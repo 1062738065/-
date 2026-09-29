@@ -237,13 +237,29 @@ function renderSchemaEntryHtml(entry, arrKey, itemId, item, d) {
   }
   return subhead + renderSchemaFieldHtml(entry, arrKey, itemId, item[entry.id], entry.customKey ? d[entry.customKey] : undefined);
 }
+// عنصر واحد بس يبقى "مفتوح" بالمرة داخل قوائم الأقسام المبنية على المحرك العام —
+// الافتراضي هو آخر عنصر تمت إضافته (أو المُوسّع صراحة بالضغط على عنوانه)، وبقية
+// العناصر تنطوي وتبين عنوانها بس. الطي عرض فقط: لا يمس البيانات المحفوظة إطلاقًا.
+function schemaExpandedItemId(arrKey, items) {
+  if (!items.length) return null;
+  const state = S.ui.expandedRepeatItem || {};
+  // hasOwnProperty يميّز بين "لسا ما طوت/فتحت شي يدويًا" (نفتح آخر عنصر تلقائيًا)
+  // و"طوت العنصر المفتوح بنفسها" (chosen = null، يعني كل العناصر مطوية الآن).
+  if (Object.prototype.hasOwnProperty.call(state, arrKey)) {
+    const chosen = state[arrKey];
+    return items.some((it) => it.id === chosen) ? chosen : null;
+  }
+  return items[items.length - 1].id;
+}
 function renderSchemaRepeaterHtml(schema, d) {
   const items = d[schema.arrayKey] || [];
-  const rows = items.map((item, i) => `
-    <div class="repeat-item">
-      <div class="repeat-item-head"><span class="repeat-item-title">${esc(schema.itemLabel)} ${i + 1}</span>${removeBtn(schema.arrayKey, item.id)}</div>
-      ${schema.fields.map((entry) => renderSchemaEntryHtml(entry, schema.arrayKey, item.id, item, d)).join("")}
-    </div>`).join("");
+  const expandedId = schemaExpandedItemId(schema.arrayKey, items);
+  const rows = items.map((item, i) => {
+    const isOpen = items.length === 1 || item.id === expandedId;
+    const head = `<div class="repeat-item-head" style="cursor:pointer;" data-action="toggle-repeat-item" data-arr="${esc(schema.arrayKey)}" data-id="${esc(item.id)}"><span class="repeat-item-title">${esc(schema.itemLabel)} ${i + 1}${isOpen ? "" : ` — ${esc(item[schema.fields.find((f) => f.id)?.id] || "")}`}</span>${removeBtn(schema.arrayKey, item.id)}</div>`;
+    if (!isOpen) return `<div class="repeat-item">${head}</div>`;
+    return `<div class="repeat-item">${head}${schema.fields.map((entry) => renderSchemaEntryHtml(entry, schema.arrayKey, item.id, item, d)).join("")}</div>`;
+  }).join("");
   return `${rows}${pillBtn(`إضافة ${schema.itemLabel}`, { variant: "ghost", icon: iconPlus(15, ROSE), action: "add-item", data: { arr: schema.arrayKey } })}<div style="margin-top:18px;">${notesFieldHtml(d)}</div>`;
 }
 
@@ -5530,7 +5546,23 @@ function handleReportEditorAction(action, ds) {
     /* ---- repeatable items ---- */
     case "add-item": {
       const factory = EMPTY_ITEM_FACTORY[ds.arr];
-      if (factory) getItemList(ds.arr).push(factory());
+      if (factory) {
+        const item = factory();
+        getItemList(ds.arr).push(item);
+        // في الأقسام المبنية على المحرك العام (SECTION_FIELD_SCHEMAS)، نطوي العناصر
+        // السابقة تلقائيًا ونخلي العنصر الجديد بس هو المفتوح.
+        if (SECTION_FIELD_SCHEMAS[ds.arr]) {
+          S.ui.expandedRepeatItem = S.ui.expandedRepeatItem || {};
+          S.ui.expandedRepeatItem[ds.arr] = item.id;
+        }
+      }
+      render();
+      return true;
+    }
+    case "toggle-repeat-item": {
+      S.ui.expandedRepeatItem = S.ui.expandedRepeatItem || {};
+      const current = S.ui.expandedRepeatItem[ds.arr];
+      S.ui.expandedRepeatItem[ds.arr] = current === ds.id ? null : ds.id;
       render();
       return true;
     }
