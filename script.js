@@ -406,6 +406,52 @@ const SECTION_FIELD_SCHEMAS = {
       { id: "explanation", type: "textarea", label: "تفسير مستوى التحقق", placeholder: "اشرحي سبب هذا المستوى من التحقق (٣٠٠ حرف كحد أقصى)" },
     ],
   },
+  // "البيانات الأساسية" و"المراجعة النهائية" قسمان بمثيل واحد لكل تقرير (لا قائمة
+  // عناصر تُضاف وتُحذف)، فليسا "repeater" مثل بقية الأقسام أعلاه — لذا fixed: true
+  // يوجّه renderSectionFields لتجاهل المحرك المتكرر (renderSchemaRepeaterHtml)
+  // ويترك الاستدعاء الفعلي لدالة مكتوبة يدويًا صغيرة (basicSectionHtml/
+  // reviewSectionHtml) تستخدم renderSchemaFixedHtml داخليًا — لأن كلا القسمين
+  // فيهما منطق عرض شرطي/زخرفي (ملاحظات تحقق، صندوق قراءة فقط لاسم الوحدة، شارة
+  // حالة التقرير) لا يصلح تعميمه كحقل عادي قابل للحذف من لوحة الإدارة.
+  basic: {
+    fixed: true,
+    // "top" (وليس "basic") — حقول هذا القسم كلها بمستوى القسم مباشرة (بدون
+    // مصفوفة عناصر)، وdata-arr الفعلي بالـ DOM لحقول من هذا النوع هو "top"
+    // (راجع CUSTOM_OPTION_FIELD_MAP)، فنطابقه هنا عشان أي تعديل حقل expandableSelect
+    // من لوحة الإدارة يسجّل مفتاح "أخرى" الصحيح.
+    arrayKey: "top",
+    itemLabel: "البيانات الأساسية",
+    fields: [
+      { id: "mainEntity", type: "text", label: "الجهة الرئيسية", required: true, placeholder: "اسم الجهة الرئيسية" },
+      { id: "reportingEntityType", type: "expandableSelect", label: "الجهة التي ترفع التقرير", baseOptions: REPORTING_TYPES_BASE, customKey: "customReportingTypes", otherLabel: "أخرى", placeholder: "اختاري (اختياري)" },
+      // "اسم الجهة" كان قائمة منسدلة مرتبطة مباشرة بـ"إدارة الأقسام والوحدات"
+      // (تتغيّر مع الوقت، وقد تختلف عن الوحدة الحالية) — حُوِّل لحقل نص حر، بنفس
+      // منطق التبسيط المطبّق سابقًا على evidenceItems.relatedDepartment؛ تنبيه
+      // مطابقة القسم (أسفل صندوق "اسم الوحدة") يبقى يعمل تمامًا لأنه مجرد مقارنة
+      // نصية بقيمة هذا الحقل.
+      { id: "entityName", type: "text", label: "اسم الجهة (القسم أو المركز)", placeholder: "اسم القسم أو المركز" },
+      { id: "officeName", type: "expandableSelect", label: "اسم المكتب", baseOptions: OFFICE_NAMES_BASE, customKey: "customOfficeNames", otherLabel: "أخرى", placeholder: "اختاري اسم المكتب", visibleWhen: { field: "reportingEntityType", equals: "مكتب" } },
+      { id: "periodType", type: "select", label: "الفترة التي يغطيها التقرير", options: PERIOD_TYPES, placeholder: "اختاري (اختياري)" },
+      { id: "startDate", type: "date", label: "تاريخ البداية", rowGroup: "dates" },
+      { id: "endDate", type: "date", label: "تاريخ النهاية", rowGroup: "dates" },
+      { id: "hijriYear", type: "select", label: "العام الهجري", options: HIJRI_YEARS, visibleWhen: { field: "periodType", notEmpty: true } },
+      { id: "month", type: "select", label: "الشهر", options: MONTHS, visibleWhen: { field: "periodType", equals: "شهري" } },
+      { id: "term", type: "expandableSelect", label: "الفصل", baseOptions: TERM_OPTIONS_BASE, customKey: "customTerms", otherLabel: "أخرى", placeholder: "اختاري الفصل", visibleWhen: { field: "periodType", equals: "فصلي" } },
+      { id: "preparerName", type: "text", label: "الاسم", required: true, placeholder: "اسم معدة التقرير", subheadBefore: "بيانات معدة التقرير" },
+      { id: "preparerTitle", type: "text", label: "المسمى الوظيفي", required: true, placeholder: "المسمى الوظيفي" },
+      { id: "managerName", type: "text", label: "اسم الرئيسة المباشرة", required: true, placeholder: "اسم الرئيسة المباشرة" },
+    ],
+  },
+  review: {
+    fixed: true,
+    itemLabel: "المراجعة النهائية",
+    fields: [
+      {
+        id: "checklist", type: "checklist", label: "قائمة التحقق (تضعها معدة التقرير)",
+        options: ["راجعت صحة الأرقام", "تأكدت من عدم تكرار المستفيدات", "أرفقت الأدلة اللازمة", "ربطت التوصيات بالنتائج", "لم أدرج بيانات شخصية غير مصرح بها", "راجعت الصياغة", "اعتمدت مديرة الوحدة البيانات"],
+      },
+    ],
+  },
 };
 
 // يرسم حقل واحد حسب نوعه — يستخدم بالضبط نفس دوال الربط العامة (inp/txt/sel/radio)
@@ -425,7 +471,23 @@ const SCHEMA_COMPUTED_FIELDS = {
 // فرعية (مثال: عناصر operationalGoals داخل هدف بقسم "الأهداف والمستهدفات") عبر
 // نفس دوال inpSub/txtSub/selSub/radioSub الموجودة أصلًا — بدون أي تغيير على
 // سلوك الاستدعاءات القديمة (بدون subArrKey تبقى تعمل تمامًا كما كانت).
+// حقل "checklist": قيمته كائن {نص_البند: true/false}، غير مرتبط بأي مصفوفة
+// عناصر متكررة (دايمًا حقل ثابت وحيد بمستوى القسم)، لذا لا يستخدم subArrKey/
+// inpSub وأخواتها إطلاقًا — نمط عرض/تخزين مختلف تمامًا عن بقية الأنواع.
+function checklistFieldHtml(fieldId, options, valueObj) {
+  valueObj = valueObj || {};
+  const rows = (options || []).map((label) => `
+    <button type="button" class="radio-pill ${valueObj[label] ? "active" : ""}" style="width:100%;justify-content:flex-start;margin-bottom:6px;" data-action="toggle-review-checklist" data-field="${esc(fieldId)}" data-key="${esc(label)}">
+      ${valueObj[label] ? iconCheck(14, "#fff") : iconCircle(14, SUBTLE)} ${esc(label)}
+    </button>`).join("");
+  return `<div style="display:flex;flex-direction:column;gap:2px;">${rows}</div>`;
+}
 function renderSchemaFieldHtml(f, arrKey, itemId, value, customOptionsList, item, subArrKey, subItemId) {
+  // checklist يُعرض بعنوان فرعي (subhead) بدل صندوق fieldWrap المعتاد — أقرب
+  // بصريًا لقائمة تحقق (مجموعة بنود قابلة للتأشير) لا "حقل واحد له تسمية".
+  if (f.type === "checklist") {
+    return `<div class="subhead">${esc(f.label)}</div><div style="margin-bottom:18px;">${checklistFieldHtml(f.id, f.options || [], value)}</div>`;
+  }
   const inputType = f.type === "number" ? "number" : f.type === "date" ? "date" : "text";
   const html =
     f.type === "computed" ? readonlyBox((SCHEMA_COMPUTED_FIELDS[f.compute] || (() => ""))(item || {})) :
@@ -435,6 +497,48 @@ function renderSchemaFieldHtml(f, arrKey, itemId, value, customOptionsList, item
     f.type === "expandableSelect" ? expandableSelectHtml(f.id, value, f.baseOptions || [], customOptionsList || [], f.placeholder, f.otherLabel || "أخرى", arrKey, itemId, subArrKey, subItemId) :
     (subArrKey ? inpSub(arrKey, itemId, subArrKey, subItemId, f.id, value, f.placeholder, inputType) : inp(arrKey, itemId, f.id, value, f.placeholder, inputType));
   return fieldWrap(f.label, !!f.required, html);
+}
+// visibleWhen اختياري: شرط ظهور بسيط يعتمد على قيمة حقل آخر بنفس القسم —
+// { field: "<معرّف حقل آخر>", equals: "<قيمة>" } أو { field: "...", notEmpty: true }.
+// بيانات وصفية بسيطة (قابلة للتخزين JSON بالقاعدة) وليست دالة، عشان تنجو من
+// الحفظ والاسترجاع عبر Supabase بدون فقدان.
+function schemaFieldVisible(f, d) {
+  if (!f.visibleWhen) return true;
+  const val = d[f.visibleWhen.field];
+  if (f.visibleWhen.notEmpty) return !!val;
+  if (Object.prototype.hasOwnProperty.call(f.visibleWhen, "equals")) return val === f.visibleWhen.equals;
+  return true;
+}
+// نسخة "ثابتة" (غير متكررة) من محرك عرض الحقول — لقسم بمثيل واحد فقط لكل تقرير
+// (بيانات ثابتة، لا قائمة عناصر تُضاف/تُحذف)، مثل "البيانات الأساسية" و"المراجعة
+// النهائية". تدعم نفس subheadBefore/rowGroup الموجودة بالنسخة المتكررة، بالإضافة
+// لـ visibleWhen. الحقول تُربط مباشرة بمستوى القسم (arrKey=null/itemId=null، مثل
+// استدعاءات inp(null,null,...) القديمة قبل هذا التعميم).
+// opts.decorators: خريطة اختيارية {معرّف_حقل: (قيمة, d) => HTML إضافي يُلحق بعد
+// الحقل} — لمنطق عرض خاص (تنبيهات/ملاحظات) لا يُعتبر "حقلًا" بحد ذاته وبالتالي
+// غير قابل للحذف أو إعادة التسمية من لوحة الإدارة.
+function renderSchemaFixedHtml(schema, d, opts) {
+  opts = opts || {};
+  const decorators = opts.decorators || {};
+  const visibleFields = schema.fields.filter((f) => schemaFieldVisible(f, d));
+  let html = "";
+  let i = 0;
+  while (i < visibleFields.length) {
+    const f = visibleFields[i];
+    const subhead = f.subheadBefore ? `<div class="subhead">${esc(f.subheadBefore)}</div>` : "";
+    const next = visibleFields[i + 1];
+    const dec = (id, val) => (decorators[id] ? decorators[id](val, d) : "");
+    if (f.rowGroup && next && next.rowGroup === f.rowGroup) {
+      html += subhead + `<div class="row-flex">${renderSchemaFieldHtml(f, null, null, d[f.id], f.customKey ? d[f.customKey] : undefined, d)}${renderSchemaFieldHtml(next, null, null, d[next.id], next.customKey ? d[next.customKey] : undefined, d)}</div>`;
+      html += dec(f.id, d[f.id]) + dec(next.id, d[next.id]);
+      i += 2;
+    } else {
+      html += subhead + renderSchemaFieldHtml(f, null, null, d[f.id], f.customKey ? d[f.customKey] : undefined, d);
+      html += dec(f.id, d[f.id]);
+      i += 1;
+    }
+  }
+  return html;
 }
 // كل عنصر في schema.fields هو دائمًا حقل حقيقي واحد (له id/type/label) — ما فيه
 // "حاويات" وهمية، عشان صفحة "إدارة حقول الأقسام" تقدر تعرض وتعدّل كل حقل لحاله.
@@ -493,15 +597,6 @@ function renderSchemaRepeaterHtml(schema, d) {
   return `${hintHtml}${rows}${pillBtn(addLabel, { variant: "ghost", icon: iconPlus(15, ROSE), action: "add-item", data: { arr: schema.arrayKey }, disabled: atMax })}${minWarningHtml}<div style="margin-top:18px;">${notesFieldHtml(d)}</div>`;
 }
 
-const REVIEW_CHECKLIST_ITEMS = [
-  { key: "numbersVerified", label: "راجعت صحة الأرقام" },
-  { key: "noDuplicateBeneficiaries", label: "تأكدت من عدم تكرار المستفيدات" },
-  { key: "evidenceAttached", label: "أرفقت الأدلة اللازمة" },
-  { key: "recommendationsLinked", label: "ربطت التوصيات بالنتائج" },
-  { key: "noUnauthorizedPersonalData", label: "لم أدرج بيانات شخصية غير مصرح بها" },
-  { key: "wordingReviewed", label: "راجعت الصياغة" },
-  { key: "unitManagerApproved", label: "اعتمدت مديرة الوحدة البيانات" },
-];
 const MANAGER_NOTE_OPTIONS = ["معتمد دون ملاحظات", "معتمد بعد التعديل", "يعاد للاستكمال"];
 
 /* =============================== Supabase integration (optional) =============
@@ -3441,13 +3536,19 @@ const SCHEMA_FIELD_TYPE_LABELS = {
   select: "قائمة اختيار (خيار واحد)",
   radio: "أزرار اختيار",
   expandableSelect: "قائمة قابلة للتوسعة (مع خيار أخرى)",
+  checklist: "قائمة تحقق (عناصر بعلامة صح)",
   computed: "محسوب تلقائيًا (بكود خاص، غير قابل للإضافة هنا)",
 };
 // الأنواع اللي تقدر مديرة النظام تختارها بنفسها وقت إضافة/تعديل حقل من صفحة
 // الإدارة — "computed" يبقى يُعرض في القائمة (فوق) لو موجود بحقل قديم، لكنه
 // مستبعد من هذه القائمة لأنه يحتاج دالة حساب مكتوبة بالكود، مو شي عام.
-const SCHEMA_FIELD_TYPES_SELECTABLE = ["text", "textarea", "number", "date", "select", "radio", "expandableSelect"];
-const SCHEMA_FIELD_TYPES_WITH_OPTIONS = ["select", "radio", "expandableSelect"];
+const SCHEMA_FIELD_TYPES_SELECTABLE = ["text", "textarea", "number", "date", "select", "radio", "expandableSelect", "checklist"];
+// حقول "checklist" تخزّن قيمتها ككائن {نص_البند: true/false} — نص كل بند هو
+// مفتاحه بالتخزين مباشرة (بدون مفتاح إنجليزي منفصل)، تمامًا بنفس أسلوب حقول
+// select/radio/expandableSelect اللي تُخزَّن بنص الخيار نفسه؛ لذا تعديل نص بند
+// موجود من لوحة الإدارة يفصله عن أي حالة "تم/لم يتم" محفوظة له سابقًا بنفس
+// الطريقة اللي يفصل فيها تعديل نص خيار عادي عن قيمة محفوظة سابقًا تطابقه.
+const SCHEMA_FIELD_TYPES_WITH_OPTIONS = ["select", "radio", "expandableSelect", "checklist"];
 
 function fieldSchemaManagedSections() {
   return Object.keys(SECTION_FIELD_SCHEMAS).map((id) => {
@@ -4129,9 +4230,14 @@ function notesFieldHtml(d) {
 
 /* =============================== Section field renderers ====================== */
 function renderSectionFields(section, d, unit, report) {
-  // المحرك العام يتولى أي قسم له fields schema مُعرَّف (حاليًا: التوصيات فقط،
-  // كتجربة أولى) — قبل الوصول لسويتش الأقسام المكتوبة يدويًا بالأسفل.
-  if (SECTION_FIELD_SCHEMAS[section.id]) return renderSchemaRepeaterHtml(SECTION_FIELD_SCHEMAS[section.id], d);
+  // المحرك العام يتولى أي قسم له fields schema مُعرَّف بنمط "متكرر" (قائمة عناصر
+  // تُضاف وتُحذف) — قبل الوصول لسويتش الأقسام المكتوبة يدويًا بالأسفل. الأقسام
+  // ذات fixed: true (بيانات ثابتة بمثيل واحد، مثل "البيانات الأساسية" و"المراجعة
+  // النهائية") تُستثنى من هذا التحويل التلقائي وتمر عبر السويتش كالمعتاد، لأن
+  // دالتها اليدوية (basicSectionHtml/reviewSectionHtml) هي اللي تستخدم الحقول
+  // الآن عبر renderSchemaFixedHtml، مع الحفاظ على منطق عرض/زخرفة خاص بها.
+  const schema = SECTION_FIELD_SCHEMAS[section.id];
+  if (schema && !schema.fixed) return renderSchemaRepeaterHtml(schema, d);
   switch (section.id) {
     case "basic": return basicSectionHtml(d, unit);
     case "kpi": return kpiSectionHtml(d, report);
@@ -4159,12 +4265,13 @@ function genericSectionHtml(section, d) {
 }
 
 /* ---- البيانات الأساسية ---- */
+// القسم كامل صار على محرك الحقول العام (SECTION_FIELD_SCHEMAS.basic، fixed: true)
+// — الحقول قابلة للإدارة الذاتية بالكامل (تسمية/نوع/خيارات/ترتيب/حذف) من لوحة
+// "إدارة حقول الأقسام". الشيء الوحيد اللي بقي بكود ثابت هو صندوق "اسم الوحدة"
+// (قراءة فقط، قيمته من سجل الوحدة نفسها وليست إدخالًا من المستخدمة) وملاحظات
+// المطابقة المرفقة به — هذي زخرفة عرض مبنية على قيمة الحقول، مو حقلًا بحد ذاته.
 function basicSectionHtml(d, unit) {
-  const periodType = d.periodType || "";
-  const showMonth = periodType === "شهري", showTerm = periodType === "فصلي";
   const activeDepartments = S.departments.filter((x) => x.status === "active");
-  const departmentOptions = activeDepartments.map((x) => x.name);
-  const showOfficeName = d.reportingEntityType === "مكتب";
   const matchedOfficeUnit = S.units.find((u) => u.name === d.officeName);
   const matchedOfficeDept = matchedOfficeUnit ? activeDepartments.find((x) => x.id === matchedOfficeUnit.departmentId) : null;
   const currentUnitRecord = S.units.find((u) => u.name === unit.name);
@@ -4176,28 +4283,23 @@ function basicSectionHtml(d, unit) {
     else if (currentUnitDept) noteHtml = `<div class="hint bad">⚠ هذه الوحدة تابعة فعليًا لـ ${esc(currentUnitDept.name)}، وليس لـ ${esc(d.entityName)}</div>`;
     else noteHtml = `<div class="hint bad">⚠ هذه الوحدة غير مرتبطة بأي قسم في إدارة الأقسام والوحدات حاليًا</div>`;
   }
+  const officeNameDecorator = (value) => {
+    if (!value) return "";
+    return `<div class="hint">القسم أو المركز التابع له: <strong style="color:${matchedOfficeDept ? INK : SUBTLE}">${matchedOfficeDept ? esc(matchedOfficeDept.name) : "لم يُسجَّل هذا المكتب بعد ضمن إدارة الأقسام والوحدات"}</strong></div>`;
+  };
+
+  const schema = SECTION_FIELD_SCHEMAS.basic;
+  // "اسم الوحدة" (صندوق قراءة فقط) يظهر بموضعه الأصلي بين "officeName" و"periodType"
+  // — نقسم قائمة الحقول لمجموعتين حول هذا الموضع الثابت بدل تعميمه كحقل.
+  const beforeUnitIds = ["mainEntity", "reportingEntityType", "entityName", "officeName"];
+  const fieldsBefore = schema.fields.filter((f) => beforeUnitIds.includes(f.id));
+  const fieldsAfter = schema.fields.filter((f) => !beforeUnitIds.includes(f.id));
+  const dd = { ...d, mainEntity: d.mainEntity !== undefined ? d.mainEntity : "إدارة التعليم النسائي" };
 
   return `
-    ${fieldWrap("الجهة الرئيسية", true, inp(null, null, "mainEntity", d.mainEntity !== undefined ? d.mainEntity : "إدارة التعليم النسائي", "اسم الجهة الرئيسية"))}
-    ${fieldWrap("الجهة التي ترفع التقرير", expandableSelectHtml("reportingEntityType", d.reportingEntityType || "", REPORTING_TYPES_BASE, d.customReportingTypes || [], "اختاري (اختياري)"))}
-    ${fieldWrap("اسم الجهة (القسم أو المركز)", expandableSelectHtml("entityName", d.entityName || "", departmentOptions, [], departmentOptions.length ? "اختاري من إدارة الأقسام والوحدات" : "لا توجد أقسام مضافة بعد", "إضافة قسم أو مركز جديد"))}
-    ${showOfficeName ? fieldWrap("اسم المكتب", expandableSelectHtml("officeName", d.officeName || "", OFFICE_NAMES_BASE, d.customOfficeNames || [], "اختاري اسم المكتب") +
-      (d.officeName ? `<div class="hint">القسم أو المركز التابع له: <strong style="color:${matchedOfficeDept ? INK : SUBTLE}">${matchedOfficeDept ? esc(matchedOfficeDept.name) : "لم يُسجَّل هذا المكتب بعد ضمن إدارة الأقسام والوحدات"}</strong></div>` : "")) : ""}
+    ${renderSchemaFixedHtml({ fields: fieldsBefore }, dd, { decorators: { officeName: officeNameDecorator } })}
     ${fieldWrap("اسم الوحدة", readonlyBox(unit.name) + noteHtml)}
-    ${fieldWrap("الفترة التي يغطيها التقرير", sel(null, null, "periodType", periodType, PERIOD_TYPES, "اختاري (اختياري)"))}
-    <div class="row-flex">
-      ${fieldWrap("تاريخ البداية", inp(null, null, "startDate", d.startDate, "", "date"))}
-      ${fieldWrap("تاريخ النهاية", inp(null, null, "endDate", d.endDate, "", "date"))}
-    </div>
-    ${periodType ? `
-      ${fieldWrap("العام الهجري", sel(null, null, "hijriYear", d.hijriYear, HIJRI_YEARS))}
-      ${showMonth ? fieldWrap("الشهر", sel(null, null, "month", d.month, MONTHS)) : ""}
-      ${showTerm ? fieldWrap("الفصل", expandableSelectHtml("term", d.term || "", TERM_OPTIONS_BASE, d.customTerms || [], "اختاري الفصل")) : ""}
-    ` : ""}
-    <div class="subhead">بيانات معدة التقرير</div>
-    ${fieldWrap("الاسم", true, inp(null, null, "preparerName", d.preparerName, "اسم معدة التقرير"))}
-    ${fieldWrap("المسمى الوظيفي", true, inp(null, null, "preparerTitle", d.preparerTitle, "المسمى الوظيفي"))}
-    ${fieldWrap("اسم الرئيسة المباشرة", true, inp(null, null, "managerName", d.managerName, "اسم الرئيسة المباشرة"))}
+    ${renderSchemaFixedHtml({ fields: fieldsAfter }, dd)}
   `;
 }
 
@@ -4669,18 +4771,14 @@ function evidenceSectionHtml(d) {
 }
 
 /* ---- الإقرار والمراجعة ---- */
+// القسم صار على محرك الحقول العام (SECTION_FIELD_SCHEMAS.review، fixed: true) —
+// بنود قائمة التحقق نفسها قابلة للإدارة الذاتية (إضافة/حذف/تعديل نص/ترتيب) من
+// لوحة "إدارة حقول الأقسام". "حالة الإرسال الحالية" تبقى بكود ثابت لأنها مُشتقة
+// من report.status (حالة النظام) وليست بيانات يُدخلها المستخدم داخل d.
 function reviewSectionHtml(d, report) {
-  const checklist = d.checklist || {};
-  const checklistHtml = REVIEW_CHECKLIST_ITEMS.map((item) => `
-    <button type="button" class="radio-pill ${checklist[item.key] ? "active" : ""}" style="width:100%;justify-content:flex-start;margin-bottom:6px;" data-action="toggle-review-checklist" data-key="${esc(item.key)}">
-      ${checklist[item.key] ? iconCheck(14, "#fff") : iconCircle(14, SUBTLE)} ${esc(item.label)}
-    </button>`).join("");
   const meta = reportStatusMeta(report.status);
-
   return `
-    <div class="subhead">قائمة التحقق (تضعها معدة التقرير)</div>
-    <div style="display:flex;flex-direction:column;gap:2px;margin-bottom:18px;">${checklistHtml}</div>
-
+    ${renderSchemaFixedHtml(SECTION_FIELD_SCHEMAS.review, d)}
     <div class="subhead">حالة الإرسال الحالية</div>
     ${fieldWrap("الحالة", badgeHtml(meta.label, meta.color, meta.bg) + `<div class="hint">تُغيَّر الحالة من الأزرار أسفل الصفحة (حفظ كمسودة / إرسال للمراجعة / إعادة للتعديل / اعتماد نهائي).</div>`)}
 
@@ -4922,9 +5020,15 @@ function sectionBodyOnly(section, saved, report) {
 
   } else if (section.id === "review") {
     const checklist = d.checklist || {};
-    const doneCount = REVIEW_CHECKLIST_ITEMS.filter((it) => checklist[it.key]).length;
-    body = kvBlock([kv("قائمة التحقق", `${doneCount} من ${REVIEW_CHECKLIST_ITEMS.length}`)]);
-    body += reportTable(["بند التحقق", "الحالة"], REVIEW_CHECKLIST_ITEMS.map((it) => [esc(it.label), checklist[it.key] ? `<span style="color:${GREEN};font-weight:800;">✓ تم</span>` : `<span style="color:${SUBTLE};">لم يتم</span>`]));
+    // قائمة البنود تُقرأ من تعريف الحقل نفسه (SECTION_FIELD_SCHEMAS.review) بدل
+    // الثابت القديم REVIEW_CHECKLIST_ITEMS — عشان لو عدّلت نجود بنود القائمة من
+    // لوحة الإدارة، تنعكس هنا بنفس اللحظة. كل بند يُخزَّن بنص عنوانه مباشرة
+    // (بدون مفتاح إنجليزي منفصل) — بنفس أسلوب كل حقول select/radio الأخرى بهذا
+    // المحرك، اللي تُخزَّن بنص الخيار نفسه.
+    const checklistItems = (SECTION_FIELD_SCHEMAS.review.fields.find((f) => f.id === "checklist") || {}).options || [];
+    const doneCount = checklistItems.filter((label) => checklist[label]).length;
+    body = kvBlock([kv("قائمة التحقق", `${doneCount} من ${checklistItems.length}`)]);
+    body += reportTable(["بند التحقق", "الحالة"], checklistItems.map((label) => [esc(label), checklist[label] ? `<span style="color:${GREEN};font-weight:800;">✓ تم</span>` : `<span style="color:${SUBTLE};">لم يتم</span>`]));
     if (d.managerDecision) body += kvBlock([kv("قرار المراجعة", d.managerDecision)]);
     if (d.managerNotesText) body += textBlock("ملاحظات المديرة المباشرة", d.managerNotesText);
 
@@ -5624,9 +5728,12 @@ function attachClickListener() {
         break;
       }
       case "toggle-review-checklist": {
+        // ds.field اختياري (يدعم أي حقل نوعه "checklist" مستقبلًا) — بدونه يفترض
+        // "checklist" افتراضيًا، نفس الاسم القديم قبل التعميم لحقل schema عام.
+        const fieldId = ds.field || "checklist";
         const key = ds.key;
-        const current = S.sectionDraft.checklist || {};
-        S.sectionDraft.checklist = { ...current, [key]: !current[key] };
+        const current = S.sectionDraft[fieldId] || {};
+        S.sectionDraft[fieldId] = { ...current, [key]: !current[key] };
         render();
         break;
       }
@@ -5979,16 +6086,18 @@ function attachClickListener() {
         const isNew = S.ui.editingFieldId === "__new__";
         const fieldId = isNew ? uid("fld") : S.ui.editingFieldId;
         const newField = { id: fieldId, type, label, required: !!draft.required, placeholder };
-        if (type === "select" || type === "radio") newField.options = optionsList;
+        if (type === "select" || type === "radio" || type === "checklist") newField.options = optionsList;
         if (type === "expandableSelect") {
           newField.baseOptions = optionsList;
           newField.otherLabel = (otherLabelEl && otherLabelEl.value.trim()) || "أخرى";
           newField.customKey = draft.customKey || `custom_${fieldId}`;
         }
-        // تنسيق بصري (عنوان فرعي/محاذاة صف) موجود على الحقل الأصلي وقت التعديل —
-        // ما فيه واجهة لتعديله حاليًا، فنحافظ عليه كما هو بدل ما يضيع بصمت.
+        // تنسيق بصري (عنوان فرعي/محاذاة صف) أو شرط ظهور شرطي موجود على الحقل
+        // الأصلي وقت التعديل — ما فيه واجهة لتعديلها حاليًا، فنحافظ عليها كما هي
+        // بدل ما تضيع بصمت (نفس الخطأ اللي أُصلح سابقًا لـ hint/minItems/maxItems).
         if (!isNew && draft.subheadBefore) newField.subheadBefore = draft.subheadBefore;
         if (!isNew && draft.rowGroup) newField.rowGroup = draft.rowGroup;
+        if (!isNew && draft.visibleWhen) newField.visibleWhen = draft.visibleWhen;
         const fields = isNew ? [...schema.fields, newField] : schema.fields.map((f) => f.id === fieldId ? newField : f);
         setSectionFieldsLive(sectionId, fields);
         dataStore.saveSectionFieldSchemas({ ...dataStore.getSectionFieldSchemas(), [sectionId]: fields });
