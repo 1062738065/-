@@ -183,32 +183,22 @@ const SECTION_FIELD_SCHEMAS = {
       { id: "name", type: "text", label: "اسم العمل", required: true, placeholder: "اسم العمل أو البرنامج", subheadBefore: "بيانات العمل" },
       { id: "goal", type: "textarea", label: "الهدف منه", placeholder: "ما الهدف من هذا العمل؟" },
       { id: "targetGroup", type: "text", label: "الفئة المستهدفة", placeholder: "مثال: طالبات المرحلة المتوسطة" },
-      { type: "row", fields: [
-        { id: "targetCount", type: "number", label: "العدد المستهدف", placeholder: "0" },
-        { id: "actualBeneficiaries", type: "number", label: "عدد المستفيدات الفعلي", placeholder: "0" },
-      ] },
-      { type: "row", fields: [
-        { id: "startDate", type: "date", label: "تاريخ البداية" },
-        { id: "endDate", type: "date", label: "تاريخ النهاية" },
-      ] },
+      { id: "targetCount", type: "number", label: "العدد المستهدف", placeholder: "0", rowGroup: "target" },
+      { id: "actualBeneficiaries", type: "number", label: "عدد المستفيدات الفعلي", placeholder: "0", rowGroup: "target" },
+      { id: "startDate", type: "date", label: "تاريخ البداية", rowGroup: "dates" },
+      { id: "endDate", type: "date", label: "تاريخ النهاية", rowGroup: "dates" },
       { id: "location", type: "text", label: "مقر التنفيذ", placeholder: "مكان التنفيذ" },
       { id: "deliveryMode", type: "radio", label: "حضوري / عن بُعد / مدمج", options: DELIVERY_MODES },
       { id: "executingEntity", type: "text", label: "الجهة المنفذة", placeholder: "الجهة المسؤولة عن التنفيذ" },
       { id: "participatingEntities", type: "text", label: "الجهات المشاركة", placeholder: "الجهات المشاركة، إن وجدت" },
       { id: "responsiblePerson", type: "text", label: "المسؤولة عن التنفيذ", placeholder: "اسم المسؤولة" },
       { id: "executionStatus", type: "radio", label: "حالة التنفيذ", options: EXECUTION_STATUSES, subheadBefore: "حالة التنفيذ" },
-      { type: "row", subheadBefore: "مستوى الإنجاز", fields: [
-        { id: "completionPercent", type: "number", label: "نسبة الإنجاز", placeholder: "0" },
-        { id: "attendeesCount", type: "number", label: "عدد الحاضرات", placeholder: "0" },
-      ] },
-      { type: "row", fields: [
-        { id: "attendanceRate", type: "number", label: "نسبة الحضور", placeholder: "0" },
-        { id: "continuationRate", type: "number", label: "نسبة الاستمرار", placeholder: "0" },
-      ] },
-      { type: "row", fields: [
-        { id: "approvedCost", type: "number", label: "التكلفة المعتمدة", placeholder: "0" },
-        { id: "actualCost", type: "number", label: "التكلفة الفعلية", placeholder: "0" },
-      ] },
+      { id: "completionPercent", type: "number", label: "نسبة الإنجاز", placeholder: "0", subheadBefore: "مستوى الإنجاز", rowGroup: "completion" },
+      { id: "attendeesCount", type: "number", label: "عدد الحاضرات", placeholder: "0", rowGroup: "completion" },
+      { id: "attendanceRate", type: "number", label: "نسبة الحضور", placeholder: "0", rowGroup: "rates" },
+      { id: "continuationRate", type: "number", label: "نسبة الاستمرار", placeholder: "0", rowGroup: "rates" },
+      { id: "approvedCost", type: "number", label: "التكلفة المعتمدة", placeholder: "0", rowGroup: "costs" },
+      { id: "actualCost", type: "number", label: "التكلفة الفعلية", placeholder: "0", rowGroup: "costs" },
       { id: "highlightResult", type: "textarea", label: "أبرز نتيجة", required: true, placeholder: "أبرز نتيجة تحققت من هذا العمل" },
     ],
   },
@@ -226,16 +216,29 @@ function renderSchemaFieldHtml(f, arrKey, itemId, value, customOptionsList) {
     inp(arrKey, itemId, f.id, value, f.placeholder, f.type === "number" ? "number" : f.type === "date" ? "date" : "text");
   return fieldWrap(f.label, !!f.required, html);
 }
-// An "entry" in a schema's fields list is normally a single field, but can also be:
-//  - { type: "row", fields: [f1, f2] } to render two fields side by side (row-flex), matching
-//    the hand-written sections' layout.
-//  - any entry with a "subheadBefore" string inserts a <div class="subhead"> above it.
-function renderSchemaEntryHtml(entry, arrKey, itemId, item, d) {
-  const subhead = entry.subheadBefore ? `<div class="subhead">${esc(entry.subheadBefore)}</div>` : "";
-  if (entry.type === "row") {
-    return subhead + `<div class="row-flex">${entry.fields.map((sub) => renderSchemaFieldHtml(sub, arrKey, itemId, item[sub.id], sub.customKey ? d[sub.customKey] : undefined)).join("")}</div>`;
+// كل عنصر في schema.fields هو دائمًا حقل حقيقي واحد (له id/type/label) — ما فيه
+// "حاويات" وهمية، عشان صفحة "إدارة حقول الأقسام" تقدر تعرض وتعدّل كل حقل لحاله.
+// شكلين اختياريين للتنسيق البصري بس (لا يغيّران البيانات المخزّنة إطلاقًا):
+//  - "subheadBefore": نص يضيف عنوان فرعي <div class="subhead"> فوق الحقل.
+//  - "rowGroup": حقلين متتاليين يحملان نفس القيمة يُرسمان جنب بعض (row-flex)،
+//    مطابقةً لتنسيق الأقسام المكتوبة يدويًا. لو انكسر التتالي (مثلاً بعد إعادة
+//    ترتيب من صفحة الإدارة) يرجع كل حقل يُرسم لحاله بعرض كامل — تجميل فقط.
+function renderSchemaFieldsHtml(fields, arrKey, itemId, item, d) {
+  let html = "";
+  let i = 0;
+  while (i < fields.length) {
+    const f = fields[i];
+    const subhead = f.subheadBefore ? `<div class="subhead">${esc(f.subheadBefore)}</div>` : "";
+    const next = fields[i + 1];
+    if (f.rowGroup && next && next.rowGroup === f.rowGroup) {
+      html += subhead + `<div class="row-flex">${renderSchemaFieldHtml(f, arrKey, itemId, item[f.id], f.customKey ? d[f.customKey] : undefined)}${renderSchemaFieldHtml(next, arrKey, itemId, item[next.id], next.customKey ? d[next.customKey] : undefined)}</div>`;
+      i += 2;
+    } else {
+      html += subhead + renderSchemaFieldHtml(f, arrKey, itemId, item[f.id], f.customKey ? d[f.customKey] : undefined);
+      i += 1;
+    }
   }
-  return subhead + renderSchemaFieldHtml(entry, arrKey, itemId, item[entry.id], entry.customKey ? d[entry.customKey] : undefined);
+  return html;
 }
 // عنصر واحد بس يبقى "مفتوح" بالمرة داخل قوائم الأقسام المبنية على المحرك العام —
 // الافتراضي هو آخر عنصر تمت إضافته (أو المُوسّع صراحة بالضغط على عنوانه)، وبقية
@@ -258,7 +261,7 @@ function renderSchemaRepeaterHtml(schema, d) {
     const isOpen = items.length === 1 || item.id === expandedId;
     const head = `<div class="repeat-item-head" style="cursor:pointer;" data-action="toggle-repeat-item" data-arr="${esc(schema.arrayKey)}" data-id="${esc(item.id)}"><span class="repeat-item-title">${esc(schema.itemLabel)} ${i + 1}${isOpen ? "" : ` — ${esc(item[schema.fields.find((f) => f.id)?.id] || "")}`}</span>${removeBtn(schema.arrayKey, item.id)}</div>`;
     if (!isOpen) return `<div class="repeat-item">${head}</div>`;
-    return `<div class="repeat-item">${head}${schema.fields.map((entry) => renderSchemaEntryHtml(entry, schema.arrayKey, item.id, item, d)).join("")}</div>`;
+    return `<div class="repeat-item">${head}${renderSchemaFieldsHtml(schema.fields, schema.arrayKey, item.id, item, d)}</div>`;
   }).join("");
   return `${rows}${pillBtn(`إضافة ${schema.itemLabel}`, { variant: "ghost", icon: iconPlus(15, ROSE), action: "add-item", data: { arr: schema.arrayKey } })}<div style="margin-top:18px;">${notesFieldHtml(d)}</div>`;
 }
@@ -5678,6 +5681,10 @@ function attachClickListener() {
           newField.otherLabel = (otherLabelEl && otherLabelEl.value.trim()) || "أخرى";
           newField.customKey = draft.customKey || `custom_${fieldId}`;
         }
+        // تنسيق بصري (عنوان فرعي/محاذاة صف) موجود على الحقل الأصلي وقت التعديل —
+        // ما فيه واجهة لتعديله حاليًا، فنحافظ عليه كما هو بدل ما يضيع بصمت.
+        if (!isNew && draft.subheadBefore) newField.subheadBefore = draft.subheadBefore;
+        if (!isNew && draft.rowGroup) newField.rowGroup = draft.rowGroup;
         const fields = isNew ? [...schema.fields, newField] : schema.fields.map((f) => f.id === fieldId ? newField : f);
         setSectionFieldsLive(sectionId, fields);
         dataStore.saveSectionFieldSchemas({ ...dataStore.getSectionFieldSchemas(), [sectionId]: fields });
