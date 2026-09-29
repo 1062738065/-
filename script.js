@@ -339,6 +339,10 @@ function goalToRow(g, kind) { return { id: g.id, name: g.name, kind }; }
 function rowToGoal(r) { return { id: r.id, name: r.name }; }
 function sectionDefToRow(s, i) { return { id: s.id, label: s.label, order_index: s.order ?? i, enabled: s.enabled !== false }; }
 function rowToSectionDef(r) { return { id: r.id, label: r.label, order: Number(r.order_index) || 0, enabled: r.enabled !== false }; }
+// خريطة حقول قسم واحد (section_id -> قائمة تعريفات الحقول) تُخزَّن كصف واحد لكل قسم،
+// وقيمة fields نفسها JSON خام (jsonb) بدون أي تحويل شكل — هي نفس بنية SECTION_FIELD_SCHEMAS[id].fields.
+function fieldSchemaToRow(sectionId, fields) { return { section_id: sectionId, fields: fields || [], updated_at: Date.now() }; }
+function rowToFieldSchemaEntry(r) { return { sectionId: r.section_id, fields: Array.isArray(r.fields) ? r.fields : [] }; }
 function reportToRow(unitId, r) { return { id: r.id, unit_id: unitId, label: r.label || "", status: r.status || "draft", report_type: r.reportType || "general", created_at: r.createdAt || Date.now(), updated_at: r.updatedAt || Date.now(), shared: r.shared || {}, indicator_history: r.indicatorHistory || {}, sections: r.sections || {}, last_section_id: r.lastSectionId || "", sent_to: r.sentTo || null, sent_at: r.sentAt || null, internal_sent_at: r.internalSentAt || null, internal_sent_by: r.internalSentBy || null, internal_review_notes: r.internalReviewNotes || null, internal_returned_at: r.internalReturnedAt || null, head_reviewed_at: r.headReviewedAt || null, head_reviewed_by: r.headReviewedBy || null, head_approval_decision: r.headApprovalDecision || null }; }
 function rowToReport(r) { return { id: r.id, label: r.label || "", status: r.status || "draft", reportType: r.report_type || "general", createdAt: Number(r.created_at) || 0, updatedAt: Number(r.updated_at) || 0, shared: r.shared || {}, indicatorHistory: r.indicator_history || {}, sections: r.sections || {}, lastSectionId: r.last_section_id || "", sentTo: r.sent_to || null, sentAt: r.sent_at ? Number(r.sent_at) : null, internalSentAt: r.internal_sent_at ? Number(r.internal_sent_at) : null, internalSentBy: r.internal_sent_by || null, internalReviewNotes: r.internal_review_notes || null, internalReturnedAt: r.internal_returned_at ? Number(r.internal_returned_at) : null, headReviewedAt: r.head_reviewed_at ? Number(r.head_reviewed_at) : null, headReviewedBy: r.head_reviewed_by || null, headApprovalDecision: r.head_approval_decision || null }; }
 
@@ -379,7 +383,8 @@ const MOCK_USERS = [
 /* =============================== Storage layer ============================= */
 const UNITS_KEY = "prs:units", DEPARTMENTS_KEY = "prs:departments", OFFICES_KEY = "prs:offices",
       INDICATOR_DEFINITIONS_KEY = "prs:indicator-definitions", GOALS_DEFINITIONS_KEY = "prs:goals-definitions",
-      SITE_SETTINGS_KEY = "prs:site-settings", REPORT_SECTIONS_KEY = "prs:report-sections";
+      SITE_SETTINGS_KEY = "prs:site-settings", REPORT_SECTIONS_KEY = "prs:report-sections",
+      SECTION_FIELD_SCHEMAS_KEY = "prs:section-field-schemas";
 const DEFAULT_SITE_COLORS = { primary: "#6b2337", background: "#F2ECE8" };
 const reportKey = (unitId) => `prs:report:${unitId}`;
 const reportsKey = (unitId) => `prs:reports:${unitId}`;
@@ -503,6 +508,15 @@ const dataStore = {
     if (sheetsConfigured()) supabaseReplaceTable("report_sections", list.map(sectionDefToRow)).catch(() => {});
   },
   cacheReportSectionDefsLocally(list) { lsSet(REPORT_SECTIONS_KEY, JSON.stringify(list)); },
+  // خريطة { sectionId: [field, field, ...] } — تخصيصات حقول الأقسام المبنية على
+  // المحرك العام (SECTION_FIELD_SCHEMAS). خالية = لا تخصيصات محفوظة بعد، فيستخدم
+  // النظام التعريفات الافتراضية المكتوبة بالكود كما هي.
+  getSectionFieldSchemas() { const v = lsGet(SECTION_FIELD_SCHEMAS_KEY); return v ? JSON.parse(v) : {}; },
+  saveSectionFieldSchemas(map) {
+    lsSet(SECTION_FIELD_SCHEMAS_KEY, JSON.stringify(map));
+    if (sheetsConfigured()) supabaseReplaceTable("section_field_schemas", Object.keys(map).map((id) => fieldSchemaToRow(id, map[id]))).catch(() => {});
+  },
+  cacheSectionFieldSchemasLocally(map) { lsSet(SECTION_FIELD_SCHEMAS_KEY, JSON.stringify(map)); },
   // Each unit now holds a LIST of report entries (one per period/submission),
   // each carrying its own status: draft / under_review / completed.
   // A unit that only ever had the old single-report shape (prs:report:<id>)
@@ -707,6 +721,8 @@ function render() {
     html = shellWrap(renderGoalsManage());
   } else if (S.view === "sections-manage") {
     html = shellWrap(renderSectionsManage());
+  } else if (S.view === "field-schemas-manage") {
+    html = shellWrap(renderFieldSchemasManage());
   } else if (S.view === "unit-dashboard") {
     html = shellWrap(renderUnitDashboard());
   } else if (S.view === "unit-settings") {
@@ -758,6 +774,7 @@ const SIDEBAR_PAGES = [
   { id: "indicators-manage", label: "إدارة مؤشرات الأداء", group: "إدارة التقارير", icon: "gauge" },
   { id: "goals-manage", label: "إدارة الأهداف والمستهدفات", group: "إدارة التقارير", icon: "target" },
   { id: "sections-manage", label: "إدارة أقسام التقرير", group: "إدارة التقارير", icon: "layers" },
+  { id: "field-schemas-manage", label: "إدارة حقول الأقسام", group: "إدارة التقارير", icon: "layers" },
   { id: "units-manage", label: "المستخدمون", group: "standalone", icon: "building" },
   { id: "offices-manage", label: "مكاتب الإشراف", group: "الهيكل التنظيمي", icon: "layers" },
   { id: "departments-list", label: "الأقسام", group: "الهيكل التنظيمي", icon: "building" },
@@ -1171,6 +1188,39 @@ async function refreshReportSectionsFromSheet() {
   }
 }
 
+// يحدّث SECTION_FIELD_SCHEMAS[sectionId] فورًا (يُستخدم من صفحة إدارة الحقول نفسها
+// وأيضًا عند تحميل تخصيصات محفوظة) ويسجّل أي حقل "قائمة قابلة للتوسعة" جديد في
+// CUSTOM_OPTION_FIELD_MAP عشان يشتغل زر "أخرى" فيه تلقائيًا بدون كود إضافي.
+function setSectionFieldsLive(sectionId, fields) {
+  const existing = SECTION_FIELD_SCHEMAS[sectionId];
+  const itemLabel = (existing && existing.itemLabel) || (SECTIONS.find((s) => s.id === sectionId) || {}).label || sectionId;
+  SECTION_FIELD_SCHEMAS[sectionId] = { arrayKey: sectionId, itemLabel, fields };
+  fields.forEach((f) => {
+    if (f.type === "expandableSelect" && f.customKey) CUSTOM_OPTION_FIELD_MAP[`${sectionId}|${f.id}`] = f.customKey;
+  });
+}
+// يطبّق تخصيصات حقول محفوظة (من القاعدة أو من التخزين المحلي) فوق SECTION_FIELD_SCHEMAS
+// الافتراضي المكتوب بالكود — قسم بدون تخصيص محفوظ (أو بتخصيص فارغ لم يُحفظ فعليًا
+// بعد) يبقى بتعريفه الافتراضي كما هو تمامًا.
+function applyFieldSchemaOverrides(map) {
+  Object.keys(map || {}).forEach((sectionId) => {
+    const fields = map[sectionId];
+    if (!Array.isArray(fields) || !fields.length) return;
+    setSectionFieldsLive(sectionId, fields);
+  });
+}
+
+async function refreshSectionFieldSchemasFromSheet() {
+  if (!sheetsConfigured()) return;
+  const res = await supabaseRequest("section_field_schemas?select=*");
+  if (res.ok && Array.isArray(res.data) && res.data.length) {
+    const map = {};
+    res.data.map(rowToFieldSchemaEntry).forEach((e) => { map[e.sectionId] = e.fields; });
+    applyFieldSchemaOverrides(map);
+    dataStore.cacheSectionFieldSchemasLocally(map);
+  }
+}
+
 async function refreshSiteSettingsFromSheet() {
   if (!sheetsConfigured()) return;
   const res = await supabaseRequest("site_settings?id=eq.main&select=*");
@@ -1205,6 +1255,7 @@ function doLogin(user) {
   S.indicatorDefinitions = dataStore.getIndicatorDefinitions();
   S.goalsDefinitions = dataStore.getGoalsDefinitions();
   applyReportSectionDefs(dataStore.getReportSectionDefs());
+  applyFieldSchemaOverrides(dataStore.getSectionFieldSchemas());
   S.sidebarOpen = !isMobileViewport();
   if (S.isAdmin) {
     const reports = {};
@@ -3116,6 +3167,105 @@ function renderSectionsManage() {
   </div></div>`;
 }
 
+/* =============================== Section field-schema management (الخطوة ٢) ====
+   إدارة حقول الأقسام المبنية على المحرك العام (SECTION_FIELD_SCHEMAS) — إضافة/
+   تعديل/حذف/ترتيب حقول أي قسم منها بدون الحاجة لتعديل الكود. التخصيصات المحفوظة
+   تُطبَّق فوق التعريفات الافتراضية عبر applyFieldSchemaOverrides (قسم بلا تخصيص
+   محفوظ يبقى بتعريفه الافتراضي كما هو). */
+const SCHEMA_FIELD_TYPE_LABELS = {
+  text: "نص قصير",
+  textarea: "نص طويل",
+  number: "رقم",
+  date: "تاريخ",
+  select: "قائمة اختيار (خيار واحد)",
+  radio: "أزرار اختيار",
+  expandableSelect: "قائمة قابلة للتوسعة (مع خيار أخرى)",
+};
+const SCHEMA_FIELD_TYPES_WITH_OPTIONS = ["select", "radio", "expandableSelect"];
+
+function fieldSchemaManagedSections() {
+  return Object.keys(SECTION_FIELD_SCHEMAS).map((id) => {
+    const sectionDef = SECTIONS.find((s) => s.id === id);
+    return { id, label: (sectionDef && sectionDef.label) || (SECTION_FIELD_SCHEMAS[id] || {}).itemLabel || id };
+  });
+}
+
+function fieldEditFormHtml(draft, isNew) {
+  const type = draft.type || "text";
+  const showOptions = SCHEMA_FIELD_TYPES_WITH_OPTIONS.includes(type);
+  const optionsText = draft.optionsText != null ? draft.optionsText : (draft.options || draft.baseOptions || []).join("\n");
+  return `<div class="card" style="margin-bottom:14px;border:1px solid ${ROSE};">
+    <div style="font-size:12.5px;font-weight:800;color:${ROSE};margin-bottom:12px;">${isNew ? "إضافة حقل جديد" : "تعديل الحقل"}</div>
+    <div style="display:flex;flex-direction:column;gap:10px;">
+      ${fieldWrap("اسم الحقل (يظهر للمستخدمة)", true, `<input class="input" id="field-draft-label" value="${esc(draft.label || "")}" placeholder="مثال: اسم التوصية" />`)}
+      ${fieldWrap("نوع الحقل", true, `<select class="input" data-action="set-field-draft" data-key="type" data-rerender="1">${Object.keys(SCHEMA_FIELD_TYPE_LABELS).map((t) => `<option value="${t}" ${t === type ? "selected" : ""}>${esc(SCHEMA_FIELD_TYPE_LABELS[t])}</option>`).join("")}</select>`)}
+      ${showOptions ? fieldWrap("الخيارات (كل خيار بسطر)", true, `<textarea class="input" id="field-draft-options" style="min-height:90px">${esc(optionsText)}</textarea>`) : ""}
+      ${type === "expandableSelect" ? fieldWrap('نص خيار "إضافة قيمة جديدة"', false, `<input class="input" id="field-draft-other-label" value="${esc(draft.otherLabel || "أخرى")}" placeholder="أخرى" />`) : ""}
+      ${fieldWrap("نص توضيحي داخل الحقل (اختياري)", false, `<input class="input" id="field-draft-placeholder" value="${esc(draft.placeholder || "")}" placeholder="مثال: اكتبي هنا..." />`)}
+      <button type="button" class="pill-btn ${draft.required ? "pill-primary" : "pill-ghost"}" data-action="toggle-field-draft-required" style="align-self:flex-start;">${draft.required ? "✓ حقل إلزامي" : "حقل اختياري — اضغطي لجعله إلزاميًا"}</button>
+      <div style="display:flex;gap:8px;margin-top:4px;">
+        ${pillBtn("حفظ الحقل", { icon: iconCheck(15, "#fff"), action: "save-schema-field" })}
+        ${pillBtn("إلغاء", { variant: "ghost", action: "cancel-field-edit" })}
+      </div>
+    </div>
+  </div>`;
+}
+
+function fieldSchemaRowHtml(field, index, total, sectionId) {
+  const typeLabel = SCHEMA_FIELD_TYPE_LABELS[field.type] || field.type;
+  return `<div class="card" style="display:flex;align-items:center;justify-content:space-between;gap:10px;">
+    <div style="min-width:0;">
+      <div style="font-size:13.5px;font-weight:700;">${esc(field.label)}${field.required ? ` <span style="color:${ROSE};">*</span>` : ""}</div>
+      <div style="font-size:10.5px;color:${SUBTLE};margin-top:2px;">${esc(typeLabel)}</div>
+    </div>
+    <div style="display:flex;gap:6px;flex-shrink:0;">
+      <button class="icon-btn" style="width:32px;height:32px;border:1px solid ${BORDER}" data-action="move-schema-field" data-section="${esc(sectionId)}" data-id="${esc(field.id)}" data-dir="up" ${index === 0 ? "disabled" : ""} title="نقل لأعلى">${iconChevronUp(14, INK)}</button>
+      <button class="icon-btn" style="width:32px;height:32px;border:1px solid ${BORDER}" data-action="move-schema-field" data-section="${esc(sectionId)}" data-id="${esc(field.id)}" data-dir="down" ${index === total - 1 ? "disabled" : ""} title="نقل لأسفل">${iconChevronDown(14, INK)}</button>
+      <button class="icon-btn" style="width:32px;height:32px;border:1px solid ${BORDER}" data-action="start-edit-field" data-section="${esc(sectionId)}" data-id="${esc(field.id)}" title="تعديل">${iconPencil(14, INK)}</button>
+      <button class="icon-btn" style="width:32px;height:32px;background:${DANGER_BG}" data-action="remove-schema-field" data-section="${esc(sectionId)}" data-id="${esc(field.id)}" title="حذف">${iconTrash(14, DANGER)}</button>
+    </div>
+  </div>`;
+}
+
+function renderFieldSchemasManage() {
+  const sections = fieldSchemaManagedSections();
+  if (!sections.length) {
+    return `<div class="page-wrap"><div class="page-inner narrow">
+      ${topBarHtml({ title: "إدارة حقول الأقسام", subtitle: "تحكّمي بحقول الأقسام المبنية على المحرك العام", backAction: "nav-back-admin" })}
+      <div class="card">لا توجد أقسام قابلة لإدارة الحقول حاليًا.</div>
+    </div></div>`;
+  }
+  const activeSectionId = (S.ui.fieldSchemaSection && sections.some((s) => s.id === S.ui.fieldSchemaSection)) ? S.ui.fieldSchemaSection : sections[0].id;
+  const schema = SECTION_FIELD_SCHEMAS[activeSectionId];
+  const fields = (schema && schema.fields) || [];
+  const editingId = S.ui.editingFieldId;
+  const draft = S.ui.fieldEditDraft || {};
+
+  return `
+  <div class="page-wrap"><div class="page-inner narrow">
+    ${topBarHtml({ title: "إدارة حقول الأقسام", subtitle: "أضيفي أو عدّلي أو رتّبي حقول الأقسام المبنية على المحرك العام، بدون الحاجة لتعديل الكود", backAction: "nav-back-admin" })}
+
+    <div class="card" style="background:${BLUE_BG};border:1px solid #cfe0f5;margin-bottom:18px;">
+      <div style="font-size:11.5px;color:#3a5a85;line-height:1.7;">
+        هذه القائمة تعرض فقط الأقسام اللي انتقلت للمحرك الجديد (زي "التوصيات" و"الأعمال والبرامج"). بقية الأقسام لسا لها نماذج مكتوبة بالكود ولا تظهر هنا حتى تنتقل هي كمان.
+      </div>
+    </div>
+
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:18px;">
+      ${sections.map((s) => `<button type="button" class="pill-btn ${s.id === activeSectionId ? "pill-primary" : "pill-ghost"}" data-action="select-field-schema-section" data-section="${esc(s.id)}">${esc(s.label)}</button>`).join("")}
+    </div>
+
+    ${editingId === "__new__" ? fieldEditFormHtml(draft, true) : ""}
+
+    <div style="font-size:12.5px;font-weight:800;color:${ROSE};margin-bottom:10px;">حقول "${esc((sections.find((s) => s.id === activeSectionId) || {}).label || activeSectionId)}" (${fields.length})</div>
+    <div style="display:flex;flex-direction:column;gap:8px;margin-bottom:16px;">
+      ${fields.map((f, i) => editingId === f.id ? fieldEditFormHtml(draft, false) : fieldSchemaRowHtml(f, i, fields.length, activeSectionId)).join("") || `<div class="card" style="color:${SUBTLE};font-size:12.5px;">لا توجد حقول بعد.</div>`}
+    </div>
+
+    ${editingId === "__new__" ? "" : pillBtn("إضافة حقل جديد", { variant: "ghost", icon: iconPlus(15, ROSE), action: "start-add-field", data: { section: activeSectionId } })}
+  </div></div>`;
+}
+
 /* =============================== Generic data-binding helpers ================ */
 // Every editable field in the report editor carries data-field (top level)
 // or data-arr/data-id/data-field (item inside a repeatable array), optionally
@@ -4776,6 +4926,22 @@ function attachFormListeners() {
     if (el.dataset && el.dataset.action === "filter-unit-all-reports-type") { S.ui.unitAllReportsTypeFilter = el.value; render(); return; }
     if (el.dataset && el.dataset.action === "filter-unit-all-reports-status") { S.ui.unitAllReportsStatusFilter = el.value; render(); return; }
     if (el.dataset && el.dataset.action === "pick-report-recipient") { S.ui.sendReportRecipientId = el.value; render(); return; }
+    if (el.dataset && el.dataset.action === "set-field-draft") {
+      S.ui.fieldEditDraft = S.ui.fieldEditDraft || {};
+      // تغيير نوع الحقل يحتاج إعادة رسم كاملة (عشان يبين/يخفي صندوق الخيارات)،
+      // فنحفظ أول أي قيم مكتوبة حاليًا في النموذج عشان ما تضيع بإعادة الرسم هذي.
+      const labelEl = document.getElementById("field-draft-label");
+      const optionsEl = document.getElementById("field-draft-options");
+      const placeholderEl = document.getElementById("field-draft-placeholder");
+      const otherLabelEl = document.getElementById("field-draft-other-label");
+      if (labelEl) S.ui.fieldEditDraft.label = labelEl.value;
+      if (optionsEl) S.ui.fieldEditDraft.optionsText = optionsEl.value;
+      if (placeholderEl) S.ui.fieldEditDraft.placeholder = placeholderEl.value;
+      if (otherLabelEl) S.ui.fieldEditDraft.otherLabel = otherLabelEl.value;
+      S.ui.fieldEditDraft[el.dataset.key] = el.value;
+      render();
+      return;
+    }
     if (el.dataset && el.dataset.action === "set-review-decision-choice") {
       const key = `${el.dataset.unitId}:${el.dataset.reportId}`;
       S.ui.reviewDecisionChoice = { ...(S.ui.reviewDecisionChoice || {}), [key]: el.value };
@@ -4877,6 +5043,8 @@ function attachClickListener() {
             refreshGoalsDefinitionsFromSheet().then(() => { if (S.view === ds.view) render(); });
           } else if (ds.view === "sections-manage") {
             refreshReportSectionsFromSheet().then(() => { if (S.view === ds.view) render(); });
+          } else if (ds.view === "field-schemas-manage") {
+            refreshSectionFieldSchemasFromSheet().then(() => { if (S.view === ds.view) render(); });
           } else if (ds.view === "unit-reports" && S.currentUnitId) {
             refreshReportsFromSheet(S.currentUnitId).then(() => { if (S.view === ds.view) render(); });
           }
@@ -5457,6 +5625,85 @@ function attachClickListener() {
         list[i] = { ...list[i], order: oj }; list[j] = { ...list[j], order: oi };
         applyReportSectionDefs(list);
         dataStore.saveReportSectionDefs(list);
+        render(); break;
+      }
+
+      /* ---- section field-schema management (الخطوة ٢) ---- */
+      case "select-field-schema-section": {
+        S.ui.fieldSchemaSection = ds.section;
+        S.ui.editingFieldId = null; S.ui.fieldEditDraft = null;
+        render(); break;
+      }
+      case "start-add-field": {
+        S.ui.fieldSchemaSection = ds.section;
+        S.ui.editingFieldId = "__new__";
+        S.ui.fieldEditDraft = { type: "text", label: "", required: false, placeholder: "", optionsText: "", otherLabel: "أخرى" };
+        render(); break;
+      }
+      case "start-edit-field": {
+        const schema = SECTION_FIELD_SCHEMAS[ds.section];
+        const field = schema && schema.fields.find((f) => f.id === ds.id);
+        if (!field) break;
+        S.ui.fieldSchemaSection = ds.section;
+        S.ui.editingFieldId = field.id;
+        S.ui.fieldEditDraft = { ...field, optionsText: (field.options || field.baseOptions || []).join("\n") };
+        render(); break;
+      }
+      case "cancel-field-edit": { S.ui.editingFieldId = null; S.ui.fieldEditDraft = null; render(); break; }
+      case "toggle-field-draft-required": {
+        S.ui.fieldEditDraft = S.ui.fieldEditDraft || {};
+        S.ui.fieldEditDraft.required = !S.ui.fieldEditDraft.required;
+        render(); break;
+      }
+      case "save-schema-field": {
+        const sectionId = S.ui.fieldSchemaSection;
+        const schema = SECTION_FIELD_SCHEMAS[sectionId];
+        if (!schema) break;
+        const draft = S.ui.fieldEditDraft || {};
+        const labelEl = document.getElementById("field-draft-label");
+        const label = (labelEl && labelEl.value || "").trim();
+        if (!label) break;
+        const type = draft.type || "text";
+        const optionsEl = document.getElementById("field-draft-options");
+        const optionsList = optionsEl ? optionsEl.value.split("\n").map((s) => s.trim()).filter(Boolean) : [];
+        const placeholderEl = document.getElementById("field-draft-placeholder");
+        const placeholder = (placeholderEl && placeholderEl.value || "").trim();
+        const otherLabelEl = document.getElementById("field-draft-other-label");
+        const isNew = S.ui.editingFieldId === "__new__";
+        const fieldId = isNew ? uid("fld") : S.ui.editingFieldId;
+        const newField = { id: fieldId, type, label, required: !!draft.required, placeholder };
+        if (type === "select" || type === "radio") newField.options = optionsList;
+        if (type === "expandableSelect") {
+          newField.baseOptions = optionsList;
+          newField.otherLabel = (otherLabelEl && otherLabelEl.value.trim()) || "أخرى";
+          newField.customKey = draft.customKey || `custom_${fieldId}`;
+        }
+        const fields = isNew ? [...schema.fields, newField] : schema.fields.map((f) => f.id === fieldId ? newField : f);
+        setSectionFieldsLive(sectionId, fields);
+        dataStore.saveSectionFieldSchemas({ ...dataStore.getSectionFieldSchemas(), [sectionId]: fields });
+        S.ui.editingFieldId = null; S.ui.fieldEditDraft = null;
+        render(); break;
+      }
+      case "remove-schema-field": {
+        const sectionId = ds.section;
+        const schema = SECTION_FIELD_SCHEMAS[sectionId];
+        if (!schema) break;
+        const fields = schema.fields.filter((f) => f.id !== ds.id);
+        setSectionFieldsLive(sectionId, fields);
+        dataStore.saveSectionFieldSchemas({ ...dataStore.getSectionFieldSchemas(), [sectionId]: fields });
+        render(); break;
+      }
+      case "move-schema-field": {
+        const sectionId = ds.section;
+        const schema = SECTION_FIELD_SCHEMAS[sectionId];
+        if (!schema) break;
+        const fields = schema.fields.slice();
+        const i = fields.findIndex((f) => f.id === ds.id);
+        const j = ds.dir === "up" ? i - 1 : i + 1;
+        if (i < 0 || j < 0 || j >= fields.length) break;
+        const tmp = fields[i]; fields[i] = fields[j]; fields[j] = tmp;
+        setSectionFieldsLive(sectionId, fields);
+        dataStore.saveSectionFieldSchemas({ ...dataStore.getSectionFieldSchemas(), [sectionId]: fields });
         render(); break;
       }
       default: handleDynamicGoalAction(action, ds) || handleReportEditorAction(action, ds, e) ;
