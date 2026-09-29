@@ -221,6 +221,83 @@ const SECTION_FIELD_SCHEMAS = {
       { id: "resultQuality", type: "radio", label: "جودة نتائج الأداة", options: TOOL_RESULT_QUALITY, subheadBefore: "جودة نتائج الأداة" },
     ],
   },
+  challenges: {
+    arrayKey: "challenges",
+    itemLabel: "الصعوبة",
+    fields: [
+      { id: "name", type: "text", label: "اسم الصعوبة", required: true, placeholder: "مثال: نقص الكادر المؤهل" },
+      { id: "area", type: "expandableSelect", label: "مجال الصعوبة", required: true, baseOptions: CHALLENGE_AREAS_BASE, customKey: "customChallengeAreas", otherLabel: "أخرى", placeholder: "اختاري مجال الصعوبة" },
+      { id: "severity", type: "radio", label: "مستوى الصعوبة", options: CHALLENGE_SEVERITY },
+      { id: "scope", type: "select", label: "نطاق الصعوبة", options: CHALLENGE_SCOPE },
+      { id: "description", type: "textarea", label: "وصف الصعوبة", required: true, subheadBefore: "بيانات الصعوبة" },
+      { id: "rootCause", type: "textarea", label: "سببها الجذري" },
+      { id: "performanceImpact", type: "textarea", label: "أثرها في الأداء" },
+      { id: "startedWhen", type: "date", label: "متى بدأت؟" },
+      { id: "recurred", type: "radio", label: "هل تكررت سابقًا؟", options: YES_NO_OPTIONS },
+      { id: "actionTaken", type: "textarea", label: "الإجراء الذي اتخذته الوحدة" },
+      { id: "actionResult", type: "textarea", label: "نتيجة الإجراء" },
+      { id: "stillOngoing", type: "radio", label: "هل ما زالت قائمة؟", options: YES_NO_OPTIONS },
+      { id: "supportNeeded", type: "textarea", label: "الدعم أو القرار المطلوب" },
+      { id: "proposedHandler", type: "text", label: "الجهة المقترحة للمعالجة", placeholder: "مثال: قسم شؤون المكاتب" },
+      { id: "resolutionTime", type: "text", label: "المدة اللازمة للمعالجة", placeholder: "مثال: أسبوعان" },
+    ],
+  },
+  improvement: {
+    arrayKey: "opportunities",
+    itemLabel: "فرصة التحسين",
+    fields: [
+      { id: "name", type: "text", label: "اسم فرصة التحسين", required: true, placeholder: "مثال: تسريع الاستجابة لطلبات المستفيدات" },
+      { id: "field", type: "text", label: "المجال الذي يمكن تحسينه", required: true, placeholder: "مثال: سرعة الاستجابة للطلبات" },
+      { id: "currentStatus", type: "textarea", label: "الوضع الحالي" },
+      { id: "desiredStatus", type: "textarea", label: "الوضع المرغوب" },
+      { id: "gap", type: "textarea", label: "الفجوة بينهما" },
+      { id: "action", type: "textarea", label: "الإجراء التحسيني" },
+      { id: "expectedImpact", type: "textarea", label: "الأثر المتوقع" },
+      { id: "ease", type: "radio", label: "سهولة التنفيذ", options: IMPROVEMENT_EASE_OPTIONS },
+      { id: "priority", type: "radio", label: "الأولوية", options: IMPROVEMENT_PRIORITY_OPTIONS },
+      { id: "responsiblePerson", type: "text", label: "المسؤولة", placeholder: "اسم المسؤولة" },
+      { id: "implementationDate", type: "date", label: "تاريخ التنفيذ" },
+      { id: "successIndicator", type: "text", label: "مؤشر قياس نجاح التحسين", placeholder: "كيف ستعرفين أن التحسين نجح؟" },
+    ],
+  },
+  initiatives: {
+    arrayKey: "initiatives",
+    itemLabel: "المبادرة",
+    fields: [
+      { id: "entryType", type: "select", label: "نوع المدخل", required: true, options: INITIATIVE_ENTRY_TYPES, placeholder: "اختاري نوع المدخل" },
+      { id: "name", type: "text", label: "اسم المبادرة", required: true, placeholder: "اسم المبادرة أو الممارسة", subheadBefore: "بيانات المبادرة" },
+      { id: "problem", type: "textarea", label: "المشكلة التي تعالجها" },
+      { id: "ideaSummary", type: "textarea", label: "الفكرة باختصار" },
+      { id: "targetGroup", type: "text", label: "الفئة المستهدفة", placeholder: "مثال: طالبات المستوى الأول" },
+      { id: "stage", type: "select", label: "مرحلة المبادرة", options: INITIATIVE_STAGES, placeholder: "اختاري مرحلة المبادرة" },
+      { id: "beneficiariesCount", type: "number", label: "عدد المستفيدات", placeholder: "0" },
+      { id: "preliminaryResults", type: "textarea", label: "النتائج الأولية" },
+      { id: "measuredImpact", type: "textarea", label: "الأثر المقاس" },
+      { id: "cost", type: "text", label: "التكلفة", placeholder: "مثال: 3500 ريال أو بدون تكلفة" },
+      { id: "sustainability", type: "radio", label: "قابلية الاستمرار", options: YES_NO_OPTIONS },
+      { id: "scalability", type: "radio", label: "قابلية التعميم", options: YES_NO_OPTIONS },
+      { id: "needs", type: "textarea", label: "الاحتياجات", placeholder: "ما الدعم أو الموارد المطلوبة؟" },
+      { id: "fileLink", type: "text", label: "رابط ملف المبادرة", placeholder: "رابط المستند أو العرض التقديمي" },
+    ],
+  },
+  impact: {
+    arrayKey: "impactStories",
+    itemLabel: "قصة الأثر",
+    fields: [
+      { id: "impactType", type: "select", label: "نوع الأثر", required: true, options: IMPACT_TYPES, placeholder: "اختاري نوع الأثر" },
+      { id: "title", type: "text", label: "عنوان مختصر", required: true, placeholder: "عنوان قصة الأثر", subheadBefore: "بناء قصة الأثر" },
+      { id: "beforeSituation", type: "textarea", label: "وصف الوضع قبل التدخل" },
+      { id: "intervention", type: "textarea", label: "التدخل أو البرنامج المنفذ" },
+      { id: "change", type: "textarea", label: "التغير الذي حدث" },
+      { id: "evidence", type: "textarea", label: "الدليل على التغير" },
+      { id: "beneficiariesCount", type: "number", label: "عدد المستفيدات", placeholder: "0" },
+      { id: "impactDuration", type: "text", label: "مدة ظهور الأثر", placeholder: "مثال: شهرين" },
+      { id: "ongoing", type: "radio", label: "هل الأثر مستمر؟", options: YES_NO_OPTIONS },
+      { id: "testimonial", type: "textarea", label: "شهادة مستفيدة إن وجدت", placeholder: "اقتباس أو شهادة من مستفيدة" },
+      { id: "evidenceLink", type: "text", label: "رابط الشاهد", placeholder: "https://..." },
+      { id: "publicConsent", type: "radio", label: "هل يسمح بعرض القصة في التقرير العام؟", options: YES_NO_OPTIONS },
+    ],
+  },
 };
 
 // يرسم حقل واحد حسب نوعه — يستخدم بالضبط نفس دوال الربط العامة (inp/txt/sel/radio)
@@ -1249,7 +1326,12 @@ async function refreshReportSectionsFromSheet() {
 function setSectionFieldsLive(sectionId, fields) {
   const existing = SECTION_FIELD_SCHEMAS[sectionId];
   const itemLabel = (existing && existing.itemLabel) || (SECTIONS.find((s) => s.id === sectionId) || {}).label || sectionId;
-  SECTION_FIELD_SCHEMAS[sectionId] = { arrayKey: sectionId, itemLabel, fields };
+  // نحافظ على arrayKey الأصلي (اسم الحقل اللي تُخزَّن فيه البيانات فعليًا، مثال: قسم
+  // "improvement" يخزّن بياناته تحت d.opportunities) — بعض الأقسام معرّفها arrayKey
+  // مختلف عن sectionId، وأي كتابة فوقه بالغلط بـ sectionId تفصل الحقول عن بياناتها
+  // المحفوظة فعليًا (تظهر فارغة). نستخدم sectionId فقط لو ما فيه تعريف افتراضي أصلاً.
+  const arrayKey = (existing && existing.arrayKey) || sectionId;
+  SECTION_FIELD_SCHEMAS[sectionId] = { arrayKey, itemLabel, fields };
   fields.forEach((f) => {
     if (f.type === "expandableSelect" && f.customKey) CUSTOM_OPTION_FIELD_MAP[`${sectionId}|${f.id}`] = f.customKey;
   });
@@ -5863,8 +5945,11 @@ function handleReportEditorAction(action, ds) {
         const item = factory();
         getItemList(ds.arr).push(item);
         // في الأقسام المبنية على المحرك العام (SECTION_FIELD_SCHEMAS)، نطوي العناصر
-        // السابقة تلقائيًا ونخلي العنصر الجديد بس هو المفتوح.
-        if (SECTION_FIELD_SCHEMAS[ds.arr]) {
+        // السابقة تلقائيًا ونخلي العنصر الجديد بس هو المفتوح. نتحقق عبر القسم المفتوح
+        // حاليًا (S.activeSectionId) لا عبر ds.arr مباشرة، لأن بعض الأقسام اسم مصفوفتها
+        // (arrayKey) مختلف عن معرّف القسم نفسه (مثال: قسم "improvement" ← d.opportunities).
+        const activeSchema = SECTION_FIELD_SCHEMAS[S.activeSectionId];
+        if (activeSchema && activeSchema.arrayKey === ds.arr) {
           S.ui.expandedRepeatItem = S.ui.expandedRepeatItem || {};
           S.ui.expandedRepeatItem[ds.arr] = item.id;
         }
