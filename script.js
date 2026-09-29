@@ -202,13 +202,43 @@ const SECTION_FIELD_SCHEMAS = {
       { id: "highlightResult", type: "textarea", label: "أبرز نتيجة", required: true, placeholder: "أبرز نتيجة تحققت من هذا العمل" },
     ],
   },
+  tools: {
+    arrayKey: "tools",
+    itemLabel: "أداة القياس",
+    fields: [
+      { id: "toolType", type: "expandableSelect", label: "نوع الأداة", required: true, baseOptions: MEASUREMENT_TOOL_TYPES, customKey: "customToolTypes", otherLabel: "أخرى", placeholder: "اختاري نوع الأداة" },
+      { id: "name", type: "text", label: "اسم الأداة", required: true, placeholder: "اسم أداة القياس", subheadBefore: "بيانات الأداة" },
+      { id: "purpose", type: "textarea", label: "الهدف من استخدامها", placeholder: "لماذا استُخدمت هذه الأداة؟" },
+      { id: "relatedProgram", type: "text", label: "الجهة أو البرنامج المرتبط بها", placeholder: "مثال: دورة إدارة الوقت" },
+      { id: "targetGroup", type: "text", label: "الفئة التي طبقت عليها", placeholder: "مثال: الموظفات" },
+      { id: "populationSize", type: "number", label: "حجم المجتمع", placeholder: "0", rowGroup: "sizes" },
+      { id: "sampleSize", type: "number", label: "حجم العينة", placeholder: "0", rowGroup: "sizes" },
+      { id: "respondentsCount", type: "number", label: "عدد المستجيبات", placeholder: "0" },
+      { id: "responseRate", type: "computed", compute: "responseRate", label: "نسبة الاستجابة" },
+      { id: "applicationDate", type: "date", label: "تاريخ التطبيق" },
+      { id: "toolLink", type: "text", label: "رابط نسخة الأداة", placeholder: "https://..." },
+      { id: "resultsLink", type: "text", label: "رابط نتائجها", placeholder: "https://..." },
+      { id: "resultQuality", type: "radio", label: "جودة نتائج الأداة", options: TOOL_RESULT_QUALITY, subheadBefore: "جودة نتائج الأداة" },
+    ],
+  },
 };
 
 // يرسم حقل واحد حسب نوعه — يستخدم بالضبط نفس دوال الربط العامة (inp/txt/sel/radio)
 // اللي تستخدمها كل الأقسام المكتوبة يدويًا، فيشتغل تلقائيًا مع add-item/remove-item
 // الحاليين بدون أي تعديل عليهم.
-function renderSchemaFieldHtml(f, arrKey, itemId, value, customOptionsList) {
+// أنواع "الحقول المحسوبة تلقائيًا" (زي نسبة الاستجابة = عدد المستجيبات ÷ حجم
+// العينة) — دالة الحساب نفسها كود ثابت مربوط باسم (f.compute)، فهذا النوع غير
+// متاح للإضافة الذاتية من صفحة "إدارة حقول الأقسام" (لا معنى لحقل محسوب بدون
+// دالة حساب مكتوبة له)، لكنه يبقى يشتغل عاديًا للحقول المعرّفة بالكود مسبقًا.
+const SCHEMA_COMPUTED_FIELDS = {
+  responseRate: (item) => {
+    const rate = computeResponseRate(item.sampleSize, item.respondentsCount);
+    return rate != null ? `${rate}٪` : "تُحسب تلقائيًا بعد إدخال حجم العينة وعدد المستجيبات";
+  },
+};
+function renderSchemaFieldHtml(f, arrKey, itemId, value, customOptionsList, item) {
   const html =
+    f.type === "computed" ? readonlyBox((SCHEMA_COMPUTED_FIELDS[f.compute] || (() => ""))(item || {})) :
     f.type === "textarea" ? txt(arrKey, itemId, f.id, value, f.placeholder) :
     f.type === "select" ? sel(arrKey, itemId, f.id, value, f.options || [], f.placeholder) :
     f.type === "radio" ? radio(arrKey, itemId, f.id, value, f.options || []) :
@@ -231,10 +261,10 @@ function renderSchemaFieldsHtml(fields, arrKey, itemId, item, d) {
     const subhead = f.subheadBefore ? `<div class="subhead">${esc(f.subheadBefore)}</div>` : "";
     const next = fields[i + 1];
     if (f.rowGroup && next && next.rowGroup === f.rowGroup) {
-      html += subhead + `<div class="row-flex">${renderSchemaFieldHtml(f, arrKey, itemId, item[f.id], f.customKey ? d[f.customKey] : undefined)}${renderSchemaFieldHtml(next, arrKey, itemId, item[next.id], next.customKey ? d[next.customKey] : undefined)}</div>`;
+      html += subhead + `<div class="row-flex">${renderSchemaFieldHtml(f, arrKey, itemId, item[f.id], f.customKey ? d[f.customKey] : undefined, item)}${renderSchemaFieldHtml(next, arrKey, itemId, item[next.id], next.customKey ? d[next.customKey] : undefined, item)}</div>`;
       i += 2;
     } else {
-      html += subhead + renderSchemaFieldHtml(f, arrKey, itemId, item[f.id], f.customKey ? d[f.customKey] : undefined);
+      html += subhead + renderSchemaFieldHtml(f, arrKey, itemId, item[f.id], f.customKey ? d[f.customKey] : undefined, item);
       i += 1;
     }
   }
@@ -3183,7 +3213,12 @@ const SCHEMA_FIELD_TYPE_LABELS = {
   select: "قائمة اختيار (خيار واحد)",
   radio: "أزرار اختيار",
   expandableSelect: "قائمة قابلة للتوسعة (مع خيار أخرى)",
+  computed: "محسوب تلقائيًا (بكود خاص، غير قابل للإضافة هنا)",
 };
+// الأنواع اللي تقدر مديرة النظام تختارها بنفسها وقت إضافة/تعديل حقل من صفحة
+// الإدارة — "computed" يبقى يُعرض في القائمة (فوق) لو موجود بحقل قديم، لكنه
+// مستبعد من هذه القائمة لأنه يحتاج دالة حساب مكتوبة بالكود، مو شي عام.
+const SCHEMA_FIELD_TYPES_SELECTABLE = ["text", "textarea", "number", "date", "select", "radio", "expandableSelect"];
 const SCHEMA_FIELD_TYPES_WITH_OPTIONS = ["select", "radio", "expandableSelect"];
 
 function fieldSchemaManagedSections() {
@@ -3201,7 +3236,7 @@ function fieldEditFormHtml(draft, isNew) {
     <div style="font-size:12.5px;font-weight:800;color:${ROSE};margin-bottom:12px;">${isNew ? "إضافة حقل جديد" : "تعديل الحقل"}</div>
     <div style="display:flex;flex-direction:column;gap:10px;">
       ${fieldWrap("اسم الحقل (يظهر للمستخدمة)", true, `<input class="input" id="field-draft-label" value="${esc(draft.label || "")}" placeholder="مثال: اسم التوصية" />`)}
-      ${fieldWrap("نوع الحقل", true, `<select class="input" data-action="set-field-draft" data-key="type" data-rerender="1">${Object.keys(SCHEMA_FIELD_TYPE_LABELS).map((t) => `<option value="${t}" ${t === type ? "selected" : ""}>${esc(SCHEMA_FIELD_TYPE_LABELS[t])}</option>`).join("")}</select>`)}
+      ${fieldWrap("نوع الحقل", true, `<select class="input" data-action="set-field-draft" data-key="type" data-rerender="1">${SCHEMA_FIELD_TYPES_SELECTABLE.map((t) => `<option value="${t}" ${t === type ? "selected" : ""}>${esc(SCHEMA_FIELD_TYPE_LABELS[t])}</option>`).join("")}</select>`)}
       ${showOptions ? fieldWrap("الخيارات (كل خيار بسطر)", true, `<textarea class="input" id="field-draft-options" style="min-height:90px">${esc(optionsText)}</textarea>`) : ""}
       ${type === "expandableSelect" ? fieldWrap('نص خيار "إضافة قيمة جديدة"', false, `<input class="input" id="field-draft-other-label" value="${esc(draft.otherLabel || "أخرى")}" placeholder="أخرى" />`) : ""}
       ${fieldWrap("نص توضيحي داخل الحقل (اختياري)", false, `<input class="input" id="field-draft-placeholder" value="${esc(draft.placeholder || "")}" placeholder="مثال: اكتبي هنا..." />`)}
@@ -3216,7 +3251,8 @@ function fieldEditFormHtml(draft, isNew) {
 
 function fieldSchemaRowHtml(field, index, total, sectionId) {
   const typeLabel = SCHEMA_FIELD_TYPE_LABELS[field.type] || field.type;
-  return `<div class="card" style="display:flex;align-items:center;justify-content:space-between;gap:10px;">
+  const isComputed = field.type === "computed";
+  return `<div class="card" style="display:flex;align-items:center;justify-content:space-between;gap:10px;${isComputed ? "opacity:.75;" : ""}">
     <div style="min-width:0;">
       <div style="font-size:13.5px;font-weight:700;">${esc(field.label)}${field.required ? ` <span style="color:${ROSE};">*</span>` : ""}</div>
       <div style="font-size:10.5px;color:${SUBTLE};margin-top:2px;">${esc(typeLabel)}</div>
@@ -3224,8 +3260,8 @@ function fieldSchemaRowHtml(field, index, total, sectionId) {
     <div style="display:flex;gap:6px;flex-shrink:0;">
       <button class="icon-btn" style="width:32px;height:32px;border:1px solid ${BORDER}" data-action="move-schema-field" data-section="${esc(sectionId)}" data-id="${esc(field.id)}" data-dir="up" ${index === 0 ? "disabled" : ""} title="نقل لأعلى">${iconChevronUp(14, INK)}</button>
       <button class="icon-btn" style="width:32px;height:32px;border:1px solid ${BORDER}" data-action="move-schema-field" data-section="${esc(sectionId)}" data-id="${esc(field.id)}" data-dir="down" ${index === total - 1 ? "disabled" : ""} title="نقل لأسفل">${iconChevronDown(14, INK)}</button>
-      <button class="icon-btn" style="width:32px;height:32px;border:1px solid ${BORDER}" data-action="start-edit-field" data-section="${esc(sectionId)}" data-id="${esc(field.id)}" title="تعديل">${iconPencil(14, INK)}</button>
-      <button class="icon-btn" style="width:32px;height:32px;background:${DANGER_BG}" data-action="remove-schema-field" data-section="${esc(sectionId)}" data-id="${esc(field.id)}" title="حذف">${iconTrash(14, DANGER)}</button>
+      ${isComputed ? "" : `<button class="icon-btn" style="width:32px;height:32px;border:1px solid ${BORDER}" data-action="start-edit-field" data-section="${esc(sectionId)}" data-id="${esc(field.id)}" title="تعديل">${iconPencil(14, INK)}</button>
+      <button class="icon-btn" style="width:32px;height:32px;background:${DANGER_BG}" data-action="remove-schema-field" data-section="${esc(sectionId)}" data-id="${esc(field.id)}" title="حذف">${iconTrash(14, DANGER)}</button>`}
     </div>
   </div>`;
 }
@@ -5646,7 +5682,7 @@ function attachClickListener() {
       case "start-edit-field": {
         const schema = SECTION_FIELD_SCHEMAS[ds.section];
         const field = schema && schema.fields.find((f) => f.id === ds.id);
-        if (!field) break;
+        if (!field || field.type === "computed") break;
         S.ui.fieldSchemaSection = ds.section;
         S.ui.editingFieldId = field.id;
         S.ui.fieldEditDraft = { ...field, optionsText: (field.options || field.baseOptions || []).join("\n") };
