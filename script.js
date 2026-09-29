@@ -149,6 +149,104 @@ const RECOMMENDATION_SOURCES = ["نتيجة مؤشر", "أداة قياس", "ص�
 const RECOMMENDATION_LEVELS = ["تنفذها الوحدة", "تنفذها إدارة القسم", "تحتاج تعاون عدة أقسام", "تحتاج قرار إدارة التعليم", "تحتاج قرار الإدارة العليا"];
 const RECOMMENDATION_PRIORITIES = ["عاجلة", "عالية", "متوسطة", "منخفضة"];
 
+/* =============================== محرك الأقسام الديناميكية (تجريبي) =============
+ * قسم واحد فقط ("التوصيات") مُشغَّل عليه حاليًا كتجربة أولى، عشان نتأكد إن
+ * المحرك العام يعيد إنتاج نفس النموذج المخصص القديم قبل ما نعمّمه على باقي
+ * الأقسام. الشكل هنا (fields schema) هو تمامًا الشكل اللي بيُخزَّن لاحقًا في
+ * جدول report_sections بالقاعدة (عمود fields_schema) بدل ما يكون كود ثابت.
+ * أنواع الحقول المدعومة الآن: text, textarea, number, date, select, radio.
+ * (الحقول المحسوبة تلقائيًا، والقوائم القابلة للتوسعة بـ"أخرى"، والحدود
+ * الدنيا/القصوى لعدد العناصر — غير مدعومة بعد في هذا المحرك العام). */
+const SECTION_FIELD_SCHEMAS = {
+  recommendations: {
+    arrayKey: "recommendations",
+    itemLabel: "التوصية",
+    fields: [
+      { id: "source", type: "select", label: "مصدر التوصية", required: true, options: RECOMMENDATION_SOURCES, placeholder: "اختاري مصدر التوصية" },
+      { id: "level", type: "select", label: "مستوى التوصية", required: true, options: RECOMMENDATION_LEVELS, placeholder: "اختاري مستوى التوصية" },
+      { id: "text", type: "textarea", label: "نص التوصية", required: true, placeholder: "نص التوصية بوضوح" },
+      { id: "evidenceBasis", type: "textarea", label: "الدليل الذي بنيت عليه" },
+      { id: "expectedResult", type: "textarea", label: "النتيجة المتوقعة" },
+      { id: "priority", type: "radio", label: "الأولوية", options: RECOMMENDATION_PRIORITIES },
+      { id: "responsibleParty", type: "text", label: "الجهة المسؤولة", placeholder: "الجهة المسؤولة عن التنفيذ" },
+      { id: "supportingParties", type: "text", label: "الجهات المساندة", placeholder: "الجهات المساندة، إن وجدت" },
+      { id: "proposedDuration", type: "text", label: "المدة المقترحة", placeholder: "مثال: شهر واحد" },
+      { id: "expectedCost", type: "text", label: "التكلفة المتوقعة", placeholder: "مثال: 2000 ريال أو بدون تكلفة" },
+      { id: "indicator", type: "text", label: "مؤشر تحقق التوصية", placeholder: "كيف ستعرفين أن التوصية تحققت؟" },
+    ],
+  },
+  programs: {
+    arrayKey: "programs",
+    itemLabel: "العمل / البرنامج",
+    fields: [
+      { id: "workType", type: "expandableSelect", label: "نوع العمل", required: true, baseOptions: WORK_TYPES_BASE, customKey: "customWorkTypes", otherLabel: "أخرى", placeholder: "اختاري نوع العمل" },
+      { id: "name", type: "text", label: "اسم العمل", required: true, placeholder: "اسم العمل أو البرنامج", subheadBefore: "بيانات العمل" },
+      { id: "goal", type: "textarea", label: "الهدف منه", placeholder: "ما الهدف من هذا العمل؟" },
+      { id: "targetGroup", type: "text", label: "الفئة المستهدفة", placeholder: "مثال: طالبات المرحلة المتوسطة" },
+      { type: "row", fields: [
+        { id: "targetCount", type: "number", label: "العدد المستهدف", placeholder: "0" },
+        { id: "actualBeneficiaries", type: "number", label: "عدد المستفيدات الفعلي", placeholder: "0" },
+      ] },
+      { type: "row", fields: [
+        { id: "startDate", type: "date", label: "تاريخ البداية" },
+        { id: "endDate", type: "date", label: "تاريخ النهاية" },
+      ] },
+      { id: "location", type: "text", label: "مقر التنفيذ", placeholder: "مكان التنفيذ" },
+      { id: "deliveryMode", type: "radio", label: "حضوري / عن بُعد / مدمج", options: DELIVERY_MODES },
+      { id: "executingEntity", type: "text", label: "الجهة المنفذة", placeholder: "الجهة المسؤولة عن التنفيذ" },
+      { id: "participatingEntities", type: "text", label: "الجهات المشاركة", placeholder: "الجهات المشاركة، إن وجدت" },
+      { id: "responsiblePerson", type: "text", label: "المسؤولة عن التنفيذ", placeholder: "اسم المسؤولة" },
+      { id: "executionStatus", type: "radio", label: "حالة التنفيذ", options: EXECUTION_STATUSES, subheadBefore: "حالة التنفيذ" },
+      { type: "row", subheadBefore: "مستوى الإنجاز", fields: [
+        { id: "completionPercent", type: "number", label: "نسبة الإنجاز", placeholder: "0" },
+        { id: "attendeesCount", type: "number", label: "عدد الحاضرات", placeholder: "0" },
+      ] },
+      { type: "row", fields: [
+        { id: "attendanceRate", type: "number", label: "نسبة الحضور", placeholder: "0" },
+        { id: "continuationRate", type: "number", label: "نسبة الاستمرار", placeholder: "0" },
+      ] },
+      { type: "row", fields: [
+        { id: "approvedCost", type: "number", label: "التكلفة المعتمدة", placeholder: "0" },
+        { id: "actualCost", type: "number", label: "التكلفة الفعلية", placeholder: "0" },
+      ] },
+      { id: "highlightResult", type: "textarea", label: "أبرز نتيجة", required: true, placeholder: "أبرز نتيجة تحققت من هذا العمل" },
+    ],
+  },
+};
+
+// يرسم حقل واحد حسب نوعه — يستخدم بالضبط نفس دوال الربط العامة (inp/txt/sel/radio)
+// اللي تستخدمها كل الأقسام المكتوبة يدويًا، فيشتغل تلقائيًا مع add-item/remove-item
+// الحاليين بدون أي تعديل عليهم.
+function renderSchemaFieldHtml(f, arrKey, itemId, value, customOptionsList) {
+  const html =
+    f.type === "textarea" ? txt(arrKey, itemId, f.id, value, f.placeholder) :
+    f.type === "select" ? sel(arrKey, itemId, f.id, value, f.options || [], f.placeholder) :
+    f.type === "radio" ? radio(arrKey, itemId, f.id, value, f.options || []) :
+    f.type === "expandableSelect" ? expandableSelectHtml(f.id, value, f.baseOptions || [], customOptionsList || [], f.placeholder, f.otherLabel || "أخرى", arrKey, itemId) :
+    inp(arrKey, itemId, f.id, value, f.placeholder, f.type === "number" ? "number" : f.type === "date" ? "date" : "text");
+  return fieldWrap(f.label, !!f.required, html);
+}
+// An "entry" in a schema's fields list is normally a single field, but can also be:
+//  - { type: "row", fields: [f1, f2] } to render two fields side by side (row-flex), matching
+//    the hand-written sections' layout.
+//  - any entry with a "subheadBefore" string inserts a <div class="subhead"> above it.
+function renderSchemaEntryHtml(entry, arrKey, itemId, item, d) {
+  const subhead = entry.subheadBefore ? `<div class="subhead">${esc(entry.subheadBefore)}</div>` : "";
+  if (entry.type === "row") {
+    return subhead + `<div class="row-flex">${entry.fields.map((sub) => renderSchemaFieldHtml(sub, arrKey, itemId, item[sub.id], sub.customKey ? d[sub.customKey] : undefined)).join("")}</div>`;
+  }
+  return subhead + renderSchemaFieldHtml(entry, arrKey, itemId, item[entry.id], entry.customKey ? d[entry.customKey] : undefined);
+}
+function renderSchemaRepeaterHtml(schema, d) {
+  const items = d[schema.arrayKey] || [];
+  const rows = items.map((item, i) => `
+    <div class="repeat-item">
+      <div class="repeat-item-head"><span class="repeat-item-title">${esc(schema.itemLabel)} ${i + 1}</span>${removeBtn(schema.arrayKey, item.id)}</div>
+      ${schema.fields.map((entry) => renderSchemaEntryHtml(entry, schema.arrayKey, item.id, item, d)).join("")}
+    </div>`).join("");
+  return `${rows}${pillBtn(`إضافة ${schema.itemLabel}`, { variant: "ghost", icon: iconPlus(15, ROSE), action: "add-item", data: { arr: schema.arrayKey } })}<div style="margin-top:18px;">${notesFieldHtml(d)}</div>`;
+}
+
 const EVIDENCE_TYPES_LIST = ["صورة", "كشف حضور", "نتيجة استبانة", "تقرير مالي", "محضر اجتماع", "رابط لوحة مؤشرات", "نموذج من المخرجات", "خطاب", "قصة نجاح", "فيديو موثق وفق السياسة", "ملف آخر"];
 const CONFIDENTIALITY_LEVELS = ["متاح في التقرير العام", "متاح للإدارة فقط", "سري ولا يظهر إلا للمخولين"];
 const REVIEW_CHECKLIST_ITEMS = [
@@ -230,19 +328,22 @@ function rowToReport(r) { return { id: r.id, label: r.label || "", status: r.sta
 
 async function supabaseLogin(name, password) {
   const uRes = await supabaseRequest(`units?name=eq.${encodeURIComponent(name)}&password=eq.${encodeURIComponent(password)}&select=*&limit=1`);
-  if (uRes.ok && Array.isArray(uRes.data) && uRes.data.length) {
+  if (!uRes.ok) return { ok: false, error: uRes.error || "تعذر الاتصال بقاعدة البيانات" };
+  if (Array.isArray(uRes.data) && uRes.data.length) {
     const m = rowToUnit(uRes.data[0]);
     if (m.status === "disabled") return { ok: false, error: "هذا الحساب معطّل حاليًا" };
     return { ok: true, user: { id: m.id, name: m.name, role: m.role, unitId: m.role === "admin" ? null : m.id } };
   }
   const dRes = await supabaseRequest(`departments?name=eq.${encodeURIComponent(name)}&password=eq.${encodeURIComponent(password)}&select=*&limit=1`);
-  if (dRes.ok && Array.isArray(dRes.data) && dRes.data.length && dRes.data[0].password) {
+  if (!dRes.ok) return { ok: false, error: dRes.error || "تعذر الاتصال بقاعدة البيانات" };
+  if (Array.isArray(dRes.data) && dRes.data.length && dRes.data[0].password) {
     const m = rowToDept(dRes.data[0]);
     if (m.status === "disabled") return { ok: false, error: "هذا الحساب معطّل حاليًا" };
     return { ok: true, user: { id: m.id, name: m.name, role: "department", departmentId: m.id } };
   }
   const oRes = await supabaseRequest(`offices?name=eq.${encodeURIComponent(name)}&password=eq.${encodeURIComponent(password)}&select=*&limit=1`);
-  if (oRes.ok && Array.isArray(oRes.data) && oRes.data.length && oRes.data[0].password) {
+  if (!oRes.ok) return { ok: false, error: oRes.error || "تعذر الاتصال بقاعدة البيانات" };
+  if (Array.isArray(oRes.data) && oRes.data.length && oRes.data[0].password) {
     const m = rowToOffice(oRes.data[0]);
     if (m.status === "disabled") return { ok: false, error: "هذا الحساب معطّل حاليًا" };
     return { ok: true, user: { id: m.id, name: m.name, role: "office", officeId: m.id } };
@@ -3591,6 +3692,9 @@ function notesFieldHtml(d) {
 
 /* =============================== Section field renderers ====================== */
 function renderSectionFields(section, d, unit, report) {
+  // المحرك العام يتولى أي قسم له fields schema مُعرَّف (حاليًا: التوصيات فقط،
+  // كتجربة أولى) — قبل الوصول لسويتش الأقسام المكتوبة يدويًا بالأسفل.
+  if (SECTION_FIELD_SCHEMAS[section.id]) return renderSchemaRepeaterHtml(SECTION_FIELD_SCHEMAS[section.id], d);
   switch (section.id) {
     case "basic": return basicSectionHtml(d, unit);
     case "kpi": return kpiSectionHtml(d, report);
