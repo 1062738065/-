@@ -131,6 +131,8 @@ const DELIVERY_MODES = ["حضوري", "عن بُعد", "مدمج"];
 const EXECUTION_STATUSES = ["مكتمل", "مستمر", "متعثر", "مؤجل", "ملغى"];
 const STRENGTH_AREAS_BASE = ["القيادة", "التخطيط", "الكادر", "جودة التعليم", "البرامج", "البيئة", "التقنية", "التواصل", "الشراكات", "رضا المستفيدات", "سرعة الإنجاز", "الابتكار", "قياس الأثر"];
 const CONTINUITY_OPTIONS = ["مستمرة", "مرتبطة بفترة"];
+const EVIDENCE_TYPES_LIST = ["صورة", "كشف حضور", "نتيجة استبانة", "تقرير مالي", "محضر اجتماع", "رابط لوحة مؤشرات", "نموذج من المخرجات", "خطاب", "قصة نجاح", "فيديو موثق وفق السياسة", "ملف آخر"];
+const CONFIDENTIALITY_LEVELS = ["متاح في التقرير العام", "متاح للإدارة فقط", "سري ولا يظهر إلا للمخولين"];
 const YES_NO_OPTIONS = ["نعم", "لا"];
 const CHALLENGE_AREAS_BASE = ["الموظفات", "الإجراءات", "الأنظمة التقنية", "الميزانية", "التجهيزات", "المبنى", "الحضور", "التواصل", "المستفيدات", "البيانات", "الصلاحيات", "التنسيق بين الأقسام", "الشراكات"];
 const CHALLENGE_SEVERITY = ["منخفض", "متوسط", "مرتفع", "حرج"];
@@ -298,6 +300,51 @@ const SECTION_FIELD_SCHEMAS = {
       { id: "publicConsent", type: "radio", label: "هل يسمح بعرض القصة في التقرير العام؟", options: YES_NO_OPTIONS },
     ],
   },
+  strengths: {
+    arrayKey: "strengths",
+    itemLabel: "نقطة قوة",
+    maxItems: 5,
+    fields: [
+      { id: "name", type: "text", label: "اسم نقطة القوة", required: true, placeholder: "مثال: قيادة داعمة ومتابعة مستمرة" },
+      { id: "area", type: "expandableSelect", label: "مجال نقطة القوة", required: true, baseOptions: STRENGTH_AREAS_BASE, customKey: "customStrengthAreas", otherLabel: "أخرى", placeholder: "اختاري مجال نقطة القوة" },
+      { id: "description", type: "textarea", label: "وصف نقطة القوة", required: true, placeholder: "اشرحي نقطة القوة", subheadBefore: "بيانات نقطة القوة" },
+      { id: "evidence", type: "textarea", label: "الدليل عليها", placeholder: "ما الدليل أو الرقم الذي يثبتها؟" },
+      { id: "impact", type: "textarea", label: "أثرها", placeholder: "ما أثر هذه النقطة على العمل أو المستفيدات؟" },
+      { id: "continuity", type: "radio", label: "هل هي مستمرة أم مرتبطة بفترة؟", options: CONTINUITY_OPTIONS },
+      { id: "maintainHow", type: "textarea", label: "كيف يمكن المحافظة عليها؟", placeholder: "ما الإجراءات اللازمة للحفاظ عليها؟" },
+      { id: "transferable", type: "radio", label: "هل يمكن نقلها إلى وحدات أخرى؟", options: YES_NO_OPTIONS },
+    ],
+  },
+  nextplan: {
+    arrayKey: "mainTasks",
+    itemLabel: "عمل رئيسي",
+    itemLabelPlural: "أعمال",
+    minItems: 3,
+    maxItems: 5,
+    hint: "تضيف الوحدة من 3 إلى 5 أعمال رئيسة فقط لخطة الفترة القادمة.",
+    fields: [
+      { id: "name", type: "text", label: "اسم العمل الرئيسي", required: true, placeholder: "اسم العمل المخطط له في الفترة القادمة" },
+      { id: "goal", type: "textarea", label: "الهدف منه" },
+      { id: "responsiblePerson", type: "text", label: "المسؤولة عنه", placeholder: "اسم المسؤولة" },
+      { id: "expectedDate", type: "date", label: "الموعد المتوقع" },
+    ],
+  },
+  evidence: {
+    arrayKey: "evidenceItems",
+    itemLabel: "شاهد",
+    hint: "لا تُدرج الصور أو الملفات داخل التقرير نفسه — تُحفظ بالمستودع الخاص بها ويُكتفى برابطها هنا.",
+    fields: [
+      { id: "evidenceType", type: "select", label: "نوع الشاهد", required: true, options: EVIDENCE_TYPES_LIST, placeholder: "اختاري نوع الشاهد" },
+      { id: "name", type: "text", label: "اسم الشاهد", required: true, subheadBefore: "بيانات الشاهد" },
+      // ملاحظة: الحقل الأصلي كان قائمة منسدلة تُبنى من أقسام الجمعية الحالية (تتغيّر
+      // مع الوقت)، وهذا لا يناسب "الحقل المحسوب/الثابت" اللي تديره لوحة إدارة الحقول
+      // ذاتيًا — لذا تحوّل هنا لحقل نص حر (اختياري) بنفس المعنى.
+      { id: "relatedDepartment", type: "text", label: "القسم المرتبط به (اختياري)", placeholder: "اسم القسم" },
+      { id: "fileLink", type: "text", label: "رابط الملف", placeholder: "رابط الملف بالمستودع" },
+      { id: "description", type: "textarea", label: "وصف مختصر" },
+      { id: "confidentiality", type: "radio", label: "درجة السرية", required: true, options: CONFIDENTIALITY_LEVELS },
+    ],
+  },
 };
 
 // يرسم حقل واحد حسب نوعه — يستخدم بالضبط نفس دوال الربط العامة (inp/txt/sel/radio)
@@ -370,11 +417,16 @@ function renderSchemaRepeaterHtml(schema, d) {
     if (!isOpen) return `<div class="repeat-item">${head}</div>`;
     return `<div class="repeat-item">${head}${renderSchemaFieldsHtml(schema.fields, schema.arrayKey, item.id, item, d)}</div>`;
   }).join("");
-  return `${rows}${pillBtn(`إضافة ${schema.itemLabel}`, { variant: "ghost", icon: iconPlus(15, ROSE), action: "add-item", data: { arr: schema.arrayKey } })}<div style="margin-top:18px;">${notesFieldHtml(d)}</div>`;
+  // hint اختياري أعلى القسم (نفس أسلوب التنبيهات المكتوبة يدويًا بأقسام مثل "الشواهد"
+  // و"خطة الفترة القادمة")، وحد أقصى/أدنى اختياري لعدد العناصر (maxItems/minItems).
+  const hintHtml = schema.hint ? `<div class="hint" style="background:${GRAY_BG};border-radius:10px;padding:9px 12px;margin-bottom:14px;">${esc(schema.hint)}</div>` : "";
+  const atMax = schema.maxItems != null && items.length >= schema.maxItems;
+  const addLabel = atMax ? `بلغتِ الحد الأقصى (${schema.maxItems} ${schema.itemLabelPlural || schema.itemLabel})` : `إضافة ${schema.itemLabel}`;
+  const belowMin = schema.minItems != null && items.length > 0 && items.length < schema.minItems;
+  const minWarningHtml = belowMin ? `<div class="hint bad">أضيفي ${schema.minItems - items.length} ${schema.itemLabelPlural || schema.itemLabel} إضافية على الأقل لاستيفاء الحد الأدنى (${schema.minItems}).</div>` : "";
+  return `${hintHtml}${rows}${pillBtn(addLabel, { variant: "ghost", icon: iconPlus(15, ROSE), action: "add-item", data: { arr: schema.arrayKey }, disabled: atMax })}${minWarningHtml}<div style="margin-top:18px;">${notesFieldHtml(d)}</div>`;
 }
 
-const EVIDENCE_TYPES_LIST = ["صورة", "كشف حضور", "نتيجة استبانة", "تقرير مالي", "محضر اجتماع", "رابط لوحة مؤشرات", "نموذج من المخرجات", "خطاب", "قصة نجاح", "فيديو موثق وفق السياسة", "ملف آخر"];
-const CONFIDENTIALITY_LEVELS = ["متاح في التقرير العام", "متاح للإدارة فقط", "سري ولا يظهر إلا للمخولين"];
 const REVIEW_CHECKLIST_ITEMS = [
   { key: "numbersVerified", label: "راجعت صحة الأرقام" },
   { key: "noDuplicateBeneficiaries", label: "تأكدت من عدم تكرار المستفيدات" },
@@ -4075,7 +4127,7 @@ function basicSectionHtml(d, unit) {
 }
 
 /* ---- مؤشرات الأداء ---- */
-function indicatorCardHtml(row, index, def, indicatorHistory) {
+function indicatorCardHtml(row, index, def, indicatorHistory, isOpen) {
   const approvedNames = S.indicatorDefinitions.map((x) => x.name);
   const nameSelector = fieldWrap("اسم المؤشر", true, sel("indicators", row.id, "name", row.name, [...approvedNames, NEW_INDICATOR_LABEL], approvedNames.length ? "اختاري من مؤشرات الوحدة المعتمدة" : "لا توجد مؤشرات معتمدة بعد"));
   const isNewFlow = row.name === NEW_INDICATOR_LABEL;
@@ -4088,6 +4140,23 @@ function indicatorCardHtml(row, index, def, indicatorHistory) {
     </div>`;
   }
 
+  // نفس أسلوب الطيّ التلقائي المستخدم بباقي الأقسام: لما تكون مطويّة، نبيّن سطر
+  // خفيف فقط — اسم المؤشر وشارة حالته (متحقق/قريب/يحتاج تدخل...) — وتقدرين
+  // تفتحينها بالضغط عليها. الشارة نفسها موجودة أصلًا داخل البطاقة المفتوحة،
+  // فهذا فقط يسمح بمراجعتها بسرعة بدون فتح كل مؤشر.
+  if (isOpen === false) {
+    const status = computeIndicatorStatus(resolveIndicatorRow(row, def));
+    return `<div class="indicator-card">
+      <div class="repeat-item-head" style="cursor:pointer;margin-bottom:0;" data-action="toggle-repeat-item" data-arr="indicators" data-id="${esc(row.id)}">
+        <span class="repeat-item-title">${esc(row.name)}</span>
+        <span style="display:flex;align-items:center;gap:8px;">
+          <span style="display:inline-flex;align-items:center;gap:4px;background:${status.bg};color:${status.color};border-radius:999px;padding:3px 10px;font-size:11px;font-weight:800;">${status.emoji} ${esc(status.label)}</span>
+          ${removeBtn("indicators", row.id)}
+        </span>
+      </div>
+    </div>`;
+  }
+
   const resolved = resolveIndicatorRow(row, def);
   const baseline = getIndicatorBaseline(indicatorHistory, row.name);
   const status = computeIndicatorStatus(resolved);
@@ -4097,7 +4166,7 @@ function indicatorCardHtml(row, index, def, indicatorHistory) {
   const isEditing = S.ui.indicatorEditingOpen ? !!S.ui.indicatorEditingOpen[row.id] : !row.name;
 
   return `<div class="indicator-card">
-    <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:10px;margin-bottom:12px;">
+    <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:10px;margin-bottom:12px;cursor:pointer;" data-action="toggle-repeat-item" data-arr="indicators" data-id="${esc(row.id)}">
       <div style="flex:1;min-width:0;">
         <div style="font-size:15px;font-weight:800;margin-bottom:7px;">${esc(row.name)}</div>
         <div style="display:flex;flex-wrap:wrap;gap:6px;">
@@ -4169,9 +4238,13 @@ function newIndicatorInlineFormHtml(rowId) {
 }
 function kpiSectionHtml(d, report) {
   const indicators = d.indicators || [];
+  // نفس الطيّ التلقائي: مؤشر واحد يبقى مفتوح دائمًا، وأي مؤشر بلا اسم بعد (لسا ما
+  // اختير) يبقى مفتوح إجباريًا بغض النظر عن حالة الطيّ (ما فيه شيء يُطوى له أصلًا).
+  const expandedId = schemaExpandedItemId("indicators", indicators);
   const rows = indicators.map((row, i) => {
     const def = S.indicatorDefinitions.find((x) => x.name === row.name);
-    return indicatorCardHtml(row, i, def, report.indicatorHistory);
+    const isOpen = indicators.length === 1 || !row.name || row.id === expandedId;
+    return indicatorCardHtml(row, i, def, report.indicatorHistory, isOpen);
   }).join("");
   return `
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;">
@@ -4183,12 +4256,27 @@ function kpiSectionHtml(d, report) {
 }
 
 /* ---- الأهداف والمستهدفات ---- */
+// هل الهدف محقق بالكامل؟ (كل أهدافه التشغيلية بمستوى "تحقق بالكامل") — نستخدمها
+// لعرض شارة "منجز" تلقائية على بطاقة الهدف، بدون ما تحتاج نجود تعليمها يدويًا.
+function goalOverallAchieved(g) {
+  const ogs = g.operationalGoals || [];
+  return ogs.length > 0 && ogs.every((og) => og.level === "تحقق بالكامل");
+}
 function goalsSectionHtml(d) {
   const goals = d.goals || [];
   const strategicOptions = (S.goalsDefinitions.strategic && S.goalsDefinitions.strategic.length ? S.goalsDefinitions.strategic.map((g) => g.name) : STRATEGIC_GOALS_FALLBACK);
   const operationalOptions = (S.goalsDefinitions.operational && S.goalsDefinitions.operational.length ? S.goalsDefinitions.operational.map((g) => g.name) : OPERATIONAL_GOALS_FALLBACK);
+  // نفس أسلوب الطيّ التلقائي المستخدم بالأقسام الأخرى (البرامج والتوصيات...):
+  // بعد إضافة هدف جديد تنطوي الأهداف السابقة تلقائيًا وتبيّن عنوانها فقط، وتقدرين
+  // ترجعين لأي واحد وتفتحينه للتعديل بالضغط عليه.
+  const expandedId = schemaExpandedItemId("goals", goals);
 
   const goalsHtml = goals.map((g, i) => {
+    const isOpen = goals.length === 1 || g.id === expandedId;
+    const achieved = goalOverallAchieved(g);
+    const achievedBadge = achieved ? `<span style="display:inline-flex;align-items:center;gap:4px;background:${GREEN_BG};color:${GREEN};border-radius:999px;padding:3px 10px;font-size:11px;font-weight:800;margin-inline-start:8px;">✅ منجز</span>` : "";
+    const head = `<div class="repeat-item-head" style="cursor:pointer;" data-action="toggle-repeat-item" data-arr="goals" data-id="${esc(g.id)}"><span class="repeat-item-title">الهدف ${i + 1}${isOpen ? "" : ` — ${esc(g.strategicGoal || "")}`}</span>${achievedBadge}${removeBtn("goals", g.id)}</div>`;
+    if (!isOpen) return `<div class="repeat-item">${head}</div>`;
     const ogHtml = (g.operationalGoals || []).map((og) => `
       <div class="og-block">
         <div style="font-size:12.5px;font-weight:800;margin-bottom:10px;">${esc(og.name)}</div>
@@ -4199,7 +4287,7 @@ function goalsSectionHtml(d) {
         ${fieldWrap("تفسير مستوى التحقق", txtSub("goals", g.id, "operationalGoals", og.id, "explanation", og.explanation, "اشرحي سبب هذا المستوى من التحقق (٣٠٠ حرف كحد أقصى)") + `<div class="char-count">${(og.explanation || "").length} / 300</div>`)}
       </div>`).join("");
     return `<div class="repeat-item">
-      <div class="repeat-item-head"><span class="repeat-item-title">الهدف ${i + 1}</span>${removeBtn("goals", g.id)}</div>
+      ${head}
       ${fieldWrap("الهدف المرتبط بالخطة الاستراتيجية", true, sel("goals", g.id, "strategicGoal", g.strategicGoal, strategicOptions, "اختاري الهدف الاستراتيجي"))}
       ${fieldWrap("الهدف التشغيلي للوحدة", true, multiSelectDropdownHtml(`goal-og-${g.id}`, operationalOptions, (g.operationalGoals || []).map((og) => og.name), "اختاري هدفًا أو أكثر"))}
       ${ogHtml}
@@ -5942,16 +6030,22 @@ function handleReportEditorAction(action, ds) {
     case "add-item": {
       const factory = EMPTY_ITEM_FACTORY[ds.arr];
       if (factory) {
-        const item = factory();
-        getItemList(ds.arr).push(item);
         // في الأقسام المبنية على المحرك العام (SECTION_FIELD_SCHEMAS)، نطوي العناصر
         // السابقة تلقائيًا ونخلي العنصر الجديد بس هو المفتوح. نتحقق عبر القسم المفتوح
         // حاليًا (S.activeSectionId) لا عبر ds.arr مباشرة، لأن بعض الأقسام اسم مصفوفتها
         // (arrayKey) مختلف عن معرّف القسم نفسه (مثال: قسم "improvement" ← d.opportunities).
         const activeSchema = SECTION_FIELD_SCHEMAS[S.activeSectionId];
-        if (activeSchema && activeSchema.arrayKey === ds.arr) {
-          S.ui.expandedRepeatItem = S.ui.expandedRepeatItem || {};
-          S.ui.expandedRepeatItem[ds.arr] = item.id;
+        const schema = (activeSchema && activeSchema.arrayKey === ds.arr) ? activeSchema : null;
+        const list = getItemList(ds.arr);
+        // شبكة أمان: تمنع تجاوز الحد الأقصى (maxItems) حتى لو انضغط الزر بالغلط وهو
+        // معطّل بالواجهة (مثال: قسم "نقاط القوة" بحد أقصى 5).
+        if (!schema || schema.maxItems == null || list.length < schema.maxItems) {
+          const item = factory();
+          list.push(item);
+          if (schema) {
+            S.ui.expandedRepeatItem = S.ui.expandedRepeatItem || {};
+            S.ui.expandedRepeatItem[ds.arr] = item.id;
+          }
         }
       }
       render();
@@ -5976,8 +6070,20 @@ function handleReportEditorAction(action, ds) {
       render();
       return true;
     }
-    case "add-goal": { getItemList("goals").push(EMPTY_ITEM_FACTORY.goals()); render(); return true; }
-    case "add-indicator": { getItemList("indicators").push(EMPTY_ITEM_FACTORY.indicators()); render(); return true; }
+    case "add-goal": {
+      const g = EMPTY_ITEM_FACTORY.goals();
+      getItemList("goals").push(g);
+      S.ui.expandedRepeatItem = S.ui.expandedRepeatItem || {};
+      S.ui.expandedRepeatItem.goals = g.id;
+      render(); return true;
+    }
+    case "add-indicator": {
+      const ind = EMPTY_ITEM_FACTORY.indicators();
+      getItemList("indicators").push(ind);
+      S.ui.expandedRepeatItem = S.ui.expandedRepeatItem || {};
+      S.ui.expandedRepeatItem.indicators = ind.id;
+      render(); return true;
+    }
 
     /* ---- indicator card toggles ---- */
     case "toggle-indicator-details": {
