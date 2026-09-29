@@ -1157,8 +1157,13 @@ function computeVisibleSidebarPages() {
   // داخل صفحات وحدة معيّنة، مو بصفحتهم الرئيسية.
   const UNIT_SCOPED_VIEWS = ["unit-dashboard", "unit-settings", "unit-reports", "unit-report", "full-report", "report-preview"];
   if (S.isAdmin) {
-    // مديرة النظام تشوف كل شي بالموقع — بما فيها صفحات الإدارة العليا للاطلاع.
-    return SIDEBAR_PAGES.filter((p) => p.id !== "department-overview" && (p.group !== "unit-home" || UNIT_SCOPED_VIEWS.includes(S.view)));
+    // مديرة النظام تشوف كل شي بالموقع — بما فيها صفحات الإدارة العليا للاطلاع
+    // (تلك عامة/غير مرتبطة بقسم أو مكتب معيّن). لكن "قسمي" وصفحات "مكتب
+    // الإشراف" الأربع مرتبطة بـ currentDepartmentId/currentOfficeId، وما
+    // توجد قيمة لهما عند مديرة النظام — فتُستثنى هنا (نفس سبب استثناء
+    // department-overview أصلاً)، واطّلاعها البديل عليها من "مكاتب الإشراف"
+    // و"الأقسام" بصفحات الهيكل التنظيمي.
+    return SIDEBAR_PAGES.filter((p) => p.id !== "department-overview" && p.group !== "مكتب الإشراف" && (p.group !== "unit-home" || UNIT_SCOPED_VIEWS.includes(S.view)));
   } else if (S.isDepartmentUser) {
     return SIDEBAR_PAGES.filter((p) => p.id === "department-overview" || p.id === "all-reports" || (p.group === "unit-home" && UNIT_SCOPED_VIEWS.includes(S.view)));
   } else if (S.isExecutive) {
@@ -1251,7 +1256,7 @@ function renderMainSidebar(mobile) {
   }).join("");
 
   const initial = (S.currentUser && S.currentUser.name ? S.currentUser.name.trim()[0] : "؟");
-  const roleLabel = S.isAdmin ? "مديرة النظام" : "مسؤولة الوحدة";
+  const roleLabel = S.isAdmin ? "مديرة النظام" : S.isDepartmentUser ? "مديرة قسم" : S.isExecutive ? "الإدارة العليا" : S.isOfficeUser ? "مكتب إشراف" : "مسؤولة الوحدة";
 
   const inner = `
     <div class="sidebar-head">
@@ -1268,11 +1273,11 @@ function renderMainSidebar(mobile) {
     <div class="sidebar-user-block">
       <div class="sidebar-user-avatar">${esc(initial)}</div>
       <div style="min-width:0;">
-        <div class="sidebar-user-hello">أهلًا وسهلًا</div>
         <div class="sidebar-user-name">${esc(S.currentUser ? S.currentUser.name : "")}</div>
+        <div class="sidebar-role-badge">${esc(roleLabel)}</div>
       </div>
     </div>
-    <div style="display:flex;flex-direction:column;gap:16px;">${groupsHtml}</div>
+    <div style="display:flex;flex-direction:column;gap:14px;">${groupsHtml}</div>
     <div class="sidebar-spacer"></div>
     <div class="sidebar-sep"></div>
     ${S.isAdmin ? "" : `<div class="sidebar-tagline">تقارير دقيقة.. لأثر أكبر</div>`}
