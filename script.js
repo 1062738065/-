@@ -345,6 +345,23 @@ const SECTION_FIELD_SCHEMAS = {
       { id: "confidentiality", type: "radio", label: "درجة السرية", required: true, options: CONFIDENTIALITY_LEVELS },
     ],
   },
+  // "تحليل النتائج" فيها حقول عامة ثابتة (أبرز نتيجة إيجابية/تحتاج تحسين، الخلاصة
+  // التحليلية) مختلطة مع قائمة "مقارنات" متكررة — هذا الخليط لا يناسب تحويل القسم
+  // كامل للمحرك العام (سيفقد الحقول الثابتة). لذا بقي القسم بكوده اليدوي
+  // (analysisSectionHtml)، لكن قائمة المقارنات نفسها صارت تُدار من نفس محرك الحقول
+  // الذاتي — معرّف هذا التعريف (analysisComparisons) مختلف عمدًا عن معرّف القسم
+  // (analysis) عشان ما يستبدل القسم كامل بالمحرك العام تلقائيًا.
+  analysisComparisons: {
+    arrayKey: "comparisons",
+    itemLabel: "مقارنة",
+    sectionLabel: "تحليل النتائج (المقارنات)",
+    fields: [
+      { id: "topic", type: "text", label: "موضوع المقارنة", placeholder: "مثال: نسبة الحضور" },
+      { id: "resultValue", type: "text", label: "نتيجة المقارنة بالرقم أو النسبة", placeholder: "مثال: ارتفعت من 70٪ إلى 85٪" },
+      { id: "judgment", type: "select", label: "الحكم", options: COMPARISON_JUDGMENTS },
+      { id: "changeReason", type: "expandableSelect", label: "سبب التغير", baseOptions: CHANGE_REASONS, customKey: "customChangeReasons", otherLabel: "سبب آخر", placeholder: "اختاري سبب التغير" },
+    ],
+  },
 };
 
 // يرسم حقل واحد حسب نوعه — يستخدم بالضبط نفس دوال الربط العامة (inp/txt/sel/radio)
@@ -1383,7 +1400,10 @@ function setSectionFieldsLive(sectionId, fields) {
   // مختلف عن sectionId، وأي كتابة فوقه بالغلط بـ sectionId تفصل الحقول عن بياناتها
   // المحفوظة فعليًا (تظهر فارغة). نستخدم sectionId فقط لو ما فيه تعريف افتراضي أصلاً.
   const arrayKey = (existing && existing.arrayKey) || sectionId;
-  SECTION_FIELD_SCHEMAS[sectionId] = { arrayKey, itemLabel, fields };
+  // نحافظ على كل تعريفات القسم الإضافية (hint/minItems/maxItems/itemLabelPlural/
+  // sectionLabel...) بنشرها من التعريف الحالي أولًا — بدل ما تُفقد بمجرد تعديل حقل
+  // واحد من لوحة الإدارة (كانت هذي مشكلة حقيقية بأقسام فيها حد أقصى/أدنى أو نص تنبيهي).
+  SECTION_FIELD_SCHEMAS[sectionId] = { ...(existing || {}), arrayKey, itemLabel, fields };
   fields.forEach((f) => {
     if (f.type === "expandableSelect" && f.customKey) CUSTOM_OPTION_FIELD_MAP[`${sectionId}|${f.id}`] = f.customKey;
   });
@@ -3380,8 +3400,12 @@ const SCHEMA_FIELD_TYPES_WITH_OPTIONS = ["select", "radio", "expandableSelect"];
 
 function fieldSchemaManagedSections() {
   return Object.keys(SECTION_FIELD_SCHEMAS).map((id) => {
+    const schema = SECTION_FIELD_SCHEMAS[id] || {};
     const sectionDef = SECTIONS.find((s) => s.id === id);
-    return { id, label: (sectionDef && sectionDef.label) || (SECTION_FIELD_SCHEMAS[id] || {}).itemLabel || id };
+    // sectionLabel تسمية صريحة اختيارية — تُستخدم لأي تعريف حقول مضمّن داخل قسم
+    // مكتوب يدويًا (id غير مطابق لأي قسم فعلي، مثال: "analysisComparisons")، عشان
+    // يبين بتبويب واضح بلوحة "إدارة حقول الأقسام" بدل معرّف تقني.
+    return { id, label: schema.sectionLabel || (sectionDef && sectionDef.label) || schema.itemLabel || id };
   });
 }
 
@@ -4378,17 +4402,18 @@ function toolsSectionHtml(d) {
 /* ---- تحليل النتائج ---- */
 function analysisSectionHtml(d) {
   const comparisons = d.comparisons || [];
-  const rows = comparisons.map((c, i) => `
-    <div style="border:1px solid ${BORDER};border-radius:12px;padding:12px 14px;margin-bottom:12px;">
-      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;">
-        <span style="font-size:11.5px;font-weight:800;color:${ROSE}">مقارنة ${i + 1}</span>
-        <button type="button" class="icon-remove" style="width:24px;height:24px;" data-action="remove-item" data-arr="comparisons" data-id="${esc(c.id)}">${iconX(11, DANGER)}</button>
-      </div>
-      ${fieldWrap("موضوع المقارنة", inp("comparisons", c.id, "topic", c.topic, "مثال: نسبة الحضور"))}
-      ${fieldWrap("نتيجة المقارنة بالرقم أو النسبة", inp("comparisons", c.id, "resultValue", c.resultValue, "مثال: ارتفعت من 70٪ إلى 85٪"))}
-      ${fieldWrap("الحكم", sel("comparisons", c.id, "judgment", c.judgment, COMPARISON_JUDGMENTS))}
-      ${fieldWrap("سبب التغير", expandableSelectHtml("changeReason", c.changeReason, CHANGE_REASONS, d.customChangeReasons || [], "اختاري سبب التغير", "سبب آخر", "comparisons", c.id))}
-    </div>`).join("");
+  // حقول المقارنة نفسها صارت مُدارة من محرك الحقول العام (SECTION_FIELD_SCHEMAS.
+  // analysisComparisons)، فتقدرين تضيفين/تعدّلين/ترتّبين حقولها من "إدارة حقول
+  // الأقسام" رغم إن باقي القسم (النتيجة الإيجابية/التحسين/الخلاصة) يبقى ثابتًا
+  // بالكود كما هو (حقول فردية، مو قائمة متكررة، فما تحتاج إدارة ذاتية).
+  const comparisonsSchema = SECTION_FIELD_SCHEMAS.analysisComparisons;
+  const expandedId = schemaExpandedItemId("comparisons", comparisons);
+  const rows = comparisons.map((c, i) => {
+    const isOpen = comparisons.length === 1 || c.id === expandedId;
+    const head = `<div class="repeat-item-head" style="cursor:pointer;" data-action="toggle-repeat-item" data-arr="comparisons" data-id="${esc(c.id)}"><span class="repeat-item-title">مقارنة ${i + 1}${isOpen ? "" : ` — ${esc(c.topic || "")}`}</span>${removeBtn("comparisons", c.id)}</div>`;
+    if (!isOpen) return `<div class="repeat-item">${head}</div>`;
+    return `<div class="repeat-item">${head}${renderSchemaFieldsHtml(comparisonsSchema.fields, "comparisons", c.id, c, d)}</div>`;
+  }).join("");
   return `
     <div class="hint" style="background:${GRAY_BG};border-radius:10px;padding:9px 12px;margin-bottom:18px;">يظهر هذا القسم بعد إدخال المؤشرات وأدوات القياس.</div>
     <div class="subhead" style="color:${GREEN}">أبرز نتيجة إيجابية</div>
@@ -6031,11 +6056,12 @@ function handleReportEditorAction(action, ds) {
       const factory = EMPTY_ITEM_FACTORY[ds.arr];
       if (factory) {
         // في الأقسام المبنية على المحرك العام (SECTION_FIELD_SCHEMAS)، نطوي العناصر
-        // السابقة تلقائيًا ونخلي العنصر الجديد بس هو المفتوح. نتحقق عبر القسم المفتوح
-        // حاليًا (S.activeSectionId) لا عبر ds.arr مباشرة، لأن بعض الأقسام اسم مصفوفتها
-        // (arrayKey) مختلف عن معرّف القسم نفسه (مثال: قسم "improvement" ← d.opportunities).
-        const activeSchema = SECTION_FIELD_SCHEMAS[S.activeSectionId];
-        const schema = (activeSchema && activeSchema.arrayKey === ds.arr) ? activeSchema : null;
+        // السابقة تلقائيًا ونخلي العنصر الجديد بس هو المفتوح. نبحث عن التعريف بمطابقة
+        // arrayKey مباشرة (لا عبر S.activeSectionId ولا معرّف القسم)، لأن بعض الأقسام
+        // اسم مصفوفتها مختلف عن معرّف القسم نفسه (مثال: "improvement" ← d.opportunities)،
+        // وبعض المصفوفات (مثل "comparisons") مُدارة ذاتيًا من داخل قسم مكتوب يدويًا
+        // (analysis) وليست القسم كامل، فما تكون مفتاحها بالتعريف مطابقًا لأي معرّف قسم.
+        const schema = Object.values(SECTION_FIELD_SCHEMAS).find((s) => s.arrayKey === ds.arr) || null;
         const list = getItemList(ds.arr);
         // شبكة أمان: تمنع تجاوز الحد الأقصى (maxItems) حتى لو انضغط الزر بالغلط وهو
         // معطّل بالواجهة (مثال: قسم "نقاط القوة" بحد أقصى 5).
