@@ -362,6 +362,50 @@ const SECTION_FIELD_SCHEMAS = {
       { id: "changeReason", type: "expandableSelect", label: "سبب التغير", baseOptions: CHANGE_REASONS, customKey: "customChangeReasons", otherLabel: "سبب آخر", placeholder: "اختاري سبب التغير" },
     ],
   },
+  // "مؤشرات الأداء" فيها حقلان مرتبطان بحسابات فعلية (name يربط بتعريف المؤشر
+  // المعتمد، actual يغذّي computeIndicatorStatus/الانحراف) — نقلهما للمحرك العام
+  // يكسر الحسابات لو أُعيدت تسميتهما أو حُذفا من لوحة الإدارة، فبقيا بكودهما
+  // اليدوي. أما حقول "تحليل الانحراف والإجراء التصحيحي" (تظهر فقط لو المؤشر لم
+  // يتحقق) فهي نصية بحتة بلا أي حساب عليها، فصارت قابلة للإدارة الذاتية عبر هذا
+  // التعريف المدمج (arrayKey يشير لنفس مصفوفة indicators الحقيقية، فليست هذه
+  // حالة تعارض معرّف/مصفوفة كباقي الأمثلة أعلاه، لأنها تضيف حقولًا على نفس العنصر
+  // بدل ما تشكّل مصفوفة منفصلة).
+  kpiDeviation: {
+    arrayKey: "indicators",
+    itemLabel: "تحليل الانحراف",
+    sectionLabel: "مؤشرات الأداء (تحليل الانحراف)",
+    fields: [
+      { id: "deviationReason", type: "textarea", label: "سبب الانحراف", placeholder: "اشرحي سبب الانحراف عن المستهدف" },
+      { id: "causeType", type: "radio", label: "هل السبب داخلي أم خارجي؟", options: CAUSE_TYPES },
+      { id: "correctiveAction", type: "textarea", label: "الإجراء التصحيحي", placeholder: "ما الإجراء المتخذ لمعالجة الانحراف" },
+      { id: "responsiblePerson", type: "text", label: "المسؤولة عن الإجراء", placeholder: "اسم المسؤولة" },
+      { id: "closureDate", type: "date", label: "موعد إغلاق المعالجة" },
+      { id: "requiredSupport", type: "textarea", label: "الدعم المطلوب", placeholder: "أي دعم إضافي مطلوب لإغلاق الانحراف" },
+    ],
+  },
+  // "الأهداف والمستهدفات": مصفوفة operationalGoals متداخلة داخل كل هدف. حقل
+  // "level" يبقى بكوده اليدوي لأنه يغذّي حساب النسبة (GOAL_LEVEL_PERCENTAGE)
+  // وشارة "منجز" التلقائية (goalOverallAchieved) — حذفه أو تغيير قيمه من لوحة
+  // الإدارة يكسر هذه الحسابات. أما دليل التحقق (evidenceType/evidenceAnswer)
+  // وتفسير المستوى (explanation) فهي حقول توثيقية بحتة بلا أي حساب عليها،
+  // فصارت قابلة للإدارة الذاتية. ملاحظة: النص التوضيحي الفعلي لحقل "إجابة الدليل"
+  // يتغيّر تلقائيًا حسب نوع الدليل المختار (evidenceAnswerPlaceholder) — هذا
+  // السلوك الذكي يبقى مستقلًا عن لوحة الإدارة، فوق أي نص توضيحي تكتبه هنا.
+  goalsEvidence: {
+    // arrayKey هنا "goals" وليس "operationalGoals" رغم إن الحقول فعليًا متداخلة
+    // داخل operationalGoals — لأن data-arr على عنصر DOM (وبالتالي مفتاح
+    // CUSTOM_OPTION_FIELD_MAP عند تسجيله من لوحة الإدارة) يتبع المصفوفة
+    // الخارجية دائمًا (goals) وليس الداخلية، تمامًا مثل الحقول الأخرى المتداخلة
+    // في نفس القسم (level, strategicGoal...).
+    arrayKey: "goals",
+    itemLabel: "دليل تحقق الهدف",
+    sectionLabel: "الأهداف والمستهدفات (دليل التحقق)",
+    fields: [
+      { id: "evidenceType", type: "expandableSelect", label: "دليل تحقق الهدف", required: true, baseOptions: EVIDENCE_TYPES, customKey: "customEvidenceTypes", otherLabel: "أخرى", placeholder: "اختاري نوع الدليل" },
+      { id: "evidenceAnswer", type: "text", label: "إجابة الدليل", required: true, placeholder: "" },
+      { id: "explanation", type: "textarea", label: "تفسير مستوى التحقق", placeholder: "اشرحي سبب هذا المستوى من التحقق (٣٠٠ حرف كحد أقصى)" },
+    ],
+  },
 };
 
 // يرسم حقل واحد حسب نوعه — يستخدم بالضبط نفس دوال الربط العامة (inp/txt/sel/radio)
@@ -377,14 +421,19 @@ const SCHEMA_COMPUTED_FIELDS = {
     return rate != null ? `${rate}٪` : "تُحسب تلقائيًا بعد إدخال حجم العينة وعدد المستجيبات";
   },
 };
-function renderSchemaFieldHtml(f, arrKey, itemId, value, customOptionsList, item) {
+// subArrKey/subItemId اختياريان: لو انمررا، الحقل يُربط بعنصر متداخل داخل مصفوفة
+// فرعية (مثال: عناصر operationalGoals داخل هدف بقسم "الأهداف والمستهدفات") عبر
+// نفس دوال inpSub/txtSub/selSub/radioSub الموجودة أصلًا — بدون أي تغيير على
+// سلوك الاستدعاءات القديمة (بدون subArrKey تبقى تعمل تمامًا كما كانت).
+function renderSchemaFieldHtml(f, arrKey, itemId, value, customOptionsList, item, subArrKey, subItemId) {
+  const inputType = f.type === "number" ? "number" : f.type === "date" ? "date" : "text";
   const html =
     f.type === "computed" ? readonlyBox((SCHEMA_COMPUTED_FIELDS[f.compute] || (() => ""))(item || {})) :
-    f.type === "textarea" ? txt(arrKey, itemId, f.id, value, f.placeholder) :
-    f.type === "select" ? sel(arrKey, itemId, f.id, value, f.options || [], f.placeholder) :
-    f.type === "radio" ? radio(arrKey, itemId, f.id, value, f.options || []) :
-    f.type === "expandableSelect" ? expandableSelectHtml(f.id, value, f.baseOptions || [], customOptionsList || [], f.placeholder, f.otherLabel || "أخرى", arrKey, itemId) :
-    inp(arrKey, itemId, f.id, value, f.placeholder, f.type === "number" ? "number" : f.type === "date" ? "date" : "text");
+    f.type === "textarea" ? (subArrKey ? txtSub(arrKey, itemId, subArrKey, subItemId, f.id, value, f.placeholder) : txt(arrKey, itemId, f.id, value, f.placeholder)) :
+    f.type === "select" ? (subArrKey ? selSub(arrKey, itemId, subArrKey, subItemId, f.id, value, f.options || [], f.placeholder) : sel(arrKey, itemId, f.id, value, f.options || [], f.placeholder)) :
+    f.type === "radio" ? (subArrKey ? radioSub(arrKey, itemId, subArrKey, subItemId, f.id, value, f.options || []) : radio(arrKey, itemId, f.id, value, f.options || [])) :
+    f.type === "expandableSelect" ? expandableSelectHtml(f.id, value, f.baseOptions || [], customOptionsList || [], f.placeholder, f.otherLabel || "أخرى", arrKey, itemId, subArrKey, subItemId) :
+    (subArrKey ? inpSub(arrKey, itemId, subArrKey, subItemId, f.id, value, f.placeholder, inputType) : inp(arrKey, itemId, f.id, value, f.placeholder, inputType));
   return fieldWrap(f.label, !!f.required, html);
 }
 // كل عنصر في schema.fields هو دائمًا حقل حقيقي واحد (له id/type/label) — ما فيه
@@ -394,7 +443,7 @@ function renderSchemaFieldHtml(f, arrKey, itemId, value, customOptionsList, item
 //  - "rowGroup": حقلين متتاليين يحملان نفس القيمة يُرسمان جنب بعض (row-flex)،
 //    مطابقةً لتنسيق الأقسام المكتوبة يدويًا. لو انكسر التتالي (مثلاً بعد إعادة
 //    ترتيب من صفحة الإدارة) يرجع كل حقل يُرسم لحاله بعرض كامل — تجميل فقط.
-function renderSchemaFieldsHtml(fields, arrKey, itemId, item, d) {
+function renderSchemaFieldsHtml(fields, arrKey, itemId, item, d, subArrKey, subItemId) {
   let html = "";
   let i = 0;
   while (i < fields.length) {
@@ -402,10 +451,10 @@ function renderSchemaFieldsHtml(fields, arrKey, itemId, item, d) {
     const subhead = f.subheadBefore ? `<div class="subhead">${esc(f.subheadBefore)}</div>` : "";
     const next = fields[i + 1];
     if (f.rowGroup && next && next.rowGroup === f.rowGroup) {
-      html += subhead + `<div class="row-flex">${renderSchemaFieldHtml(f, arrKey, itemId, item[f.id], f.customKey ? d[f.customKey] : undefined, item)}${renderSchemaFieldHtml(next, arrKey, itemId, item[next.id], next.customKey ? d[next.customKey] : undefined, item)}</div>`;
+      html += subhead + `<div class="row-flex">${renderSchemaFieldHtml(f, arrKey, itemId, item[f.id], f.customKey ? d[f.customKey] : undefined, item, subArrKey, subItemId)}${renderSchemaFieldHtml(next, arrKey, itemId, item[next.id], next.customKey ? d[next.customKey] : undefined, item, subArrKey, subItemId)}</div>`;
       i += 2;
     } else {
-      html += subhead + renderSchemaFieldHtml(f, arrKey, itemId, item[f.id], f.customKey ? d[f.customKey] : undefined, item);
+      html += subhead + renderSchemaFieldHtml(f, arrKey, itemId, item[f.id], f.customKey ? d[f.customKey] : undefined, item, subArrKey, subItemId);
       i += 1;
     }
   }
@@ -1405,7 +1454,9 @@ function setSectionFieldsLive(sectionId, fields) {
   // واحد من لوحة الإدارة (كانت هذي مشكلة حقيقية بأقسام فيها حد أقصى/أدنى أو نص تنبيهي).
   SECTION_FIELD_SCHEMAS[sectionId] = { ...(existing || {}), arrayKey, itemLabel, fields };
   fields.forEach((f) => {
-    if (f.type === "expandableSelect" && f.customKey) CUSTOM_OPTION_FIELD_MAP[`${sectionId}|${f.id}`] = f.customKey;
+    // المفتاح لازم يكون arrayKey (نفس المفتاح اللي يبحث فيه dispatch الحقيقي عند
+    // إضافة قيمة "أخرى" مخصصة: data-arr بالنموذج هو arrayKey دايمًا، وليس sectionId).
+    if (f.type === "expandableSelect" && f.customKey) CUSTOM_OPTION_FIELD_MAP[`${arrayKey}|${f.id}`] = f.customKey;
   });
 }
 // يطبّق تخصيصات حقول محفوظة (من القاعدة أو من التخزين المحلي) فوق SECTION_FIELD_SCHEMAS
@@ -4151,7 +4202,7 @@ function basicSectionHtml(d, unit) {
 }
 
 /* ---- مؤشرات الأداء ---- */
-function indicatorCardHtml(row, index, def, indicatorHistory, isOpen) {
+function indicatorCardHtml(row, index, def, indicatorHistory, isOpen, d) {
   const approvedNames = S.indicatorDefinitions.map((x) => x.name);
   const nameSelector = fieldWrap("اسم المؤشر", true, sel("indicators", row.id, "name", row.name, [...approvedNames, NEW_INDICATOR_LABEL], approvedNames.length ? "اختاري من مؤشرات الوحدة المعتمدة" : "لا توجد مؤشرات معتمدة بعد"));
   const isNewFlow = row.name === NEW_INDICATOR_LABEL;
@@ -4230,12 +4281,7 @@ function indicatorCardHtml(row, index, def, indicatorHistory, isOpen) {
       ${needsDeviation ? `
         <div style="font-size:11.5px;font-weight:800;color:${DANGER};margin:0 0 10px;padding-bottom:6px;border-bottom:1px solid ${BORDER}">تحليل الانحراف والإجراء التصحيحي</div>
         ${fieldWrap("مقدار الانحراف", readonlyBox(deviation != null ? deviation : "—"))}
-        ${fieldWrap("سبب الانحراف", txt("indicators", row.id, "deviationReason", row.deviationReason, "اشرحي سبب الانحراف عن المستهدف"))}
-        ${fieldWrap("هل السبب داخلي أم خارجي؟", radio("indicators", row.id, "causeType", row.causeType, CAUSE_TYPES))}
-        ${fieldWrap("الإجراء التصحيحي", txt("indicators", row.id, "correctiveAction", row.correctiveAction, "ما الإجراء المتخذ لمعالجة الانحراف"))}
-        ${fieldWrap("المسؤولة عن الإجراء", inp("indicators", row.id, "responsiblePerson", row.responsiblePerson, "اسم المسؤولة"))}
-        ${fieldWrap("موعد إغلاق المعالجة", inp("indicators", row.id, "closureDate", row.closureDate, "", "date"))}
-        ${fieldWrap("الدعم المطلوب", txt("indicators", row.id, "requiredSupport", row.requiredSupport, "أي دعم إضافي مطلوب لإغلاق الانحراف"))}
+        ${renderSchemaFieldsHtml(SECTION_FIELD_SCHEMAS.kpiDeviation.fields, "indicators", row.id, row, d || S.sectionDraft || {})}
       ` : ""}
     </div>` : ""}
   </div>`;
@@ -4268,7 +4314,7 @@ function kpiSectionHtml(d, report) {
   const rows = indicators.map((row, i) => {
     const def = S.indicatorDefinitions.find((x) => x.name === row.name);
     const isOpen = indicators.length === 1 || !row.name || row.id === expandedId;
-    return indicatorCardHtml(row, i, def, report.indicatorHistory, isOpen);
+    return indicatorCardHtml(row, i, def, report.indicatorHistory, isOpen, d);
   }).join("");
   return `
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;">
@@ -4294,6 +4340,10 @@ function goalsSectionHtml(d) {
   // بعد إضافة هدف جديد تنطوي الأهداف السابقة تلقائيًا وتبيّن عنوانها فقط، وتقدرين
   // ترجعين لأي واحد وتفتحينه للتعديل بالضغط عليه.
   const expandedId = schemaExpandedItemId("goals", goals);
+  const evSchema = SECTION_FIELD_SCHEMAS.goalsEvidence;
+  const evidenceTypeField = evSchema.fields.find((f) => f.id === "evidenceType");
+  const evidenceAnswerField = evSchema.fields.find((f) => f.id === "evidenceAnswer");
+  const explanationField = evSchema.fields.find((f) => f.id === "explanation");
 
   const goalsHtml = goals.map((g, i) => {
     const isOpen = goals.length === 1 || g.id === expandedId;
@@ -4306,9 +4356,9 @@ function goalsSectionHtml(d) {
         <div style="font-size:12.5px;font-weight:800;margin-bottom:10px;">${esc(og.name)}</div>
         ${fieldWrap("مستوى تحقق الهدف", true, selSub("goals", g.id, "operationalGoals", og.id, "level", og.level, GOAL_LEVELS, "اختاري مستوى التحقق"))}
         ${fieldWrap("نسبة تحقق الهدف", og.level ? `<div style="display:flex;align-items:center;gap:10px;"><div style="flex:1;">${progressBarHtml(og.percentage || 0, goalLevelMeta(og.level).color)}</div><span style="font-size:13px;font-weight:800;color:${goalLevelMeta(og.level).color};min-width:34px;text-align:left;">${og.percentage}٪</span></div>` : `<div class="hint">تُحسب تلقائيًا بعد اختيار مستوى التحقق</div>`)}
-        ${fieldWrap("دليل تحقق الهدف", true, expandableSelectHtml("evidenceType", og.evidenceType || "", EVIDENCE_TYPES, d.customEvidenceTypes || [], "اختاري نوع الدليل", "أخرى", "goals", g.id, "operationalGoals", og.id))}
-        ${og.evidenceType ? fieldWrap("إجابة الدليل", true, inpSub("goals", g.id, "operationalGoals", og.id, "evidenceAnswer", og.evidenceAnswer, evidenceAnswerPlaceholder(og.evidenceType))) : ""}
-        ${fieldWrap("تفسير مستوى التحقق", txtSub("goals", g.id, "operationalGoals", og.id, "explanation", og.explanation, "اشرحي سبب هذا المستوى من التحقق (٣٠٠ حرف كحد أقصى)") + `<div class="char-count">${(og.explanation || "").length} / 300</div>`)}
+        ${renderSchemaFieldHtml(evidenceTypeField, "goals", g.id, og.evidenceType || "", d.customEvidenceTypes || [], og, "operationalGoals", og.id)}
+        ${og.evidenceType ? renderSchemaFieldHtml({ ...evidenceAnswerField, placeholder: evidenceAnswerPlaceholder(og.evidenceType) }, "goals", g.id, og.evidenceAnswer, undefined, og, "operationalGoals", og.id) : ""}
+        ${renderSchemaFieldHtml(explanationField, "goals", g.id, og.explanation, undefined, og, "operationalGoals", og.id) + `<div class="char-count">${(og.explanation || "").length} / 300</div>`}
       </div>`).join("");
     return `<div class="repeat-item">
       ${head}
