@@ -357,6 +357,24 @@ async function supabaseReplaceTable(table, rows) {
   }
 }
 
+// طابور كتابة لكل جدول: لو صار أكثر من تعديل سريع بعد بعض (مثال: ضغط "نقل لأعلى"
+// عدة مرات متتالية بسرعة على حقل)، كل تعديل يبدأ كتابته للقاعدة فقط بعد ما تخلص
+// كتابة التعديل اللي قبله تمامًا — بدل ما تتسابق الطلبات وتوصل بترتيب معكوس فتطغى
+// نتيجة قديمة على نتيجة أحدث بالغلط. ودالة pendingSupabaseWrite تتيح لأي شاشة
+// "تحديث من القاعدة" (refresh*FromSheet) أن تنتظر اكتمال آخر كتابة معلّقة لنفس
+// الجدول قبل ما تقرأ منه، عشان ما ترجع بنسخة قديمة وتطبّقها فوق تعديل المستخدم
+// الأحدث (وهذا بالضبط سبب مشكلة "رجع الترتيب تحت" اللي لاحظتها).
+const supabaseWriteQueues = {};
+function queueSupabaseReplaceTable(table, rows) {
+  const prev = supabaseWriteQueues[table] || Promise.resolve();
+  const next = prev.catch(() => {}).then(() => supabaseReplaceTable(table, rows));
+  supabaseWriteQueues[table] = next;
+  return next;
+}
+function pendingSupabaseWrite(table) {
+  return supabaseWriteQueues[table] || Promise.resolve();
+}
+
 /* ---- تحويل الأشكال بين JS (camelCase) وأعمدة قاعدة البيانات (snake_case) ---- */
 function unitToRow(u) { return { id: u.id, name: u.name, password: u.password || "", role: u.role || "unit", department_id: u.departmentId || "", status: u.status || "active", created_at: u.createdAt || Date.now(), email: u.email || "" }; }
 function rowToUnit(r) { return { id: r.id, name: r.name, password: r.password || "", role: r.role || "unit", departmentId: r.department_id || "", status: r.status || "active", createdAt: Number(r.created_at) || 0, email: r.email || "" }; }
@@ -500,23 +518,23 @@ const dataStore = {
   },
   saveDepartments(d) {
     lsSet(DEPARTMENTS_KEY, JSON.stringify(d));
-    if (sheetsConfigured()) supabaseReplaceTable("departments", d.map(deptToRow)).catch(() => {});
+    if (sheetsConfigured()) queueSupabaseReplaceTable("departments", d.map(deptToRow)).catch(() => {});
   },
   getOffices() { const v = lsGet(OFFICES_KEY); if (v) return JSON.parse(v); const seed = seedOffices(); lsSet(OFFICES_KEY, JSON.stringify(seed)); return seed; },
   saveOffices(o) {
     lsSet(OFFICES_KEY, JSON.stringify(o));
-    if (sheetsConfigured()) supabaseReplaceTable("offices", o.map(officeToRow)).catch(() => {});
+    if (sheetsConfigured()) queueSupabaseReplaceTable("offices", o.map(officeToRow)).catch(() => {});
   },
   cacheOfficesLocally(o) { lsSet(OFFICES_KEY, JSON.stringify(o)); },
   getUnits() { const v = lsGet(UNITS_KEY); if (v) return JSON.parse(v); const seed = seedUnits(); lsSet(UNITS_KEY, JSON.stringify(seed)); return seed; },
   saveUnits(u) {
     lsSet(UNITS_KEY, JSON.stringify(u));
-    if (sheetsConfigured()) supabaseReplaceTable("units", u.map(unitToRow)).catch(() => {});
+    if (sheetsConfigured()) queueSupabaseReplaceTable("units", u.map(unitToRow)).catch(() => {});
   },
   getIndicatorDefinitions() { const v = lsGet(INDICATOR_DEFINITIONS_KEY); return v ? JSON.parse(v) : []; },
   saveIndicatorDefinitions(d) {
     lsSet(INDICATOR_DEFINITIONS_KEY, JSON.stringify(d));
-    if (sheetsConfigured()) supabaseReplaceTable("indicator_definitions", d.map(indDefToRow)).catch(() => {});
+    if (sheetsConfigured()) queueSupabaseReplaceTable("indicator_definitions", d.map(indDefToRow)).catch(() => {});
   },
   getSiteSettings() { const v = lsGet(SITE_SETTINGS_KEY); return v ? JSON.parse(v) : { ...DEFAULT_SITE_COLORS }; },
   saveSiteSettings(s) {
@@ -531,14 +549,14 @@ const dataStore = {
     lsSet(GOALS_DEFINITIONS_KEY, JSON.stringify(d));
     if (sheetsConfigured()) {
       const rows = (d.strategic || []).map((g) => goalToRow(g, "strategic")).concat((d.operational || []).map((g) => goalToRow(g, "operational")));
-      supabaseReplaceTable("goals_definitions", rows).catch(() => {});
+      queueSupabaseReplaceTable("goals_definitions", rows).catch(() => {});
     }
   },
   cacheGoalsDefinitionsLocally(d) { lsSet(GOALS_DEFINITIONS_KEY, JSON.stringify(d)); },
   getReportSectionDefs() { const v = lsGet(REPORT_SECTIONS_KEY); return v ? JSON.parse(v) : DEFAULT_SECTIONS.map((s, i) => ({ id: s.id, label: s.label, order: i, enabled: true })); },
   saveReportSectionDefs(list) {
     lsSet(REPORT_SECTIONS_KEY, JSON.stringify(list));
-    if (sheetsConfigured()) supabaseReplaceTable("report_sections", list.map(sectionDefToRow)).catch(() => {});
+    if (sheetsConfigured()) queueSupabaseReplaceTable("report_sections", list.map(sectionDefToRow)).catch(() => {});
   },
   cacheReportSectionDefsLocally(list) { lsSet(REPORT_SECTIONS_KEY, JSON.stringify(list)); },
   // خريطة { sectionId: [field, field, ...] } — تخصيصات حقول الأقسام المبنية على
@@ -547,7 +565,7 @@ const dataStore = {
   getSectionFieldSchemas() { const v = lsGet(SECTION_FIELD_SCHEMAS_KEY); return v ? JSON.parse(v) : {}; },
   saveSectionFieldSchemas(map) {
     lsSet(SECTION_FIELD_SCHEMAS_KEY, JSON.stringify(map));
-    if (sheetsConfigured()) supabaseReplaceTable("section_field_schemas", Object.keys(map).map((id) => fieldSchemaToRow(id, map[id]))).catch(() => {});
+    if (sheetsConfigured()) queueSupabaseReplaceTable("section_field_schemas", Object.keys(map).map((id) => fieldSchemaToRow(id, map[id]))).catch(() => {});
   },
   cacheSectionFieldSchemasLocally(map) { lsSet(SECTION_FIELD_SCHEMAS_KEY, JSON.stringify(map)); },
   // Each unit now holds a LIST of report entries (one per period/submission),
@@ -1152,6 +1170,7 @@ async function handleLoginSubmit() {
 
 async function refreshUnitsAndDepartmentsFromSheet() {
   if (!sheetsConfigured()) return;
+  await Promise.all([pendingSupabaseWrite("units"), pendingSupabaseWrite("departments"), pendingSupabaseWrite("offices")]);
   const [unitsRes, deptRes, officesRes] = await Promise.all([
     supabaseRequest("units?select=*"),
     supabaseRequest("departments?select=*"),
@@ -1176,6 +1195,7 @@ async function refreshUnitsAndDepartmentsFromSheet() {
 
 async function refreshIndicatorDefinitionsFromSheet() {
   if (!sheetsConfigured()) return;
+  await pendingSupabaseWrite("indicator_definitions");
   const res = await supabaseRequest("indicator_definitions?select=*");
   if (res.ok && Array.isArray(res.data)) {
     S.indicatorDefinitions = res.data.map(rowToIndDef);
@@ -1185,6 +1205,7 @@ async function refreshIndicatorDefinitionsFromSheet() {
 
 async function refreshGoalsDefinitionsFromSheet() {
   if (!sheetsConfigured()) return;
+  await pendingSupabaseWrite("goals_definitions");
   const res = await supabaseRequest("goals_definitions?select=*");
   if (res.ok && Array.isArray(res.data)) {
     S.goalsDefinitions = {
@@ -1206,6 +1227,7 @@ function applyReportSectionDefs(list) {
 
 async function refreshReportSectionsFromSheet() {
   if (!sheetsConfigured()) return;
+  await pendingSupabaseWrite("report_sections");
   const res = await supabaseRequest("report_sections?select=*");
   if (res.ok && Array.isArray(res.data)) {
     if (res.data.length) {
@@ -1245,6 +1267,7 @@ function applyFieldSchemaOverrides(map) {
 
 async function refreshSectionFieldSchemasFromSheet() {
   if (!sheetsConfigured()) return;
+  await pendingSupabaseWrite("section_field_schemas");
   const res = await supabaseRequest("section_field_schemas?select=*");
   if (res.ok && Array.isArray(res.data) && res.data.length) {
     const map = {};
