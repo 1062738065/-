@@ -670,8 +670,8 @@ function unitToRow(u) { return { id: u.id, name: u.name, password: u.password ||
 function rowToUnit(r) { return { id: r.id, name: r.name, password: r.password || "", role: r.role || "unit", departmentId: r.department_id || "", status: r.status || "active", createdAt: Number(r.created_at) || 0, email: r.email || "" }; }
 function deptToRow(d) { return { id: d.id, name: d.name, password: d.password || "", status: d.status || "active", created_at: d.createdAt || Date.now(), curation: d.curation || { approvedKeys: [] }, email: d.email || "", office_id: d.officeId || "" }; }
 function rowToDept(r) { return { id: r.id, name: r.name, password: r.password || "", status: r.status || "active", createdAt: Number(r.created_at) || 0, curation: r.curation || { approvedKeys: [] }, email: r.email || "", officeId: r.office_id || "" }; }
-function officeToRow(o) { return { id: o.id, name: o.name, password: o.password || "", status: o.status || "active", created_at: o.createdAt || Date.now() }; }
-function rowToOffice(r) { return { id: r.id, name: r.name, password: r.password || "", status: r.status || "active", createdAt: Number(r.created_at) || 0 }; }
+function officeToRow(o) { return { id: o.id, name: o.name, password: o.password || "", status: o.status || "active", created_at: o.createdAt || Date.now(), curation: o.curation || { approvedKeys: [] } }; }
+function rowToOffice(r) { return { id: r.id, name: r.name, password: r.password || "", status: r.status || "active", createdAt: Number(r.created_at) || 0, curation: r.curation || { approvedKeys: [] } }; }
 function siteSettingsToRow(s) { return { id: "main", primary_color: s.primary || DEFAULT_SITE_COLORS.primary, background: s.background || DEFAULT_SITE_COLORS.background }; }
 function rowToSiteSettings(r) { return { primary: r.primary_color || DEFAULT_SITE_COLORS.primary, background: r.background || DEFAULT_SITE_COLORS.background }; }
 function indDefToRow(d) { return { id: d.id, name: d.name, category: d.category || "", direction: d.direction || "", nature: d.nature || "", frequency: d.frequency || "", unit: d.unit || "", target: String(d.target ?? ""), data_source: d.dataSource || "", calculation_method: d.calculationMethod || "" }; }
@@ -914,6 +914,7 @@ function isUnitInUserScope(unitId) {
   const unit = S.units.find((u) => u.id === unitId);
   if (!unit) return false;
   if (S.isDepartmentUser) return unit.departmentId === S.currentDepartmentId;
+  if (S.isOfficeUser) return officeUnits(S.currentOfficeId).some((u) => u.id === unitId);
   return unit.id === S.currentUnitId;
 }
 // يرفع بيانات التقرير فعليًا لقاعدة Supabase (upsert بمفتاح id) — كانت هذي
@@ -1082,6 +1083,14 @@ function render() {
     html = shellWrap(renderReportPreview());
   } else if (S.view === "offices-manage") {
     html = shellWrap(renderOfficesManagePage());
+  } else if (S.view === "office-dashboard") {
+    html = shellWrap(renderOfficeDashboard());
+  } else if (S.view === "office-archive") {
+    html = shellWrap(renderOfficeArchive());
+  } else if (S.view === "office-summary") {
+    html = shellWrap(renderOfficeSummary());
+  } else if (S.view === "office-curation") {
+    html = shellWrap(renderOfficeCuration());
   } else if (S.view === "unit-role-select") {
     html = renderUnitRoleSelect();
   } else {
@@ -1125,12 +1134,16 @@ const SIDEBAR_PAGES = [
   { id: "executive-dashboard", label: "لوحة المعلومات", group: "الإدارة العليا", icon: "home" },
   { id: "executive-summary", label: "الملخص التنفيذي", group: "الإدارة العليا", icon: "document" },
   { id: "executive-final-report", label: "التقرير الإداري النهائي", group: "الإدارة العليا", icon: "layers" },
+  { id: "office-dashboard", label: "لوحة المعلومات", group: "مكتب الإشراف", icon: "home" },
+  { id: "office-archive", label: "الأرشفة", group: "مكتب الإشراف", icon: "layers" },
+  { id: "office-summary", label: "ملخص الوحدات", group: "مكتب الإشراف", icon: "document" },
+  { id: "office-curation", label: "اعتماد أبرز النتائج والتوصيات", group: "مكتب الإشراف", icon: "target" },
   { id: "unit-dashboard", label: "لوحة المعلومات", group: "unit-home", scope: "unit", icon: "home" },
   { id: "unit-reports", label: "تقارير", group: "unit-home", scope: "unit", icon: "document" },
   { id: "unit-report", label: "إنشاء تقرير", group: "unit-home", icon: "pencil" },
   { id: "unit-settings", label: "الإعدادات", group: "unit-home", scope: "unit", icon: "gauge" },
 ];
-const SIDEBAR_GROUPS = ["الرئيسية", "إدارة التقارير", "__standalone__all-reports", "__standalone__units-manage", "الإدارة العليا", "الهيكل التنظيمي", "unit-home"];
+const SIDEBAR_GROUPS = ["الرئيسية", "إدارة التقارير", "__standalone__all-reports", "__standalone__units-manage", "الإدارة العليا", "مكتب الإشراف", "الهيكل التنظيمي", "unit-home"];
 const SIDEBAR_GROUP_LABELS = { "unit-home": "الرئيسية" };
 function sidebarNavIcon(key, size, color) {
   const map = { home: iconHome, document: iconDocument, building: iconBuilding, gauge: iconGauge, target: iconTarget, pencil: iconPencil, layers: iconLayers, printer: iconPrinter, plus: iconPlus, bell: iconBell };
@@ -1151,7 +1164,7 @@ function computeVisibleSidebarPages() {
   } else if (S.isExecutive) {
     return SIDEBAR_PAGES.filter((p) => p.group === "الإدارة العليا" || p.id === "all-reports");
   } else if (S.isOfficeUser) {
-    return SIDEBAR_PAGES.filter((p) => p.id === "departments-list");
+    return SIDEBAR_PAGES.filter((p) => ["office-dashboard", "office-archive", "all-reports", "office-summary", "office-curation", "departments-list"].includes(p.id));
   }
   // موظفة الوحدة أو المركز: تشوف "تقاريري" + "جميع التقارير" — بدون
   // "الأقسام والوحدات" (ذاك رابط إشرافي خاص بمديرة النظام).
@@ -1631,11 +1644,12 @@ function doLogin(user) {
     S.reports = reports;
     S.view = "executive-dashboard";
   } else if (S.isOfficeUser) {
-    // اطلاع مكتب الإشراف: يشوف فقط الأقسام التابعة له، وعند اختيار قسم يشوف
-    // وحداته — بدون أي دخول لتقارير الوحدات أو تعديلها (خارج نطاق هذي الخطوة).
+    // اطلاع مكتب الإشراف: لوحة معلومات + أرشفة + تقارير + ملخص + اعتماد أبرز
+    // النتائج، كلها مقتصرة على وحدات أقسامه التابعة فقط — بدون أي دخول لتقارير
+    // الوحدات أو تعديلها.
     S.currentOfficeId = user.officeId || "";
     S.ui.departmentsPageSelectedId = null;
-    S.view = "departments-list";
+    S.view = "office-dashboard";
   } else if (user.role === "center") {
     const unitId = user.unitId;
     S.reports[unitId] = dataStore.getReports(unitId);
@@ -1656,6 +1670,8 @@ function doLogin(user) {
       Promise.all(S.units.map((u) => refreshReportsFromSheet(u.id))).then(() => { if (S.currentUser) render(); });
     } else if (S.isDepartmentUser) {
       Promise.all(S.units.filter((u) => u.departmentId === S.currentDepartmentId).map((u) => refreshReportsFromSheet(u.id))).then(() => { if (S.currentUser) render(); });
+    } else if (S.isOfficeUser) {
+      Promise.all(officeUnits(S.currentOfficeId).map((u) => refreshReportsFromSheet(u.id))).then(() => { if (S.currentUser) render(); });
     } else if (S.currentUnitId) {
       refreshReportsFromSheet(S.currentUnitId).then(() => { if (S.currentUser) render(); });
     }
@@ -2129,45 +2145,6 @@ function renderEntityPickerPage(kind) {
   </div></div>`;
 }
 
-/* =============================== Office dashboard (مكتب الإشراف) ============= */
-// اطلاع فقط: مكتب الإشراف يشوف الأقسام التابعة له (عبر officeId)، وعند اختيار
-// قسم يشوف وحداته. بدون أي دخول لتقارير الوحدات أو صلاحياتها في هذي الخطوة.
-function renderOfficeDashboard() {
-  const office = (S.offices || []).find((o) => o.id === S.currentOfficeId);
-  const officeName = office ? office.name : (S.currentUser && S.currentUser.name) || "مكتب الإشراف";
-  const linkedDepartments = S.departments.filter((d) => d.officeId === S.currentOfficeId);
-  const selectedDept = S.ui.officeSelectedDeptId ? linkedDepartments.find((d) => d.id === S.ui.officeSelectedDeptId) : null;
-
-  if (selectedDept) {
-    const units = S.units.filter((u) => u.departmentId === selectedDept.id);
-    return `
-    <div class="page-wrap"><div class="page-inner">
-      ${topBarHtml({ title: selectedDept.name, subtitle: `تابع لـ ${officeName}`, backAction: "office-back-to-departments",
-        right: pillBtn("خروج", { variant: "danger", icon: iconLogout(15, DANGER), action: "logout" }) })}
-      ${units.length === 0 ? `<div class="card" style="text-align:center;color:${SUBTLE};padding:36px;">لا توجد وحدات في هذا القسم بعد.</div>` :
-        `<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:12px;">${units.map((u) => `
-          <div class="card">
-            <div style="display:flex;align-items:center;gap:10px;">
-              <div style="width:34px;height:34px;border-radius:10px;background:${DANGER_BG};display:flex;align-items:center;justify-content:center;flex-shrink:0;">${iconBuilding(ROSE, 16)}</div>
-              <div style="font-size:13.5px;font-weight:700;">${esc(u.name)} ${u.role === "center" ? `<span style="font-size:9.5px;font-weight:700;color:${GOLD};background:${GOLD_BG};padding:1px 6px;border-radius:999px;">مركز</span>` : ""}</div>
-            </div>
-          </div>`).join("")}</div>`}
-    </div></div>`;
-  }
-
-  return `
-  <div class="page-wrap"><div class="page-inner">
-    ${topBarHtml({ title: officeName, subtitle: "الأقسام التابعة للمكتب",
-      right: pillBtn("خروج", { variant: "danger", icon: iconLogout(15, DANGER), action: "logout" }) })}
-    ${linkedDepartments.length === 0 ? `<div class="card" style="text-align:center;color:${SUBTLE};padding:36px;">لا توجد أقسام مرتبطة بهذا المكتب بعد.</div>` :
-      `<div style="display:flex;flex-direction:column;gap:8px;">${linkedDepartments.map((d) => `
-        <button class="card" style="display:flex;align-items:center;justify-content:space-between;width:100%;background:none;border:1px solid ${BORDER};cursor:pointer;text-align:right;" data-action="open-office-department" data-id="${esc(d.id)}">
-          <span style="font-size:13.5px;font-weight:700;">${esc(d.name)}</span>
-          <span style="font-size:11px;color:${SUBTLE};display:flex;align-items:center;gap:6px;">${S.units.filter((u) => u.departmentId === d.id).length} وحدة/مركز ${iconChevronLeft(14, SUBTLE)}</span>
-        </button>`).join("")}</div>`}
-  </div></div>`;
-}
-
 /* ===================== Offices management page (admin, standalone) =========== */
 // صفحة مستقلة بالشريط الجانبي لمديرة النظام: قائمة كل مكاتب الإشراف، وعند فتح
 // مكتب تظهر الأقسام التابعة له، وعند فتح قسم تظهر الوحدات التابعة له — بنفس
@@ -2385,9 +2362,15 @@ function reviewDecisionsSectionHtml(pendingReports) {
    نفسها، بدون أي جدول أو تبويب جديد بقاعدة البيانات. ---- */
 function curationKey(kind, reportId, itemId) { return `${kind}:${reportId}:${itemId}`; }
 function isDeptCurated(dept, key) { return !!(dept.curation && dept.curation.approvedKeys && dept.curation.approvedKeys.includes(key)); }
+function isOfficeCurated(office, key) { return !!(office.curation && office.curation.approvedKeys && office.curation.approvedKeys.includes(key)); }
+// عنصر يظهر "⭐ معتمد" بالملخص التنفيذي/التقرير النهائي لو اعتمدته مديرة القسم
+// أو مكتب الإشراف (أيهما اعتمده) — طبقتا إشراف مستقلتان، كل وحدة يمر اعتمادها
+// عبر الاثنتين إن وُجدتا.
 function isItemCurated(unit, key) {
   const dept = S.departments.find((d) => d.id === unit.departmentId);
-  return dept ? isDeptCurated(dept, key) : false;
+  if (dept && isDeptCurated(dept, key)) return true;
+  const office = dept ? (S.offices || []).find((o) => o.id === dept.officeId) : null;
+  return office ? isOfficeCurated(office, key) : false;
 }
 function toggleDeptCuration(dept, key) {
   const current = (dept.curation && dept.curation.approvedKeys) || [];
@@ -2395,10 +2378,11 @@ function toggleDeptCuration(dept, key) {
   S.departments = S.departments.map((d) => d.id === dept.id ? { ...d, curation: { approvedKeys: next } } : d);
   dataStore.saveDepartments(S.departments);
 }
-function collectDeptCurationCandidates(dept) {
-  const deptUnits = S.units.filter((u) => u.departmentId === dept.id && u.status === "active");
+// نسخة عامة تأخذ أي قائمة وحدات — تُستخدم لكل من القسم (وحداته) ومكتب الإشراف
+// (وحدات كل أقسامه التابعة، عبر officeUnits).
+function collectCurationCandidatesForUnits(units) {
   const achievements = [], recommendations = [], challenges = [], strengths = [];
-  deptUnits.forEach((u) => {
+  units.forEach((u) => {
     ensureUnitReportsLoaded(u.id).forEach((r) => {
       (r.sections?.programs?.data?.programs || []).filter((p) => p.highlightResult).forEach((p) => {
         achievements.push({ key: curationKey("achievement", r.id, p.id), unitName: u.name, text: `${p.name || "عمل"}: ${p.highlightResult}` });
@@ -2416,12 +2400,19 @@ function collectDeptCurationCandidates(dept) {
   });
   return { achievements, recommendations, challenges, strengths };
 }
-function deptCurationSectionHtml(dept) {
-  const { achievements, recommendations, challenges, strengths } = collectDeptCurationCandidates(dept);
+function collectDeptCurationCandidates(dept) {
+  return collectCurationCandidatesForUnits(S.units.filter((u) => u.departmentId === dept.id && u.status === "active"));
+}
+// عرض عام لقسم "اعتماد أبرز النتائج والتوصيات" — يُستخدم لكل من مديرة القسم
+// ومكتب الإشراف، بفرق فقط في: مصدر العناصر المرشّحة (units)، ودالتي isCurated/
+// toggleAction + بيانات الإجراء (data-*) اللي يحتاجها كل زر.
+function curationSectionHtml(units, isCuratedFn, toggleAction, toggleData) {
+  const { achievements, recommendations, challenges, strengths } = collectCurationCandidatesForUnits(units);
+  const dataAttrs = Object.entries(toggleData || {}).map(([k, v]) => `data-${k}="${esc(v)}"`).join(" ");
   const renderList = (items, emptyMsg) => items.length === 0 ? emptyHint(emptyMsg) : items.map((it) => `
-    <div style="display:flex;align-items:flex-start;gap:8px;padding:8px 10px;border-radius:8px;background:${isDeptCurated(dept, it.key) ? GREEN_BG : "#fff"};border:1px solid ${isDeptCurated(dept, it.key) ? GREEN : BORDER};margin-bottom:6px;">
-      <button type="button" data-action="toggle-dept-curation" data-key="${esc(it.key)}" style="flex-shrink:0;background:none;border:none;cursor:pointer;padding:2px;">
-        ${isDeptCurated(dept, it.key) ? iconCheckCircle(18, GREEN) : iconCircle(18, SUBTLE)}
+    <div style="display:flex;align-items:flex-start;gap:8px;padding:8px 10px;border-radius:8px;background:${isCuratedFn(it.key) ? GREEN_BG : "#fff"};border:1px solid ${isCuratedFn(it.key) ? GREEN : BORDER};margin-bottom:6px;">
+      <button type="button" data-action="${esc(toggleAction)}" data-key="${esc(it.key)}" ${dataAttrs} style="flex-shrink:0;background:none;border:none;cursor:pointer;padding:2px;">
+        ${isCuratedFn(it.key) ? iconCheckCircle(18, GREEN) : iconCircle(18, SUBTLE)}
       </button>
       <div style="flex:1;font-size:12.5px;"><b>${esc(it.unitName)}</b> — ${esc(it.text || "—")}</div>
     </div>`).join("");
@@ -2435,16 +2426,139 @@ function deptCurationSectionHtml(dept) {
       <div class="subhead">التحديات</div>${renderList(challenges, "لا توجد تحديات مُدخلة بعد.")}
     </div>`;
 }
+function deptCurationSectionHtml(dept) {
+  const deptUnits = S.units.filter((u) => u.departmentId === dept.id && u.status === "active");
+  return curationSectionHtml(deptUnits, (key) => isDeptCurated(dept, key), "toggle-dept-curation", {});
+}
+function toggleOfficeCuration(office, key) {
+  const current = (office.curation && office.curation.approvedKeys) || [];
+  const next = current.includes(key) ? current.filter((k) => k !== key) : [...current, key];
+  S.offices = (S.offices || []).map((o) => o.id === office.id ? { ...o, curation: { approvedKeys: next } } : o);
+  dataStore.saveOffices(S.offices);
+}
+function officeCurationSectionHtml(office) {
+  return curationSectionHtml(officeUnits(office.id), (key) => isOfficeCurated(office, key), "toggle-office-curation", {});
+}
+
+/* =============================== صفحات مكتب الإشراف (لوحة المعلومات، الأرشفة،
+   الملخص، الاعتماد) — كل صفحة مقتصرة على وحدات أقسام هذا المكتب فقط، عبر
+   officeUnits(officeId). صفحة "التقارير" لا تحتاج دالة خاصة: تُستخدم renderAllReports
+   نفسها (مُعمَّمة أعلاه لتشمل فرع S.isOfficeUser). ============================= */
+function currentOffice() { return (S.offices || []).find((o) => o.id === S.currentOfficeId) || null; }
+
+function renderOfficeDashboard() {
+  const office = currentOffice();
+  if (!office) return `<div class="page-wrap">تعذر إيجاد مكتب الإشراف.</div>`;
+  const units = officeUnits(office.id);
+  const depts = S.departments.filter((d) => d.officeId === office.id && d.status === "active");
+  return renderExecutiveDashboard(units, depts, { subtitle: `نظرة إشرافية شاملة على وحدات ${office.name}` });
+}
+
+function renderOfficeSummary() {
+  const office = currentOffice();
+  if (!office) return `<div class="page-wrap">تعذر إيجاد مكتب الإشراف.</div>`;
+  const units = officeUnits(office.id);
+  const depts = S.departments.filter((d) => d.officeId === office.id && d.status === "active");
+  return renderExecutiveSummary(units, depts, { title: `ملخص ${office.name}`, showAiSummary: false });
+}
+
+function renderOfficeCuration() {
+  const office = currentOffice();
+  if (!office) return `<div class="page-wrap">تعذر إيجاد مكتب الإشراف.</div>`;
+  return `
+  <div class="page-wrap"><div class="page-inner">
+    ${topBarHtml({ title: "اعتماد أبرز النتائج والتوصيات", subtitle: office.name,
+      right: pillBtn("خروج", { variant: "danger", icon: iconLogout(15, DANGER), action: "logout" }) })}
+    ${officeCurationSectionHtml(office)}
+  </div></div>`;
+}
+
+// أرشيف التقارير: تلقائي بالكامل من بيانات التقرير نفسه (السنة الهجرية ونوع
+// الفترة بقسم "البيانات الأساسية") — بدون أي مجلدات تُنشأ أو تُحذف يدويًا، حسب
+// طلب نجود صراحة. البنية: سنة هجرية ← نوع الفترة ← قائمة التقارير.
+function officeArchiveTree(units) {
+  const flat = collectReportsFlatForUnits(units);
+  const tree = {};
+  flat.forEach((x) => {
+    const basic = x.report.sections?.basic?.data || {};
+    const year = basic.hijriYear || "بدون سنة محددة";
+    const period = basic.periodType || "بدون نوع فترة";
+    if (!tree[year]) tree[year] = {};
+    if (!tree[year][period]) tree[year][period] = [];
+    tree[year][period].push(x);
+  });
+  return tree;
+}
+function renderOfficeArchive() {
+  const office = currentOffice();
+  if (!office) return `<div class="page-wrap">تعذر إيجاد مكتب الإشراف.</div>`;
+  const units = officeUnits(office.id);
+  const tree = officeArchiveTree(units);
+  const years = Object.keys(tree).sort((a, b) => b.localeCompare(a, "ar"));
+  const selectedYear = S.ui.officeArchiveYear && tree[S.ui.officeArchiveYear] ? S.ui.officeArchiveYear : null;
+  const selectedPeriod = selectedYear && S.ui.officeArchivePeriod && tree[selectedYear][S.ui.officeArchivePeriod] ? S.ui.officeArchivePeriod : null;
+
+  const crumbs = [`<button class="pill-btn pill-ghost" data-action="office-archive-nav" data-year="" data-period="">${iconLayers(13, ROSE)} الأرشيف</button>`];
+  if (selectedYear) crumbs.push(`<span style="color:${SUBTLE};">/</span><button class="pill-btn pill-ghost" data-action="office-archive-nav" data-year="${esc(selectedYear)}" data-period="">${esc(selectedYear)}</button>`);
+  if (selectedPeriod) crumbs.push(`<span style="color:${SUBTLE};">/</span><span class="pill-btn pill-primary" style="cursor:default;">${esc(selectedPeriod)}</span>`);
+
+  let body;
+  if (!selectedYear) {
+    body = years.length === 0 ? `<div class="card" style="text-align:center;color:${SUBTLE};padding:36px;">لا توجد تقارير مؤرشفة بعد.</div>` :
+      `<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:12px;">${years.map((y) => {
+        const count = Object.values(tree[y]).reduce((s, arr) => s + arr.length, 0);
+        return `<button type="button" class="card" style="text-align:right;cursor:pointer;border:none;" data-action="office-archive-nav" data-year="${esc(y)}" data-period="">
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;">${iconLayers(18, GOLD)}<div style="font-size:14px;font-weight:800;">${esc(y)}</div></div>
+          <div class="hint">${count} تقرير</div>
+        </button>`;
+      }).join("")}</div>`;
+  } else if (!selectedPeriod) {
+    const periods = Object.keys(tree[selectedYear]);
+    body = `<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:12px;">${periods.map((p) => `
+      <button type="button" class="card" style="text-align:right;cursor:pointer;border:none;" data-action="office-archive-nav" data-year="${esc(selectedYear)}" data-period="${esc(p)}">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;">${iconDocument(18, ROSE)}<div style="font-size:14px;font-weight:800;">${esc(p)}</div></div>
+        <div class="hint">${tree[selectedYear][p].length} تقرير</div>
+      </button>`).join("")}</div>`;
+  } else {
+    const items = tree[selectedYear][selectedPeriod];
+    body = reportTable(["الوحدة", "التقرير", "الحالة", "تاريخ الإنشاء", ""], items.map(({ unit, report }) => {
+      const meta = reportStatusMeta(report.status);
+      const dateStr = new Date(report.createdAt).toLocaleDateString("ar-SA-u-ca-islamic", { year: "numeric", month: "long", day: "numeric" });
+      return [esc(unit.name), esc(report.label || "تقرير"), badgeHtml(meta.label, meta.color, meta.bg), esc(dateStr),
+        `<button class="pill-btn pill-ghost" style="padding:5px 10px;" data-action="view-report-pdf" data-unit-id="${esc(unit.id)}" data-report-id="${esc(report.id)}">${iconDocument(13, ROSE)} عرض PDF</button>`];
+    }));
+  }
+
+  return `
+  <div class="page-wrap"><div class="page-inner">
+    ${topBarHtml({ title: "أرشيف التقارير", subtitle: `منظَّم تلقائيًا حسب السنة الهجرية ونوع الفترة — ${office.name}`,
+      right: pillBtn("خروج", { variant: "danger", icon: iconLogout(15, DANGER), action: "logout" }) })}
+    <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-bottom:16px;">${crumbs.join("")}</div>
+    ${body}
+  </div></div>`;
+}
 
 /* =============================== Executive (الإدارة العليا) — اطّلاع إشرافي شامل فقط،
    بدون أي دخول لنموذج كتابة أو تعديل تقارير الوحدات. ============================= */
-function collectAllReportsFlat() {
+// نسخة عامة تأخذ أي قائمة وحدات (كل الوحدات للإدارة العليا، أو وحدات مكتب إشراف
+// معيّن فقط) — تُستخدم من collectAllReportsFlat ومن صفحات مكتب الإشراف الجديدة.
+function collectReportsFlatForUnits(units) {
   const flat = [];
-  S.units.filter((u) => u.status === "active").forEach((u) => {
+  units.forEach((u) => {
     const dept = S.departments.find((d) => d.id === u.departmentId);
     ensureUnitReportsLoaded(u.id).forEach((r) => flat.push({ unit: u, dept, report: r }));
   });
   return flat;
+}
+function collectAllReportsFlat() {
+  return collectReportsFlatForUnits(S.units.filter((u) => u.status === "active"));
+}
+// كل الوحدات (النشطة) التابعة لمكتب إشراف معيّن — عبر office.id <- department.officeId
+// <- department.id <- unit.departmentId، بنفس العلاقة المستخدمة أصلاً بصفحة "الأقسام"
+// الخاصة بمكتب الإشراف (renderDepartmentsPage).
+function officeUnits(officeId) {
+  const deptIds = S.departments.filter((d) => d.officeId === officeId).map((d) => d.id);
+  return S.units.filter((u) => deptIds.includes(u.departmentId) && u.status === "active");
 }
 // "متأخر" هنا يعني: تقرير لم يُعتمد بعد (مسودة أو قيد المراجعة) ومضى على إنشائه
 // أكثر من 14 يومًا — تقدير عملي بما إن النظام لا يحتفظ بموعد استحقاق صريح لكل تقرير.
@@ -2458,22 +2572,26 @@ function hijriMonthLabel(ts) {
   catch (e) { return "—"; }
 }
 
-function renderExecutiveDashboard() {
-  const flat = collectAllReportsFlat();
+// معمّمة الآن لتأخذ (وحدات، أقسام) اختياريًا — تُستخدم من الإدارة العليا (كل
+// شي) ومن لوحة معلومات مكتب الإشراف (وحدات/أقسام مكتبه فقط) بنفس الدالة تمامًا.
+function renderExecutiveDashboard(scopeUnits, scopeDepartments, opts) {
+  opts = opts || {};
+  const units = scopeUnits || S.units.filter((u) => u.status === "active");
+  const activeDepartments = scopeDepartments || S.departments.filter((d) => d.status === "active");
+  const flat = scopeUnits ? collectReportsFlatForUnits(units) : collectAllReportsFlat();
   const total = flat.length;
   const completed = flat.filter((x) => x.report.status === "completed").length;
   const inProgress = flat.filter((x) => x.report.status === "draft" || x.report.status === "under_review" || x.report.status === "returned").length;
   const overdue = flat.filter((x) => isReportOverdue(x.report)).length;
   const completionPct = total ? Math.round((completed / total) * 100) : 0;
 
-  const activeDepartments = S.departments.filter((d) => d.status === "active");
   const deptPerf = activeDepartments.map((dept) => {
-    const deptUnits = S.units.filter((u) => u.departmentId === dept.id && u.status === "active");
+    const deptUnits = units.filter((u) => u.departmentId === dept.id);
     const pcts = deptUnits.map((u) => computeProgress(latestReportForUnit(u.id)).percent);
     const avg = pcts.length ? Math.round(pcts.reduce((s, v) => s + v, 0) / pcts.length) : 0;
     return { label: dept.name, value: avg, color: "var(--rpt-burgundy)" };
   });
-  const unitPerf = S.units.filter((u) => u.status === "active").map((u) => ({ label: u.name, value: computeProgress(latestReportForUnit(u.id)).percent, color: ROSE }));
+  const unitPerf = units.map((u) => ({ label: u.name, value: computeProgress(latestReportForUnit(u.id)).percent, color: ROSE }));
 
   const statusPie = svgPieChart([
     { label: "مكتمل", value: completed, color: GREEN },
@@ -2490,7 +2608,7 @@ function renderExecutiveDashboard() {
 
   return `
   <div class="page-wrap"><div class="page-inner">
-    ${topBarHtml({ title: "لوحة المعلومات", subtitle: "نظرة إشرافية شاملة على كل الأقسام والوحدات",
+    ${topBarHtml({ title: "لوحة المعلومات", subtitle: opts.subtitle || "نظرة إشرافية شاملة على كل الأقسام والوحدات",
       right: pillBtn("خروج", { variant: "danger", icon: iconLogout(15, DANGER), action: "logout" }) })}
     <div class="stat-grid" style="margin-bottom:18px;">
       ${statIconCardHtml("إجمالي التقارير", total, iconDocument(18, ROSE), DANGER_BG)}
@@ -2565,8 +2683,12 @@ async function generateAiSummaryAsync() {
   render();
 }
 
-function renderExecutiveSummary() {
-  const flat = collectAllReportsFlat();
+// معمّمة بنفس أسلوب renderExecutiveDashboard أعلاه — وحدات/أقسام اختيارية
+// لدعم نسخة مكتب الإشراف المقتصرة على وحداته فقط.
+function renderExecutiveSummary(scopeUnits, scopeDepartments, opts) {
+  opts = opts || {};
+  const activeDepartments = scopeDepartments || S.departments.filter((d) => d.status === "active");
+  const flat = scopeUnits ? collectReportsFlatForUnits(scopeUnits) : collectAllReportsFlat();
   const sortCurated = (arr) => [...arr].sort((a, b) => (b.curated ? 1 : 0) - (a.curated ? 1 : 0));
   const achievementsAll = [];
   flat.forEach((x) => (x.report.sections?.programs?.data?.programs || []).filter((p) => p.highlightResult).forEach((p) => {
@@ -2599,9 +2721,9 @@ function renderExecutiveSummary() {
   const endDates = dates.map((d) => d.endDate).filter(Boolean).sort();
   const periodRange = startDates.length && endDates.length ? `${esc(startDates[0])} — ${esc(endDates[endDates.length - 1])}` : "لم تُحدَّد فترات بعد";
 
-  const activeDepartments = S.departments.filter((d) => d.status === "active");
+  const scopeUnitsList = scopeUnits || S.units.filter((u) => u.status === "active");
   const deptRows = activeDepartments.map((dept) => {
-    const deptUnits = S.units.filter((u) => u.departmentId === dept.id && u.status === "active");
+    const deptUnits = scopeUnitsList.filter((u) => u.departmentId === dept.id);
     const pcts = deptUnits.map((u) => computeProgress(latestReportForUnit(u.id)).percent);
     const avg = pcts.length ? Math.round(pcts.reduce((s, v) => s + v, 0) / pcts.length) : 0;
     return [esc(dept.name), deptUnits.length, avg + "٪"];
@@ -2609,10 +2731,10 @@ function renderExecutiveSummary() {
 
   return `
   <div class="page-wrap"><div class="page-inner">
-    ${topBarHtml({ title: "الملخص التنفيذي", subtitle: `الفترة: ${periodRange}`,
+    ${topBarHtml({ title: opts.title || "الملخص التنفيذي", subtitle: `الفترة: ${periodRange}`,
       right: pillBtn("خروج", { variant: "danger", icon: iconLogout(15, DANGER), action: "logout" }) })}
 
-    ${aiSummaryCardHtml()}
+    ${opts.showAiSummary === false ? "" : aiSummaryCardHtml()}
 
     <div class="card" style="margin-bottom:16px;">
       <div class="prs-title" style="font-size:14px;font-weight:800;margin-bottom:10px;">أهم النتائج والإنجازات</div>
@@ -2810,6 +2932,8 @@ function renderAllReports() {
     scopeUnits = S.units.filter((u) => u.status === "active" && u.role !== "admin" && u.role !== "executive");
   } else if (S.isDepartmentUser) {
     scopeUnits = S.units.filter((u) => u.status === "active" && u.departmentId === S.currentDepartmentId);
+  } else if (S.isOfficeUser) {
+    scopeUnits = officeUnits(S.currentOfficeId);
   } else {
     scopeUnits = S.units.filter((u) => u.id === S.currentUnitId);
   }
@@ -2821,7 +2945,7 @@ function renderAllReports() {
   });
   rows.sort((a, b) => b.report.createdAt - a.report.createdAt);
 
-  const canSeeMultipleEntities = S.isAdmin || S.isExecutive || S.isDepartmentUser;
+  const canSeeMultipleEntities = S.isAdmin || S.isExecutive || S.isDepartmentUser || S.isOfficeUser;
   const tabs = [
     { id: "all", label: "الكل" },
     { id: "completed", label: "مكتمل" },
@@ -2851,7 +2975,9 @@ function renderAllReports() {
     </tr>`;
   }).join("");
 
-  const scopeDeptOptions = canSeeMultipleEntities && (S.isAdmin || S.isExecutive) ? S.departments.filter((d) => d.status === "active") : [];
+  const scopeDeptOptions = S.isAdmin || S.isExecutive ? S.departments.filter((d) => d.status === "active")
+    : S.isOfficeUser ? S.departments.filter((d) => d.status === "active" && d.officeId === S.currentOfficeId)
+    : [];
   const scopeUnitOptions = canSeeMultipleEntities ? scopeUnits : [];
 
   return `
@@ -5587,8 +5713,6 @@ function attachClickListener() {
         if (sheetsConfigured()) { refreshReportsFromSheet(unitId).then(() => { if (S.currentUser) render(); }); }
         break;
       }
-      case "open-office-department": S.ui.officeSelectedDeptId = ds.id; render(); break;
-      case "office-back-to-departments": S.ui.officeSelectedDeptId = null; render(); break;
       case "departments-page-open": S.ui.departmentsPageSelectedId = ds.id; render(); break;
       case "departments-page-back": S.ui.departmentsPageSelectedId = null; render(); break;
       case "offices-manage-open-office": S.ui.officesManageOfficeId = ds.id; S.ui.officesManageDeptId = null; render(); break;
@@ -5740,6 +5864,18 @@ function attachClickListener() {
       case "toggle-dept-curation": {
         const dept = S.departments.find((d) => d.id === S.currentDepartmentId);
         if (dept) toggleDeptCuration(dept, ds.key);
+        render();
+        break;
+      }
+      case "toggle-office-curation": {
+        const office = (S.offices || []).find((o) => o.id === S.currentOfficeId);
+        if (office) toggleOfficeCuration(office, ds.key);
+        render();
+        break;
+      }
+      case "office-archive-nav": {
+        S.ui.officeArchiveYear = ds.year || null;
+        S.ui.officeArchivePeriod = ds.period || null;
         render();
         break;
       }
