@@ -672,8 +672,35 @@ function deptToRow(d) { return { id: d.id, name: d.name, password: d.password ||
 function rowToDept(r) { return { id: r.id, name: r.name, password: r.password || "", status: r.status || "active", createdAt: Number(r.created_at) || 0, curation: r.curation || { approvedKeys: [] }, email: r.email || "", officeId: r.office_id || "" }; }
 function officeToRow(o) { return { id: o.id, name: o.name, password: o.password || "", status: o.status || "active", created_at: o.createdAt || Date.now(), curation: o.curation || { approvedKeys: [] } }; }
 function rowToOffice(r) { return { id: r.id, name: r.name, password: r.password || "", status: r.status || "active", createdAt: Number(r.created_at) || 0, curation: r.curation || { approvedKeys: [] } }; }
-function siteSettingsToRow(s) { return { id: "main", primary_color: s.primary || DEFAULT_SITE_COLORS.primary, background: s.background || DEFAULT_SITE_COLORS.background }; }
-function rowToSiteSettings(r) { return { primary: r.primary_color || DEFAULT_SITE_COLORS.primary, background: r.background || DEFAULT_SITE_COLORS.background }; }
+function siteSettingsToRow(s) {
+  return {
+    id: "main",
+    primary_color: s.primary || DEFAULT_SITE_COLORS.primary,
+    background: s.background || DEFAULT_SITE_COLORS.background,
+    logo_url: s.logo || null,
+    logo_size: s.logoSize || DEFAULT_BRANDING.logoSize,
+    banner_image_url: s.bannerImage || null,
+    banner_title: s.bannerTitle || DEFAULT_BRANDING.bannerTitle,
+    banner_sub: s.bannerSub || DEFAULT_BRANDING.bannerSub,
+    platform_name: s.platformName || DEFAULT_BRANDING.platformName,
+    sidebar_tagline: s.sidebarTagline != null ? s.sidebarTagline : DEFAULT_BRANDING.sidebarTagline,
+    sidebar_tagline_image_url: s.sidebarTaglineImage || null,
+  };
+}
+function rowToSiteSettings(r) {
+  return {
+    primary: r.primary_color || DEFAULT_SITE_COLORS.primary,
+    background: r.background || DEFAULT_SITE_COLORS.background,
+    logo: r.logo_url || null,
+    logoSize: Number(r.logo_size) || DEFAULT_BRANDING.logoSize,
+    bannerImage: r.banner_image_url || null,
+    bannerTitle: r.banner_title || DEFAULT_BRANDING.bannerTitle,
+    bannerSub: r.banner_sub || DEFAULT_BRANDING.bannerSub,
+    platformName: r.platform_name || DEFAULT_BRANDING.platformName,
+    sidebarTagline: r.sidebar_tagline != null ? r.sidebar_tagline : DEFAULT_BRANDING.sidebarTagline,
+    sidebarTaglineImage: r.sidebar_tagline_image_url || null,
+  };
+}
 function indDefToRow(d) { return { id: d.id, name: d.name, category: d.category || "", direction: d.direction || "", nature: d.nature || "", frequency: d.frequency || "", unit: d.unit || "", target: String(d.target ?? ""), data_source: d.dataSource || "", calculation_method: d.calculationMethod || "" }; }
 function rowToIndDef(r) { return { id: r.id, name: r.name, category: r.category || "", direction: r.direction || "", nature: r.nature || "", frequency: r.frequency || "", unit: r.unit || "", target: r.target || "", dataSource: r.data_source || "", calculationMethod: r.calculation_method || "" }; }
 function goalToRow(g, kind) { return { id: g.id, name: g.name, kind }; }
@@ -727,6 +754,22 @@ const UNITS_KEY = "prs:units", DEPARTMENTS_KEY = "prs:departments", OFFICES_KEY 
       SITE_SETTINGS_KEY = "prs:site-settings", REPORT_SECTIONS_KEY = "prs:report-sections",
       SECTION_FIELD_SCHEMAS_KEY = "prs:section-field-schemas";
 const DEFAULT_SITE_COLORS = { primary: "#6b2337", background: "#F2ECE8" };
+// إعدادات الهوية القابلة للتخصيص من "إعدادات الموقع": الشعار وحجمه، بانر لوحة
+// المعلومات (صورة + عنوان + وصف)، اسم المنصة بعنوان الشريط الجانبي، وعبارة/صورة
+// الشريط الجانبي قبل زر تسجيل الخروج. null تعني: استخدام الافتراضي المُبرمَج.
+const DEFAULT_BRANDING = {
+  logo: null,
+  logoSize: 30,
+  bannerImage: null,
+  bannerTitle: "منصة التقارير",
+  bannerSub: "نحو تقارير أكثر دقة وتنظيمًا",
+  platformName: "منصة التقارير",
+  sidebarTagline: "تقارير دقيقة.. لأثر أكبر",
+  sidebarTaglineImage: null,
+};
+function siteLogoSrc(s) { return (s && s.logo) || ASSOCIATION_LOGO; }
+function siteBannerSrc(s) { return (s && s.bannerImage) || "hero-bg.jpg"; }
+function currentSiteSettings() { return S.siteSettings || dataStore.getSiteSettings(); }
 const reportKey = (unitId) => `prs:report:${unitId}`;
 const reportsKey = (unitId) => `prs:reports:${unitId}`;
 
@@ -826,7 +869,7 @@ const dataStore = {
     lsSet(INDICATOR_DEFINITIONS_KEY, JSON.stringify(d));
     if (sheetsConfigured()) queueSupabaseReplaceTable("indicator_definitions", d.map(indDefToRow)).catch(() => {});
   },
-  getSiteSettings() { const v = lsGet(SITE_SETTINGS_KEY); return v ? JSON.parse(v) : { ...DEFAULT_SITE_COLORS }; },
+  getSiteSettings() { const v = lsGet(SITE_SETTINGS_KEY); return { ...DEFAULT_SITE_COLORS, ...DEFAULT_BRANDING, ...(v ? JSON.parse(v) : {}) }; },
   saveSiteSettings(s) {
     lsSet(SITE_SETTINGS_KEY, JSON.stringify(s));
     if (sheetsConfigured()) supabaseRequest("site_settings", { method: "POST", prefer: "return=minimal,resolution=merge-duplicates", body: JSON.stringify(siteSettingsToRow(s)) }).catch(() => {});
@@ -1220,7 +1263,7 @@ function renderMainSidebar(mobile) {
       const page = visible.find((p) => p.id === soloId);
       if (!page) return "";
       const active = S.view === page.id;
-      const iconColor = active ? "#6b2337" : INK;
+      const iconColor = active ? ROSE : INK;
       return `
         <div class="nav-group open">
           <div class="nav-list" style="padding-right:0;width:100%;">
@@ -1247,7 +1290,7 @@ function renderMainSidebar(mobile) {
           ${items.map((p) => {
             const disabled = (p.scope === "unit" && !S.currentUnitId) || (p.scope === "unitreport" && !(S.currentUnitId && S.currentReportId));
             const active = S.view === p.id;
-            const iconColor = disabled ? "#cfc3c8" : active ? "#6b2337" : INK;
+            const iconColor = disabled ? "#cfc3c8" : active ? ROSE : INK;
             const isCreateEntry = p.id === "unit-report";
             return `<button class="nav-item ${active ? "active" : ""}" ${disabled ? "disabled" : ""} data-action="${isCreateEntry ? "open-or-create-report" : "nav-to"}" ${isCreateEntry ? "" : `data-view="${p.id}"`}>${sidebarNavIcon(p.icon, 15, iconColor)}<span>${esc(p.label)}</span></button>`;
           }).join("")}
@@ -1257,18 +1300,24 @@ function renderMainSidebar(mobile) {
 
   const initial = (S.currentUser && S.currentUser.name ? S.currentUser.name.trim()[0] : "؟");
   const roleLabel = S.isAdmin ? "مديرة النظام" : S.isDepartmentUser ? "مديرة قسم" : S.isExecutive ? "الإدارة العليا" : S.isOfficeUser ? "مكتب إشراف" : "مسؤولة الوحدة";
+  const site = currentSiteSettings();
+  const taglineHtml = S.isAdmin ? "" : `
+    <div class="sidebar-tagline-block">
+      ${site.sidebarTaglineImage ? `<img src="${esc(site.sidebarTaglineImage)}" class="sidebar-tagline-img" alt="" />` : ""}
+      ${site.sidebarTagline ? `<div class="sidebar-tagline">${esc(site.sidebarTagline)}</div>` : ""}
+    </div>`;
 
   const inner = `
     <div class="sidebar-head">
       <div class="sidebar-head-icons-row">
-        <div class="icon-badge">${iconGauge("#6b2337")}</div>
+        <div class="icon-badge">${iconGauge(ROSE)}</div>
         <div style="display:flex;gap:6px;">
           <button class="sidebar-bell" title="الإشعارات">${iconBell(15, INK)}${notifCount > 0 ? `<span class="notif-badge">${notifCount > 9 ? "9+" : notifCount}</span>` : ""}</button>
           <button class="icon-btn" data-action="${mobile ? "close-mobile-sidebar" : "close-sidebar"}" title="إغلاق القائمة">${iconX(14, INK)}</button>
         </div>
       </div>
-      <img src="${ASSOCIATION_LOGO}" class="sidebar-logo" alt="جمعية فرقان" />
-      <div class="prs-title sidebar-title">منصة التقارير</div>
+      <img src="${esc(siteLogoSrc(site))}" class="sidebar-logo" style="width:${Number(site.logoSize) || 30}px;height:${Number(site.logoSize) || 30}px;" alt="جمعية فرقان" />
+      <div class="prs-title sidebar-title">${esc(site.platformName || "منصة التقارير")}</div>
     </div>
     <div class="sidebar-user-block">
       <div class="sidebar-user-avatar">${esc(initial)}</div>
@@ -1280,8 +1329,8 @@ function renderMainSidebar(mobile) {
     <div style="display:flex;flex-direction:column;gap:14px;">${groupsHtml}</div>
     <div class="sidebar-spacer"></div>
     <div class="sidebar-sep"></div>
-    ${S.isAdmin ? "" : `<div class="sidebar-tagline">تقارير دقيقة.. لأثر أكبر</div>`}
-    <button class="logout-btn" data-action="logout">${iconLogout(16, "#6b2337")} تسجيل الخروج</button>
+    ${taglineHtml}
+    <button class="logout-btn" data-action="logout">${iconLogout(16, ROSE)} تسجيل الخروج</button>
   `;
 
   if (!mobile) return `<div class="sidebar">${inner}</div>`;
@@ -1393,7 +1442,7 @@ function renderUnitRoleSelect() {
     <div class="login-box" style="max-width:440px;">
       <div class="login-card">
         <div style="text-align:center;margin-bottom:22px;">
-          <img class="login-logo" src="${ASSOCIATION_LOGO}" alt="جمعية فرقان" />
+          <img class="login-logo" src="${esc(siteLogoSrc(currentSiteSettings()))}" alt="جمعية فرقان" />
           <div class="prs-title" style="font-size:19px;font-weight:900;color:#000">كيف تريدين الدخول؟</div>
           ${unit ? `<div style="font-size:11.5px;color:${SUBTLE};margin-top:4px;">${esc(unit.name)}</div>` : ""}
         </div>
@@ -1428,7 +1477,7 @@ function renderLogin() {
     <div class="login-box">
       <div class="login-card">
         <div style="text-align:center;margin-bottom:26px;">
-          <img class="login-logo" src="${ASSOCIATION_LOGO}" alt="جمعية فرقان" />
+          <img class="login-logo" src="${esc(siteLogoSrc(currentSiteSettings()))}" alt="جمعية فرقان" />
           <div class="prs-title" style="font-size:21px;font-weight:900;color:#000">نظام توثيق الأداء</div>
           <div style="font-size:11.5px;color:${SUBTLE};margin-top:4px;">جمعية فرقان لتحفيظ القرآن الكريم بالطائف</div>
         </div>
@@ -1856,16 +1905,17 @@ function renderDashboard() {
     </tr>`;
   }).join("");
 
+  const site = currentSiteSettings();
   return `
   <div class="page-wrap"><div class="page-inner">
     ${topBarHtml({ title: "لوحة المعلومات", subtitle: `مرحبًا ${esc(S.currentUser.name)} — نظرة شاملة على كل الوحدات` })}
 
     <div class="hero-banner">
-      <img class="hero-banner-bg" src="hero-bg.jpg" alt="" />
+      <img class="hero-banner-bg" src="${esc(siteBannerSrc(site))}" alt="" />
       <div class="hero-banner-text">
         <div class="hero-banner-eyebrow">مرحبًا بك في</div>
-        <div class="prs-title hero-banner-title">منصة التقارير</div>
-        <div class="hero-banner-sub">نحو تقارير أكثر دقة وتنظيمًا</div>
+        <div class="prs-title hero-banner-title">${esc(site.bannerTitle || "منصة التقارير")}</div>
+        <div class="hero-banner-sub">${esc(site.bannerSub || "نحو تقارير أكثر دقة وتنظيمًا")}</div>
       </div>
       <div class="search-bar">
         ${iconSearch(16, SUBTLE)}
@@ -1995,16 +2045,17 @@ function renderUnitDashboard() {
     </tr>`;
   }).join("");
 
+  const site = currentSiteSettings();
   return `
   <div class="page-wrap"><div class="page-inner">
     ${topBarHtml({ title: "لوحة المعلومات", subtitle: `مرحبًا ${esc(S.currentUser.name)} — نظرة عامة على تقارير ${esc(unit.name)}` })}
 
     <div class="hero-banner">
-      <img class="hero-banner-bg" src="hero-bg.jpg" alt="" />
+      <img class="hero-banner-bg" src="${esc(siteBannerSrc(site))}" alt="" />
       <div class="hero-banner-text">
         <div class="hero-banner-eyebrow">مرحبًا بك في</div>
-        <div class="prs-title hero-banner-title">منصة التقارير</div>
-        <div class="hero-banner-sub">نحو تقارير أكثر دقة وتنظيمًا</div>
+        <div class="prs-title hero-banner-title">${esc(site.bannerTitle || "منصة التقارير")}</div>
+        <div class="hero-banner-sub">${esc(site.bannerSub || "نحو تقارير أكثر دقة وتنظيمًا")}</div>
       </div>
       <div class="search-bar">
         ${iconSearch(16, SUBTLE)}
@@ -2247,29 +2298,100 @@ function officeManageRowHtml(o) {
 /* =============================== Site settings (admin) ======================= */
 function renderSiteSettings() {
   const current = S.siteSettings || dataStore.getSiteSettings();
-  const isDefault = current.primary === DEFAULT_SITE_COLORS.primary && current.background === DEFAULT_SITE_COLORS.background;
+  const isColorDefault = current.primary === DEFAULT_SITE_COLORS.primary && current.background === DEFAULT_SITE_COLORS.background;
+  const isBrandingDefault = !current.logo && (Number(current.logoSize) || DEFAULT_BRANDING.logoSize) === DEFAULT_BRANDING.logoSize && !current.bannerImage &&
+    (current.bannerTitle || DEFAULT_BRANDING.bannerTitle) === DEFAULT_BRANDING.bannerTitle && (current.bannerSub || DEFAULT_BRANDING.bannerSub) === DEFAULT_BRANDING.bannerSub &&
+    (current.platformName || DEFAULT_BRANDING.platformName) === DEFAULT_BRANDING.platformName && (current.sidebarTagline || "") === DEFAULT_BRANDING.sidebarTagline && !current.sidebarTaglineImage;
+  const fieldLabel = (t) => `<div style="font-size:13px;font-weight:800;margin-bottom:8px;">${esc(t)}</div>`;
+  const textInput = (id, val, placeholder) => `<input type="text" id="${id}" class="input" value="${esc(val || "")}" placeholder="${esc(placeholder || "")}" style="width:100%;" />`;
+  const imgPreviewBlock = (src, alt, previewStyle, fileInputId, removeAction, showRemove) => `
+    <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;">
+      ${src
+        ? `<img id="${fileInputId === "site-logo-file" ? "site-logo-preview" : ""}" src="${esc(src)}" alt="${esc(alt)}" style="${previewStyle}background:#fff;border:1px solid ${BORDER};border-radius:8px;object-fit:contain;" />`
+        : `<div style="${previewStyle}background:${GRAY_BG};border:1px dashed ${BORDER};border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:10.5px;color:${SUBTLE};text-align:center;">بدون صورة</div>`}
+      <label class="pill-btn pill-ghost" style="margin:0;">
+        ${iconCheckCircle(14, INK)} اختيار صورة
+        <input type="file" accept="image/*" id="${fileInputId}" style="display:none;" />
+      </label>
+      ${showRemove ? pillBtn("إزالة", { variant: "ghost", icon: iconX(14, INK), action: removeAction }) : ""}
+    </div>`;
+
   return `
   <div class="page-wrap"><div class="page-inner">
-    ${topBarHtml({ title: "إعدادات الموقع", subtitle: "تخصيص ألوان الموقع — التغيير يظهر فورًا هنا، ولازم الضغط على \"حفظ\" ليصير دائمًا" })}
-    <div class="card" style="max-width:480px;">
+    ${topBarHtml({ title: "إعدادات الموقع", subtitle: "تخصيص هوية الموقع — الألوان، الشعار، البانر، والعبارات. التغيير يظهر فورًا هنا، ولازم الضغط على \"حفظ\" ليصير دائمًا" })}
+
+    <div class="card" style="max-width:560px;margin-bottom:16px;">
+      <div class="subhead" style="margin-top:0;">الألوان</div>
       <div style="margin-bottom:20px;">
-        <div style="font-size:13px;font-weight:800;margin-bottom:8px;">اللون الأساسي (الأزرار، العناوين، التحديد)</div>
+        ${fieldLabel("اللون الأساسي (الأزرار، العناوين، التحديد)")}
         <div style="display:flex;align-items:center;gap:12px;">
           <input type="color" id="site-primary-color" value="${esc(current.primary)}" style="width:52px;height:40px;border:1px solid ${BORDER};border-radius:8px;cursor:pointer;padding:2px;" />
           <span style="font-size:12.5px;color:${SUBTLE};font-family:monospace;">${esc(current.primary)}</span>
         </div>
       </div>
-      <div style="margin-bottom:24px;">
-        <div style="font-size:13px;font-weight:800;margin-bottom:8px;">لون خلفية الموقع</div>
+      <div style="margin-bottom:16px;">
+        ${fieldLabel("لون خلفية الموقع")}
         <div style="display:flex;align-items:center;gap:12px;">
           <input type="color" id="site-bg-color" value="${esc(current.background)}" style="width:52px;height:40px;border:1px solid ${BORDER};border-radius:8px;cursor:pointer;padding:2px;" />
           <span style="font-size:12.5px;color:${SUBTLE};font-family:monospace;">${esc(current.background)}</span>
         </div>
       </div>
+      <div>${pillBtn("استعادة الألوان الافتراضية", { variant: "ghost", icon: iconX(14, INK), action: "restore-site-settings-defaults", disabled: isColorDefault })}</div>
+    </div>
+
+    <div class="card" style="max-width:560px;margin-bottom:16px;">
+      <div class="subhead" style="margin-top:0;">الشعار</div>
+      <div style="margin-bottom:20px;">
+        ${fieldLabel("صورة الشعار (يظهر بالشريط الجانبي وصفحة الدخول)")}
+        ${imgPreviewBlock(siteLogoSrc(current), "الشعار", `width:${Number(current.logoSize) || DEFAULT_BRANDING.logoSize}px;height:${Number(current.logoSize) || DEFAULT_BRANDING.logoSize}px;`, "site-logo-file", "remove-site-logo", !!current.logo)}
+      </div>
+      <div>
+        ${fieldLabel("حجم الشعار")}
+        <div style="display:flex;align-items:center;gap:12px;">
+          <input type="range" id="site-logo-size" min="20" max="72" step="2" value="${Number(current.logoSize) || DEFAULT_BRANDING.logoSize}" style="flex:1;" />
+          <span id="site-logo-size-label" style="font-size:12.5px;color:${SUBTLE};font-family:monospace;min-width:40px;">${Number(current.logoSize) || DEFAULT_BRANDING.logoSize}px</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="card" style="max-width:560px;margin-bottom:16px;">
+      <div class="subhead" style="margin-top:0;">بانر لوحة المعلومات</div>
+      <div style="margin-bottom:20px;">
+        ${fieldLabel("صورة البانر")}
+        ${imgPreviewBlock(siteBannerSrc(current), "البانر", `width:120px;height:60px;`, "site-banner-file", "remove-site-banner", !!current.bannerImage)}
+      </div>
+      <div style="margin-bottom:14px;">
+        ${fieldLabel("عنوان البانر")}
+        ${textInput("site-banner-title", current.bannerTitle, DEFAULT_BRANDING.bannerTitle)}
+      </div>
+      <div>
+        ${fieldLabel("وصف البانر")}
+        ${textInput("site-banner-sub", current.bannerSub, DEFAULT_BRANDING.bannerSub)}
+      </div>
+    </div>
+
+    <div class="card" style="max-width:560px;margin-bottom:16px;">
+      <div class="subhead" style="margin-top:0;">الشريط الجانبي</div>
+      <div style="margin-bottom:14px;">
+        ${fieldLabel("اسم المنصة (يظهر بعنوان الشريط الجانبي)")}
+        ${textInput("site-platform-name", current.platformName, DEFAULT_BRANDING.platformName)}
+      </div>
+      <div style="margin-bottom:14px;">
+        ${fieldLabel("العبارة أسفل الشريط الجانبي (قبل تسجيل الخروج)")}
+        ${textInput("site-sidebar-tagline", current.sidebarTagline, DEFAULT_BRANDING.sidebarTagline)}
+      </div>
+      <div>
+        ${fieldLabel("صورة اختيارية أسفل الشريط الجانبي (قبل تسجيل الخروج)")}
+        ${imgPreviewBlock(current.sidebarTaglineImage || "", "عبارة الشريط الجانبي", `width:90px;height:60px;`, "site-tagline-image-file", "remove-site-tagline-image", !!current.sidebarTaglineImage)}
+      </div>
+    </div>
+
+    <div class="card" style="max-width:560px;">
       <div style="display:flex;gap:8px;flex-wrap:wrap;">
         ${pillBtn("حفظ", { icon: iconCheckCircle(15, "#fff"), action: "save-site-settings" })}
-        ${pillBtn("استعادة الألوان الافتراضية", { variant: "ghost", icon: iconX(14, INK), action: "restore-site-settings-defaults", disabled: isDefault })}
+        ${pillBtn("استعادة إعدادات الهوية الافتراضية", { variant: "ghost", icon: iconX(14, INK), action: "restore-site-branding-defaults", disabled: isBrandingDefault })}
       </div>
+      ${S.ui.siteSettingsFileError ? `<div class="error-box" style="margin-top:10px;">${esc(S.ui.siteSettingsFileError)}</div>` : ""}
       ${S.ui.siteSettingsSaved ? `<div class="hint" style="color:${GREEN};margin-top:10px;">تم الحفظ ✓ — التغيير صار دائمًا لكل زوار الموقع.</div>` : ""}
     </div>
   </div></div>`;
@@ -3914,45 +4036,52 @@ function renderUnitAdminSidebar(mobile) {
     <div class="nav-group open">
       <div class="nav-group-label" style="display:flex;align-items:center;gap:6px;">${sidebarNavIcon("home", 13, SUBTLE)}الرئيسية</div>
       <div class="nav-list">
-        <button class="nav-item ${activeDash ? "active" : ""}" data-action="nav-to" data-view="unit-dashboard">${sidebarNavIcon("home", 15, activeDash ? "#6b2337" : INK)}<span>لوحة المعلومات</span></button>
+        <button class="nav-item ${activeDash ? "active" : ""}" data-action="nav-to" data-view="unit-dashboard">${sidebarNavIcon("home", 15, activeDash ? ROSE : INK)}<span>لوحة المعلومات</span></button>
       </div>
     </div>
     <div class="nav-group open">
       <div class="nav-group-label" style="display:flex;align-items:center;gap:6px;">${sidebarNavIcon("document", 13, SUBTLE)}التقارير</div>
       <div class="nav-list">
         <button class="nav-item" data-action="open-or-create-report">${sidebarNavIcon("pencil", 15, INK)}<span>إنشاء تقرير</span></button>
-        <button class="nav-item ${activeReports ? "active" : ""}" data-action="nav-to" data-view="unit-reports">${sidebarNavIcon("document", 15, activeReports ? "#6b2337" : INK)}<span>التقارير</span></button>
+        <button class="nav-item ${activeReports ? "active" : ""}" data-action="nav-to" data-view="unit-reports">${sidebarNavIcon("document", 15, activeReports ? ROSE : INK)}<span>التقارير</span></button>
         <button class="nav-item ${activeNotif ? "active" : ""}" data-action="nav-to" data-view="unit-notifications" style="display:flex;align-items:center;justify-content:space-between;">
-          <span style="display:flex;align-items:center;gap:10px;">${sidebarNavIcon("bell", 15, activeNotif ? "#6b2337" : INK)}<span>التنبيهات</span></span>
+          <span style="display:flex;align-items:center;gap:10px;">${sidebarNavIcon("bell", 15, activeNotif ? ROSE : INK)}<span>التنبيهات</span></span>
           ${notifCount > 0 ? `<span style="background:#d65b57;color:#fff;font-size:10px;font-weight:800;min-width:18px;height:18px;border-radius:9px;display:inline-flex;align-items:center;justify-content:center;padding:0 5px;">${notifCount > 9 ? "9+" : notifCount}</span>` : ""}
         </button>
       </div>
     </div>`;
 
   const initial = (S.currentUser && S.currentUser.name ? S.currentUser.name.trim()[0] : "؟");
+  const site = currentSiteSettings();
+  const taglineHtml = `
+    <div class="sidebar-tagline-block">
+      ${site.sidebarTaglineImage ? `<img src="${esc(site.sidebarTaglineImage)}" class="sidebar-tagline-img" alt="" />` : ""}
+      ${site.sidebarTagline ? `<div class="sidebar-tagline">${esc(site.sidebarTagline)}</div>` : ""}
+    </div>`;
   const inner = `
     <div class="sidebar-head">
       <div class="sidebar-head-icons-row">
-        <div class="icon-badge">${iconGauge("#6b2337")}</div>
+        <div class="icon-badge">${iconGauge(ROSE)}</div>
         <div style="display:flex;gap:6px;">
           <button class="sidebar-bell" title="الإشعارات">${iconBell(15, INK)}${notifCount > 0 ? `<span class="notif-badge">${notifCount > 9 ? "9+" : notifCount}</span>` : ""}</button>
           <button class="icon-btn" data-action="${mobile ? "close-mobile-sidebar" : "close-sidebar"}" title="إغلاق القائمة">${iconX(14, INK)}</button>
         </div>
       </div>
-      <img src="${ASSOCIATION_LOGO}" class="sidebar-logo" alt="جمعية فرقان" />
-      <div class="prs-title sidebar-title">منصة التقارير</div>
+      <img src="${esc(siteLogoSrc(site))}" class="sidebar-logo" style="width:${Number(site.logoSize) || 30}px;height:${Number(site.logoSize) || 30}px;" alt="جمعية فرقان" />
+      <div class="prs-title sidebar-title">${esc(site.platformName || "منصة التقارير")}</div>
     </div>
     <div class="sidebar-user-block">
       <div class="sidebar-user-avatar">${esc(initial)}</div>
       <div style="min-width:0;">
-        <div class="sidebar-user-hello">أهلًا وسهلًا</div>
+        <div class="sidebar-role-badge">الإدارية</div>
         <div class="sidebar-user-name">${esc(S.currentUser ? S.currentUser.name : "")}</div>
       </div>
     </div>
     <div style="display:flex;flex-direction:column;gap:16px;">${groupsHtml}</div>
     <div class="sidebar-spacer"></div>
     <div class="sidebar-sep"></div>
-    <button class="logout-btn" data-action="logout">${iconLogout(16, "#6b2337")} تسجيل الخروج</button>
+    ${taglineHtml}
+    <button class="logout-btn" data-action="logout">${iconLogout(16, ROSE)} تسجيل الخروج</button>
   `;
 
   if (!mobile) return `<div class="sidebar">${inner}</div>`;
@@ -4024,53 +4153,60 @@ function renderUnitHeadSidebar(mobile) {
     <div class="nav-group open">
       <div class="nav-group-label" style="display:flex;align-items:center;gap:6px;">${sidebarNavIcon("home", 13, SUBTLE)}الرئيسية</div>
       <div class="nav-list">
-        <button class="nav-item ${activeDash ? "active" : ""}" data-action="nav-to" data-view="unit-dashboard">${sidebarNavIcon("home", 15, activeDash ? "#6b2337" : INK)}<span>لوحة المعلومات</span></button>
+        <button class="nav-item ${activeDash ? "active" : ""}" data-action="nav-to" data-view="unit-dashboard">${sidebarNavIcon("home", 15, activeDash ? ROSE : INK)}<span>لوحة المعلومات</span></button>
       </div>
     </div>
     <div class="nav-group open">
       <div class="nav-group-label" style="display:flex;align-items:center;gap:6px;">${sidebarNavIcon("document", 13, SUBTLE)}التقارير</div>
       <div class="nav-list">
         <button class="nav-item ${activeReports ? "active" : ""}" data-action="nav-to" data-view="unit-reports" style="display:flex;align-items:center;justify-content:space-between;">
-          <span style="display:flex;align-items:center;gap:10px;">${sidebarNavIcon("document", 15, activeReports ? "#6b2337" : INK)}<span>التقارير</span></span>
+          <span style="display:flex;align-items:center;gap:10px;">${sidebarNavIcon("document", 15, activeReports ? ROSE : INK)}<span>التقارير</span></span>
           ${badgeHtmlSmall(pendingCount)}
         </button>
-        <button class="nav-item ${activeAll ? "active" : ""}" data-action="nav-to" data-view="unit-all-reports">${sidebarNavIcon("layers", 15, activeAll ? "#6b2337" : INK)}<span>جميع التقارير</span></button>
+        <button class="nav-item ${activeAll ? "active" : ""}" data-action="nav-to" data-view="unit-all-reports">${sidebarNavIcon("layers", 15, activeAll ? ROSE : INK)}<span>جميع التقارير</span></button>
       </div>
     </div>
     <div class="nav-group open">
       <div class="nav-group-label" style="display:flex;align-items:center;gap:6px;">${sidebarNavIcon("bell", 13, SUBTLE)}التنبيهات</div>
       <div class="nav-list">
         <button class="nav-item ${activeNotif ? "active" : ""}" data-action="nav-to" data-view="unit-notifications" style="display:flex;align-items:center;justify-content:space-between;">
-          <span style="display:flex;align-items:center;gap:10px;">${sidebarNavIcon("bell", 15, activeNotif ? "#6b2337" : INK)}<span>التنبيهات</span></span>
+          <span style="display:flex;align-items:center;gap:10px;">${sidebarNavIcon("bell", 15, activeNotif ? ROSE : INK)}<span>التنبيهات</span></span>
           ${badgeHtmlSmall(pendingCount)}
         </button>
       </div>
     </div>`;
 
   const initial = (S.currentUser && S.currentUser.name ? S.currentUser.name.trim()[0] : "؟");
+  const site = currentSiteSettings();
+  const taglineHtml = `
+    <div class="sidebar-tagline-block">
+      ${site.sidebarTaglineImage ? `<img src="${esc(site.sidebarTaglineImage)}" class="sidebar-tagline-img" alt="" />` : ""}
+      ${site.sidebarTagline ? `<div class="sidebar-tagline">${esc(site.sidebarTagline)}</div>` : ""}
+    </div>`;
   const inner = `
     <div class="sidebar-head">
       <div class="sidebar-head-icons-row">
-        <div class="icon-badge">${iconGauge("#6b2337")}</div>
+        <div class="icon-badge">${iconGauge(ROSE)}</div>
         <div style="display:flex;gap:6px;">
           <button class="sidebar-bell" title="الإشعارات">${iconBell(15, INK)}${pendingCount > 0 ? `<span class="notif-badge">${pendingCount > 9 ? "9+" : pendingCount}</span>` : ""}</button>
           <button class="icon-btn" data-action="${mobile ? "close-mobile-sidebar" : "close-sidebar"}" title="إغلاق القائمة">${iconX(14, INK)}</button>
         </div>
       </div>
-      <img src="${ASSOCIATION_LOGO}" class="sidebar-logo" alt="جمعية فرقان" />
-      <div class="prs-title sidebar-title">منصة التقارير</div>
+      <img src="${esc(siteLogoSrc(site))}" class="sidebar-logo" style="width:${Number(site.logoSize) || 30}px;height:${Number(site.logoSize) || 30}px;" alt="جمعية فرقان" />
+      <div class="prs-title sidebar-title">${esc(site.platformName || "منصة التقارير")}</div>
     </div>
     <div class="sidebar-user-block">
       <div class="sidebar-user-avatar">${esc(initial)}</div>
       <div style="min-width:0;">
-        <div class="sidebar-user-hello">أهلًا وسهلًا</div>
+        <div class="sidebar-role-badge">رئيسة الوحدة</div>
         <div class="sidebar-user-name">${esc(S.currentUser ? S.currentUser.name : "")}</div>
       </div>
     </div>
     <div style="display:flex;flex-direction:column;gap:16px;">${groupsHtml}</div>
     <div class="sidebar-spacer"></div>
     <div class="sidebar-sep"></div>
-    <button class="logout-btn" data-action="logout">${iconLogout(16, "#6b2337")} تسجيل الخروج</button>
+    ${taglineHtml}
+    <button class="logout-btn" data-action="logout">${iconLogout(16, ROSE)} تسجيل الخروج</button>
   `;
 
   if (!mobile) return `<div class="sidebar">${inner}</div>`;
@@ -5445,6 +5581,23 @@ function attachFormListeners() {
       render();
       return;
     }
+    if (el.id === "site-logo-size") {
+      S.siteSettings = S.siteSettings || dataStore.getSiteSettings();
+      S.siteSettings = { ...S.siteSettings, logoSize: Number(el.value) || DEFAULT_BRANDING.logoSize };
+      S.ui.siteSettingsSaved = false;
+      const preview = document.getElementById("site-logo-preview");
+      if (preview) { preview.style.width = `${S.siteSettings.logoSize}px`; preview.style.height = `${S.siteSettings.logoSize}px`; }
+      const sizeLabel = document.getElementById("site-logo-size-label");
+      if (sizeLabel) sizeLabel.textContent = `${S.siteSettings.logoSize}px`;
+      return;
+    }
+    if (el.id === "site-platform-name" || el.id === "site-banner-title" || el.id === "site-banner-sub" || el.id === "site-sidebar-tagline") {
+      const fieldMap = { "site-platform-name": "platformName", "site-banner-title": "bannerTitle", "site-banner-sub": "bannerSub", "site-sidebar-tagline": "sidebarTagline" };
+      S.siteSettings = S.siteSettings || dataStore.getSiteSettings();
+      S.siteSettings = { ...S.siteSettings, [fieldMap[el.id]]: el.value };
+      S.ui.siteSettingsSaved = false;
+      return;
+    }
     if (el.id === "login-password") { S.ui.loginPasswordVal = el.value; return; }
     if (el.id === "head-return-notes") { S.ui.headReturnNotesVal = el.value; return; }
     if (el.dataset && el.dataset.field && el.tagName !== "SELECT") {
@@ -5460,6 +5613,26 @@ function attachFormListeners() {
 
   appEl.addEventListener("change", (e) => {
     const el = e.target;
+    if (el.id === "site-logo-file" || el.id === "site-banner-file" || el.id === "site-tagline-image-file") {
+      const file = el.files && el.files[0];
+      if (!file) return;
+      if (file.size > 1.5 * 1024 * 1024) {
+        S.ui.siteSettingsFileError = "حجم الصورة كبير — الرجاء اختيار صورة أصغر من 1.5 ميغابايت.";
+        render();
+        return;
+      }
+      const fieldMap = { "site-logo-file": "logo", "site-banner-file": "bannerImage", "site-tagline-image-file": "sidebarTaglineImage" };
+      const reader = new FileReader();
+      reader.onload = () => {
+        S.siteSettings = S.siteSettings || dataStore.getSiteSettings();
+        S.siteSettings = { ...S.siteSettings, [fieldMap[el.id]]: reader.result };
+        S.ui.siteSettingsSaved = false;
+        S.ui.siteSettingsFileError = null;
+        render();
+      };
+      reader.readAsDataURL(file);
+      return;
+    }
     if (el.dataset && el.dataset.action === "filter-all-reports-dept") { S.ui.allReportsDept = el.value; render(); return; }
     if (el.dataset && el.dataset.action === "filter-unit-reports-type") { S.ui.unitReportsTypeFilter = el.value; render(); return; }
     if (el.dataset && el.dataset.action === "filter-unit-reports-year") { S.ui.unitReportsYearFilter = el.value; render(); return; }
@@ -5602,10 +5775,35 @@ function attachClickListener() {
         break;
       }
       case "restore-site-settings-defaults": {
-        S.siteSettings = { ...DEFAULT_SITE_COLORS };
+        S.siteSettings = { ...(S.siteSettings || dataStore.getSiteSettings()), ...DEFAULT_SITE_COLORS };
         applySiteColors(S.siteSettings);
         dataStore.saveSiteSettings(S.siteSettings);
         S.ui.siteSettingsSaved = true;
+        render();
+        break;
+      }
+      case "restore-site-branding-defaults": {
+        S.siteSettings = { ...(S.siteSettings || dataStore.getSiteSettings()), ...DEFAULT_BRANDING };
+        dataStore.saveSiteSettings(S.siteSettings);
+        S.ui.siteSettingsSaved = true;
+        render();
+        break;
+      }
+      case "remove-site-logo": {
+        S.siteSettings = { ...(S.siteSettings || dataStore.getSiteSettings()), logo: null };
+        S.ui.siteSettingsSaved = false;
+        render();
+        break;
+      }
+      case "remove-site-banner": {
+        S.siteSettings = { ...(S.siteSettings || dataStore.getSiteSettings()), bannerImage: null };
+        S.ui.siteSettingsSaved = false;
+        render();
+        break;
+      }
+      case "remove-site-tagline-image": {
+        S.siteSettings = { ...(S.siteSettings || dataStore.getSiteSettings()), sidebarTaglineImage: null };
+        S.ui.siteSettingsSaved = false;
         render();
         break;
       }
@@ -6512,7 +6710,8 @@ function afterRender() {
 }
 
 function boot() {
-  applySiteColors(dataStore.getSiteSettings());
+  S.siteSettings = dataStore.getSiteSettings();
+  applySiteColors(S.siteSettings);
   attachFormListeners();
   attachClickListener();
   render();
