@@ -1343,6 +1343,8 @@ function render() {
     html = renderPlatformUserRoleSelect();
   } else if (S.view === "platform-users-manage") {
     html = shellWrap(renderPlatformUsersManage());
+  } else if (S.view === "platform-permissions-manage") {
+    html = shellWrap(renderPlatformPermissionsManage());
   } else {
     html = renderLogin();
   }
@@ -1371,6 +1373,7 @@ const SIDEBAR_PAGES = [
   { id: "admin-reports", label: "الأقسام والوحدات", group: "الرئيسية", icon: "building" },
   { id: "site-settings", label: "إعدادات الموقع", group: "الرئيسية", icon: "gauge" },
   { id: "platform-users-manage", label: "حسابات إضافية", group: "الرئيسية", icon: "layers" },
+  { id: "platform-permissions-manage", label: "صلاحيات الحسابات", group: "الرئيسية", icon: "key" },
   { id: "all-reports", label: "جميع التقارير", group: "standalone", icon: "document" },
   { id: "indicators-manage", label: "إدارة مؤشرات الأداء", group: "إدارة التقارير", icon: "gauge" },
   { id: "goals-manage", label: "إدارة الأهداف والمستهدفات", group: "إدارة التقارير", icon: "target" },
@@ -1408,6 +1411,9 @@ const ACTION_CATALOG = [
   { id: "start-head-return", label: "إعادة التقرير للتعديل/الاستكمال (كمراجِعة داخلية)" },
   { id: "submit-department-review-decision", label: "اتخاذ قرار مراجعة القسم (اعتماد/إعادة)" },
   { id: "delete-report", label: "حذف تقرير (مسودة)" },
+  { id: "section-save-draft", label: "حفظ القسم كمسودة أثناء التعبئة" },
+  { id: "toggle-section-completed", label: "تحديد القسم كمكتمل (أو الرجوع لمسودة)" },
+  { id: "open-or-create-report", label: "إنشاء تقرير جديد" },
 ];
 // true = مسموح بهذا الإجراء. null/undefined بـ S.platformUserAllowedActions يعني
 // حساب بلا قيود إجراءات إضافية (كل الحسابات العادية، وحسابات platform_users
@@ -1417,7 +1423,7 @@ function platformActionAllowed(actionId) {
   return S.platformUserAllowedActions.includes(actionId);
 }
 function sidebarNavIcon(key, size, color) {
-  const map = { home: iconHome, document: iconDocument, building: iconBuilding, gauge: iconGauge, target: iconTarget, pencil: iconPencil, layers: iconLayers, printer: iconPrinter, plus: iconPlus, bell: iconBell };
+  const map = { home: iconHome, document: iconDocument, building: iconBuilding, gauge: iconGauge, target: iconTarget, pencil: iconPencil, layers: iconLayers, printer: iconPrinter, plus: iconPlus, bell: iconBell, key: iconKey };
   const fn = map[key] || iconDocument;
   return key === "building" || key === "gauge" ? fn(color, size) : fn(size, color);
 }
@@ -1523,10 +1529,11 @@ function renderMainSidebar(mobile) {
         </button>
         ${isOpen ? `<div class="nav-list">
           ${items.map((p) => {
+            const isCreateEntry = p.id === "unit-report";
+            if (isCreateEntry && !platformActionAllowed("open-or-create-report")) return "";
             const disabled = (p.scope === "unit" && !S.currentUnitId) || (p.scope === "unitreport" && !(S.currentUnitId && S.currentReportId));
             const active = S.view === p.id;
             const iconColor = disabled ? "#cfc3c8" : active ? ROSE : INK;
-            const isCreateEntry = p.id === "unit-report";
             return `<button class="nav-item ${active ? "active" : ""}" ${disabled ? "disabled" : ""} data-action="${isCreateEntry ? "open-or-create-report" : "nav-to"}" ${isCreateEntry ? "" : `data-view="${p.id}"`}>${sidebarNavIcon(p.icon, 15, iconColor)}<span>${esc(p.label)}</span></button>`;
           }).join("")}
         </div>` : ""}
@@ -4122,7 +4129,8 @@ function renderPlatformUsersManage() {
   };
   return `
   <div class="page-wrap"><div class="page-inner narrow">
-    ${topBarHtml({ title: "حسابات إضافية", subtitle: "أضيفي مسمّيات وظيفية جديدة بصلاحيات دخول وصفحات خاصة — بدون أي تأثير على الحسابات الحالية", backAction: "nav-back-admin" })}
+    ${topBarHtml({ title: "حسابات إضافية", subtitle: "أضيفي مسمّيات وظيفية جديدة بصلاحيات دخول وصفحات خاصة — بدون أي تأثير على الحسابات الحالية", backAction: "nav-back-admin",
+      right: pillBtn("صلاحيات الحسابات", { variant: "ghost", icon: iconKey(15, INK), action: "nav-to", data: { view: "platform-permissions-manage" } }) })}
 
     <div class="card" style="margin-bottom:18px;">
       <div style="font-size:12.5px;font-weight:800;color:${ROSE};margin-bottom:12px;">إضافة مسمّى وظيفي جديد</div>
@@ -4175,6 +4183,30 @@ function platformUserRowHtml(pu, allList) {
       <button class="icon-btn" style="width:32px;height:32px;border:1px solid ${BORDER}" data-action="confirm-remove-platform-user" data-id="${esc(pu.id)}" title="حذف">${iconTrash(14, DANGER)}</button>
     </div>
   </div>`;
+}
+
+// صفحة مستقلة لعرض/تعديل صلاحيات الحسابات الإضافية مباشرة — بدون المرور
+// بنموذج "إضافة حساب" أعلى صفحة "حسابات إضافية". تتيح البحث السريع بالمسمى
+// الوظيفي أو معرّف الدخول، ثم فتح نفس نموذج التعديل الكامل (صفحات + إجراءات +
+// نطاق) لأي حساب مباشرة. كل حساب له صلاحياته الخاصة به (حتى لو شارك نفس
+// المسمى الوظيفي مع حساب آخر) — بدون أي قوالب أو تأثير على الحسابات الحالية.
+function renderPlatformPermissionsManage() {
+  const list = S.platformUsers || [];
+  return `
+  <div class="page-wrap"><div class="page-inner narrow">
+    ${topBarHtml({ title: "صلاحيات الحسابات", subtitle: "ابحثي عن حساب بالمسمى الوظيفي أو معرّف الدخول، وعدّلي صفحاته وإجراءاته ونطاقه مباشرة", backAction: "nav-back-admin",
+      right: pillBtn("إضافة حساب جديد", { variant: "ghost", icon: iconPlus(15, INK), action: "nav-to", data: { view: "platform-users-manage" } }) })}
+
+    ${list.length === 0 ? `<div class="card" style="text-align:center;color:${SUBTLE};padding:36px 20px;border-style:dashed;">لا توجد حسابات إضافية بعد — أضيفيها أولًا من "حسابات إضافية".</div>` : `
+    <div class="card" style="margin-bottom:14px;padding:10px 14px;">
+      <input class="input" id="pu-perm-search" placeholder="اكتبي المسمى الوظيفي أو معرّف الدخول للبحث... (مثال: إدارية)" style="width:100%;" />
+    </div>
+    <div id="pu-perm-list" style="display:flex;flex-direction:column;gap:8px;">
+      ${list.map((pu) => `<div data-search="${esc((pu.jobTitle + " " + pu.loginId + " " + platformUserScopeLabel(pu)).toLowerCase())}">${platformUserRowHtml(pu, list)}</div>`).join("")}
+    </div>
+    <div id="pu-perm-empty-hint" style="display:none;text-align:center;color:${SUBTLE};padding:20px;font-size:12px;">لا يوجد حساب مطابق للبحث.</div>
+    `}
+  </div></div>`;
 }
 
 /* =============================== Indicators management ======================= */
@@ -4630,7 +4662,7 @@ function renderUnitAdminSidebar(mobile) {
     <div class="nav-group open">
       <div class="nav-group-label" style="display:flex;align-items:center;gap:6px;">${sidebarNavIcon("document", 13, SUBTLE)}التقارير</div>
       <div class="nav-list">
-        <button class="nav-item" data-action="open-or-create-report">${sidebarNavIcon("pencil", 15, INK)}<span>إنشاء تقرير</span></button>
+        ${platformActionAllowed("open-or-create-report") ? `<button class="nav-item" data-action="open-or-create-report">${sidebarNavIcon("pencil", 15, INK)}<span>إنشاء تقرير</span></button>` : ""}
         <button class="nav-item ${activeReports ? "active" : ""}" data-action="nav-to" data-view="unit-reports">${sidebarNavIcon("document", 15, activeReports ? ROSE : INK)}<span>التقارير</span></button>
         <button class="nav-item ${activeNotif ? "active" : ""}" data-action="nav-to" data-view="unit-notifications" style="display:flex;align-items:center;justify-content:space-between;">
           <span style="display:flex;align-items:center;gap:10px;">${sidebarNavIcon("bell", 15, activeNotif ? ROSE : INK)}<span>التنبيهات</span></span>
@@ -5073,9 +5105,9 @@ function sectionEditorHtml(unit, report) {
         <div style="width:42px;height:42px;border-radius:12px;background:${color.bg};display:flex;align-items:center;justify-content:center;">${iconLayers(20, color.fg)}</div>
         <div class="prs-title" style="font-size:17px;font-weight:800;">${esc(section.label)}</div>
       </div>
-      <button data-action="toggle-section-completed" style="display:flex;align-items:center;gap:6px;background:${S.sectionCompleted ? GREEN_BG : "#fff"};border:1px solid ${S.sectionCompleted ? GREEN : BORDER};border-radius:999px;padding:6px 12px;cursor:pointer;font-size:11.5px;font-weight:700;color:${S.sectionCompleted ? GREEN : SUBTLE}">
+      ${platformActionAllowed("toggle-section-completed") ? `<button data-action="toggle-section-completed" style="display:flex;align-items:center;gap:6px;background:${S.sectionCompleted ? GREEN_BG : "#fff"};border:1px solid ${S.sectionCompleted ? GREEN : BORDER};border-radius:999px;padding:6px 12px;cursor:pointer;font-size:11.5px;font-weight:700;color:${S.sectionCompleted ? GREEN : SUBTLE}">
         ${S.sectionCompleted ? iconCheckCircle(14, GREEN) : iconCircle(14, SUBTLE)} ${S.sectionCompleted ? "مكتمل" : "تحديد كمكتمل"}
-      </button>
+      </button>` : ""}
     </div>
     ${sharedBar}
     ${fieldsHtml}
@@ -5083,7 +5115,7 @@ function sectionEditorHtml(unit, report) {
     ${S.ui.showSendPicker ? sendReportPickerHtml(unit) : ""}
     <div class="section-editor-nav">
       ${pillBtn("السابق", { variant: "ghost", action: "section-prev", disabled: sectionIndex <= 0 })}
-      <div style="flex:1;">${pillBtn(S.sectionSaveStatus || "حفظ كمسودة", { variant: "soft", icon: iconSave(15, GREEN), action: "section-save-draft" })}</div>
+      <div style="flex:1;">${platformActionAllowed("section-save-draft") ? pillBtn(S.sectionSaveStatus || "حفظ كمسودة", { variant: "soft", icon: iconSave(15, GREEN), action: "section-save-draft" }) : ""}</div>
       ${sectionIndex >= SECTIONS.length - 1
         ? (report.status === "draft" || report.status === "returned" || report.status === "needs_completion" || report.status === "head_returned_edit" || report.status === "head_returned_completion" || report.status === "extra_returned_edit" || report.status === "extra_returned_completion"
             ? (() => {
@@ -6171,6 +6203,19 @@ function attachFormListeners() {
       rows.forEach((row) => { row.style.display = !q || (row.dataset.search || "").includes(q) ? "" : "none"; });
       return;
     }
+    if (el.id === "pu-perm-search") {
+      const q = el.value.trim().toLowerCase();
+      const rows = document.querySelectorAll("#pu-perm-list > [data-search]");
+      let visibleCount = 0;
+      rows.forEach((row) => {
+        const match = !q || (row.dataset.search || "").includes(q);
+        row.style.display = match ? "" : "none";
+        if (match) visibleCount++;
+      });
+      const hint = document.getElementById("pu-perm-empty-hint");
+      if (hint) hint.style.display = visibleCount === 0 ? "" : "none";
+      return;
+    }
     if (el.id === "all-reports-search") {
       const q = el.value.trim().toLowerCase();
       const rows = document.querySelectorAll("#all-reports-table tbody tr");
@@ -6375,7 +6420,7 @@ function attachClickListener() {
         // نلغي أي طيّ يدوي للمجموعة اللي تحتوي الصفحة الجديدة، عشان تفتح تلقائيًا وتبيّن أين نحن.
         const targetPage = SIDEBAR_PAGES.find((p) => p.id === ds.view);
         if (targetPage && S.ui.sidebarGroupState) delete S.ui.sidebarGroupState[targetPage.group];
-        if (ds.view === "platform-users-manage") S.platformUsers = dataStore.getPlatformUsers();
+        if (ds.view === "platform-users-manage" || ds.view === "platform-permissions-manage") S.platformUsers = dataStore.getPlatformUsers();
         render();
         if (sheetsConfigured()) {
           if (ds.view === "admin-reports" || ds.view === "units-manage" || ds.view === "department-overview") {
@@ -6651,6 +6696,7 @@ function attachClickListener() {
       }
       case "set-unit-reports-filter": S.ui.unitReportsFilter = ds.filter; render(); break;
       case "open-or-create-report": {
+        if (!platformActionAllowed("open-or-create-report")) break;
         // إنشاء تقرير: تكمل آخر تقرير لسا شغّالة عليه (مسودة/بحاجة لتعديل أو استكمال)،
         // أو تنشئ تقرير جديد فورًا بدون أي اختيار وسيط.
         const list = ensureUnitReportsLoaded(S.currentUnitId);
@@ -7324,12 +7370,14 @@ function handleReportEditorAction(action, ds) {
       return true;
     }
     case "toggle-section-completed": {
+      if (!platformActionAllowed("toggle-section-completed")) return true;
       const next = !S.sectionCompleted;
       if (trySaveSectionWithStatus(next ? "completed" : "draft")) S.sectionCompleted = next;
       render();
       return true;
     }
     case "section-save-draft": {
+      if (!platformActionAllowed("section-save-draft")) return true;
       if (trySaveSectionWithStatus(S.sectionCompleted ? "completed" : "draft")) {
         S.sectionSaveStatus = "تم الحفظ ✓";
         render();
