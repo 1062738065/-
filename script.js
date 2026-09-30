@@ -703,6 +703,7 @@ function siteSettingsToRow(s) {
     platform_name: s.platformName || DEFAULT_BRANDING.platformName,
     sidebar_tagline: s.sidebarTagline != null ? s.sidebarTagline : DEFAULT_BRANDING.sidebarTagline,
     sidebar_tagline_image_url: s.sidebarTaglineImage || null,
+    font_family: s.fontFamily || DEFAULT_BRANDING.fontFamily,
   };
 }
 function rowToSiteSettings(r) {
@@ -717,6 +718,7 @@ function rowToSiteSettings(r) {
     platformName: r.platform_name || DEFAULT_BRANDING.platformName,
     sidebarTagline: r.sidebar_tagline != null ? r.sidebar_tagline : DEFAULT_BRANDING.sidebarTagline,
     sidebarTaglineImage: r.sidebar_tagline_image_url || null,
+    fontFamily: r.font_family || DEFAULT_BRANDING.fontFamily,
   };
 }
 function indDefToRow(d) { return { id: d.id, name: d.name, category: d.category || "", direction: d.direction || "", nature: d.nature || "", frequency: d.frequency || "", unit: d.unit || "", target: String(d.target ?? ""), data_source: d.dataSource || "", calculation_method: d.calculationMethod || "" }; }
@@ -784,7 +786,21 @@ const DEFAULT_BRANDING = {
   platformName: "منصة التقارير",
   sidebarTagline: "تقارير دقيقة.. لأثر أكبر",
   sidebarTaglineImage: null,
+  fontFamily: "IBM Plex Sans Arabic",
 };
+// قائمة خطوط عربية جاهزة (محمّلة مسبقًا من Google Fonts بملف index.html) —
+// تُطبَّق على واجهة الموقع كلها (نصوص، عناوين، أزرار) فيما عدا التقرير المطبوع/PDF
+// اللي يبقى بخطه الثابت (Almarai/Amiri) عمدًا لضمان ثبات شكل المستند المطبوع.
+const FONT_OPTIONS = [
+  { value: "IBM Plex Sans Arabic", label: "IBM Plex Sans Arabic (الافتراضي)" },
+  { value: "Cairo", label: "Cairo" },
+  { value: "Tajawal", label: "Tajawal" },
+  { value: "Almarai", label: "Almarai" },
+  { value: "Changa", label: "Changa" },
+  { value: "Noto Kufi Arabic", label: "Noto Kufi Arabic" },
+  { value: "Reem Kufi", label: "Reem Kufi" },
+  { value: "Amiri", label: "Amiri (خط كلاسيكي)" },
+];
 function siteLogoSrc(s) { return (s && s.logo) || ASSOCIATION_LOGO; }
 function siteBannerSrc(s) { return (s && s.bannerImage) || "hero-bg.jpg"; }
 function currentSiteSettings() { return S.siteSettings || dataStore.getSiteSettings(); }
@@ -2448,7 +2464,8 @@ function renderSiteSettings() {
   const isColorDefault = current.primary === DEFAULT_SITE_COLORS.primary && current.background === DEFAULT_SITE_COLORS.background;
   const isBrandingDefault = !current.logo && (Number(current.logoSize) || DEFAULT_BRANDING.logoSize) === DEFAULT_BRANDING.logoSize && !current.bannerImage &&
     (current.bannerTitle || DEFAULT_BRANDING.bannerTitle) === DEFAULT_BRANDING.bannerTitle && (current.bannerSub || DEFAULT_BRANDING.bannerSub) === DEFAULT_BRANDING.bannerSub &&
-    (current.platformName || DEFAULT_BRANDING.platformName) === DEFAULT_BRANDING.platformName && (current.sidebarTagline || "") === DEFAULT_BRANDING.sidebarTagline && !current.sidebarTaglineImage;
+    (current.platformName || DEFAULT_BRANDING.platformName) === DEFAULT_BRANDING.platformName && (current.sidebarTagline || "") === DEFAULT_BRANDING.sidebarTagline && !current.sidebarTaglineImage &&
+    (current.fontFamily || DEFAULT_BRANDING.fontFamily) === DEFAULT_BRANDING.fontFamily;
   const fieldLabel = (t) => `<div style="font-size:13px;font-weight:800;margin-bottom:8px;">${esc(t)}</div>`;
   const textInput = (id, val, placeholder) => `<input type="text" id="${id}" class="input" value="${esc(val || "")}" placeholder="${esc(placeholder || "")}" style="width:100%;" />`;
   const imgPreviewBlock = (src, alt, previewStyle, fileInputId, removeAction, showRemove) => `
@@ -2484,6 +2501,20 @@ function renderSiteSettings() {
         </div>
       </div>
       <div>${pillBtn("استعادة الألوان الافتراضية", { variant: "ghost", icon: iconX(14, INK), action: "restore-site-settings-defaults", disabled: isColorDefault })}</div>
+    </div>
+
+    <div class="card" style="max-width:560px;margin-bottom:16px;">
+      <div class="subhead" style="margin-top:0;">الخط</div>
+      <div>
+        ${fieldLabel("خط الموقع (يشمل النصوص والعناوين والأزرار بكل الصفحات — عدا التقرير المطبوع نفسه)")}
+        <select class="input" id="site-font-family" style="width:100%;margin-bottom:10px;">
+          ${FONT_OPTIONS.map((f) => `<option value="${esc(f.value)}" style="font-family:'${esc(f.value)}';" ${(current.fontFamily || DEFAULT_BRANDING.fontFamily) === f.value ? "selected" : ""}>${esc(f.label)}</option>`).join("")}
+        </select>
+        <div style="border:1px solid ${BORDER};border-radius:10px;padding:14px 16px;background:${GRAY_BG};font-family:'${esc(current.fontFamily || DEFAULT_BRANDING.fontFamily)}';">
+          <div style="font-size:16px;font-weight:800;margin-bottom:4px;">هذا مثال على شكل الخط المختار</div>
+          <div style="font-size:12.5px;color:${SUBTLE};">تقرير الأداء الدوري — وحدة الاختبارات — جمعية فرقان</div>
+        </div>
+      </div>
     </div>
 
     <div class="card" style="max-width:560px;margin-bottom:16px;">
@@ -6019,6 +6050,14 @@ function attachFormListeners() {
       render();
       return;
     }
+    if (el.id === "site-font-family") {
+      S.siteSettings = S.siteSettings || dataStore.getSiteSettings();
+      S.siteSettings = { ...S.siteSettings, fontFamily: el.value };
+      S.ui.siteSettingsSaved = false;
+      applySiteColors(S.siteSettings);
+      render();
+      return;
+    }
     if (el.dataset && el.dataset.action === "change-pu-scopekind") {
       const prefix = el.dataset.prefix;
       capturePlatformUserFormFields(prefix);
@@ -6119,6 +6158,7 @@ function attachClickListener() {
       case "restore-site-branding-defaults": {
         S.siteSettings = { ...(S.siteSettings || dataStore.getSiteSettings()), ...DEFAULT_BRANDING };
         dataStore.saveSiteSettings(S.siteSettings);
+        applySiteColors(S.siteSettings);
         S.ui.siteSettingsSaved = true;
         render();
         break;
@@ -7122,6 +7162,9 @@ function applySiteColors(settings) {
   root.style.setProperty("--rose", settings.primary);
   root.style.setProperty("--rose-dark", settings.primary);
   root.style.setProperty("--blush-bg", settings.background);
+  const font = settings.fontFamily || DEFAULT_BRANDING.fontFamily;
+  root.style.setProperty("--font-main", `'${font}'`);
+  root.style.setProperty("--font-heading", `'${font}'`);
 }
 function afterRender() {
   const loginUserEl = document.getElementById("login-username");
