@@ -672,6 +672,7 @@ function unitToRow(u) {
     status: u.status || "active", created_at: u.createdAt || Date.now(), email: u.email || "",
     has_head: u.hasHead !== undefined && u.hasHead !== null ? !!u.hasHead : (u.role || "unit") !== "center",
     extra_reviewer_title: u.extraReviewerTitle || "",
+    allowed_pages: u.allowedPages || [], allowed_actions: u.allowedActions || [],
   };
 }
 function rowToUnit(r) {
@@ -680,12 +681,13 @@ function rowToUnit(r) {
     status: r.status || "active", createdAt: Number(r.created_at) || 0, email: r.email || "",
     hasHead: r.has_head !== undefined && r.has_head !== null ? !!r.has_head : (r.role || "unit") !== "center",
     extraReviewerTitle: r.extra_reviewer_title || "",
+    allowedPages: r.allowed_pages || [], allowedActions: r.allowed_actions || [],
   };
 }
-function deptToRow(d) { return { id: d.id, name: d.name, password: d.password || "", status: d.status || "active", created_at: d.createdAt || Date.now(), curation: d.curation || { approvedKeys: [] }, email: d.email || "", office_id: d.officeId || "" }; }
-function rowToDept(r) { return { id: r.id, name: r.name, password: r.password || "", status: r.status || "active", createdAt: Number(r.created_at) || 0, curation: r.curation || { approvedKeys: [] }, email: r.email || "", officeId: r.office_id || "" }; }
-function officeToRow(o) { return { id: o.id, name: o.name, password: o.password || "", status: o.status || "active", created_at: o.createdAt || Date.now(), curation: o.curation || { approvedKeys: [] } }; }
-function rowToOffice(r) { return { id: r.id, name: r.name, password: r.password || "", status: r.status || "active", createdAt: Number(r.created_at) || 0, curation: r.curation || { approvedKeys: [] } }; }
+function deptToRow(d) { return { id: d.id, name: d.name, password: d.password || "", status: d.status || "active", created_at: d.createdAt || Date.now(), curation: d.curation || { approvedKeys: [] }, email: d.email || "", office_id: d.officeId || "", allowed_pages: d.allowedPages || [], allowed_actions: d.allowedActions || [] }; }
+function rowToDept(r) { return { id: r.id, name: r.name, password: r.password || "", status: r.status || "active", createdAt: Number(r.created_at) || 0, curation: r.curation || { approvedKeys: [] }, email: r.email || "", officeId: r.office_id || "", allowedPages: r.allowed_pages || [], allowedActions: r.allowed_actions || [] }; }
+function officeToRow(o) { return { id: o.id, name: o.name, password: o.password || "", status: o.status || "active", created_at: o.createdAt || Date.now(), curation: o.curation || { approvedKeys: [] }, allowed_pages: o.allowedPages || [], allowed_actions: o.allowedActions || [] }; }
+function rowToOffice(r) { return { id: r.id, name: r.name, password: r.password || "", status: r.status || "active", createdAt: Number(r.created_at) || 0, curation: r.curation || { approvedKeys: [] }, allowedPages: r.allowed_pages || [], allowedActions: r.allowed_actions || [] }; }
 // "حسابات إضافية" (platform_users) — طبقة مرنة إضافية فوق نظام الحسابات الحالي
 // (وحدات/أقسام/مكاتب/مديرة نظام)، لمسمّيات وظيفية جديدة كليًا (سكرتارية، مديرة
 // تعليمية...) بصلاحيات صفحات مخصّصة لكل واحدة. لا تلمس أو تعدّل حسابات units/
@@ -2021,6 +2023,23 @@ function doLoginPlatformUser(pu) {
   }
 }
 
+// دمج حقيقي لنظام الصلاحيات: أي حساب أساسي (وحدة/مركز/قسم/مكتب) يقدر يُقيَّد
+// بنفس آلية الصفحات/الإجراءات المستخدمة أصلاً لـ"حسابات إضافية" — ببساطة عبر
+// حقلي allowedPages/allowedActions المحفوظين على سجل الوحدة/القسم/المكتب نفسه.
+// تُطبَّق فقط لو ما كان فيه تقييد أسبق مضبوط صراحة (مثلاً من حساب "مسمى وظيفي"
+// عبر doLoginPlatformUser) — تقييد الحساب الإضافي نفسه له الأولوية دائمًا؛ ولو
+// ما فيه، يرث القيود المضبوطة على الحساب الأساسي نفسه. أي حساب لم تُخصَّص له
+// صلاحيات بعد (القيمة الافتراضية: مصفوفة فاضية) يبقى بلا أي قيد تمامًا كالسابق.
+function applyScopedAccountPermissions(entity) {
+  if (!entity) return;
+  if (S.platformUserAllowedPages === null && entity.allowedPages && entity.allowedPages.length) {
+    S.platformUserAllowedPages = entity.allowedPages;
+  }
+  if (S.platformUserAllowedActions === null && entity.allowedActions && entity.allowedActions.length) {
+    S.platformUserAllowedActions = entity.allowedActions;
+  }
+}
+
 function doLogin(user) {
   S.currentUser = user;
   S.cameFromAllReports = false;
@@ -2045,12 +2064,14 @@ function doLogin(user) {
     S.view = "dashboard";
   } else if (S.isDepartmentUser) {
     S.currentDepartmentId = user.departmentId;
+    applyScopedAccountPermissions(S.departments.find((d) => d.id === S.currentDepartmentId));
     const reports = {};
     S.units.filter((u) => u.departmentId === S.currentDepartmentId).forEach((u) => { reports[u.id] = dataStore.getReports(u.id); });
     S.reports = reports;
     S.view = "department-overview";
   } else if (S.isExecutive) {
     // اطلاع إشرافي شامل فقط — بدون أي دخول لنموذج كتابة التقارير أو تعديلها.
+    // (حساب الإدارة العليا خارج نطاق نظام الصلاحيات المخصّصة هذا عمدًا)
     const reports = {};
     S.units.forEach((u) => { reports[u.id] = dataStore.getReports(u.id); });
     S.reports = reports;
@@ -2060,17 +2081,20 @@ function doLogin(user) {
     // النتائج، كلها مقتصرة على وحدات أقسامه التابعة فقط — بدون أي دخول لتقارير
     // الوحدات أو تعديلها.
     S.currentOfficeId = user.officeId || "";
+    applyScopedAccountPermissions(S.offices.find((o) => o.id === S.currentOfficeId));
     S.ui.departmentsPageSelectedId = null;
     S.view = "office-dashboard";
   } else if (user.role === "center" || (!unitHasHead(S.units.find((u) => u.id === user.unitId)) && !unitHasExtraReview(S.units.find((u) => u.id === user.unitId)))) {
     // مركز، أو وحدة مُهيّأة صراحة بدون أي مستوى مراجعة داخلي (لا رئيسة ولا
     // مستوى إضافي) — تدخل مباشرة بدون شاشة اختيار صفة، بالضبط كسلوك المركز.
     const unitId = user.unitId;
+    applyScopedAccountPermissions(S.units.find((u) => u.id === unitId));
     S.reports[unitId] = dataStore.getReports(unitId);
     S.currentUnitId = unitId;
     S.currentReportId = null;
     S.view = "unit-dashboard";
   } else {
+    applyScopedAccountPermissions(S.units.find((u) => u.id === user.unitId));
     // موظفة الوحدة: تختار أولًا كيف تريد الدخول — الإدارية، أو رئيسة الوحدة
     // (إن وُجدت)، أو مستوى المراجعة الإضافي (إن وُجد) — قبل الدخول لصفحات
     // الوحدة نفسها. نفس الحساب ونفس كلمة المرور بالضبط، بدون أي حساب أو
@@ -4190,19 +4214,73 @@ function platformUserRowHtml(pu, allList) {
 // الوظيفي أو معرّف الدخول، ثم فتح نفس نموذج التعديل الكامل (صفحات + إجراءات +
 // نطاق) لأي حساب مباشرة. كل حساب له صلاحياته الخاصة به (حتى لو شارك نفس
 // المسمى الوظيفي مع حساب آخر) — بدون أي قوالب أو تأثير على الحسابات الحالية.
+// تجمع كل حساب بالنظام له صلاحيات قابلة للتخصيص بقائمة واحدة موحّدة: الحسابات
+// الأساسية (وحدات/مراكز/أقسام/مكاتب إشراف) + الحسابات الإضافية (platform_users)
+// — دمج حقيقي لنفس نظام الصلاحيات (allowedPages/allowedActions) على كل منها،
+// بدل ما يبقى النظامان منفصلين. حساب مديرة النظام والإدارة العليا مستثنيان
+// عمدًا (دائمًا كامل الصلاحيات، ما فيه داعي لتقييدهما).
+function collectPermissionAccounts() {
+  const list = [];
+  (S.units || []).forEach((u) => {
+    if (u.role === "admin" || u.role === "executive") return;
+    list.push({ kind: "unit", id: u.id, entity: u, label: u.name, typeLabel: u.role === "center" ? "مركز" : "وحدة" });
+  });
+  (S.departments || []).forEach((d) => {
+    list.push({ kind: "department", id: d.id, entity: d, label: d.name, typeLabel: "قسم" });
+  });
+  (S.offices || []).forEach((o) => {
+    list.push({ kind: "office", id: o.id, entity: o, label: o.name, typeLabel: "مكتب إشراف" });
+  });
+  (S.platformUsers || []).forEach((pu) => {
+    list.push({ kind: "platform_user", id: pu.id, entity: pu, label: pu.jobTitle, typeLabel: "حساب إضافي" });
+  });
+  return list;
+}
+function unifiedAccountPermRowHtml(rec) {
+  if (rec.kind === "platform_user") return platformUserRowHtml(rec.entity, S.platformUsers);
+  const entity = rec.entity;
+  const editing = S.ui.editingAccountPerm && S.ui.editingAccountPerm.kind === rec.kind && S.ui.editingAccountPerm.id === rec.id;
+  if (editing) {
+    const form = S.ui.editAccountPermForm || { allowedPages: [], allowedActions: [] };
+    return `<div class="card">
+      <div style="font-size:13px;font-weight:800;margin-bottom:10px;">${esc(rec.label)} <span style="font-size:10.5px;font-weight:700;color:${SUBTLE}">(${esc(rec.typeLabel)})</span></div>
+      <div style="margin-bottom:6px;font-size:11.5px;font-weight:800;color:${ROSE};">صلاحية الصفحات (اتركيها فاضية للسماح بكل الصفحات المتاحة لهذا الحساب أصلًا حسب دوره)</div>
+      ${platformUserPagesChecklistHtml(form.allowedPages || [], "toggle-account-perm-page")}
+      <div style="margin:14px 0 6px;font-size:11.5px;font-weight:800;color:${ROSE};">صلاحية الإجراءات (اتركيها فاضية للسماح بكل الإجراءات المتاحة أصلًا)</div>
+      ${platformUserActionsChecklistHtml(form.allowedActions || [], "toggle-account-perm-action")}
+      <div style="display:flex;gap:6px;margin-top:10px;">${pillBtn("حفظ", { action: "save-account-perm-edit", data: { kind: rec.kind, id: rec.id } })}${pillBtn("إلغاء", { variant: "ghost", action: "cancel-account-perm-edit" })}</div>
+    </div>`;
+  }
+  const pagesCount = (entity.allowedPages || []).length;
+  const actionsCount = (entity.allowedActions || []).length;
+  return `<div class="card" style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;">
+    <div style="display:flex;align-items:center;gap:10px;min-width:0;">
+      <div style="width:34px;height:34px;border-radius:10px;background:${BLUE_BG};display:flex;align-items:center;justify-content:center;flex-shrink:0;">${iconBuilding(ROSE, 16)}</div>
+      <div style="min-width:0;">
+        <div style="font-size:13.5px;font-weight:700;">${esc(rec.label)} <span style="font-size:10px;font-weight:700;color:${SUBTLE};">(${esc(rec.typeLabel)})</span></div>
+        <div style="font-size:10.5px;color:${SUBTLE};margin-top:2px;">${pagesCount ? `<span style="color:${GREEN}">${pagesCount} صفحة مسموحة</span>` : "بلا قيد صفحات"} · ${actionsCount ? `<span style="color:${GREEN}">${actionsCount} إجراء مسموح</span>` : "بلا قيد إجراءات"}</div>
+      </div>
+    </div>
+    <button class="icon-btn" style="width:32px;height:32px;border:1px solid ${BORDER}" data-action="start-account-perm-edit" data-kind="${esc(rec.kind)}" data-id="${esc(rec.id)}" title="تعديل الصلاحيات">${iconPencil(14, INK)}</button>
+  </div>`;
+}
 function renderPlatformPermissionsManage() {
-  const list = S.platformUsers || [];
+  const list = collectPermissionAccounts();
   return `
   <div class="page-wrap"><div class="page-inner narrow">
-    ${topBarHtml({ title: "صلاحيات الحسابات", subtitle: "ابحثي عن حساب بالمسمى الوظيفي أو معرّف الدخول، وعدّلي صفحاته وإجراءاته ونطاقه مباشرة", backAction: "nav-back-admin",
-      right: pillBtn("إضافة حساب جديد", { variant: "ghost", icon: iconPlus(15, INK), action: "nav-to", data: { view: "platform-users-manage" } }) })}
+    ${topBarHtml({ title: "صلاحيات الحسابات", subtitle: "كل حساب بالنظام — وحدات، مراكز، أقسام، مكاتب إشراف، وحسابات إضافية — بقائمة واحدة، وتعديل صفحاته وإجراءاته مباشرة", backAction: "nav-back-admin",
+      right: pillBtn("إضافة حساب إضافي جديد", { variant: "ghost", icon: iconPlus(15, INK), action: "nav-to", data: { view: "platform-users-manage" } }) })}
 
-    ${list.length === 0 ? `<div class="card" style="text-align:center;color:${SUBTLE};padding:36px 20px;border-style:dashed;">لا توجد حسابات إضافية بعد — أضيفيها أولًا من "حسابات إضافية".</div>` : `
+    ${list.length === 0 ? `<div class="card" style="text-align:center;color:${SUBTLE};padding:36px 20px;border-style:dashed;">لا توجد حسابات بعد.</div>` : `
     <div class="card" style="margin-bottom:14px;padding:10px 14px;">
-      <input class="input" id="pu-perm-search" placeholder="اكتبي المسمى الوظيفي أو معرّف الدخول للبحث... (مثال: إدارية)" style="width:100%;" />
+      <input class="input" id="pu-perm-search" placeholder="اكتبي اسم الحساب أو المسمى الوظيفي أو معرّف الدخول للبحث... (مثال: إدارية)" style="width:100%;" />
     </div>
     <div id="pu-perm-list" style="display:flex;flex-direction:column;gap:8px;">
-      ${list.map((pu) => `<div data-search="${esc((pu.jobTitle + " " + pu.loginId + " " + platformUserScopeLabel(pu)).toLowerCase())}">${platformUserRowHtml(pu, list)}</div>`).join("")}
+      ${list.map((rec) => {
+        const loginId = rec.kind === "platform_user" ? rec.entity.loginId : "";
+        const searchText = [rec.label, rec.typeLabel, loginId].filter(Boolean).join(" ").toLowerCase();
+        return `<div data-search="${esc(searchText)}">${unifiedAccountPermRowHtml(rec)}</div>`;
+      }).join("")}
     </div>
     <div id="pu-perm-empty-hint" style="display:none;text-align:center;color:${SUBTLE};padding:20px;font-size:12px;">لا يوجد حساب مطابق للبحث.</div>
     `}
@@ -7061,6 +7139,56 @@ function attachClickListener() {
         const arr = S.ui.editPuForm.allowedActions || (S.ui.editPuForm.allowedActions = []);
         const idx = arr.indexOf(ds.id);
         if (idx >= 0) arr.splice(idx, 1); else arr.push(ds.id);
+        render();
+        break;
+      }
+      // تعديل صلاحيات (صفحات/إجراءات) حساب أساسي (وحدة/مركز/قسم/مكتب) مباشرة
+      // من صفحة "صلاحيات الحسابات" — دمج حقيقي مع نفس نظام الحسابات الإضافية.
+      case "start-account-perm-edit": {
+        const list = collectPermissionAccounts();
+        const rec = list.find((r) => r.kind === ds.kind && r.id === ds.id);
+        if (!rec) break;
+        S.ui.editingAccountPerm = { kind: ds.kind, id: ds.id };
+        S.ui.editAccountPermForm = { allowedPages: [...(rec.entity.allowedPages || [])], allowedActions: [...(rec.entity.allowedActions || [])] };
+        render();
+        break;
+      }
+      case "cancel-account-perm-edit": {
+        S.ui.editingAccountPerm = null; S.ui.editAccountPermForm = null;
+        render();
+        break;
+      }
+      case "toggle-account-perm-page": {
+        S.ui.editAccountPermForm = S.ui.editAccountPermForm || { allowedPages: [], allowedActions: [] };
+        const arr = S.ui.editAccountPermForm.allowedPages || (S.ui.editAccountPermForm.allowedPages = []);
+        const idx = arr.indexOf(ds.id);
+        if (idx >= 0) arr.splice(idx, 1); else arr.push(ds.id);
+        render();
+        break;
+      }
+      case "toggle-account-perm-action": {
+        S.ui.editAccountPermForm = S.ui.editAccountPermForm || { allowedPages: [], allowedActions: [] };
+        const arr = S.ui.editAccountPermForm.allowedActions || (S.ui.editAccountPermForm.allowedActions = []);
+        const idx = arr.indexOf(ds.id);
+        if (idx >= 0) arr.splice(idx, 1); else arr.push(ds.id);
+        render();
+        break;
+      }
+      case "save-account-perm-edit": {
+        const form = S.ui.editAccountPermForm || { allowedPages: [], allowedActions: [] };
+        const allowedPages = form.allowedPages || [];
+        const allowedActions = form.allowedActions || [];
+        if (ds.kind === "unit") {
+          S.units = S.units.map((u) => (u.id === ds.id ? { ...u, allowedPages, allowedActions } : u));
+          dataStore.saveUnits(S.units);
+        } else if (ds.kind === "department") {
+          S.departments = S.departments.map((d) => (d.id === ds.id ? { ...d, allowedPages, allowedActions } : d));
+          dataStore.saveDepartments(S.departments);
+        } else if (ds.kind === "office") {
+          S.offices = S.offices.map((o) => (o.id === ds.id ? { ...o, allowedPages, allowedActions } : o));
+          dataStore.saveOffices(S.offices);
+        }
+        S.ui.editingAccountPerm = null; S.ui.editAccountPermForm = null;
         render();
         break;
       }
