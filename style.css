@@ -60,17 +60,14 @@ img { max-width: 100%; }
 .app-main { flex: 1; min-width: 0; }
 .open-sidebar-wrap { padding: 20px 20px 0; }
 
-/* Sidebar (main nav) — مجموعات منفصلة ببطاقات، بألوان تتبع "إعدادات الموقع" (--rose / --blush-bg) بدل أي لون ثابت */
-/* الشريط الجانبي — بطاقة واحدة صلبة بلون الموقع الأساسي (--rose)، بنفس شكل
-   المرجع اللي أرسلته المستخدمة (بطاقة داكنة موحّدة، عنصر نشط أبيض بارز، بدون
-   بطاقات فرعية منفصلة لكل مجموعة)، مع إبقاء الشعار والألوان الديناميكية للموقع. */
+/* Sidebar (main nav) */
 .sidebar {
-  width: 252px;
+  width: 244px;
   flex-shrink: 0;
-  background: var(--rose);
+  background: var(--sidebar-bg);
   box-shadow: var(--card-shadow);
-  border-radius: 26px;
-  padding: 20px 14px;
+  border-radius: 20px;
+  padding: 18px 12px;
   display: flex;
   flex-direction: column;
   position: sticky;
@@ -80,69 +77,62 @@ img { max-width: 100%; }
   overflow-y: auto;
   height: calc(100vh - 40px);
   scrollbar-width: thin;
-  scrollbar-color: rgba(255,255,255,0.25) transparent;
+  scrollbar-color: var(--border) transparent;
 }
 .sidebar::-webkit-scrollbar { width: 6px; }
-.sidebar::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.25); border-radius: 6px; }
-.sidebar-head { padding: 2px 4px 18px; margin-bottom: 4px; }
-.sidebar-head-icons-row { display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px; }
+.sidebar::-webkit-scrollbar-thumb { background: var(--border); border-radius: 6px; }
+.sidebar-head {
+  padding: 2px 4px 16px; border-bottom: 1px solid var(--border); margin-bottom: 16px;
+}
+.sidebar-head-icons-row { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
 .sidebar-head-left { display: flex; align-items: center; gap: 8px; min-width: 0; }
-.icon-badge { width: 30px; height: 30px; border-radius: 9px; background: rgba(255,255,255,0.16); display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
-.sidebar-logo { display: block; width: 30px; height: 30px; object-fit: contain; margin: 0 auto 8px; border-radius: 8px; background: #fff; padding: 3px; }
-.sidebar-title { display: block; font-size: 15px; font-weight: 900; color: #fff; text-align: center; white-space: normal; line-height: 1.3; }
-.icon-btn { width: 28px; height: 28px; border-radius: 8px; border: none; background: rgba(255,255,255,0.16); display: flex; align-items: center; justify-content: center; cursor: pointer; flex-shrink: 0; transition: background 0.15s ease; }
-.icon-btn:hover { background: rgba(255,255,255,0.28); }
-.sidebar .icon-btn { background: rgba(255,255,255,0.16); }
-.sidebar-user-block {
-  display: flex; align-items: center; gap: 10px; padding: 10px; margin: 4px 0 18px;
-  background: rgba(255,255,255,0.12); border-radius: 14px;
-}
+.icon-badge { width: 30px; height: 30px; border-radius: 9px; background: linear-gradient(150deg, #efd9c9, #DDCCC2); display: flex; align-items: center; justify-content: center; flex-shrink: 0; box-shadow: 0 2px 6px rgba(107,35,55,0.12); }
+.sidebar-logo { display: block; width: 32px; height: 32px; object-fit: contain; margin: 0 auto 7px; }
+.sidebar-title { display: block; font-size: 15px; font-weight: 900; color: #6b2337; text-align: center; white-space: normal; line-height: 1.35; }
+.icon-btn { width: 28px; height: 28px; border-radius: 8px; border: none; background: #fdfbfa; display: flex; align-items: center; justify-content: center; cursor: pointer; flex-shrink: 0; transition: background 0.15s ease; }
+.icon-btn:hover { background: #f1e6ea; }
+.sidebar .icon-btn { background: var(--gray-bg); }
+.sidebar-user-block { display: flex; align-items: center; gap: 10px; padding: 2px 6px 16px; }
 .sidebar-user-avatar {
-  width: 36px; height: 36px; border-radius: 50%; background: #fff; color: var(--rose);
-  display: flex; align-items: center; justify-content: center; font-weight: 900; font-size: 14px; flex-shrink: 0;
+  width: 38px; height: 38px; border-radius: 50%; background: linear-gradient(150deg, #e9d5cb, #DDCCC2); color: #6b2337;
+  display: flex; align-items: center; justify-content: center; font-weight: 900; font-size: 14.5px; flex-shrink: 0;
+  box-shadow: 0 0 0 2.5px #fff, 0 0 0 4px rgba(107,35,55,0.14);
 }
-.sidebar-user-name { font-size: 12.5px; font-weight: 800; color: #fff; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sidebar-user-name { font-size: 12.5px; font-weight: 800; color: var(--ink); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .sidebar-role-badge {
-  display: inline-block; margin-top: 3px; font-size: 9.5px; font-weight: 700; color: #fff;
-  background: rgba(255,255,255,0.22); padding: 2px 8px; border-radius: 999px; white-space: nowrap;
+  display: inline-block; margin-top: 3px; font-size: 9.5px; font-weight: 700; color: #6b2337;
+  background: rgba(107,35,55,0.08); padding: 2px 8px; border-radius: 999px; white-space: nowrap;
   overflow: hidden; text-overflow: ellipsis; max-width: 100%;
 }
-.sidebar-bell { margin-right: auto; background: rgba(255,255,255,0.16); border: none; width: 30px; height: 30px; border-radius: 50%; display: flex; align-items: center; justify-content: center; flex-shrink: 0; color: #fff; transition: background 0.15s ease; }
-.sidebar-bell:hover { background: rgba(255,255,255,0.28); }
-.nav-group {
-  position: relative; background: transparent; padding: 4px 0;
-}
+.sidebar-bell { margin-right: auto; background: var(--gray-bg); border: none; width: 30px; height: 30px; border-radius: 50%; display: flex; align-items: center; justify-content: center; flex-shrink: 0; color: var(--ink); transition: background 0.15s ease; }
+.sidebar-bell:hover { background: #f1e6ea; }
+.nav-group { position: relative; }
 .nav-group-label {
-  font-size: 11px; font-weight: 800; color: rgba(255,255,255,0.6); letter-spacing: 0.2px;
-  padding: 4px 8px 7px; display: flex !important; transition: opacity 0.15s ease;
+  font-size: 11px; font-weight: 800; color: var(--subtle); letter-spacing: 0.2px;
+  padding: 4px 10px 7px; transition: color 0.15s ease;
 }
-.nav-group-label svg { opacity: 0.85; }
-.nav-list { display: flex; flex-direction: column; gap: 3px; padding-right: 0; width: 100%; }
+.nav-group-label:hover { color: var(--ink); }
+.nav-list { display: flex; flex-direction: column; gap: 3px; padding-right: 10px; width: calc(100% - 10px); }
 .nav-item {
   position: relative;
-  display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-radius: 12px; border: none;
-  background: transparent; color: rgba(255,255,255,0.88); font-size: 12px; font-weight: 600; cursor: pointer; text-align: right; width: 100%;
+  display: flex; align-items: center; gap: 10px; padding: 9px 12px; border-radius: 10px; border: none;
+  background: transparent; color: var(--ink); font-size: 12px; font-weight: 600; cursor: pointer; text-align: right; width: 100%;
   transition: background 0.15s ease, color 0.15s ease;
 }
-.nav-item.active { background: #fff; color: var(--rose); font-weight: 800; box-shadow: 0 4px 12px rgba(0,0,0,0.12); }
-.nav-item.active svg { stroke: var(--rose) !important; }
-.nav-item.active::before { content: none; }
-.nav-item:not(.active):not([disabled]):hover { background: rgba(255,255,255,0.12); }
-.nav-item[disabled] { color: rgba(255,255,255,0.35); cursor: not-allowed; }
-/* أيقونات الشريط الجانبي تُرسم بلون مضبوط مسبقًا (JS) لسياق الخلفية الفاتحة
-   الأصلية؛ نجبرها هنا على الأبيض (أو لون الموقع للعنصر النشط) لتناسب الخلفية
-   الداكنة الجديدة، دون الحاجة لتعديل الكود اللي يولّد كل أيقونة. */
-.sidebar .nav-item svg { stroke: rgba(255,255,255,0.88) !important; }
-.sidebar .nav-item.active svg { stroke: var(--rose) !important; }
-.sidebar .icon-badge svg, .sidebar .icon-btn svg, .sidebar .sidebar-bell svg { stroke: #fff !important; }
-.sidebar .logout-btn svg { stroke: #fff !important; }
+.nav-item.active { background: var(--sidebar-active); color: #6b2337; font-weight: 800; }
+.nav-item.active::before {
+  content: ""; position: absolute; right: -10px; top: 50%; transform: translateY(-50%);
+  width: 3px; height: 60%; border-radius: 3px; background: #6b2337;
+}
+.nav-item:not(.active):not([disabled]):hover { background: var(--gray-bg); }
+.nav-item[disabled] { color: #cfc3c8; cursor: not-allowed; }
 .sidebar-tagline-block { display: flex; flex-direction: column; align-items: center; }
 .sidebar-tagline-img { max-width: 100%; max-height: 70px; object-fit: contain; margin: 10px auto 0; border-radius: 10px; }
-.sidebar-tagline { font-family: var(--font-heading), 'IBM Plex Sans Arabic', sans-serif; font-size: 13px; font-weight: 800; color: #fff; text-align: center; margin: 14px 0 8px; line-height: 1.5; }
-.sidebar-spacer { flex: 1; min-height: 10px; }
-.sidebar-sep { border-top: none; margin: 6px 0; }
-.logout-btn { display: flex; align-items: center; justify-content: center; gap: 8px; padding: 11px 6px; border-radius: 12px; border: none; background: rgba(255,255,255,0.14); color: #fff; font-size: 12.5px; font-weight: 700; cursor: pointer; text-align: center; width: 100%; margin-bottom: 14px; transition: background 0.15s ease; }
-.logout-btn:hover { background: rgba(255,255,255,0.24); }
+.sidebar-tagline { font-family: var(--font-heading), 'IBM Plex Sans Arabic', sans-serif; font-size: 14px; font-weight: 800; color: var(--rose); text-align: center; margin: 16px 0; line-height: 1.5; }
+.sidebar-spacer { flex: 1; min-height: 12px; }
+.sidebar-sep { border-top: 1px solid var(--border); margin: 12px 0 8px; }
+.logout-btn { display: flex; align-items: center; justify-content: center; gap: 10px; padding: 10px 6px; border-radius: 10px; border: none; background: transparent; color: #6b2337; font-size: 12.5px; font-weight: 700; cursor: pointer; text-align: center; width: 100%; margin-bottom: 10px; transition: background 0.15s ease; }
+.logout-btn:hover { background: rgba(214,91,87,0.1); }
 .mobile-menu-toggle { width: 38px; height: 38px; border-radius: 10px; border: 1px solid #fff; box-shadow: var(--card-shadow); background: #fff; display: flex; align-items: center; justify-content: center; cursor: pointer; }
 .mobile-backdrop { position: fixed; inset: 0; background: rgba(46,36,42,0.4); z-index: 40; }
 .sidebar-mobile-panel { position: fixed; top: 0; bottom: 0; right: 0; z-index: 50; width: 264px; max-width: 82vw; box-shadow: -8px 0 24px rgba(0,0,0,0.15); }
