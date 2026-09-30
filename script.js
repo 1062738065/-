@@ -672,6 +672,24 @@ function deptToRow(d) { return { id: d.id, name: d.name, password: d.password ||
 function rowToDept(r) { return { id: r.id, name: r.name, password: r.password || "", status: r.status || "active", createdAt: Number(r.created_at) || 0, curation: r.curation || { approvedKeys: [] }, email: r.email || "", officeId: r.office_id || "" }; }
 function officeToRow(o) { return { id: o.id, name: o.name, password: o.password || "", status: o.status || "active", created_at: o.createdAt || Date.now(), curation: o.curation || { approvedKeys: [] } }; }
 function rowToOffice(r) { return { id: r.id, name: r.name, password: r.password || "", status: r.status || "active", createdAt: Number(r.created_at) || 0, curation: r.curation || { approvedKeys: [] } }; }
+// "حسابات إضافية" (platform_users) — طبقة مرنة إضافية فوق نظام الحسابات الحالي
+// (وحدات/أقسام/مكاتب/مديرة نظام)، لمسمّيات وظيفية جديدة كليًا (سكرتارية، مديرة
+// تعليمية...) بصلاحيات صفحات مخصّصة لكل واحدة. لا تلمس أو تعدّل حسابات units/
+// departments/offices الحالية أبدًا — إضافة بحتة، مستقلة تمامًا.
+function platformUserToRow(u) {
+  return {
+    id: u.id, job_title: u.jobTitle || "", login_type: u.loginType || "job_title", login_id: u.loginId || "",
+    password: u.password || "", allowed_pages: u.allowedPages || [], scope_kind: u.scopeKind || "none",
+    scope_id: u.scopeId || "", status: u.status || "active", created_at: u.createdAt || Date.now(),
+  };
+}
+function rowToPlatformUser(r) {
+  return {
+    id: r.id, jobTitle: r.job_title || "", loginType: r.login_type || "job_title", loginId: r.login_id || "",
+    password: r.password || "", allowedPages: Array.isArray(r.allowed_pages) ? r.allowed_pages : [], scopeKind: r.scope_kind || "none",
+    scopeId: r.scope_id || "", status: r.status || "active", createdAt: Number(r.created_at) || 0,
+  };
+}
 function siteSettingsToRow(s) {
   return {
     id: "main",
@@ -752,7 +770,7 @@ const MOCK_USERS = [
 const UNITS_KEY = "prs:units", DEPARTMENTS_KEY = "prs:departments", OFFICES_KEY = "prs:offices",
       INDICATOR_DEFINITIONS_KEY = "prs:indicator-definitions", GOALS_DEFINITIONS_KEY = "prs:goals-definitions",
       SITE_SETTINGS_KEY = "prs:site-settings", REPORT_SECTIONS_KEY = "prs:report-sections",
-      SECTION_FIELD_SCHEMAS_KEY = "prs:section-field-schemas";
+      SECTION_FIELD_SCHEMAS_KEY = "prs:section-field-schemas", PLATFORM_USERS_KEY = "prs:platform-users";
 const DEFAULT_SITE_COLORS = { primary: "#6b2337", background: "#F2ECE8" };
 // إعدادات الهوية القابلة للتخصيص من "إعدادات الموقع": الشعار وحجمه، بانر لوحة
 // المعلومات (صورة + عنوان + وصف)، اسم المنصة بعنوان الشريط الجانبي، وعبارة/صورة
@@ -877,6 +895,12 @@ const dataStore = {
   cacheIndicatorDefinitionsLocally(d) { lsSet(INDICATOR_DEFINITIONS_KEY, JSON.stringify(d)); },
   cacheUnitsLocally(u) { lsSet(UNITS_KEY, JSON.stringify(u)); },
   cacheDepartmentsLocally(d) { lsSet(DEPARTMENTS_KEY, JSON.stringify(d)); },
+  getPlatformUsers() { const v = lsGet(PLATFORM_USERS_KEY); return v ? JSON.parse(v) : []; },
+  savePlatformUsers(list) {
+    lsSet(PLATFORM_USERS_KEY, JSON.stringify(list));
+    if (sheetsConfigured()) queueSupabaseReplaceTable("platform_users", list.map(platformUserToRow)).catch(() => {});
+  },
+  cachePlatformUsersLocally(list) { lsSet(PLATFORM_USERS_KEY, JSON.stringify(list)); },
   getGoalsDefinitions() { const v = lsGet(GOALS_DEFINITIONS_KEY); return v ? JSON.parse(v) : { strategic: [], operational: [] }; },
   saveGoalsDefinitions(d) {
     lsSet(GOALS_DEFINITIONS_KEY, JSON.stringify(d));
@@ -1052,6 +1076,15 @@ const S = {
   currentOfficeId: null,
   cameFromAllReports: false,
   adminPreviewOrigin: null,
+  // "حسابات إضافية" (platform_users): لما الحساب الحالي مسمّى وظيفي مخصّص، هذي
+  // القيمة تحمل قائمة الصفحات المسموحة له تحديدًا (تتجاوز فلترة الأدوار
+  // العادية بـ computeVisibleSidebarPages)؛ null = حساب عادي (المنطق الأصلي).
+  platformUserAllowedPages: null,
+  currentPlatformUserJobTitle: null,
+  pendingPlatformUserMatches: null,
+  // قائمة كل "الحسابات الإضافية" (platform_users) — تُحمَّل عند فتح صفحة
+  // إدارتها فقط (مو عند كل تسجيل دخول)، لأنها صفحة نادرة الفتح.
+  platformUsers: [],
   sidebarOpen: true,
   mobileSidebarOpen: false,
   // report editor state
@@ -1136,6 +1169,10 @@ function render() {
     html = shellWrap(renderOfficeCuration());
   } else if (S.view === "unit-role-select") {
     html = renderUnitRoleSelect();
+  } else if (S.view === "platform-user-role-select") {
+    html = renderPlatformUserRoleSelect();
+  } else if (S.view === "platform-users-manage") {
+    html = shellWrap(renderPlatformUsersManage());
   } else {
     html = renderLogin();
   }
@@ -1163,6 +1200,7 @@ const SIDEBAR_PAGES = [
   { id: "dashboard", label: "لوحة المعلومات", group: "الرئيسية", icon: "home" },
   { id: "admin-reports", label: "الأقسام والوحدات", group: "الرئيسية", icon: "building" },
   { id: "site-settings", label: "إعدادات الموقع", group: "الرئيسية", icon: "gauge" },
+  { id: "platform-users-manage", label: "حسابات إضافية", group: "الرئيسية", icon: "layers" },
   { id: "all-reports", label: "جميع التقارير", group: "standalone", icon: "document" },
   { id: "indicators-manage", label: "إدارة مؤشرات الأداء", group: "إدارة التقارير", icon: "gauge" },
   { id: "goals-manage", label: "إدارة الأهداف والمستهدفات", group: "إدارة التقارير", icon: "target" },
@@ -1199,6 +1237,11 @@ function computeVisibleSidebarPages() {
   // الوحدة نفسها، مو إدارة الموقع — مديرة النظام والقسم يشوفونها بس وهم فعليًا
   // داخل صفحات وحدة معيّنة، مو بصفحتهم الرئيسية.
   const UNIT_SCOPED_VIEWS = ["unit-dashboard", "unit-settings", "unit-reports", "unit-report", "full-report", "report-preview"];
+  // حساب "مسمى وظيفي" من صفحة "حسابات إضافية" له قائمة صفحات محدّدة بالضبط —
+  // هذي تتجاوز كل منطق الأدوار العادي أدناه (لا تُقيَّد بأي فلترة أخرى).
+  if (S.platformUserAllowedPages) {
+    return SIDEBAR_PAGES.filter((p) => S.platformUserAllowedPages.includes(p.id) && (p.group !== "unit-home" || UNIT_SCOPED_VIEWS.includes(S.view)));
+  }
   if (S.isAdmin) {
     // مديرة النظام تشوف كل شي بالموقع — بما فيها صفحات الإدارة العليا للاطلاع
     // (تلك عامة/غير مرتبطة بقسم أو مكتب معيّن). لكن "قسمي" وصفحات "مكتب
@@ -1468,6 +1511,36 @@ function renderUnitRoleSelect() {
   </div>`;
 }
 
+// شاشة اختيار المسمّى الوظيفي — تظهر فقط لما بيانات دخول واحدة (مسمى وظيفي أو
+// إيميل + رقم سري) تكون مشتركة بين أكثر من "حساب إضافي" (من صفحة "حسابات
+// إضافية")، تمامًا نفس فكرة اختيار الإدارية/رئيسة الوحدة بالأعلى لكن معمّمة
+// لأي عدد من المسمّيات.
+function renderPlatformUserRoleSelect() {
+  const matches = S.pendingPlatformUserMatches || [];
+  return `
+  <div class="login-wrap">
+    <div class="login-box" style="max-width:440px;">
+      <div class="login-card">
+        <div style="text-align:center;margin-bottom:22px;">
+          <img class="login-logo" src="${esc(siteLogoSrc(currentSiteSettings()))}" alt="جمعية فرقان" />
+          <div class="prs-title" style="font-size:19px;font-weight:900;color:#000">كيف تريدين الدخول؟</div>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:12px;">
+          ${matches.map((pu) => `
+          <button type="button" class="card" data-action="choose-platform-user" data-id="${esc(pu.id)}" style="display:flex;align-items:center;gap:12px;text-align:right;cursor:pointer;border:1px solid ${BORDER};background:#fff;width:100%;">
+            <div style="width:42px;height:42px;border-radius:12px;background:${DANGER_BG};display:flex;align-items:center;justify-content:center;flex-shrink:0;">${iconUser(19, ROSE)}</div>
+            <div>
+              <div style="font-size:14px;font-weight:800;">${esc(pu.jobTitle)}</div>
+              <div style="font-size:11px;color:${SUBTLE};margin-top:2px;">الدخول بصفة ${esc(pu.jobTitle)}</div>
+            </div>
+          </button>`).join("")}
+        </div>
+      </div>
+      <button type="button" data-action="logout" style="display:block;margin:16px auto 0;background:none;border:none;color:${SUBTLE};font-size:11.5px;cursor:pointer;text-decoration:underline;">ليست أنتِ؟ تسجيل الخروج</button>
+    </div>
+  </div>`;
+}
+
 function renderLogin() {
   const err = S.ui.loginError || "";
   const showPw = !!S.ui.loginShowPw;
@@ -1510,19 +1583,32 @@ async function handleLoginSubmit() {
   if (sheetsConfigured()) {
     S.ui.loginBusy = true; render();
     const result = await supabaseLogin(username, password);
-    if (!result.ok) { S.ui.loginBusy = false; S.ui.loginError = result.error || "تعذر تسجيل الدخول"; render(); return; }
-    await refreshUnitsAndDepartmentsFromSheet();
+    if (result.ok) {
+      await refreshUnitsAndDepartmentsFromSheet();
+      S.ui.loginBusy = false;
+      S.ui.loginError = "";
+      doLogin(result.user);
+      return;
+    }
+    // لا حساب أصلي مطابق — نجرّب "حسابات إضافية" (platform_users) قبل الفشل النهائي.
+    const puRes = await supabaseRequest(`platform_users?login_id=eq.${encodeURIComponent(username)}&password=eq.${encodeURIComponent(password)}&status=eq.active&select=*`);
     S.ui.loginBusy = false;
-    S.ui.loginError = "";
-    doLogin(result.user);
+    if (puRes.ok && Array.isArray(puRes.data) && puRes.data.length) {
+      S.ui.loginError = "";
+      startPlatformUserLogin(puRes.data.map(rowToPlatformUser));
+      return;
+    }
+    S.ui.loginError = result.error || "تعذر تسجيل الدخول";
+    render();
     return;
   }
 
   // Fallback: no database connected yet — use the built-in demo accounts.
   const match = MOCK_USERS.find((u) => u.username === username && u.password === password);
-  if (!match) { S.ui.loginError = "اسم المستخدم أو كلمة السر غير صحيحة"; render(); return; }
-  S.ui.loginError = "";
-  doLogin(match);
+  if (match) { S.ui.loginError = ""; doLogin(match); return; }
+  const localMatches = dataStore.getPlatformUsers().filter((u) => u.loginId === username && u.password === password && u.status !== "disabled");
+  if (localMatches.length) { S.ui.loginError = ""; startPlatformUserLogin(localMatches); return; }
+  S.ui.loginError = "اسم المستخدم أو كلمة السر غير صحيحة"; render();
 }
 
 async function refreshUnitsAndDepartmentsFromSheet() {
@@ -1570,6 +1656,16 @@ async function refreshGoalsDefinitionsFromSheet() {
       operational: res.data.filter((r) => r.kind === "operational").map(rowToGoal),
     };
     dataStore.cacheGoalsDefinitionsLocally(S.goalsDefinitions);
+  }
+}
+
+async function refreshPlatformUsersFromSheet() {
+  if (!sheetsConfigured()) return;
+  await pendingSupabaseWrite("platform_users");
+  const res = await supabaseRequest("platform_users?select=*");
+  if (res.ok && Array.isArray(res.data)) {
+    S.platformUsers = res.data.map(rowToPlatformUser);
+    dataStore.cachePlatformUsersLocally(S.platformUsers);
   }
 }
 
@@ -1663,6 +1759,57 @@ async function refreshReportsFromSheet(unitId) {
   }
 }
 
+// نقطة الدخول لأي "حساب إضافي" (platform_users) بعد مطابقة بيانات الدخول —
+// matches قد تكون صفًا واحدًا (دخول مباشر بدون شاشة اختيار) أو أكثر (بيانات
+// دخول مشتركة بين عدة مسمّيات، مثل الإدارية ورئيسة الوحدة، فتظهر شاشة اختيار).
+function startPlatformUserLogin(matches) {
+  if (matches.length === 1) { doLoginPlatformUser(matches[0]); return; }
+  S.currentUser = { id: "pending", name: "", role: "platform-pending" };
+  S.pendingPlatformUserMatches = matches;
+  S.view = "platform-user-role-select";
+  render();
+}
+function doLoginPlatformUser(pu) {
+  S.platformUserAllowedPages = (pu.allowedPages && pu.allowedPages.length) ? pu.allowedPages : null;
+  S.currentPlatformUserJobTitle = pu.jobTitle;
+  S.pendingPlatformUserMatches = null;
+  if (pu.scopeKind === "none") {
+    // بدون نطاق بيانات محدد: حساب اطّلاع عام بصفحات مخصّصة فقط، بدون أي ربط
+    // بوحدة/قسم/مكتب معيّن.
+    S.currentUser = { id: pu.id, name: pu.jobTitle, role: "platform" };
+    S.cameFromAllReports = false; S.adminPreviewOrigin = null;
+    S.isAdmin = false; S.isDepartmentUser = false; S.isExecutive = false; S.isOfficeUser = false;
+    S.currentDepartmentId = null; S.currentOfficeId = null; S.currentUnitId = null;
+    S.units = dataStore.getUnits(); S.departments = dataStore.getDepartments(); S.offices = dataStore.getOffices();
+    S.indicatorDefinitions = dataStore.getIndicatorDefinitions(); S.goalsDefinitions = dataStore.getGoalsDefinitions();
+    applyReportSectionDefs(dataStore.getReportSectionDefs()); applyFieldSchemaOverrides(dataStore.getSectionFieldSchemas());
+    S.sidebarOpen = !isMobileViewport();
+    const visible = computeVisibleSidebarPages();
+    S.view = visible.length ? visible[0].id : "login";
+    render();
+    return;
+  }
+  // نطاق مرتبط بحساب/بيانات موجودة أصلًا (إدارة عليا/قسم/مكتب/وحدة) — نعيد
+  // استخدام منطق doLogin الأصلي المُختبر بالكامل لتحميل البيانات والصلاحيات
+  // الصحيحة لهذا النطاق، ثم فقط نتجاوز الصفحة الافتراضية بأول صفحة من قائمة
+  // الصفحات المسموحة تحديدًا لهذا المسمى الوظيفي.
+  const roleMap = { admin: "admin", department: "department", office: "office", executive: "executive", unit: "center" };
+  doLogin({
+    id: pu.id, name: pu.jobTitle, role: roleMap[pu.scopeKind] || "admin",
+    departmentId: pu.scopeKind === "department" ? pu.scopeId : undefined,
+    officeId: pu.scopeKind === "office" ? pu.scopeId : undefined,
+    unitId: pu.scopeKind === "unit" ? pu.scopeId : undefined,
+  });
+  // لو ما حددنا لها صفحات معيّنة، نسيب doLogin تفتح صفحتها الافتراضية العادية
+  // لهذا النطاق (لوحة معلومات الوحدة/القسم/...) بدون أي تغيير. لو حددنا لها
+  // صفحات، نتأكد إن الصفحة الحالية من ضمنها، وإلا ننتقل لأول صفحة مسموحة.
+  if (S.platformUserAllowedPages && !S.platformUserAllowedPages.includes(S.view)) {
+    const visible = computeVisibleSidebarPages();
+    S.view = visible.length ? visible[0].id : S.view;
+    render();
+  }
+}
+
 function doLogin(user) {
   S.currentUser = user;
   S.cameFromAllReports = false;
@@ -1733,7 +1880,7 @@ function doLogin(user) {
 }
 
 function doLogout() {
-  S.currentUser = null; S.currentUnitId = null; S.currentDepartmentId = null; S.currentOfficeId = null; S.isAdmin = false; S.isDepartmentUser = false; S.isExecutive = false; S.isOfficeUser = false; S.cameFromAllReports = false; S.adminPreviewOrigin = null; S.pendingUnitLoginId = null; S.currentUnitEntryMode = null; S.view = "login"; S.ui = {};
+  S.currentUser = null; S.currentUnitId = null; S.currentDepartmentId = null; S.currentOfficeId = null; S.isAdmin = false; S.isDepartmentUser = false; S.isExecutive = false; S.isOfficeUser = false; S.cameFromAllReports = false; S.adminPreviewOrigin = null; S.pendingUnitLoginId = null; S.currentUnitEntryMode = null; S.platformUserAllowedPages = null; S.currentPlatformUserJobTitle = null; S.pendingPlatformUserMatches = null; S.view = "login"; S.ui = {};
   render();
 }
 
@@ -3585,6 +3732,182 @@ function unitRowHtml(u) {
       <button class="icon-btn" style="width:32px;height:32px;border:1px solid ${BORDER}" data-action="start-unit-edit" data-id="${esc(u.id)}" data-name="${esc(u.name)}" title="تعديل">${iconPencil(14, INK)}</button>
       <button class="icon-btn" style="width:32px;height:32px;background:${isActive ? DANGER_BG : GREEN_BG}" data-action="toggle-unit" data-id="${esc(u.id)}" title="${isActive ? "تعطيل" : "تفعيل"}">${iconPower(14, isActive ? DANGER : GREEN)}</button>
       <button class="icon-btn" style="width:32px;height:32px;border:1px solid ${BORDER}" data-action="confirm-delete-unit" data-id="${esc(u.id)}" title="حذف">${iconTrash(14, DANGER)}</button>
+    </div>
+  </div>`;
+}
+
+/* =============================== "حسابات إضافية" (platform_users) =========== */
+// نظام مرن لإضافة مسميات وظيفية جديدة (سكرتارية، مديرة تعليمية، ...) بدون لمس
+// حسابات مديرة النظام/الأقسام/المكاتب/الوحدات الأصلية إطلاقًا — إضافة بحتة.
+const PLATFORM_USER_SCOPE_OPTIONS = [
+  { value: "none", label: "بدون نطاق (صفحات محددة فقط)" },
+  { value: "admin", label: "مديرة نظام (صلاحية كاملة)" },
+  { value: "executive", label: "الإدارة العليا" },
+  { value: "department", label: "قسم" },
+  { value: "office", label: "مكتب إشراف" },
+  { value: "unit", label: "وحدة" },
+];
+function platformUserScopeLabel(pu) {
+  if (pu.scopeKind === "department") { const d = S.departments.find((x) => x.id === pu.scopeId); return `قسم: ${d ? d.name : "—"}`; }
+  if (pu.scopeKind === "office") { const o = (S.offices || []).find((x) => x.id === pu.scopeId); return `مكتب إشراف: ${o ? o.name : "—"}`; }
+  if (pu.scopeKind === "unit") { const u = S.units.find((x) => x.id === pu.scopeId); return `وحدة: ${u ? u.name : "—"}`; }
+  const opt = PLATFORM_USER_SCOPE_OPTIONS.find((o) => o.value === pu.scopeKind);
+  return opt ? opt.label : "—";
+}
+function platformUserPagesChecklistHtml(selected, action) {
+  selected = selected || [];
+  const groups = [];
+  SIDEBAR_PAGES.forEach((p) => {
+    if (p.group === "unit-home") return; // صفحات عمل الوحدة نفسها (كتابة التقرير) — خارج نطاق هذي القائمة حاليًا
+    let g = groups.find((x) => x.name === p.group);
+    if (!g) { g = { name: p.group, pages: [] }; groups.push(g); }
+    g.pages.push(p);
+  });
+  return groups.map((g) => `
+    <div style="margin-bottom:10px;">
+      <div style="font-size:10.5px;font-weight:800;color:${SUBTLE};margin-bottom:6px;">${esc(g.name === "standalone" ? "أخرى" : g.name)}</div>
+      <div style="display:flex;flex-wrap:wrap;gap:6px;">
+        ${g.pages.map((p) => `<button type="button" class="radio-pill ${selected.includes(p.id) ? "active" : ""}" style="padding:6px 12px;font-size:11.5px;" data-action="${esc(action)}" data-id="${esc(p.id)}">${selected.includes(p.id) ? "✓ " : ""}${esc(p.label)}</button>`).join("")}
+      </div>
+    </div>`).join("");
+}
+function platformUserScopeIdSelectHtml(scopeKind, selectedId, selectId) {
+  if (scopeKind === "department") {
+    return `<select class="input" id="${esc(selectId)}"><option value="">اختاري القسم</option>${S.departments.map((d) => `<option value="${esc(d.id)}" ${selectedId === d.id ? "selected" : ""}>${esc(d.name)}</option>`).join("")}</select>`;
+  }
+  if (scopeKind === "office") {
+    return `<select class="input" id="${esc(selectId)}"><option value="">اختاري مكتب الإشراف</option>${(S.offices || []).map((o) => `<option value="${esc(o.id)}" ${selectedId === o.id ? "selected" : ""}>${esc(o.name)}</option>`).join("")}</select>`;
+  }
+  if (scopeKind === "unit") {
+    return `<select class="input" id="${esc(selectId)}"><option value="">اختاري الوحدة</option>${S.units.filter((u) => u.role !== "admin" && u.role !== "executive").map((u) => `<option value="${esc(u.id)}" ${selectedId === u.id ? "selected" : ""}>${esc(u.name)}${u.role === "center" ? " (مركز)" : ""}</option>`).join("")}</select>`;
+  }
+  return "";
+}
+function platformUserFormFieldsHtml(prefix, form) {
+  form = form || {};
+  const loginType = form.loginType || "job_title";
+  const scopeKind = form.scopeKind || "none";
+  return `
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px;">
+      <input class="input" id="${prefix}-jobtitle" list="pu-jobtitle-list" style="flex:1;min-width:180px;" placeholder="المسمى الوظيفي (مثال: سكرتارية)" value="${esc(form.jobTitle || "")}" />
+      <datalist id="pu-jobtitle-list">${[...new Set((S.platformUsers || []).map((u) => u.jobTitle))].map((t) => `<option value="${esc(t)}"></option>`).join("")}</datalist>
+    </div>
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;">
+      <span style="font-size:11px;color:${SUBTLE};font-weight:700;">الدخول بـ:</span>
+      <button type="button" class="radio-pill ${loginType === "job_title" ? "active" : ""}" data-action="set-pu-logintype" data-prefix="${esc(prefix)}" data-value="job_title">المسمى الوظيفي</button>
+      <button type="button" class="radio-pill ${loginType === "email" ? "active" : ""}" data-action="set-pu-logintype" data-prefix="${esc(prefix)}" data-value="email">الإيميل</button>
+    </div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px;">
+      <input class="input" id="${prefix}-loginid" type="${loginType === "email" ? "email" : "text"}" style="flex:1;min-width:160px;" placeholder="${loginType === "email" ? "الإيميل" : "معرّف الدخول (يُكتب عند تسجيل الدخول)"}" value="${esc(form.loginId || "")}" />
+      <input class="input" id="${prefix}-password" style="flex:1;min-width:140px;" placeholder="كلمة المرور" value="${esc(form.password || "")}" />
+    </div>
+    <div style="font-size:10.5px;color:${SUBTLE};background:${BLUE_BG};border-radius:8px;padding:7px 10px;margin-bottom:10px;">لمشاركة نفس الدخول بين مسمّيين (مثل الإدارية ورئيسة الوحدة): أضيفي المسمّى الثاني بنفس معرّف الدخول وكلمة المرور بالضبط — عند تسجيل الدخول سيُطلب اختيار الصفة.</div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px;">
+      <select class="input" id="${prefix}-scopekind" style="flex:1;min-width:180px;" data-action="change-pu-scopekind" data-prefix="${esc(prefix)}">
+        ${PLATFORM_USER_SCOPE_OPTIONS.map((o) => `<option value="${esc(o.value)}" ${scopeKind === o.value ? "selected" : ""}>${esc(o.label)}</option>`).join("")}
+      </select>
+      ${["department", "office", "unit"].includes(scopeKind) ? `<div style="flex:1;min-width:180px;">${platformUserScopeIdSelectHtml(scopeKind, form.scopeId || "", `${prefix}-scopeid`)}</div>` : ""}
+    </div>
+    <div style="margin-bottom:6px;font-size:11.5px;font-weight:800;color:${ROSE};">صلاحية الصفحات (تحدد ما تشوفه بالشريط الجانبي، إضافة لصلاحيات النطاق أعلاه إن وُجد)</div>
+    ${platformUserPagesChecklistHtml(form.allowedPages || [], `toggle-${prefix}-page`)}
+  `;
+}
+
+// تلتقط القيم المكتوبة حاليًا بحقول نموذج "حساب إضافي" (المسمى/معرّف الدخول/
+// كلمة المرور/النطاق) وتحفظها بحالة S.ui — لازم تُستدعى قبل أي تغيير يسبب
+// إعادة رسم كاملة (تبديل صفة الدخول، تبديل صلاحية صفحة، تغيير النطاق)، وإلا
+// تنمسح القيم المكتوبة لأن النموذج يُعاد بناؤه من حالة S.ui فقط.
+function capturePlatformUserFormFields(prefix) {
+  const jt = document.getElementById(`${prefix}-jobtitle`);
+  const li = document.getElementById(`${prefix}-loginid`);
+  const pw = document.getElementById(`${prefix}-password`);
+  const sk = document.getElementById(`${prefix}-scopekind`);
+  const si = document.getElementById(`${prefix}-scopeid`);
+  if (prefix === "new-pu") {
+    if (jt) S.ui.newPuJobTitle = jt.value;
+    if (li) S.ui.newPuLoginId = li.value;
+    if (pw) S.ui.newPuPassword = pw.value;
+    if (sk) S.ui.newPuScopeKind = sk.value;
+    if (si) S.ui.newPuScopeId = si.value;
+  } else {
+    S.ui.editPuForm = S.ui.editPuForm || {};
+    if (jt) S.ui.editPuForm.jobTitle = jt.value;
+    if (li) S.ui.editPuForm.loginId = li.value;
+    if (pw) S.ui.editPuForm.password = pw.value;
+    if (sk) S.ui.editPuForm.scopeKind = sk.value;
+    if (si) S.ui.editPuForm.scopeId = si.value;
+  }
+}
+function readPlatformUserFormFromDom(prefix, currentLoginType, currentAllowedPages) {
+  const jobTitle = (document.getElementById(`${prefix}-jobtitle`).value || "").trim();
+  const loginId = (document.getElementById(`${prefix}-loginid`).value || "").trim();
+  const password = (document.getElementById(`${prefix}-password`).value || "").trim();
+  const scopeKindEl = document.getElementById(`${prefix}-scopekind`);
+  const scopeKind = scopeKindEl ? scopeKindEl.value : "none";
+  const scopeIdEl = document.getElementById(`${prefix}-scopeid`);
+  const scopeId = scopeIdEl ? scopeIdEl.value : "";
+  return { jobTitle, loginId, password, scopeKind, scopeId, loginType: currentLoginType || "job_title", allowedPages: currentAllowedPages || [] };
+}
+
+function renderPlatformUsersManage() {
+  const ui = S.ui;
+  const list = S.platformUsers || [];
+  const newForm = {
+    jobTitle: ui.newPuJobTitle || "", loginType: ui.newPuLoginType || "job_title", loginId: ui.newPuLoginId || "",
+    password: ui.newPuPassword || "", scopeKind: ui.newPuScopeKind || "none", scopeId: ui.newPuScopeId || "", allowedPages: ui.newPuAllowedPages || [],
+  };
+  return `
+  <div class="page-wrap"><div class="page-inner narrow">
+    ${topBarHtml({ title: "حسابات إضافية", subtitle: "أضيفي مسمّيات وظيفية جديدة بصلاحيات دخول وصفحات خاصة — بدون أي تأثير على الحسابات الحالية", backAction: "nav-back-admin" })}
+
+    <div class="card" style="margin-bottom:18px;">
+      <div style="font-size:12.5px;font-weight:800;color:${ROSE};margin-bottom:12px;">إضافة مسمّى وظيفي جديد</div>
+      ${platformUserFormFieldsHtml("new-pu", newForm)}
+      ${ui.puFormError ? `<div style="color:${DANGER};font-size:11.5px;font-weight:700;margin-bottom:8px;">${esc(ui.puFormError)}</div>` : ""}
+      ${pillBtn("إضافة الحساب", { icon: iconPlus(15, "#fff"), action: "add-platform-user" })}
+    </div>
+
+    <div style="font-size:12.5px;font-weight:800;color:${ROSE};margin-bottom:10px;">الحسابات الإضافية (${list.length})</div>
+    ${list.length === 0 ? `<div class="card" style="text-align:center;color:${SUBTLE};padding:36px 20px;border-style:dashed;">لا توجد حسابات إضافية بعد — أضيفي أول مسمّى وظيفي من الأعلى.</div>` :
+      `<div style="display:flex;flex-direction:column;gap:8px;">${list.map((pu) => platformUserRowHtml(pu, list)).join("")}</div>`}
+  </div></div>`;
+}
+
+function platformUserRowHtml(pu, allList) {
+  const isActive = pu.status !== "disabled";
+  const editing = S.ui.editingPuId === pu.id;
+  const confirming = S.ui.confirmRemovePuId === pu.id;
+  const sharing = (allList || []).filter((x) => x.id !== pu.id && x.loginId === pu.loginId && x.password === pu.password && x.loginId);
+
+  if (confirming) {
+    return `<div class="card" style="display:flex;align-items:center;justify-content:space-between;gap:10px;">
+      <span style="font-size:12px;font-weight:700;">حذف "${esc(pu.jobTitle)}" نهائيًا؟</span>
+      <div style="display:flex;gap:6px;">${pillBtn("حذف", { variant: "danger", action: "delete-platform-user", data: { id: pu.id } })}${pillBtn("تراجع", { variant: "ghost", action: "cancel-remove-platform-user" })}</div>
+    </div>`;
+  }
+
+  if (editing) {
+    const editForm = S.ui.editPuForm || {};
+    return `<div class="card">
+      ${platformUserFormFieldsHtml("edit-pu", editForm)}
+      <div style="display:flex;gap:6px;">${pillBtn("حفظ", { action: "save-platform-user-edit", data: { id: pu.id } })}${pillBtn("إلغاء", { variant: "ghost", action: "cancel-platform-user-edit" })}</div>
+    </div>`;
+  }
+
+  return `<div class="card" style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;opacity:${isActive ? 1 : 0.6}">
+    <div style="display:flex;align-items:center;gap:10px;min-width:0;">
+      <div style="width:34px;height:34px;border-radius:10px;background:${DANGER_BG};display:flex;align-items:center;justify-content:center;flex-shrink:0;">${iconUser(16, ROSE)}</div>
+      <div style="min-width:0;">
+        <div style="font-size:13.5px;font-weight:700;">${esc(pu.jobTitle)}${!isActive ? ` <span style="font-size:10px;font-weight:700;color:${DANGER};">(معطّل)</span>` : ""}</div>
+        <div style="font-size:10.5px;color:${SUBTLE};margin-top:2px;">${pu.loginType === "email" ? iconMail(11, SUBTLE) : ""} ${esc(pu.loginId)} · ${esc(platformUserScopeLabel(pu))}</div>
+        ${(pu.allowedPages || []).length ? `<div style="font-size:10px;color:${GREEN};margin-top:2px;">${pu.allowedPages.length} صفحة مسموحة</div>` : ""}
+        ${sharing.length ? `<div style="font-size:10px;color:${SUBTLE};margin-top:2px;">تشارك نفس الدخول مع: ${sharing.map((s) => esc(s.jobTitle)).join("، ")}</div>` : ""}
+      </div>
+    </div>
+    <div style="display:flex;gap:6px;flex-shrink:0;">
+      <button class="icon-btn" style="width:32px;height:32px;border:1px solid ${BORDER}" data-action="start-platform-user-edit" data-id="${esc(pu.id)}" title="تعديل">${iconPencil(14, INK)}</button>
+      <button class="icon-btn" style="width:32px;height:32px;background:${isActive ? DANGER_BG : GREEN_BG}" data-action="toggle-platform-user" data-id="${esc(pu.id)}" title="${isActive ? "تعطيل" : "تفعيل"}">${iconPower(14, isActive ? DANGER : GREEN)}</button>
+      <button class="icon-btn" style="width:32px;height:32px;border:1px solid ${BORDER}" data-action="confirm-remove-platform-user" data-id="${esc(pu.id)}" title="حذف">${iconTrash(14, DANGER)}</button>
     </div>
   </div>`;
 }
@@ -5696,6 +6019,14 @@ function attachFormListeners() {
       render();
       return;
     }
+    if (el.dataset && el.dataset.action === "change-pu-scopekind") {
+      const prefix = el.dataset.prefix;
+      capturePlatformUserFormFields(prefix);
+      if (prefix === "new-pu") { S.ui.newPuScopeKind = el.value; S.ui.newPuScopeId = ""; }
+      else { S.ui.editPuForm = S.ui.editPuForm || {}; S.ui.editPuForm.scopeKind = el.value; S.ui.editPuForm.scopeId = ""; }
+      render();
+      return;
+    }
     if (el.dataset && el.dataset.action === "assign-dept-office") {
       const d = S.departments.find((x) => x.id === el.dataset.id);
       if (d) { d.officeId = el.value; dataStore.saveDepartments(S.departments); }
@@ -5748,6 +6079,7 @@ function attachClickListener() {
         // نلغي أي طيّ يدوي للمجموعة اللي تحتوي الصفحة الجديدة، عشان تفتح تلقائيًا وتبيّن أين نحن.
         const targetPage = SIDEBAR_PAGES.find((p) => p.id === ds.view);
         if (targetPage && S.ui.sidebarGroupState) delete S.ui.sidebarGroupState[targetPage.group];
+        if (ds.view === "platform-users-manage") S.platformUsers = dataStore.getPlatformUsers();
         render();
         if (sheetsConfigured()) {
           if (ds.view === "admin-reports" || ds.view === "units-manage" || ds.view === "department-overview") {
@@ -5762,6 +6094,8 @@ function attachClickListener() {
             refreshSectionFieldSchemasFromSheet().then(() => { if (S.view === ds.view) render(); });
           } else if (ds.view === "unit-reports" && S.currentUnitId) {
             refreshReportsFromSheet(S.currentUnitId).then(() => { if (S.view === ds.view) render(); });
+          } else if (ds.view === "platform-users-manage") {
+            refreshPlatformUsersFromSheet().then(() => { if (S.view === ds.view) render(); });
           }
         }
         break;
@@ -5914,6 +6248,11 @@ function attachClickListener() {
         S.view = "unit-dashboard";
         render();
         if (sheetsConfigured()) { refreshReportsFromSheet(unitId).then(() => { if (S.currentUser) render(); }); }
+        break;
+      }
+      case "choose-platform-user": {
+        const chosen = (S.pendingPlatformUserMatches || []).find((pu) => pu.id === ds.id);
+        if (chosen) doLoginPlatformUser(chosen);
         break;
       }
       case "departments-page-open": S.ui.departmentsPageSelectedId = ds.id; render(); break;
@@ -6269,6 +6608,86 @@ function attachClickListener() {
         delete S.reports[ds.id];
         dataStore.saveUnits(S.units); dataStore.deleteReports(ds.id);
         S.ui.confirmDeleteUnitId = null; render();
+        break;
+      }
+
+      /* ---------- حسابات إضافية (platform_users) ---------- */
+      case "set-pu-logintype": {
+        capturePlatformUserFormFields(ds.prefix);
+        if (ds.prefix === "new-pu") S.ui.newPuLoginType = ds.value;
+        else { S.ui.editPuForm = S.ui.editPuForm || {}; S.ui.editPuForm.loginType = ds.value; }
+        render();
+        break;
+      }
+      case "toggle-new-pu-page": {
+        capturePlatformUserFormFields("new-pu");
+        const arr = S.ui.newPuAllowedPages || (S.ui.newPuAllowedPages = []);
+        const idx = arr.indexOf(ds.id);
+        if (idx >= 0) arr.splice(idx, 1); else arr.push(ds.id);
+        render();
+        break;
+      }
+      case "toggle-edit-pu-page": {
+        capturePlatformUserFormFields("edit-pu");
+        S.ui.editPuForm = S.ui.editPuForm || {};
+        const arr = S.ui.editPuForm.allowedPages || (S.ui.editPuForm.allowedPages = []);
+        const idx = arr.indexOf(ds.id);
+        if (idx >= 0) arr.splice(idx, 1); else arr.push(ds.id);
+        render();
+        break;
+      }
+      case "add-platform-user": {
+        const form = readPlatformUserFormFromDom("new-pu", S.ui.newPuLoginType, S.ui.newPuAllowedPages);
+        if (!form.jobTitle || !form.loginId || !form.password) { S.ui.puFormError = "الرجاء تعبئة المسمى الوظيفي ومعرّف الدخول وكلمة المرور."; render(); break; }
+        if (["department", "office", "unit"].includes(form.scopeKind) && !form.scopeId) { S.ui.puFormError = "الرجاء اختيار الجهة المرتبطة بهذا النطاق."; render(); break; }
+        const list = [...(S.platformUsers || []), {
+          id: uid("pu"), jobTitle: form.jobTitle, loginType: form.loginType, loginId: form.loginId, password: form.password,
+          allowedPages: form.allowedPages, scopeKind: form.scopeKind, scopeId: form.scopeId, status: "active", createdAt: Date.now(),
+        }];
+        S.platformUsers = list;
+        dataStore.savePlatformUsers(list);
+        S.ui.newPuJobTitle = ""; S.ui.newPuLoginType = "job_title"; S.ui.newPuLoginId = ""; S.ui.newPuPassword = "";
+        S.ui.newPuScopeKind = "none"; S.ui.newPuScopeId = ""; S.ui.newPuAllowedPages = []; S.ui.puFormError = "";
+        render();
+        break;
+      }
+      case "start-platform-user-edit": {
+        const pu = (S.platformUsers || []).find((x) => x.id === ds.id);
+        if (!pu) break;
+        S.ui.editingPuId = pu.id;
+        S.ui.editPuForm = { jobTitle: pu.jobTitle, loginType: pu.loginType, loginId: pu.loginId, password: pu.password, scopeKind: pu.scopeKind, scopeId: pu.scopeId, allowedPages: [...(pu.allowedPages || [])] };
+        S.ui.puFormError = "";
+        render();
+        break;
+      }
+      case "cancel-platform-user-edit": S.ui.editingPuId = null; S.ui.editPuForm = null; S.ui.puFormError = ""; render(); break;
+      case "save-platform-user-edit": {
+        const editForm = S.ui.editPuForm || {};
+        const form = readPlatformUserFormFromDom("edit-pu", editForm.loginType, editForm.allowedPages);
+        if (!form.jobTitle || !form.loginId || !form.password) { S.ui.puFormError = "الرجاء تعبئة المسمى الوظيفي ومعرّف الدخول وكلمة المرور."; render(); break; }
+        if (["department", "office", "unit"].includes(form.scopeKind) && !form.scopeId) { S.ui.puFormError = "الرجاء اختيار الجهة المرتبطة بهذا النطاق."; render(); break; }
+        S.platformUsers = (S.platformUsers || []).map((x) => x.id === ds.id ? {
+          ...x, jobTitle: form.jobTitle, loginType: form.loginType, loginId: form.loginId, password: form.password,
+          scopeKind: form.scopeKind, scopeId: form.scopeId, allowedPages: form.allowedPages,
+        } : x);
+        dataStore.savePlatformUsers(S.platformUsers);
+        S.ui.editingPuId = null; S.ui.editPuForm = null; S.ui.puFormError = "";
+        render();
+        break;
+      }
+      case "toggle-platform-user": {
+        S.platformUsers = (S.platformUsers || []).map((x) => x.id === ds.id ? { ...x, status: x.status === "active" || !x.status ? "disabled" : "active" } : x);
+        dataStore.savePlatformUsers(S.platformUsers);
+        render();
+        break;
+      }
+      case "confirm-remove-platform-user": S.ui.confirmRemovePuId = ds.id; render(); break;
+      case "cancel-remove-platform-user": S.ui.confirmRemovePuId = null; render(); break;
+      case "delete-platform-user": {
+        S.platformUsers = (S.platformUsers || []).filter((x) => x.id !== ds.id);
+        dataStore.savePlatformUsers(S.platformUsers);
+        S.ui.confirmRemovePuId = null;
+        render();
         break;
       }
 
