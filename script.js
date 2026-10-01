@@ -1441,13 +1441,13 @@ function computeVisibleSidebarPages() {
     return SIDEBAR_PAGES.filter((p) => S.platformUserAllowedPages.includes(p.id) && (p.group !== "unit-home" || UNIT_SCOPED_VIEWS.includes(S.view)));
   }
   if (S.isAdmin) {
-    // مديرة النظام تشوف كل شي بالموقع — بما فيها صفحات الإدارة العليا للاطلاع
-    // (تلك عامة/غير مرتبطة بقسم أو مكتب معيّن). لكن "قسمي" وصفحات "مكتب
-    // الإشراف" الأربع مرتبطة بـ currentDepartmentId/currentOfficeId، وما
-    // توجد قيمة لهما عند مديرة النظام — فتُستثنى هنا (نفس سبب استثناء
-    // department-overview أصلاً)، واطّلاعها البديل عليها من "مكاتب الإشراف"
-    // و"الأقسام" بصفحات الهيكل التنظيمي.
-    return SIDEBAR_PAGES.filter((p) => p.id !== "department-overview" && p.group !== "مكتب الإشراف" && (p.group !== "unit-home" || UNIT_SCOPED_VIEWS.includes(S.view)));
+    // مديرة النظام تشوف كل صفحات الموقع بلا استثناء — بما فيها "قسمي" وصفحات
+    // "مكتب الإشراف" الأربع، رغم إنها أصلًا مرتبطة بـ currentDepartmentId/
+    // currentOfficeId (قيمة واحدة فقط). عند الدخول لهذي الصفحات من الشريط
+    // الجانبي مباشرة (بدل المرور بـ"الأقسام"/"مكاتب الإشراف")، تُفعَّل تلقائيًا
+    // لأول قسم/مكتب نشط، وتظهر بداخل الصفحة نفسها قائمة تبديل تسمح لمديرة
+    // النظام تختار أي قسم أو مكتب تبي تشوفه وتضبطه (راجع adminScopeSwitcherHtml).
+    return SIDEBAR_PAGES.filter((p) => p.group !== "unit-home" || UNIT_SCOPED_VIEWS.includes(S.view));
   } else if (S.isDepartmentUser) {
     return SIDEBAR_PAGES.filter((p) => p.id === "department-overview" || p.id === "all-reports" || (p.group === "unit-home" && UNIT_SCOPED_VIEWS.includes(S.view)));
   } else if (S.isExecutive) {
@@ -2831,9 +2831,26 @@ function renderUnitsOverview() {
 }
 
 /* =============================== Department overview (department-level login) = */
+// قائمة تبديل تظهر فقط لمديرة النظام بصفحتي "قسمي" ومكتب الإشراف — تتيح لها
+// اختيار أي قسم/مكتب تبي تطّلع عليه وتضبطه، بدل الاقتصار على قيمة واحدة ثابتة.
+function adminScopeSwitcherHtml(kind) {
+  if (!S.isAdmin) return "";
+  const list = kind === "department" ? (S.departments || []) : (S.offices || []);
+  const current = kind === "department" ? S.currentDepartmentId : S.currentOfficeId;
+  const action = kind === "department" ? "admin-switch-department" : "admin-switch-office";
+  const label = kind === "department" ? "عرض وضبط أي قسم:" : "عرض وضبط أي مكتب إشراف:";
+  if (!list.length) return "";
+  return `
+  <div class="card" style="margin-bottom:14px;display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+    <span style="font-size:11.5px;font-weight:700;color:${SUBTLE};white-space:nowrap;">${label}</span>
+    <select class="input" style="flex:1;min-width:200px;" data-action="${action}">
+      ${list.map((x) => `<option value="${esc(x.id)}" ${current === x.id ? "selected" : ""}>${esc(x.name)}${x.status !== "active" ? " (معطّل)" : ""}</option>`).join("")}
+    </select>
+  </div>`;
+}
 function renderDepartmentOverview() {
   const dept = S.departments.find((d) => d.id === S.currentDepartmentId);
-  if (!dept) return `<div class="page-wrap">تعذر إيجاد القسم.</div>`;
+  if (!dept) return `<div class="page-wrap"><div class="page-inner">${S.isAdmin ? adminScopeSwitcherHtml("department") : ""}<div class="card" style="text-align:center;color:${SUBTLE};padding:36px;">${(S.departments || []).length ? "اختاري قسمًا من القائمة أعلاه." : "لا توجد أقسام بعد."}</div></div></div>`;
   const units = S.units.filter((u) => u.departmentId === dept.id && u.status === "active");
   const pendingReports = [];
   units.forEach((u) => {
@@ -2844,6 +2861,7 @@ function renderDepartmentOverview() {
   <div class="page-wrap"><div class="page-inner">
     ${topBarHtml({ title: dept.name, subtitle: `مرحبًا — ${units.length} وحدة تابعة لهذا القسم`,
       right: S.isAdmin && S.adminPreviewOrigin ? pillBtn("رجوع", { variant: "ghost", icon: iconChevronRight(15, INK), action: "nav-to", data: { view: S.adminPreviewOrigin } }) : pillBtn("خروج", { variant: "danger", icon: iconLogout(15, DANGER), action: "logout" }) })}
+    ${adminScopeSwitcherHtml("department")}
     ${reviewDecisionsSectionHtml(pendingReports)}
     ${units.length === 0 ? `<div class="card" style="text-align:center;color:${SUBTLE};padding:36px;">لا توجد وحدات نشطة تابعة لهذا القسم بعد.</div>` :
       `<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:12px;">${units.map((u) => unitCardHtml(u, null, latestReportForUnit(u.id))).join("")}</div>`}
@@ -2978,29 +2996,33 @@ function officeCurationSectionHtml(office) {
    نفسها (مُعمَّمة أعلاه لتشمل فرع S.isOfficeUser). ============================= */
 function currentOffice() { return (S.offices || []).find((o) => o.id === S.currentOfficeId) || null; }
 
+function officeNotFoundPageHtml() {
+  return `<div class="page-wrap"><div class="page-inner">${adminScopeSwitcherHtml("office")}<div class="card" style="text-align:center;color:${SUBTLE};padding:36px;">${(S.offices || []).length ? "اختاري مكتب إشراف من القائمة أعلاه." : "لا توجد مكاتب إشراف بعد."}</div></div></div>`;
+}
 function renderOfficeDashboard() {
   const office = currentOffice();
-  if (!office) return `<div class="page-wrap">تعذر إيجاد مكتب الإشراف.</div>`;
+  if (!office) return officeNotFoundPageHtml();
   const units = officeUnits(office.id);
   const depts = S.departments.filter((d) => d.officeId === office.id && d.status === "active");
-  return renderExecutiveDashboard(units, depts, { subtitle: `نظرة إشرافية شاملة على وحدات ${office.name}` });
+  return renderExecutiveDashboard(units, depts, { subtitle: `نظرة إشرافية شاملة على وحدات ${office.name}`, extraTop: adminScopeSwitcherHtml("office") });
 }
 
 function renderOfficeSummary() {
   const office = currentOffice();
-  if (!office) return `<div class="page-wrap">تعذر إيجاد مكتب الإشراف.</div>`;
+  if (!office) return officeNotFoundPageHtml();
   const units = officeUnits(office.id);
   const depts = S.departments.filter((d) => d.officeId === office.id && d.status === "active");
-  return renderExecutiveSummary(units, depts, { title: `ملخص ${office.name}`, showAiSummary: false });
+  return renderExecutiveSummary(units, depts, { title: `ملخص ${office.name}`, showAiSummary: false, extraTop: adminScopeSwitcherHtml("office") });
 }
 
 function renderOfficeCuration() {
   const office = currentOffice();
-  if (!office) return `<div class="page-wrap">تعذر إيجاد مكتب الإشراف.</div>`;
+  if (!office) return officeNotFoundPageHtml();
   return `
   <div class="page-wrap"><div class="page-inner">
     ${topBarHtml({ title: "اعتماد أبرز النتائج والتوصيات", subtitle: office.name,
       right: pillBtn("خروج", { variant: "danger", icon: iconLogout(15, DANGER), action: "logout" }) })}
+    ${adminScopeSwitcherHtml("office")}
     ${officeCurationSectionHtml(office)}
   </div></div>`;
 }
@@ -3023,7 +3045,7 @@ function officeArchiveTree(units) {
 }
 function renderOfficeArchive() {
   const office = currentOffice();
-  if (!office) return `<div class="page-wrap">تعذر إيجاد مكتب الإشراف.</div>`;
+  if (!office) return officeNotFoundPageHtml();
   const units = officeUnits(office.id);
   const tree = officeArchiveTree(units);
   const years = Object.keys(tree).sort((a, b) => b.localeCompare(a, "ar"));
@@ -3065,6 +3087,7 @@ function renderOfficeArchive() {
   <div class="page-wrap"><div class="page-inner">
     ${topBarHtml({ title: "أرشيف التقارير", subtitle: `منظَّم تلقائيًا حسب السنة الهجرية ونوع الفترة — ${office.name}`,
       right: pillBtn("خروج", { variant: "danger", icon: iconLogout(15, DANGER), action: "logout" }) })}
+    ${adminScopeSwitcherHtml("office")}
     <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-bottom:16px;">${crumbs.join("")}</div>
     ${body}
   </div></div>`;
@@ -3142,6 +3165,7 @@ function renderExecutiveDashboard(scopeUnits, scopeDepartments, opts) {
   <div class="page-wrap"><div class="page-inner">
     ${topBarHtml({ title: "لوحة المعلومات", subtitle: opts.subtitle || "نظرة إشرافية شاملة على كل الأقسام والوحدات",
       right: pillBtn("خروج", { variant: "danger", icon: iconLogout(15, DANGER), action: "logout" }) })}
+    ${opts.extraTop || ""}
     <div class="stat-grid" style="margin-bottom:18px;">
       ${statIconCardHtml("إجمالي التقارير", total, iconDocument(18, ROSE), DANGER_BG)}
       ${statIconCardHtml("تقارير مكتملة", completed, iconCheckCircle(18, GREEN), GREEN_BG)}
@@ -3265,6 +3289,7 @@ function renderExecutiveSummary(scopeUnits, scopeDepartments, opts) {
   <div class="page-wrap"><div class="page-inner">
     ${topBarHtml({ title: opts.title || "الملخص التنفيذي", subtitle: `الفترة: ${periodRange}`,
       right: pillBtn("خروج", { variant: "danger", icon: iconLogout(15, DANGER), action: "logout" }) })}
+    ${opts.extraTop || ""}
 
     ${opts.showAiSummary === false ? "" : aiSummaryCardHtml()}
 
@@ -6482,6 +6507,16 @@ function attachFormListeners() {
       render();
       return;
     }
+    // قائمة تبديل القسم/المكتب — تظهر فقط لمديرة النظام بصفحتي "قسمي" ومكتب
+    // الإشراف، تتيح لها الاطّلاع والضبط لأي قسم أو مكتب تختاره بدون أي تنقّل.
+    if (el.dataset && el.dataset.action === "admin-switch-department") {
+      S.currentDepartmentId = el.value; S.adminPreviewOrigin = null; render();
+      return;
+    }
+    if (el.dataset && el.dataset.action === "admin-switch-office") {
+      S.currentOfficeId = el.value; S.adminPreviewOrigin = null; render();
+      return;
+    }
     if (el.id === "site-font-family") {
       S.siteSettings = S.siteSettings || dataStore.getSiteSettings();
       S.siteSettings = { ...S.siteSettings, fontFamily: el.value };
@@ -6547,6 +6582,17 @@ function attachClickListener() {
       /* ---------- navigation & shell ---------- */
       case "nav-to": {
         S.view = ds.view; if (ds.view !== "unit-report") S.activeSectionId = null; if (isMobileViewport()) S.mobileSidebarOpen = false;
+        // مديرة النظام تدخل "قسمي"/صفحات مكتب الإشراف مباشرة من الشريط الجانبي —
+        // بما إنهم أصلًا مرتبطين بقسم/مكتب واحد، نفعّلهم تلقائيًا لأول قسم أو مكتب
+        // نشط لو ما كان فيه قيمة محفوظة أصلًا (أو كانت محفوظة أصبحت غير موجودة).
+        if (S.isAdmin && ds.view === "department-overview" && !(S.departments || []).some((d) => d.id === S.currentDepartmentId)) {
+          const firstDept = (S.departments || []).find((d) => d.status === "active") || (S.departments || [])[0];
+          S.currentDepartmentId = firstDept ? firstDept.id : null;
+        }
+        if (S.isAdmin && ["office-dashboard", "office-archive", "office-summary", "office-curation"].includes(ds.view) && !(S.offices || []).some((o) => o.id === S.currentOfficeId)) {
+          const firstOffice = (S.offices || []).find((o) => o.status === "active") || (S.offices || [])[0];
+          S.currentOfficeId = firstOffice ? firstOffice.id : null;
+        }
         // نلغي أي طيّ يدوي للمجموعة اللي تحتوي الصفحة الجديدة، عشان تفتح تلقائيًا وتبيّن أين نحن.
         const targetPage = SIDEBAR_PAGES.find((p) => p.id === ds.view);
         if (targetPage && S.ui.sidebarGroupState) delete S.ui.sidebarGroupState[targetPage.group];
