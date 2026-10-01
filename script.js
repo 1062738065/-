@@ -1387,6 +1387,10 @@ const SIDEBAR_PAGES = [
   { id: "units-list", label: "الوحدات", group: "الهيكل التنظيمي", icon: "document" },
   { id: "centers-list", label: "المراكز", group: "الهيكل التنظيمي", icon: "document" },
   { id: "department-overview", label: "قسمي", group: "الرئيسية", icon: "building" },
+  // رابط ثابت لمديرة النظام فقط: بوّابة دخول لصفحات "unit-home" (نفس أفكار
+  // "قسمي")، يختار أول وحدة/مركز نشط تلقائيًا ثم يحوّل فعليًا لعرض "تقارير"
+  // (راجع case "nav-to" ومعالجته الخاصة لـ"unit-overview").
+  { id: "unit-overview", label: "وحدتي", group: "الرئيسية", icon: "document" },
   { id: "executive-dashboard", label: "لوحة المعلومات", group: "الإدارة العليا", icon: "home" },
   { id: "executive-summary", label: "الملخص التنفيذي", group: "الإدارة العليا", icon: "document" },
   { id: "executive-final-report", label: "التقرير الإداري النهائي", group: "الإدارة العليا", icon: "layers" },
@@ -2365,8 +2369,12 @@ function renderDashboard() {
 
 /* =============================== Units overview (admin) ====================== */
 /* =============================== Unit dashboard (لوحة معلومات الوحدة) ========= */
+function unitNotFoundPageHtml() {
+  return `<div class="page-wrap"><div class="page-inner">${adminUnitSwitcherHtml()}<div class="card" style="text-align:center;color:${SUBTLE};padding:36px;">${(S.units || []).some((u) => u.role === "unit" || u.role === "center") ? "اختاري وحدة أو مركزًا من القائمة أعلاه." : "لا توجد وحدات أو مراكز بعد."}</div></div></div>`;
+}
 function renderUnitDashboard() {
   const unit = S.units.find((u) => u.id === S.currentUnitId);
+  if (!unit && S.isAdmin) return unitNotFoundPageHtml();
   const dept = S.departments.find((d) => d.id === unit?.departmentId);
   const reports = ensureUnitReportsLoaded(S.currentUnitId);
   const report = latestReportForUnit(S.currentUnitId);
@@ -2437,6 +2445,7 @@ function renderUnitDashboard() {
   return `
   <div class="page-wrap"><div class="page-inner">
     ${topBarHtml({ title: "لوحة المعلومات", subtitle: `مرحبًا ${esc(S.currentUser.name)} — نظرة عامة على تقارير ${esc(unit.name)}` })}
+    ${adminUnitSwitcherHtml()}
 
     <div class="hero-banner">
       <img class="hero-banner-bg" src="${esc(siteBannerSrc(site))}" alt="" />
@@ -2504,6 +2513,7 @@ function renderUnitSettings() {
   return `
   <div class="page-wrap"><div class="page-inner">
     ${topBarHtml({ title: "الإعدادات" })}
+    ${adminUnitSwitcherHtml()}
     <div class="card" style="text-align:center;color:${SUBTLE};padding:48px 20px;">
       ${iconGauge(SUBTLE, 32)}
       <div style="font-size:14px;font-weight:700;margin-top:12px;color:${INK}">قريبًا</div>
@@ -2846,6 +2856,27 @@ function adminScopeSwitcherHtml(kind) {
     <select class="input" style="flex:1;min-width:200px;" data-action="${action}">
       ${list.map((x) => `<option value="${esc(x.id)}" ${current === x.id ? "selected" : ""}>${esc(x.name)}${x.status !== "active" ? " (معطّل)" : ""}</option>`).join("")}
     </select>
+  </div>`;
+}
+// نفس فكرة adminScopeSwitcherHtml، لكن للوحدات/المراكز: قائمة تبديل + مفتاح
+// منظور (الإدارية/رئيسة الوحدة) يضبط S.currentUnitEntryMode لمعاينة مديرة
+// النظام فقط — لا يظهر ولا يؤثر إطلاقًا على حسابات الوحدة/المركز الحقيقية.
+function adminUnitSwitcherHtml() {
+  if (!S.isAdmin) return "";
+  const list = (S.units || []).filter((u) => u.role === "unit" || u.role === "center");
+  if (!list.length) return "";
+  const current = S.currentUnitId;
+  const mode = S.currentUnitEntryMode === "head" ? "head" : "admin";
+  return `
+  <div class="card" style="margin-bottom:14px;display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+    <span style="font-size:11.5px;font-weight:700;color:${SUBTLE};white-space:nowrap;">عرض وضبط أي وحدة:</span>
+    <select class="input" style="flex:1;min-width:200px;" data-action="admin-switch-unit">
+      ${list.map((u) => `<option value="${esc(u.id)}" ${current === u.id ? "selected" : ""}>${esc(u.name)}${u.role === "center" ? " (مركز)" : ""}${u.status !== "active" ? " (معطّلة)" : ""}</option>`).join("")}
+    </select>
+    <div style="display:flex;gap:6px;">
+      ${pillBtn("الإدارية", { variant: mode === "admin" ? "primary" : "ghost", action: "admin-set-unit-entry-mode", data: { mode: "admin" } })}
+      ${pillBtn("رئيسة الوحدة", { variant: mode === "head" ? "primary" : "ghost", action: "admin-set-unit-entry-mode", data: { mode: "head" } })}
+    </div>
   </div>`;
 }
 function renderDepartmentOverview() {
@@ -3653,7 +3684,7 @@ function reportCardHtml(unit, entry) {
 
 function renderUnitReportsHub() {
   const unit = S.units.find((u) => u.id === S.currentUnitId);
-  if (!unit) return `<div class="page-wrap">تعذر إيجاد الوحدة.</div>`;
+  if (!unit) return S.isAdmin ? unitNotFoundPageHtml() : `<div class="page-wrap">تعذر إيجاد الوحدة.</div>`;
   const dept = S.departments.find((d) => d.id === unit.departmentId);
   const list = ensureUnitReportsLoaded(unit.id);
   const filter = S.ui.unitReportsFilter || "all";
@@ -3708,6 +3739,7 @@ function renderUnitReportsHub() {
     ${topBarHtml({ title: "نظام توثيق الأداء", subtitle: dept ? `${unit.name} — ${dept.name}` : unit.name,
       backAction: S.isAdmin && S.adminPreviewOrigin ? "nav-to" : S.isAdmin ? "nav-back-admin" : S.isDepartmentUser ? "nav-back-department" : "",
       backData: S.isAdmin && S.adminPreviewOrigin ? { view: S.adminPreviewOrigin } : undefined })}
+    ${adminUnitSwitcherHtml()}
 
     <div class="hero-banner">
       <img class="hero-banner-bg" src="hero-bg.jpg" alt="" />
@@ -6517,6 +6549,14 @@ function attachFormListeners() {
       S.currentOfficeId = el.value; S.adminPreviewOrigin = null; render();
       return;
     }
+    // قائمة تبديل الوحدة/المركز — تظهر فقط لمديرة النظام بصفحات "وحدتي"
+    // (unit-home)، تتيح لها معاينة وضبط أي وحدة أو مركز تختاره.
+    if (el.dataset && el.dataset.action === "admin-switch-unit") {
+      S.currentUnitId = el.value; S.adminPreviewOrigin = null; S.currentReportId = null; S.view = "unit-reports";
+      ensureUnitReportsLoaded(S.currentUnitId);
+      render();
+      return;
+    }
     if (el.id === "site-font-family") {
       S.siteSettings = S.siteSettings || dataStore.getSiteSettings();
       S.siteSettings = { ...S.siteSettings, fontFamily: el.value };
@@ -6581,38 +6621,52 @@ function attachClickListener() {
     switch (action) {
       /* ---------- navigation & shell ---------- */
       case "nav-to": {
-        S.view = ds.view; if (ds.view !== "unit-report") S.activeSectionId = null; if (isMobileViewport()) S.mobileSidebarOpen = false;
+        // "وحدتي" رابط ثابت لمديرة النظام فقط (بوّابة دخول) — لا يقابله عرض فعلي
+        // باسمه، فنحوّله هنا فعليًا لعرض "تقارير" الوحدة (نفس مسار open-unit-preview)
+        // بعد التأكد من اختيار وحدة/مركز صالح ووضع دخول افتراضي (الإدارية).
+        let navView = ds.view;
+        if (S.isAdmin && navView === "unit-overview") {
+          const eligibleUnits = (S.units || []).filter((u) => u.role === "unit" || u.role === "center");
+          if (!eligibleUnits.some((u) => u.id === S.currentUnitId)) {
+            const firstUnit = eligibleUnits.find((u) => u.status === "active") || eligibleUnits[0];
+            S.currentUnitId = firstUnit ? firstUnit.id : null;
+          }
+          if (S.currentUnitEntryMode !== "admin" && S.currentUnitEntryMode !== "head") S.currentUnitEntryMode = "admin";
+          S.adminPreviewOrigin = null;
+          navView = "unit-reports";
+        }
+        S.view = navView; if (navView !== "unit-report") S.activeSectionId = null; if (isMobileViewport()) S.mobileSidebarOpen = false;
         // مديرة النظام تدخل "قسمي"/صفحات مكتب الإشراف مباشرة من الشريط الجانبي —
         // بما إنهم أصلًا مرتبطين بقسم/مكتب واحد، نفعّلهم تلقائيًا لأول قسم أو مكتب
         // نشط لو ما كان فيه قيمة محفوظة أصلًا (أو كانت محفوظة أصبحت غير موجودة).
-        if (S.isAdmin && ds.view === "department-overview" && !(S.departments || []).some((d) => d.id === S.currentDepartmentId)) {
+        if (S.isAdmin && navView === "department-overview" && !(S.departments || []).some((d) => d.id === S.currentDepartmentId)) {
           const firstDept = (S.departments || []).find((d) => d.status === "active") || (S.departments || [])[0];
           S.currentDepartmentId = firstDept ? firstDept.id : null;
         }
-        if (S.isAdmin && ["office-dashboard", "office-archive", "office-summary", "office-curation"].includes(ds.view) && !(S.offices || []).some((o) => o.id === S.currentOfficeId)) {
+        if (S.isAdmin && ["office-dashboard", "office-archive", "office-summary", "office-curation"].includes(navView) && !(S.offices || []).some((o) => o.id === S.currentOfficeId)) {
           const firstOffice = (S.offices || []).find((o) => o.status === "active") || (S.offices || [])[0];
           S.currentOfficeId = firstOffice ? firstOffice.id : null;
         }
         // نلغي أي طيّ يدوي للمجموعة اللي تحتوي الصفحة الجديدة، عشان تفتح تلقائيًا وتبيّن أين نحن.
-        const targetPage = SIDEBAR_PAGES.find((p) => p.id === ds.view);
+        const targetPage = SIDEBAR_PAGES.find((p) => p.id === navView);
         if (targetPage && S.ui.sidebarGroupState) delete S.ui.sidebarGroupState[targetPage.group];
-        if (ds.view === "platform-users-manage" || ds.view === "platform-permissions-manage") S.platformUsers = dataStore.getPlatformUsers();
+        if (navView === "platform-users-manage" || navView === "platform-permissions-manage") S.platformUsers = dataStore.getPlatformUsers();
         render();
         if (sheetsConfigured()) {
-          if (ds.view === "admin-reports" || ds.view === "units-manage" || ds.view === "department-overview") {
-            refreshUnitsAndDepartmentsFromSheet().then(() => { if (S.view === ds.view) render(); });
-          } else if (ds.view === "indicators-manage") {
-            refreshIndicatorDefinitionsFromSheet().then(() => { if (S.view === ds.view) render(); });
-          } else if (ds.view === "goals-manage") {
-            refreshGoalsDefinitionsFromSheet().then(() => { if (S.view === ds.view) render(); });
-          } else if (ds.view === "sections-manage") {
-            refreshReportSectionsFromSheet().then(() => { if (S.view === ds.view) render(); });
-          } else if (ds.view === "field-schemas-manage") {
-            refreshSectionFieldSchemasFromSheet().then(() => { if (S.view === ds.view) render(); });
-          } else if (ds.view === "unit-reports" && S.currentUnitId) {
-            refreshReportsFromSheet(S.currentUnitId).then(() => { if (S.view === ds.view) render(); });
-          } else if (ds.view === "platform-users-manage") {
-            refreshPlatformUsersFromSheet().then(() => { if (S.view === ds.view) render(); });
+          if (navView === "admin-reports" || navView === "units-manage" || navView === "department-overview") {
+            refreshUnitsAndDepartmentsFromSheet().then(() => { if (S.view === navView) render(); });
+          } else if (navView === "indicators-manage") {
+            refreshIndicatorDefinitionsFromSheet().then(() => { if (S.view === navView) render(); });
+          } else if (navView === "goals-manage") {
+            refreshGoalsDefinitionsFromSheet().then(() => { if (S.view === navView) render(); });
+          } else if (navView === "sections-manage") {
+            refreshReportSectionsFromSheet().then(() => { if (S.view === navView) render(); });
+          } else if (navView === "field-schemas-manage") {
+            refreshSectionFieldSchemasFromSheet().then(() => { if (S.view === navView) render(); });
+          } else if (navView === "unit-reports" && S.currentUnitId) {
+            refreshReportsFromSheet(S.currentUnitId).then(() => { if (S.view === navView) render(); });
+          } else if (navView === "platform-users-manage") {
+            refreshPlatformUsersFromSheet().then(() => { if (S.view === navView) render(); });
           }
         }
         break;
@@ -6858,8 +6912,20 @@ function attachClickListener() {
         if (!unit) break;
         S.adminPreviewOrigin = unit.role === "center" ? "centers-list" : "units-list";
         ensureUnitReportsLoaded(unit.id);
-        S.currentUnitId = unit.id; S.currentReportId = null; S.view = "unit-reports"; S.openPhaseId = null; S.activeSectionId = null; render();
+        S.currentUnitId = unit.id; S.currentReportId = null; S.view = "unit-reports"; S.openPhaseId = null; S.activeSectionId = null;
+        // وضع دخول افتراضي ("الإدارية") لو ما كان عندها اختيار صالح أصلًا — يتيح
+        // تبديله لاحقًا من الصفحة نفسها (adminUnitSwitcherHtml) لمنظور "رئيسة الوحدة".
+        if (S.currentUnitEntryMode !== "admin" && S.currentUnitEntryMode !== "head") S.currentUnitEntryMode = "admin";
+        render();
         if (sheetsConfigured()) refreshReportsFromSheet(unit.id).then(() => { if (S.currentUnitId === unit.id) render(); });
+        break;
+      }
+      case "admin-set-unit-entry-mode": {
+        // تبديل منظور مديرة النظام وهي تعاين وحدة: "الإدارية" (موظفة الوحدة) أو
+        // "رئيسة الوحدة" (صلاحية اعتماد/إعادة فعلية على pending_head_review).
+        // هذا المفتاح نفسه (S.currentUnitEntryMode) يُستخدم أصلًا لحسابات الوحدة
+        // الحقيقية؛ لا يمس أي سلوك لها لأنه لا يُستدعى إلا من صفحات معاينة مديرة النظام.
+        if (S.isAdmin) { S.currentUnitEntryMode = ds.mode === "head" ? "head" : "admin"; render(); }
         break;
       }
       case "open-department-preview": {
