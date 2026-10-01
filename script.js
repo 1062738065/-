@@ -1519,10 +1519,13 @@ function renderMainSidebar(mobile) {
     // أكورديون: يفيد فقط لما القائمة كاملة تكون طويلة (عدة مجموعات بعناصر كثيرة،
     // زي مديرة النظام). لو كل قائمة المستخدمة قصيرة أصلًا (وحدة، مركز، قسم، إدارة
     // عليا)، نخلي كل المجموعات مفتوحة دائمًا بدون طي، لأن الطي هنا يزيد خطوة بلا فائدة.
+    // مديرة النظام تحديدًا: كل المجموعات مفتوحة افتراضيًا (كل الصفحات ظاهرة مباشرة
+    // بدون ما تحتاج تضغط كل عنوان مجموعة لتوسيعها) — تقدر طبعًا تطوي أي مجموعة
+    // يدويًا لو حبت، وهذا الطي اليدوي (manualState) يبقى له الأولوية دائمًا.
     const shortSidebar = visible.length <= 6;
     const containsActive = items.some((p) => p.id === S.view);
     const manualState = (S.ui.sidebarGroupState || {})[g];
-    const isOpen = manualState !== undefined ? manualState : (shortSidebar || containsActive);
+    const isOpen = manualState !== undefined ? manualState : (shortSidebar || containsActive || S.isAdmin);
     return `
       <div class="nav-group ${isOpen ? "open" : ""}">
         <button class="nav-group-label" data-action="toggle-sidebar-group" data-group="${esc(g)}" style="display:flex;align-items:center;justify-content:space-between;width:100%;background:none;border:none;cursor:pointer;padding:4px 12px 8px;">
