@@ -4036,6 +4036,37 @@ function platformUserScopeLabel(pu) {
   const opt = PLATFORM_USER_SCOPE_OPTIONS.find((o) => o.value === pu.scopeKind);
   return opt ? opt.label : "—";
 }
+// صفّ عنصر واحد (checkbox) داخل قائمة منسدلة لصلاحيات الصفحات/الإجراءات —
+// يحافظ على نفس data-action/data-id المستخدمين أصلًا في التبديل، فقط يغيّر الشكل.
+function permCheckboxRowHtml(action, id, label, checked) {
+  return `<label style="display:flex;align-items:center;gap:8px;font-size:12px;padding:5px 4px;border-radius:6px;cursor:pointer;">
+    <input type="checkbox" style="width:15px;height:15px;cursor:pointer;flex-shrink:0;" ${checked ? "checked" : ""} data-action="${esc(action)}" data-id="${esc(id)}" />
+    <span>${esc(label)}</span>
+  </label>`;
+}
+// الإطار العام للقائمة المنسدلة القابلة للتعدد: زر ملخّص (كم محدد من الإجمالي)
+// يفتح/يقفل لوحة فيها "تحديد الكل"/"إلغاء الكل" + القائمة الفعلية. الفتح/الإغلاق
+// يُدار بـ S.ui.permDropdownOpen[action] — حالة عرض بحتة، ما تمسّ بيانات الصلاحيات.
+function permDropdownChecklistHtml({ action, selected, total, emptyLabel, renderList }) {
+  const isOpen = !!(S.ui.permDropdownOpen && S.ui.permDropdownOpen[action]);
+  const count = selected.length;
+  const summary = count === 0 ? `بدون قيد (كل ${emptyLabel})` : count === total ? `كل ${emptyLabel} (${count})` : `${count} من ${total} ${emptyLabel} محددة`;
+  return `
+    <div style="position:relative;">
+      <button type="button" class="input" style="display:flex;align-items:center;justify-content:space-between;width:100%;cursor:pointer;text-align:right;" data-action="toggle-perm-dropdown" data-key="${esc(action)}">
+        <span style="font-size:12px;color:${count ? INK : SUBTLE};">${esc(summary)}</span>
+        <span style="display:inline-flex;transition:transform 0.15s;transform:rotate(${isOpen ? "180" : "0"}deg);">${iconChevronDown(14, SUBTLE)}</span>
+      </button>
+      ${isOpen ? `
+        <div style="border:1px solid ${BORDER};border-radius:10px;margin-top:6px;padding:10px;max-height:280px;overflow:auto;background:#fff;box-shadow:0 4px 14px rgba(0,0,0,0.08);">
+          <div style="display:flex;gap:6px;margin-bottom:10px;">
+            ${pillBtn("تحديد الكل", { variant: "soft", action: "select-all-perm", data: { key: action, mode: "all" } })}
+            ${pillBtn("إلغاء الكل", { variant: "ghost", action: "select-all-perm", data: { key: action, mode: "none" } })}
+          </div>
+          ${renderList()}
+        </div>` : ""}
+    </div>`;
+}
 function platformUserPagesChecklistHtml(selected, action) {
   selected = selected || [];
   const groups = [];
@@ -4045,20 +4076,38 @@ function platformUserPagesChecklistHtml(selected, action) {
     if (!g) { g = { name: p.group, pages: [] }; groups.push(g); }
     g.pages.push(p);
   });
-  return groups.map((g) => `
-    <div style="margin-bottom:10px;">
-      <div style="font-size:10.5px;font-weight:800;color:${SUBTLE};margin-bottom:6px;">${esc(g.name === "standalone" ? "أخرى" : g.name)}</div>
-      <div style="display:flex;flex-wrap:wrap;gap:6px;">
-        ${g.pages.map((p) => `<button type="button" class="radio-pill ${selected.includes(p.id) ? "active" : ""}" style="padding:6px 12px;font-size:11.5px;" data-action="${esc(action)}" data-id="${esc(p.id)}">${selected.includes(p.id) ? "✓ " : ""}${esc(p.label)}</button>`).join("")}
-      </div>
-    </div>`).join("");
+  const total = groups.reduce((sum, g) => sum + g.pages.length, 0);
+  return permDropdownChecklistHtml({
+    action, selected, total, emptyLabel: "صفحات",
+    renderList: () => groups.map((g) => `
+      <div style="margin-bottom:10px;">
+        <div style="font-size:10.5px;font-weight:800;color:${SUBTLE};margin-bottom:6px;">${esc(g.name === "standalone" ? "أخرى" : g.name)}</div>
+        <div style="display:flex;flex-direction:column;gap:2px;">
+          ${g.pages.map((p) => permCheckboxRowHtml(action, p.id, p.label, selected.includes(p.id))).join("")}
+        </div>
+      </div>`).join(""),
+  });
 }
 function platformUserActionsChecklistHtml(selected, action) {
   selected = selected || [];
-  return `
-    <div style="display:flex;flex-wrap:wrap;gap:6px;">
-      ${ACTION_CATALOG.map((a) => `<button type="button" class="radio-pill ${selected.includes(a.id) ? "active" : ""}" style="padding:6px 12px;font-size:11.5px;" data-action="${esc(action)}" data-id="${esc(a.id)}">${selected.includes(a.id) ? "✓ " : ""}${esc(a.label)}</button>`).join("")}
-    </div>`;
+  return permDropdownChecklistHtml({
+    action, selected, total: ACTION_CATALOG.length, emptyLabel: "إجراءات",
+    renderList: () => `
+      <div style="display:flex;flex-direction:column;gap:2px;">
+        ${ACTION_CATALOG.map((a) => permCheckboxRowHtml(action, a.id, a.label, selected.includes(a.id))).join("")}
+      </div>`,
+  });
+}
+// يرجع المصفوفة الحية (نفس المرجع المستخدم أصلًا بكل حالة toggle-*) بالاعتماد
+// على اسم الـ action — يخدم "تحديد الكل"/"إلغاء الكل" بدون تكرار منطق الحفظ.
+function permDropdownTargetArray(key) {
+  if (key === "toggle-new-pu-page") { capturePlatformUserFormFields("new-pu"); return S.ui.newPuAllowedPages || (S.ui.newPuAllowedPages = []); }
+  if (key === "toggle-edit-pu-page") { capturePlatformUserFormFields("edit-pu"); S.ui.editPuForm = S.ui.editPuForm || {}; return S.ui.editPuForm.allowedPages || (S.ui.editPuForm.allowedPages = []); }
+  if (key === "toggle-new-pu-action") { capturePlatformUserFormFields("new-pu"); return S.ui.newPuAllowedActions || (S.ui.newPuAllowedActions = []); }
+  if (key === "toggle-edit-pu-action") { capturePlatformUserFormFields("edit-pu"); S.ui.editPuForm = S.ui.editPuForm || {}; return S.ui.editPuForm.allowedActions || (S.ui.editPuForm.allowedActions = []); }
+  if (key === "toggle-account-perm-page") { S.ui.editAccountPermForm = S.ui.editAccountPermForm || { allowedPages: [], allowedActions: [] }; return S.ui.editAccountPermForm.allowedPages || (S.ui.editAccountPermForm.allowedPages = []); }
+  if (key === "toggle-account-perm-action") { S.ui.editAccountPermForm = S.ui.editAccountPermForm || { allowedPages: [], allowedActions: [] }; return S.ui.editAccountPermForm.allowedActions || (S.ui.editAccountPermForm.allowedActions = []); }
+  return [];
 }
 function platformUserScopeIdSelectHtml(scopeKind, selectedId, selectId) {
   if (scopeKind === "department") {
@@ -7139,6 +7188,33 @@ function attachClickListener() {
         const arr = S.ui.editPuForm.allowedActions || (S.ui.editPuForm.allowedActions = []);
         const idx = arr.indexOf(ds.id);
         if (idx >= 0) arr.splice(idx, 1); else arr.push(ds.id);
+        render();
+        break;
+      }
+      // فتح/قفل القائمة المنسدلة لصلاحيات الصفحات/الإجراءات — حالة عرض بحتة.
+      // نلتقط حقول نموذج "حساب إضافي" أولًا (لو كانت هذي القائمة تابعة له)، لأن
+      // render() بعدها يعيد بناء كل النموذج من S.ui، وبدون الالتقاط تنمسح القيم
+      // المكتوبة بالحقول اللي ما لها معالج خاص (مثل اختيار النطاق).
+      case "toggle-perm-dropdown": {
+        if (ds.key === "toggle-new-pu-page" || ds.key === "toggle-new-pu-action") capturePlatformUserFormFields("new-pu");
+        else if (ds.key === "toggle-edit-pu-page" || ds.key === "toggle-edit-pu-action") capturePlatformUserFormFields("edit-pu");
+        S.ui.permDropdownOpen = S.ui.permDropdownOpen || {};
+        S.ui.permDropdownOpen[ds.key] = !S.ui.permDropdownOpen[ds.key];
+        render();
+        break;
+      }
+      // "تحديد الكل" / "إلغاء الكل" داخل أي قائمة منسدلة صلاحيات (صفحات أو إجراءات)
+      case "select-all-perm": {
+        if (ds.key === "toggle-new-pu-page" || ds.key === "toggle-new-pu-action") capturePlatformUserFormFields("new-pu");
+        else if (ds.key === "toggle-edit-pu-page" || ds.key === "toggle-edit-pu-action") capturePlatformUserFormFields("edit-pu");
+        const arr = permDropdownTargetArray(ds.key);
+        const isPage = ds.key.indexOf("page") !== -1;
+        const allIds = isPage ? SIDEBAR_PAGES.filter((p) => p.group !== "unit-home").map((p) => p.id) : ACTION_CATALOG.map((a) => a.id);
+        if (ds.mode === "all") {
+          allIds.forEach((id) => { if (arr.indexOf(id) < 0) arr.push(id); });
+        } else {
+          arr.length = 0;
+        }
         render();
         break;
       }
