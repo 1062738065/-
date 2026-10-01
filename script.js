@@ -738,6 +738,11 @@ function rowToSiteSettings(r) {
     fontFamily: r.font_family || DEFAULT_BRANDING.fontFamily,
   };
 }
+// مخطط الهيكل التنظيمي (مسميات وظيفية حرة، للتخطيط فقط — لا علاقة له بحسابات
+// تسجيل الدخول الفعلية). يُخزَّن كصف واحد (id: "main") فيه الشجرة كاملة كـ JSON،
+// بنفس أسلوب site_settings بالضبط.
+function orgChartToRow(nodes) { return { id: "main", nodes: nodes || [] }; }
+function rowToOrgChart(r) { return Array.isArray(r.nodes) ? r.nodes : []; }
 function indDefToRow(d) { return { id: d.id, name: d.name, category: d.category || "", direction: d.direction || "", nature: d.nature || "", frequency: d.frequency || "", unit: d.unit || "", target: String(d.target ?? ""), data_source: d.dataSource || "", calculation_method: d.calculationMethod || "" }; }
 function rowToIndDef(r) { return { id: r.id, name: r.name, category: r.category || "", direction: r.direction || "", nature: r.nature || "", frequency: r.frequency || "", unit: r.unit || "", target: r.target || "", dataSource: r.data_source || "", calculationMethod: r.calculation_method || "" }; }
 function goalToRow(g, kind) { return { id: g.id, name: g.name, kind }; }
@@ -789,7 +794,8 @@ const MOCK_USERS = [
 const UNITS_KEY = "prs:units", DEPARTMENTS_KEY = "prs:departments", OFFICES_KEY = "prs:offices",
       INDICATOR_DEFINITIONS_KEY = "prs:indicator-definitions", GOALS_DEFINITIONS_KEY = "prs:goals-definitions",
       SITE_SETTINGS_KEY = "prs:site-settings", REPORT_SECTIONS_KEY = "prs:report-sections",
-      SECTION_FIELD_SCHEMAS_KEY = "prs:section-field-schemas", PLATFORM_USERS_KEY = "prs:platform-users";
+      SECTION_FIELD_SCHEMAS_KEY = "prs:section-field-schemas", PLATFORM_USERS_KEY = "prs:platform-users",
+      ORG_CHART_KEY = "prs:org-chart";
 const DEFAULT_SITE_COLORS = { primary: "#6b2337", background: "#F2ECE8" };
 // إعدادات الهوية القابلة للتخصيص من "إعدادات الموقع": الشعار وحجمه، بانر لوحة
 // المعلومات (صورة + عنوان + وصف)، اسم المنصة بعنوان الشريط الجانبي، وعبارة/صورة
@@ -924,6 +930,11 @@ const dataStore = {
   saveSiteSettings(s) {
     lsSet(SITE_SETTINGS_KEY, JSON.stringify(s));
     if (sheetsConfigured()) supabaseRequest("site_settings", { method: "POST", prefer: "return=minimal,resolution=merge-duplicates", body: JSON.stringify(siteSettingsToRow(s)) }).catch(() => {});
+  },
+  getOrgChart() { const v = lsGet(ORG_CHART_KEY); return v ? JSON.parse(v) : []; },
+  saveOrgChart(nodes) {
+    lsSet(ORG_CHART_KEY, JSON.stringify(nodes));
+    if (sheetsConfigured()) supabaseRequest("org_chart", { method: "POST", prefer: "return=minimal,resolution=merge-duplicates", body: JSON.stringify(orgChartToRow(nodes)) }).catch(() => {});
   },
   cacheIndicatorDefinitionsLocally(d) { lsSet(INDICATOR_DEFINITIONS_KEY, JSON.stringify(d)); },
   cacheUnitsLocally(u) { lsSet(UNITS_KEY, JSON.stringify(u)); },
@@ -1291,6 +1302,8 @@ function render() {
     html = shellWrap(renderEntityPickerPage("units"));
   } else if (S.view === "centers-list") {
     html = shellWrap(renderEntityPickerPage("centers"));
+  } else if (S.view === "org-chart") {
+    html = shellWrap(renderOrgChartPage());
   } else if (S.view === "department-overview") {
     html = shellWrap(renderDepartmentOverview());
   } else if (S.view === "executive-dashboard") {
@@ -1386,6 +1399,10 @@ const SIDEBAR_PAGES = [
   { id: "departments-list", label: "الأقسام", group: "الهيكل التنظيمي", icon: "building" },
   { id: "units-list", label: "الوحدات", group: "الهيكل التنظيمي", icon: "document" },
   { id: "centers-list", label: "المراكز", group: "الهيكل التنظيمي", icon: "document" },
+  // صفحة مستقلة تمامًا عن الأربعة أعلاه: مخطط مسميات وظيفية حرّ للتخطيط فقط
+  // (بدون حسابات تسجيل دخول أو ربط بمسار اعتماد التقارير) — الصفحات الأربع
+  // الأصلية تبقى كما هي تمامًا، هذي إضافة فقط (راجع renderOrgChartPage).
+  { id: "org-chart", label: "مخطط الهيكل التنظيمي", group: "الهيكل التنظيمي", icon: "layers" },
   { id: "department-overview", label: "قسمي", group: "الرئيسية", icon: "building" },
   // رابط ثابت لمديرة النظام فقط: بوّابة دخول لصفحات "unit-home" (نفس أفكار
   // "قسمي")، يختار أول وحدة/مركز نشط تلقائيًا ثم يحوّل فعليًا لعرض "تقارير"
@@ -1966,6 +1983,15 @@ async function refreshSiteSettingsFromSheet() {
     S.siteSettings = rowToSiteSettings(res.data[0]);
     lsSet(SITE_SETTINGS_KEY, JSON.stringify(S.siteSettings));
     applySiteColors(S.siteSettings);
+  }
+}
+
+async function refreshOrgChartFromSheet() {
+  if (!sheetsConfigured()) return;
+  const res = await supabaseRequest("org_chart?id=eq.main&select=*");
+  if (res.ok && Array.isArray(res.data) && res.data.length) {
+    S.orgChart = rowToOrgChart(res.data[0]);
+    lsSet(ORG_CHART_KEY, JSON.stringify(S.orgChart));
   }
 }
 
@@ -2691,6 +2717,103 @@ function officeManageRowHtml(o) {
       <button class="icon-btn" style="width:32px;height:32px;background:${DANGER_BG}" data-action="offices-manage-open-office" data-id="${esc(o.id)}" title="عرض الأقسام التابعة">${iconChevronLeft(14, ROSE)}</button>
     </div>
   </div>`;
+}
+
+/* =============================== مخطط الهيكل التنظيمي (تخطيط حر، admin) ======
+   شجرة مسميات وظيفية حرة تبنيها مديرة النظام بنفسها: عنصر جذر، وتحت كل عنصر
+   "إضافة تفرع" بلا حد للعمق. لا علاقة لها بحسابات تسجيل الدخول (الوحدة/القسم/
+   المكتب) ولا بمسار اعتماد التقارير — أداة تخطيط وتصوّر بصري فقط، منفصلة تمامًا
+   عن الصفحات الأربع (مكاتب الإشراف/الأقسام/الوحدات/المراكز) اللي تبقى كما هي. */
+function currentOrgChart() { return S.orgChart || (S.orgChart = dataStore.getOrgChart()); }
+function orgChartFindParentArray(nodes, id, parentArr) {
+  parentArr = parentArr || nodes;
+  for (const n of nodes) {
+    if (n.id === id) return parentArr;
+    const found = orgChartFindParentArray(n.children || [], id, n.children || []);
+    if (found) return found;
+  }
+  return null;
+}
+function orgChartFindNode(nodes, id) {
+  for (const n of nodes) {
+    if (n.id === id) return n;
+    const found = orgChartFindNode(n.children || [], id);
+    if (found) return found;
+  }
+  return null;
+}
+function orgChartCountDescendants(node) {
+  let count = 0;
+  (node.children || []).forEach((c) => { count += 1 + orgChartCountDescendants(c); });
+  return count;
+}
+function orgChartNodeHtml(node, depth) {
+  const collapsed = !!(S.ui.orgChartCollapsed || {})[node.id];
+  const editing = S.ui.orgChartEditingId === node.id;
+  const confirming = S.ui.orgChartConfirmDeleteId === node.id;
+  const addingChild = S.ui.orgChartAddingParentId === node.id;
+  const hasChildren = (node.children || []).length > 0;
+  const descCount = orgChartCountDescendants(node);
+
+  let rowInner;
+  if (editing) {
+    rowInner = `
+      <input class="input" id="org-chart-edit-${esc(node.id)}" style="flex:1;" value="${esc(S.ui.orgChartEditValue || node.title)}" />
+      <button data-action="org-chart-save-edit" data-id="${esc(node.id)}" style="background:${GREEN_BG};border:none;border-radius:8px;padding:0 10px;cursor:pointer;">${iconCheck(16, GREEN)}</button>
+      <button data-action="org-chart-cancel-edit" style="background:${DANGER_BG};border:none;border-radius:8px;padding:0 10px;cursor:pointer;">${iconX(16, DANGER)}</button>`;
+  } else if (confirming) {
+    rowInner = `
+      <span style="font-size:12px;font-weight:700;flex:1;">حذف "${esc(node.title)}"${descCount ? ` وكل ما تحتها (${descCount})؟` : "؟"}</span>
+      ${pillBtn("حذف", { variant: "danger", action: "org-chart-delete", data: { id: node.id } })}
+      ${pillBtn("تراجع", { variant: "ghost", action: "org-chart-cancel-delete" })}`;
+  } else {
+    rowInner = `
+      <button class="icon-btn" style="width:26px;height:26px;flex-shrink:0;${hasChildren ? "" : "visibility:hidden;"}" data-action="org-chart-toggle-collapse" data-id="${esc(node.id)}" title="${collapsed ? "توسيع" : "طيّ"}">
+        <span style="display:inline-flex;transition:transform 0.15s;transform:rotate(${collapsed ? "-90" : "0"}deg);">${iconChevronDown(12, SUBTLE)}</span>
+      </button>
+      <span style="font-size:13px;font-weight:700;flex:1;">${esc(node.title)}</span>
+      <div style="display:flex;gap:6px;">
+        <button class="icon-btn" style="width:28px;height:28px;border:1px solid ${BORDER}" data-action="org-chart-start-add-child" data-id="${esc(node.id)}" title="إضافة تفرع">${iconPlus(13, INK)}</button>
+        <button class="icon-btn" style="width:28px;height:28px;border:1px solid ${BORDER}" data-action="org-chart-start-edit" data-id="${esc(node.id)}" title="تعديل">${iconPencil(13, INK)}</button>
+        <button class="icon-btn" style="width:28px;height:28px;background:${DANGER_BG}" data-action="org-chart-confirm-delete" data-id="${esc(node.id)}" title="حذف">${iconTrash(13, DANGER)}</button>
+      </div>`;
+  }
+
+  const addChildFormHtml = addingChild ? `
+    <div style="display:flex;gap:6px;margin-top:8px;">
+      <input class="input" id="org-chart-new-child-${esc(node.id)}" style="flex:1;" placeholder="المسمى الوظيفي الجديد" />
+      ${pillBtn("إضافة", { icon: iconPlus(14, "#fff"), action: "org-chart-save-add-child", data: { id: node.id } })}
+      ${pillBtn("إلغاء", { variant: "ghost", action: "org-chart-cancel-add-child" })}
+    </div>` : "";
+
+  const childrenHtml = (!collapsed && hasChildren) ? `
+    <div style="margin-top:8px;display:flex;flex-direction:column;gap:8px;">
+      ${node.children.map((c) => orgChartNodeHtml(c, depth + 1)).join("")}
+    </div>` : "";
+
+  return `
+  <div style="margin-right:${depth > 0 ? 22 : 0}px;${depth > 0 ? `border-right:2px solid ${BORDER};padding-right:14px;` : ""}">
+    <div class="card" style="display:flex;align-items:center;gap:8px;">${rowInner}</div>
+    ${addChildFormHtml}
+    ${childrenHtml}
+  </div>`;
+}
+function renderOrgChartPage() {
+  const nodes = currentOrgChart();
+  const addingRoot = !!S.ui.orgChartAddingRoot;
+  return `
+  <div class="page-wrap"><div class="page-inner">
+    ${topBarHtml({ title: "مخطط الهيكل التنظيمي", subtitle: "مخطط مسميات وظيفية حرّ للتخطيط فقط — بدون حسابات تسجيل دخول، ومنفصل تمامًا عن صفحات مكاتب الإشراف/الأقسام/الوحدات/المراكز",
+      right: pillBtn("إضافة", { icon: iconPlus(15, "#fff"), action: "org-chart-start-add-root" }) })}
+    ${addingRoot ? `
+      <div class="card" style="display:flex;gap:6px;margin-bottom:14px;">
+        <input class="input" id="org-chart-new-root" style="flex:1;" placeholder="المسمى الوظيفي الجديد (عنصر رئيسي)" />
+        ${pillBtn("إضافة", { icon: iconPlus(14, "#fff"), action: "org-chart-save-add-root" })}
+        ${pillBtn("إلغاء", { variant: "ghost", action: "org-chart-cancel-add-root" })}
+      </div>` : ""}
+    ${nodes.length === 0 && !addingRoot ? `<div class="card" style="text-align:center;color:${SUBTLE};padding:36px;">لا يوجد شيء بالمخطط بعد — اضغطي "إضافة" لبدء أول عنصر.</div>` :
+      `<div style="display:flex;flex-direction:column;gap:10px;">${nodes.map((n) => orgChartNodeHtml(n, 0)).join("")}</div>`}
+  </div></div>`;
 }
 
 /* =============================== Site settings (admin) ======================= */
@@ -6926,6 +7049,73 @@ function attachClickListener() {
         // هذا المفتاح نفسه (S.currentUnitEntryMode) يُستخدم أصلًا لحسابات الوحدة
         // الحقيقية؛ لا يمس أي سلوك لها لأنه لا يُستدعى إلا من صفحات معاينة مديرة النظام.
         if (S.isAdmin) { S.currentUnitEntryMode = ds.mode === "head" ? "head" : "admin"; render(); }
+        break;
+      }
+      /* ===== مخطط الهيكل التنظيمي (تخطيط حر — راجع renderOrgChartPage) ===== */
+      case "org-chart-start-add-root": S.ui.orgChartAddingRoot = true; render(); break;
+      case "org-chart-cancel-add-root": S.ui.orgChartAddingRoot = false; render(); break;
+      case "org-chart-save-add-root": {
+        const el = document.getElementById("org-chart-new-root");
+        const title = (el && el.value || "").trim();
+        if (!title) break;
+        const nodes = currentOrgChart();
+        S.orgChart = [...nodes, { id: uid("node"), title, children: [] }];
+        dataStore.saveOrgChart(S.orgChart);
+        S.ui.orgChartAddingRoot = false;
+        render();
+        break;
+      }
+      case "org-chart-start-add-child": S.ui.orgChartAddingParentId = ds.id; render(); break;
+      case "org-chart-cancel-add-child": S.ui.orgChartAddingParentId = null; render(); break;
+      case "org-chart-save-add-child": {
+        const el = document.getElementById(`org-chart-new-child-${ds.id}`);
+        const title = (el && el.value || "").trim();
+        if (!title) break;
+        const parentNode = orgChartFindNode(currentOrgChart(), ds.id);
+        if (!parentNode) break;
+        parentNode.children = [...(parentNode.children || []), { id: uid("node"), title, children: [] }];
+        dataStore.saveOrgChart(S.orgChart);
+        S.ui.orgChartAddingParentId = null;
+        render();
+        break;
+      }
+      case "org-chart-start-edit": {
+        const node = orgChartFindNode(currentOrgChart(), ds.id);
+        if (!node) break;
+        S.ui.orgChartEditingId = ds.id; S.ui.orgChartEditValue = node.title; render();
+        break;
+      }
+      case "org-chart-cancel-edit": S.ui.orgChartEditingId = null; render(); break;
+      case "org-chart-save-edit": {
+        const el = document.getElementById(`org-chart-edit-${ds.id}`);
+        const title = (el && el.value || "").trim();
+        if (!title) break;
+        const node = orgChartFindNode(currentOrgChart(), ds.id);
+        if (!node) break;
+        node.title = title;
+        dataStore.saveOrgChart(S.orgChart);
+        S.ui.orgChartEditingId = null;
+        render();
+        break;
+      }
+      case "org-chart-confirm-delete": S.ui.orgChartConfirmDeleteId = ds.id; render(); break;
+      case "org-chart-cancel-delete": S.ui.orgChartConfirmDeleteId = null; render(); break;
+      case "org-chart-delete": {
+        const nodes = currentOrgChart();
+        const arr = orgChartFindParentArray(nodes, ds.id);
+        if (arr) {
+          const idx = arr.findIndex((n) => n.id === ds.id);
+          if (idx !== -1) arr.splice(idx, 1);
+        }
+        dataStore.saveOrgChart(S.orgChart);
+        S.ui.orgChartConfirmDeleteId = null;
+        render();
+        break;
+      }
+      case "org-chart-toggle-collapse": {
+        S.ui.orgChartCollapsed = S.ui.orgChartCollapsed || {};
+        S.ui.orgChartCollapsed[ds.id] = !S.ui.orgChartCollapsed[ds.id];
+        render();
         break;
       }
       case "open-department-preview": {
