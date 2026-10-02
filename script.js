@@ -2241,6 +2241,27 @@ function statIconCardHtml(label, value, iconHtml, iconBg) {
 }
 
 function renderDashboard() {
+  // "لوحة المعلومات" صارت صفحة واحدة ذكية تتكيّف تلقائيًا حسب نطاق الحساب —
+  // دون أي تغيير على مديرة النظام (تشوف كل شيء كما كان تمامًا) ولا على
+  // "الإدارة العليا" (حسابات تنفيذية تبقى كما هي بالضبط، خارج نطاق هذا
+  // التبديل عمدًا). لحساب "مسمى وظيفي" بنطاق قسم/مكتب/وحدة (حسابات
+  // platform_users ذات صلاحية صفحة "dashboard")، نعيد استخدام نفس محتوى
+  // "قسمي"/"مكتب الإشراف"/"لوحة معلومات الوحدة" الحقيقي والمُختبر فعليًا —
+  // بما فيه أزرار الاعتماد الفعلية، لأنها مقيّدة أصلًا بنظام الإجراءات
+  // (platformActionAllowed) المستقل عن اسم الصفحة. هذا فقط لحساب نطاق
+  // "لوحة المعلومات" الموحّدة؛ الصفحات المخصّصة الأصلية (قسمي/مكتب
+  // الإشراف/لوحة معلومات الوحدة) تبقى موجودة تمامًا بدون أي حذف.
+  if (S.isDepartmentUser && S.currentDepartmentId) {
+    return renderDepartmentOverview();
+  }
+  if (S.isOfficeUser && S.currentOfficeId) {
+    return renderOfficeDashboard();
+  }
+  if (!S.isAdmin && !S.isExecutive && !S.isDepartmentUser && !S.isOfficeUser && S.currentUnitId) {
+    return renderUnitDashboard();
+  }
+  // الحالة الافتراضية (مديرة النظام، أو أي حساب بلا نطاق محدّد، أو الإدارة
+  // العليا إن وصلت هنا) — نفس السلوك الكامل غير المُقيَّد تمامًا كما كان.
   const activeUnits = S.units.filter((u) => u.status === "active");
   let totalCompleted = 0, totalSections = 0;
   const allIndicators = [], allGoals = [];
