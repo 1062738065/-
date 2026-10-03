@@ -1342,6 +1342,8 @@ function render() {
     html = shellWrap(renderOrgChartPage());
   } else if (S.view === "department-overview") {
     html = shellWrap(renderDepartmentOverview());
+  } else if (S.view === "department-curation") {
+    html = shellWrap(renderDepartmentCuration());
   } else if (S.view === "executive-dashboard") {
     html = shellWrap(renderExecutiveDashboard());
   } else if (S.view === "executive-summary") {
@@ -1443,6 +1445,9 @@ const SIDEBAR_PAGES = [
   // الأصلية تبقى كما هي تمامًا، هذي إضافة فقط (راجع renderOrgChartPage).
   { id: "org-chart", label: "مخطط الهيكل التنظيمي", group: "الهيكل التنظيمي", icon: "layers" },
   { id: "department-overview", label: "قسمي", group: "الرئيسية", icon: "building" },
+  // صفحة مستقلة قائمة بذاتها (نفس نمط "office-curation" للمكتب) — بدل ما تكون
+  // قسمًا مدمجًا داخل صفحة أخرى، حسب طلب نجود الصريح.
+  { id: "department-curation", label: "اعتماد أبرز النتائج والتوصيات", group: "الرئيسية", icon: "target" },
   // رابط ثابت لمديرة النظام فقط: بوّابة دخول لصفحات "unit-home" (نفس أفكار
   // "قسمي")، يختار أول وحدة/مركز نشط تلقائيًا ثم يحوّل فعليًا لعرض "تقارير"
   // (راجع case "nav-to" ومعالجته الخاصة لـ"unit-overview").
@@ -1533,7 +1538,7 @@ function computeVisibleSidebarPages() {
     // "لوحة المعلومات" أضيفت هنا لتصير الصفحة الافتراضية الجديدة (بدل "قسمي")
     // — "قسمي" تبقى متاحة بجانبها مؤقتًا (بدون حذف) حسب تعليمات نجود الصريحة،
     // لحد ما تتأكد إن الصفحة الجديدة تغطي كل شيء وتقرر حذف القديمة بنفسها.
-    return SIDEBAR_PAGES.filter((p) => p.id === "dashboard" || p.id === "department-overview" || p.id === "all-reports" || (p.group === "unit-home" && UNIT_SCOPED_VIEWS.includes(S.view)));
+    return SIDEBAR_PAGES.filter((p) => p.id === "dashboard" || p.id === "department-overview" || p.id === "department-curation" || p.id === "all-reports" || (p.group === "unit-home" && UNIT_SCOPED_VIEWS.includes(S.view)));
   } else if (S.isExecutive) {
     return SIDEBAR_PAGES.filter((p) => p.group === "الإدارة العليا" || p.id === "all-reports");
   } else if (S.isOfficeUser) {
@@ -2565,6 +2570,7 @@ function renderDashboardBody(activeUnits, opts) {
         <th style="color:${ROSE}">الوحدة</th><th style="color:${ROSE}">الهدف التشغيلي</th><th style="text-align:center;color:${ROSE}">المستوى</th><th style="text-align:center;color:${ROSE};width:70px">النسبة</th>
       </tr></thead><tbody>${goalsRows}</tbody></table></div>`}
     </div>
+    ${opts.extraBottom || ""}
   </div></div>`;
 }
 
@@ -3224,6 +3230,22 @@ function renderDepartmentOverview() {
     ${reviewDecisionsSectionHtml(pendingReports)}
     ${units.length === 0 ? `<div class="card" style="text-align:center;color:${SUBTLE};padding:36px;">لا توجد وحدات نشطة تابعة لهذا القسم بعد.</div>` :
       `<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:12px;">${units.map((u) => unitCardHtml(u, null, latestReportForUnit(u.id))).join("")}</div>`}
+    ${deptCurationSectionHtml(dept)}
+  </div></div>`;
+}
+
+// صفحة مستقلة قائمة بذاتها لـ"اعتماد أبرز النتائج والتوصيات" — نفس القسم
+// بالضبط (deptCurationSectionHtml، بدون أي تكرار بالكود)، بنفس نمط صفحة
+// "office-curation" المستقلة أصلًا للمكتب. "قسمي" تبقى تعرض نفس القسم أيضًا
+// بدون أي حذف، لحد ما تتأكد نجود من الصفحة الجديدة وتقرر حذف القديمة بنفسها.
+function renderDepartmentCuration() {
+  const dept = S.departments.find((d) => d.id === S.currentDepartmentId);
+  if (!dept) return `<div class="page-wrap"><div class="page-inner">${S.isAdmin ? adminScopeSwitcherHtml("department") : ""}<div class="card" style="text-align:center;color:${SUBTLE};padding:36px;">${(S.departments || []).length ? "اختاري قسمًا من القائمة أعلاه." : "لا توجد أقسام بعد."}</div></div></div>`;
+  return `
+  <div class="page-wrap"><div class="page-inner">
+    ${topBarHtml({ title: "اعتماد أبرز النتائج والتوصيات", subtitle: dept.name,
+      right: pillBtn("خروج", { variant: "danger", icon: iconLogout(15, DANGER), action: "logout" }) })}
+    ${adminScopeSwitcherHtml("department")}
     ${deptCurationSectionHtml(dept)}
   </div></div>`;
 }
