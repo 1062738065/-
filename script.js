@@ -673,6 +673,11 @@ function unitToRow(u) {
     has_head: u.hasHead !== undefined && u.hasHead !== null ? !!u.hasHead : (u.role || "unit") !== "center",
     extra_reviewer_title: u.extraReviewerTitle || "",
     allowed_pages: u.allowedPages || [], allowed_actions: u.allowedActions || [],
+    // حقلان جديدان خاصان بـ"وحدة" التقرير الذاتي (role: self_report) — يحتاجان
+    // عمودين جديدين فعليًا بجدول units على Supabase (انظر الملاحظة أسفل
+    // rowToUnit)، وإلا تُفقَد هذي الوحدات أو يفشل حفظها بعد أول تحديث فعلي
+    // على قاعدة بيانات حقيقية (لا تُفقَد محليًا بدون Supabase).
+    office_id: u.officeId || "", platform_user_id: u.platformUserId || "",
   };
 }
 function rowToUnit(r) {
@@ -682,6 +687,12 @@ function rowToUnit(r) {
     hasHead: r.has_head !== undefined && r.has_head !== null ? !!r.has_head : (r.role || "unit") !== "center",
     extraReviewerTitle: r.extra_reviewer_title || "",
     allowedPages: r.allowed_pages || [], allowedActions: r.allowed_actions || [],
+    // ملاحظة Supabase: يتطلب جدول units وجود عمودين جديدين (نص، تقبل NULL):
+    // office_id و platform_user_id — خاصّان فقط بـ"وحدة" التقرير الذاتي
+    // (role: self_report). لو role بعمود units مقيّد بقائمة قيم ثابتة
+    // (CHECK constraint)، يجب إضافة القيمة 'self_report' لها أيضًا، وإلا
+    // سيفشل حفظ أي تقرير ذاتي جديد على قاعدة البيانات الحقيقية.
+    officeId: r.office_id || "", platformUserId: r.platform_user_id || "",
   };
 }
 function deptToRow(d) { return { id: d.id, name: d.name, password: d.password || "", status: d.status || "active", created_at: d.createdAt || Date.now(), curation: d.curation || { approvedKeys: [] }, email: d.email || "", office_id: d.officeId || "", allowed_pages: d.allowedPages || [], allowed_actions: d.allowedActions || [] }; }
@@ -4019,7 +4030,15 @@ function renderUnitReportsHub() {
   <div class="page-wrap"><div class="page-inner">
     ${topBarHtml({ title: "نظام توثيق الأداء", subtitle: dept ? `${unit.name} — ${dept.name}` : unit.name,
       backAction: S.isAdmin && S.adminPreviewOrigin ? "nav-to" : S.isAdmin ? "nav-back-admin" : S.isDepartmentUser ? "nav-back-department" : "",
-      backData: S.isAdmin && S.adminPreviewOrigin ? { view: S.adminPreviewOrigin } : undefined })}
+      backData: S.isAdmin && S.adminPreviewOrigin ? { view: S.adminPreviewOrigin } : undefined,
+      // زر "إنشاء تقرير" هنا بالصفحة نفسها، مو بالشريط الجانبي فقط — يحتاج
+      // فقط صلاحية الإجراء (open-or-create-report)، بدون اشتراط وجود صفحة
+      // "إنشاء تقرير" ضمن allowedPages أيضًا. هذا يمنع طريق مسدود حقيقي: حساب
+      // وصل لهذي الصفحة من مكان آخر (مثال: بطاقة الوحدة بصفحة "قسمي") لكن
+      // زر الشريط الجانبي نفسه غير ظاهر له لأن صفحة "إنشاء تقرير" تحديدًا لم
+      // تُمنح له ضمن قائمة الصفحات — فتظل الصفحة تَعِد بالزر "من الشريط
+      // الجانبي" بينما هو غير موجود أصلًا.
+      right: platformActionAllowed("open-or-create-report") ? pillBtn("إنشاء تقرير", { icon: iconPencil(14, "#fff"), action: "open-or-create-report" }) : "" })}
     ${scopedUnitSwitcherHtml()}
 
     <div class="hero-banner">
