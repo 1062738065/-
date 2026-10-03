@@ -2030,8 +2030,22 @@ function doLoginPlatformUser(pu) {
     S.indicatorDefinitions = dataStore.getIndicatorDefinitions(); S.goalsDefinitions = dataStore.getGoalsDefinitions();
     applyReportSectionDefs(dataStore.getReportSectionDefs()); applyFieldSchemaOverrides(dataStore.getSectionFieldSchemas());
     S.sidebarOpen = !isMobileViewport();
-    const visible = computeVisibleSidebarPages();
-    S.view = visible.length ? visible[0].id : "login";
+    // نفس ملاحظة الفرع الآخر أسفل: لا نستخدم computeVisibleSidebarPages()
+    // لاختيار الصفحة الهدف مباشرة، لأنها تُقيّد صفحات "unit-home" بشرط S.view
+    // الحالي (مشكلة دائرية). لو الصفحة الهدف من "unit-home" (مثل "إنشاء
+    // تقرير")، ننشئ تلقائيًا "وحدة" تقرير مستقلة خاصة بهذا المسمى الوظيفي
+    // نفسه (بلا أي ربط بقسم/مكتب) — هذا ما يتيح لأي مسمى وظيفي "بدون نطاق"
+    // إنشاء تقريره الخاص، يظهر فقط لمديرة النظام والإدارة العليا.
+    const target = SIDEBAR_PAGES.find((p) => S.platformUserAllowedPages && S.platformUserAllowedPages.includes(p.id));
+    if (target) {
+      if (target.group === "unit-home") {
+        const selfUnit = ensureSelfReportUnit("own", pu.id);
+        if (selfUnit) S.currentUnitId = selfUnit.id;
+      }
+      S.view = target.id;
+    } else {
+      S.view = "login";
+    }
     render();
     return;
   }
@@ -3392,16 +3406,22 @@ function officeUnits(officeId) {
 // فعلية في أي عداد/رسم بياني (role !== "self_report" بكل تلك المواضع) ولا
 // تظهر لأي وحدة تابعة (أدنى بالمخطط) — فقط لصاحب القسم/المكتب نفسه ولمن
 // أعلى منه (المكتب/الإدارة العليا/مديرة النظام) عبر "جميع التقارير".
+// kind: "department" | "office" | "own" (مسمى وظيفي بلا نطاق محدّد (none) —
+// تقرير خاص بالمسمى نفسه فقط، غير تابع لأي قسم/مكتب، فيظهر فقط لمن أعلى
+// الجميع (مديرة النظام/الإدارة العليا) ضمن "جميع التقارير"، بلا أي ظهور
+// لأي حساب آخر.
 function ensureSelfReportUnit(kind, scopeId) {
   if (!scopeId) return null;
-  const field = kind === "office" ? "officeId" : "departmentId";
-  let u = S.units.find((x) => x.role === "self_report" && x[field] === scopeId && (kind === "office" ? !x.departmentId : true));
+  const field = kind === "office" ? "officeId" : kind === "own" ? "platformUserId" : "departmentId";
+  let u = S.units.find((x) => x.role === "self_report" && x[field] === scopeId && (kind === "office" || kind === "own" ? !x.departmentId : true));
   if (u) return u;
-  const owner = kind === "office" ? (S.offices || []).find((o) => o.id === scopeId) : S.departments.find((d) => d.id === scopeId);
+  const owner = kind === "office" ? (S.offices || []).find((o) => o.id === scopeId)
+    : kind === "own" ? { name: S.currentPlatformUserJobTitle || "تقرير مستقل" }
+    : S.departments.find((d) => d.id === scopeId);
   u = {
     id: uid("unit"), name: owner ? `تقرير ${owner.name} (ذاتي)` : "تقرير ذاتي",
     role: "self_report", status: "active", createdAt: Date.now(),
-    ...(kind === "office" ? { officeId: scopeId } : { departmentId: scopeId }),
+    ...(kind === "office" ? { officeId: scopeId } : kind === "own" ? { platformUserId: scopeId } : { departmentId: scopeId }),
   };
   S.units = [...S.units, u];
   dataStore.saveUnits(S.units);
@@ -4398,12 +4418,18 @@ const SENSITIVE_PAGE_IDS = [
   "field-schemas-manage", "offices-manage", "departments-list", "units-list",
   "centers-list", "org-chart",
 ];
+// أسماء عرض مخصّصة لمجموعات الصفحات بقائمة صلاحيات "حسابات إضافية" — فقط
+// حيث اسم المجموعة الأصلي (المستخدم بالشريط الجانبي الحقيقي) غير واضح هنا.
+const PU_PAGE_GROUP_LABELS = { "unit-home": "صفحات التقارير (لوحة المعلومات/تقارير/إنشاء تقرير/الإعدادات)" };
 function platformUserPagesChecklistHtml(selected, action) {
   selected = selected || [];
   const groups = [];
   const sensitivePages = [];
   SIDEBAR_PAGES.forEach((p) => {
-    if (p.group === "unit-home") return; // صفحات عمل الوحدة نفسها (كتابة التقرير) — خارج نطاق هذي القائمة حاليًا
+    // صفحات "unit-home" (لوحة معلومات الوحدة/تقارير/إنشاء تقرير/الإعدادات)
+    // الآن قابلة للمنح لأي مسمى وظيفي — تحتاج فقط نطاق بيانات محدّد (قسم/مكتب
+    // إشراف/وحدة) ليعرف النظام لأي وحدة/قسم ينشئ التقرير (انظر ملاحظة أسفل
+    // قائمة النطاق بنموذج إضافة/تعديل المسمى الوظيفي).
     if (SENSITIVE_PAGE_IDS.includes(p.id)) { sensitivePages.push(p); return; }
     let g = groups.find((x) => x.name === p.group);
     if (!g) { g = { name: p.group, pages: [] }; groups.push(g); }
@@ -4416,7 +4442,7 @@ function platformUserPagesChecklistHtml(selected, action) {
       <div style="font-size:10.5px;font-weight:800;color:${ROSE};margin-bottom:6px;">صفحات عامة (آمنة لأي حساب)</div>
       ${groups.map((g) => `
         <div style="margin-bottom:10px;">
-          <div style="font-size:10.5px;font-weight:800;color:${SUBTLE};margin-bottom:6px;">${esc(g.name === "standalone" ? "أخرى" : g.name)}</div>
+          <div style="font-size:10.5px;font-weight:800;color:${SUBTLE};margin-bottom:6px;">${esc(PU_PAGE_GROUP_LABELS[g.name] || (g.name === "standalone" ? "أخرى" : g.name))}</div>
           <div style="display:flex;flex-direction:column;gap:2px;">
             ${g.pages.map((p) => permCheckboxRowHtml(action, p.id, p.label, selected.includes(p.id))).join("")}
           </div>
