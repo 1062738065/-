@@ -1530,7 +1530,10 @@ function computeVisibleSidebarPages() {
     // النظام تختار أي قسم أو مكتب تبي تشوفه وتضبطه (راجع adminScopeSwitcherHtml).
     return SIDEBAR_PAGES.filter((p) => p.group !== "unit-home" || UNIT_SCOPED_VIEWS.includes(S.view));
   } else if (S.isDepartmentUser) {
-    return SIDEBAR_PAGES.filter((p) => p.id === "department-overview" || p.id === "all-reports" || (p.group === "unit-home" && UNIT_SCOPED_VIEWS.includes(S.view)));
+    // "لوحة المعلومات" أضيفت هنا لتصير الصفحة الافتراضية الجديدة (بدل "قسمي")
+    // — "قسمي" تبقى متاحة بجانبها مؤقتًا (بدون حذف) حسب تعليمات نجود الصريحة،
+    // لحد ما تتأكد إن الصفحة الجديدة تغطي كل شيء وتقرر حذف القديمة بنفسها.
+    return SIDEBAR_PAGES.filter((p) => p.id === "dashboard" || p.id === "department-overview" || p.id === "all-reports" || (p.group === "unit-home" && UNIT_SCOPED_VIEWS.includes(S.view)));
   } else if (S.isExecutive) {
     return SIDEBAR_PAGES.filter((p) => p.group === "الإدارة العليا" || p.id === "all-reports");
   } else if (S.isOfficeUser) {
@@ -2209,7 +2212,10 @@ function doLogin(user) {
     const reports = {};
     S.units.filter((u) => u.departmentId === S.currentDepartmentId).forEach((u) => { reports[u.id] = dataStore.getReports(u.id); });
     S.reports = reports;
-    S.view = "department-overview";
+    // الصفحة الافتراضية صارت "لوحة المعلومات" الموحدة بدل "قسمي" القديمة —
+    // "قسمي" تبقى متاحة بالشريط الجانبي بجانبها (بدون حذف) لحد ما نتأكد إن
+    // الجديدة تغطي كل شيء.
+    S.view = "dashboard";
   } else if (S.isExecutive) {
     // اطلاع إشرافي شامل فقط — بدون أي دخول لنموذج كتابة التقارير أو تعديلها.
     // (حساب الإدارة العليا خارج نطاق نظام الصلاحيات المخصّصة هذا عمدًا)
