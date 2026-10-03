@@ -2049,9 +2049,32 @@ function doLoginPlatformUser(pu) {
   // لو ما حددنا لها صفحات معيّنة، نسيب doLogin تفتح صفحتها الافتراضية العادية
   // لهذا النطاق (لوحة معلومات الوحدة/القسم/...) بدون أي تغيير. لو حددنا لها
   // صفحات، نتأكد إن الصفحة الحالية من ضمنها، وإلا ننتقل لأول صفحة مسموحة.
+  //
+  // ملاحظة مهمة: لا نستخدم computeVisibleSidebarPages() هنا لاختيار الصفحة
+  // الهدف، لأنها تُقيّد صفحات مجموعة "unit-home" (مثل "إنشاء تقرير"/"تقارير")
+  // بشرط S.view الحالي (UNIT_SCOPED_VIEWS.includes(S.view)) — وبما إن S.view
+  // هنا لسه القيمة الافتراضية القديمة لنطاق القسم/المكتب (مثل
+  // "department-overview")، هذا الشرط يفشل دائمًا فتبقى الصفحة أبدًا ما
+  // تتغيّر. نبحث بالصفحة المسموحة الأولى مباشرة من SIDEBAR_PAGES بدل ذلك.
   if (S.platformUserAllowedPages && !S.platformUserAllowedPages.includes(S.view)) {
-    const visible = computeVisibleSidebarPages();
-    S.view = visible.length ? visible[0].id : S.view;
+    const target = SIDEBAR_PAGES.find((p) => S.platformUserAllowedPages.includes(p.id));
+    if (target) {
+      // صفحات "unit-home" (لوحة معلومات الوحدة/تقارير/إنشاء تقرير/الإعدادات)
+      // تحتاج وحدة واحدة محدّدة (S.currentUnitId) لتعمل. حساب نطاقه قسم أو
+      // مكتب إشراف ما له وحدة واحدة بطبيعته — فنختار أول وحدة فعّالة ضمن
+      // نطاقه تلقائيًا، وتبقى قائمة تبديل الوحدة (scopedUnitSwitcherHtml)
+      // داخل الصفحة نفسها متاحة له لتغييرها لاحقًا.
+      if (target.group === "unit-home" && (pu.scopeKind === "department" || pu.scopeKind === "office")) {
+        const scopedUnits = pu.scopeKind === "department"
+          ? S.units.filter((u) => u.departmentId === pu.scopeId && u.status === "active")
+          : officeUnits(pu.scopeId);
+        if (scopedUnits.length && !scopedUnits.some((u) => u.id === S.currentUnitId)) {
+          S.currentUnitId = scopedUnits[0].id;
+          ensureUnitReportsLoaded(S.currentUnitId);
+        }
+      }
+      S.view = target.id;
+    }
     render();
   }
 }
@@ -2241,28 +2264,59 @@ function statIconCardHtml(label, value, iconHtml, iconBg) {
 }
 
 function renderDashboard() {
-  // "لوحة المعلومات" صارت صفحة واحدة ذكية تتكيّف تلقائيًا حسب نطاق الحساب —
-  // دون أي تغيير على مديرة النظام (تشوف كل شيء كما كان تمامًا) ولا على
-  // "الإدارة العليا" (حسابات تنفيذية تبقى كما هي بالضبط، خارج نطاق هذا
-  // التبديل عمدًا). لحساب "مسمى وظيفي" بنطاق قسم/مكتب/وحدة (حسابات
-  // platform_users ذات صلاحية صفحة "dashboard")، نعيد استخدام نفس محتوى
-  // "قسمي"/"مكتب الإشراف"/"لوحة معلومات الوحدة" الحقيقي والمُختبر فعليًا —
-  // بما فيه أزرار الاعتماد الفعلية، لأنها مقيّدة أصلًا بنظام الإجراءات
-  // (platformActionAllowed) المستقل عن اسم الصفحة. هذا فقط لحساب نطاق
-  // "لوحة المعلومات" الموحّدة؛ الصفحات المخصّصة الأصلية (قسمي/مكتب
-  // الإشراف/لوحة معلومات الوحدة) تبقى موجودة تمامًا بدون أي حذف.
+  // "لوحة المعلومات" صارت صفحة واحدة ذكية — تبقى بنفس شكلها الكامل المعتاد
+  // (البانر + بطاقات الإحصاءات + الرسوم البيانية + جداول المؤشرات/الأهداف)
+  // دائمًا، لكن البيانات المعروضة تُقتصر تلقائيًا حسب نطاق الحساب (قسم/مكتب
+  // إشراف/وحدة)، بدل عرض كل وحدات النظام. دون أي تغيير على مديرة النظام
+  // (تشوف كل شيء كما كان تمامًا) ولا على "الإدارة العليا" (خارج نطاق هذا
+  // التبديل عمدًا). الأزرار الفعلية (كاتخاذ قرار مراجعة القسم) تظهر ضمن نفس
+  // الصفحة فقط لو الحساب عنده صلاحية الإجراء المطابق (platformActionAllowed)
+  // — مستقل تمامًا عن اسم الصفحة. هذا فقط لحساب نطاق "لوحة المعلومات"
+  // الموحّدة؛ الصفحات المخصّصة الأصلية (قسمي/مكتب الإشراف/لوحة معلومات
+  // الوحدة) تبقى موجودة تمامًا بدون أي حذف أو تغيير.
   if (S.isDepartmentUser && S.currentDepartmentId) {
-    return renderDepartmentOverview();
+    const dept = S.departments.find((d) => d.id === S.currentDepartmentId);
+    if (!dept) return renderDepartmentOverview();
+    const units = S.units.filter((u) => u.departmentId === dept.id && u.status === "active");
+    const pendingReports = [];
+    units.forEach((u) => {
+      ensureUnitReportsLoaded(u.id).filter((r) => r.status === "under_review").forEach((r) => pendingReports.push({ unit: u, report: r }));
+    });
+    return renderDashboardBody(units, {
+      title: dept.name,
+      subtitle: `مرحبًا — نظرة شاملة على ${units.length} وحدة تابعة لهذا القسم`,
+      topBarRight: pillBtn("خروج", { variant: "danger", icon: iconLogout(15, DANGER), action: "logout" }),
+      extraTop: reviewDecisionsSectionHtml(pendingReports),
+    });
   }
   if (S.isOfficeUser && S.currentOfficeId) {
-    return renderOfficeDashboard();
+    const office = currentOffice();
+    if (!office) return renderOfficeDashboard();
+    const units = officeUnits(office.id);
+    return renderDashboardBody(units, {
+      title: office.name,
+      subtitle: `نظرة شاملة على ${units.length} وحدة تابعة لهذا المكتب`,
+      topBarRight: pillBtn("خروج", { variant: "danger", icon: iconLogout(15, DANGER), action: "logout" }),
+    });
   }
   if (!S.isAdmin && !S.isExecutive && !S.isDepartmentUser && !S.isOfficeUser && S.currentUnitId) {
+    // حساب بنطاق وحدة: نفس بالضبط "لوحة معلومات الوحدة" الحقيقية (renderUnitDashboard)
+    // — هي أصلًا مصمَّمة بنفس روح لوحة المعلومات (بانر + بطاقات إحصاءات + رسوم
+    // بيانية) لكن بمقاييس خاصة بوحدة واحدة (تقارير هذي الوحدة فقط)، فلا داعي
+    // لإعادة بنائها بشكل عام كالقسم/المكتب.
     return renderUnitDashboard();
   }
   // الحالة الافتراضية (مديرة النظام، أو أي حساب بلا نطاق محدّد، أو الإدارة
   // العليا إن وصلت هنا) — نفس السلوك الكامل غير المُقيَّد تمامًا كما كان.
-  const activeUnits = S.units.filter((u) => u.status === "active");
+  return renderDashboardBody(S.units.filter((u) => u.status === "active"), {});
+}
+
+// جسم "لوحة المعلومات" الكامل (البانر + بطاقات الإحصاءات + الرسوم البيانية +
+// جداول المؤشرات/الأهداف) — مُعمَّم ليأخذ أي قائمة وحدات، كي يُعاد استخدامه
+// بالضبط بنفس الشكل لكل نطاق (مديرة النظام: كل الوحدات، أو قسم/مكتب/وحدة
+// محدّدة)، بدل تكرار نفس الكود. opts: { title, subtitle, topBarRight, extraTop }.
+function renderDashboardBody(activeUnits, opts) {
+  opts = opts || {};
   let totalCompleted = 0, totalSections = 0;
   const allIndicators = [], allGoals = [];
   const allReportsFlat = [];
@@ -2347,7 +2401,8 @@ function renderDashboard() {
   const site = currentSiteSettings();
   return `
   <div class="page-wrap"><div class="page-inner">
-    ${topBarHtml({ title: "لوحة المعلومات", subtitle: `مرحبًا ${esc(S.currentUser.name)} — نظرة شاملة على كل الوحدات` })}
+    ${topBarHtml({ title: opts.title || "لوحة المعلومات", subtitle: opts.subtitle || `مرحبًا ${esc(S.currentUser.name)} — نظرة شاملة على كل الوحدات`, right: opts.topBarRight })}
+    ${opts.extraTop || ""}
 
     <div class="hero-banner">
       <img class="hero-banner-bg" src="${esc(siteBannerSrc(site))}" alt="" />
@@ -2492,7 +2547,7 @@ function renderUnitDashboard() {
   return `
   <div class="page-wrap"><div class="page-inner">
     ${topBarHtml({ title: "لوحة المعلومات", subtitle: `مرحبًا ${esc(S.currentUser.name)} — نظرة عامة على تقارير ${esc(unit.name)}` })}
-    ${adminUnitSwitcherHtml()}
+    ${scopedUnitSwitcherHtml()}
 
     <div class="hero-banner">
       <img class="hero-banner-bg" src="${esc(siteBannerSrc(site))}" alt="" />
@@ -2560,7 +2615,7 @@ function renderUnitSettings() {
   return `
   <div class="page-wrap"><div class="page-inner">
     ${topBarHtml({ title: "الإعدادات" })}
-    ${adminUnitSwitcherHtml()}
+    ${scopedUnitSwitcherHtml()}
     <div class="card" style="text-align:center;color:${SUBTLE};padding:48px 20px;">
       ${iconGauge(SUBTLE, 32)}
       <div style="font-size:14px;font-weight:700;margin-top:12px;color:${INK}">قريبًا</div>
@@ -3022,6 +3077,29 @@ function adminUnitSwitcherHtml() {
       ${pillBtn("رئيسة الوحدة", { variant: mode === "head" ? "primary" : "ghost", action: "admin-set-unit-entry-mode", data: { mode: "head" } })}
     </div>
   </div>`;
+}
+// قائمة تبديل الوحدة بصفحات "unit-home" (لوحة معلومات الوحدة/تقارير/إنشاء
+// تقرير) — تعمل لثلاث حالات: مديرة النظام (كل الوحدات، نفس adminUnitSwitcherHtml
+// القديمة بكامل خياراتها)، وحساب نطاقه قسم أو مكتب إشراف (وحدات نطاقه فقط،
+// بدون مفتاح منظور "رئيسة الوحدة" الخاص بمديرة النظام). حساب الوحدة نفسها لا
+// يحتاج قائمة تبديل أصلًا (عنده وحدة واحدة فقط).
+function scopedUnitSwitcherHtml() {
+  if (S.isAdmin) return adminUnitSwitcherHtml();
+  if (S.isDepartmentUser || S.isOfficeUser) {
+    const list = S.isDepartmentUser
+      ? S.units.filter((u) => u.departmentId === S.currentDepartmentId && u.status === "active")
+      : officeUnits(S.currentOfficeId);
+    if (list.length < 2) return "";
+    const current = S.currentUnitId;
+    return `
+    <div class="card" style="margin-bottom:14px;display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+      <span style="font-size:11.5px;font-weight:700;color:${SUBTLE};white-space:nowrap;">اختيار الوحدة:</span>
+      <select class="input" style="flex:1;min-width:200px;" data-action="scoped-switch-unit">
+        ${list.map((u) => `<option value="${esc(u.id)}" ${current === u.id ? "selected" : ""}>${esc(u.name)}</option>`).join("")}
+      </select>
+    </div>`;
+  }
+  return "";
 }
 function renderDepartmentOverview() {
   const dept = S.departments.find((d) => d.id === S.currentDepartmentId);
@@ -3883,7 +3961,7 @@ function renderUnitReportsHub() {
     ${topBarHtml({ title: "نظام توثيق الأداء", subtitle: dept ? `${unit.name} — ${dept.name}` : unit.name,
       backAction: S.isAdmin && S.adminPreviewOrigin ? "nav-to" : S.isAdmin ? "nav-back-admin" : S.isDepartmentUser ? "nav-back-department" : "",
       backData: S.isAdmin && S.adminPreviewOrigin ? { view: S.adminPreviewOrigin } : undefined })}
-    ${adminUnitSwitcherHtml()}
+    ${scopedUnitSwitcherHtml()}
 
     <div class="hero-banner">
       <img class="hero-banner-bg" src="hero-bg.jpg" alt="" />
@@ -4271,25 +4349,48 @@ function permDropdownChecklistHtml({ action, selected, total, emptyLabel, render
         </div>` : ""}
     </div>`;
 }
+// صفحات إدارية حسّاسة — تتحكم بإعدادات الموقع كامل، أو بإنشاء/تعديل حسابات
+// وصلاحيات حسابات أخرى، أو بهيكل القسم/المكتب/الوحدات نفسه. منحها لحساب
+// "مسمى وظيفي" عادي (زي سكرتارية) يعطيه قدرة أعلى بكثير من المقصود — فتُعرض
+// بقسم منفصل محذّر بصريًا بدل ما تكون مختلطة بصفحات المحتوى العادية.
+const SENSITIVE_PAGE_IDS = [
+  "site-settings", "platform-users-manage", "platform-permissions-manage",
+  "admin-reports", "indicators-manage", "goals-manage", "sections-manage",
+  "field-schemas-manage", "offices-manage", "departments-list", "units-list",
+  "centers-list", "org-chart",
+];
 function platformUserPagesChecklistHtml(selected, action) {
   selected = selected || [];
   const groups = [];
+  const sensitivePages = [];
   SIDEBAR_PAGES.forEach((p) => {
     if (p.group === "unit-home") return; // صفحات عمل الوحدة نفسها (كتابة التقرير) — خارج نطاق هذي القائمة حاليًا
+    if (SENSITIVE_PAGE_IDS.includes(p.id)) { sensitivePages.push(p); return; }
     let g = groups.find((x) => x.name === p.group);
     if (!g) { g = { name: p.group, pages: [] }; groups.push(g); }
     g.pages.push(p);
   });
-  const total = groups.reduce((sum, g) => sum + g.pages.length, 0);
+  const total = groups.reduce((sum, g) => sum + g.pages.length, 0) + sensitivePages.length;
   return permDropdownChecklistHtml({
     action, selected, total, emptyLabel: "صفحات",
-    renderList: () => groups.map((g) => `
-      <div style="margin-bottom:10px;">
-        <div style="font-size:10.5px;font-weight:800;color:${SUBTLE};margin-bottom:6px;">${esc(g.name === "standalone" ? "أخرى" : g.name)}</div>
+    renderList: () => `
+      <div style="font-size:10.5px;font-weight:800;color:${ROSE};margin-bottom:6px;">صفحات عامة (آمنة لأي حساب)</div>
+      ${groups.map((g) => `
+        <div style="margin-bottom:10px;">
+          <div style="font-size:10.5px;font-weight:800;color:${SUBTLE};margin-bottom:6px;">${esc(g.name === "standalone" ? "أخرى" : g.name)}</div>
+          <div style="display:flex;flex-direction:column;gap:2px;">
+            ${g.pages.map((p) => permCheckboxRowHtml(action, p.id, p.label, selected.includes(p.id))).join("")}
+          </div>
+        </div>`).join("")}
+      ${sensitivePages.length ? `
+      <div style="margin-top:6px;padding-top:10px;border-top:1.5px dashed ${DANGER};">
+        <div style="font-size:10.5px;font-weight:800;color:${DANGER};margin-bottom:2px;">⚠️ صفحات إدارية حسّاسة</div>
+        <div style="font-size:10px;color:${SUBTLE};margin-bottom:6px;">تتحكم بإعدادات الموقع أو الحسابات أو الهيكل التنظيمي نفسه — امنحيها بحذر شديد، وفقط لمن تثقين بها فعلًا.</div>
         <div style="display:flex;flex-direction:column;gap:2px;">
-          ${g.pages.map((p) => permCheckboxRowHtml(action, p.id, p.label, selected.includes(p.id))).join("")}
+          ${sensitivePages.map((p) => permCheckboxRowHtml(action, p.id, p.label, selected.includes(p.id))).join("")}
         </div>
-      </div>`).join(""),
+      </div>` : ""}
+    `,
   });
 }
 function platformUserActionsChecklistHtml(selected, action) {
@@ -6701,6 +6802,16 @@ function attachFormListeners() {
       render();
       return;
     }
+    // نفس فكرة admin-switch-unit، لكن لحساب نطاقه قسم أو مكتب إشراف — يتحقق
+    // فعليًا إن الوحدة المختارة ضمن نطاقه (isUnitInUserScope) قبل تبديلها.
+    if (el.dataset && el.dataset.action === "scoped-switch-unit") {
+      if (isUnitInUserScope(el.value)) {
+        S.currentUnitId = el.value; S.currentReportId = null; S.view = "unit-reports";
+        ensureUnitReportsLoaded(S.currentUnitId);
+      }
+      render();
+      return;
+    }
     if (el.id === "site-font-family") {
       S.siteSettings = S.siteSettings || dataStore.getSiteSettings();
       S.siteSettings = { ...S.siteSettings, fontFamily: el.value };
@@ -7150,6 +7261,15 @@ function attachClickListener() {
       case "set-unit-reports-filter": S.ui.unitReportsFilter = ds.filter; render(); break;
       case "open-or-create-report": {
         if (!platformActionAllowed("open-or-create-report")) break;
+        // حساب نطاقه قسم أو مكتب إشراف له أكثر من وحدة — نوجّهه أولًا لصفحة
+        // "تقارير" (نفس renderUnitReportsHub) ليختار/يتأكد من الوحدة عبر
+        // قائمة التبديل (scopedUnitSwitcherHtml) قبل إنشاء التقرير، بدل إنشاء
+        // تقرير فورًا لوحدة قد لا تكون مقصودة. حساب الوحدة نفسها (وحدة واحدة
+        // فقط) يبقى بسلوكه الأصلي: إنشاء/استكمال فوري بلا أي اختيار وسيط.
+        if ((S.isDepartmentUser || S.isOfficeUser) && S.view !== "unit-reports") {
+          S.view = "unit-reports"; render();
+          break;
+        }
         // إنشاء تقرير: تكمل آخر تقرير لسا شغّالة عليه (مسودة/بحاجة لتعديل أو استكمال)،
         // أو تنشئ تقرير جديد فورًا بدون أي اختيار وسيط.
         const list = ensureUnitReportsLoaded(S.currentUnitId);
