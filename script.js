@@ -708,6 +708,19 @@ function platformUserToRow(u) {
     id: u.id, job_title: u.jobTitle || "", login_type: u.loginType || "job_title", login_id: u.loginId || "",
     password: u.password || "", allowed_pages: u.allowedPages || [], allowed_actions: u.allowedActions || [], scope_kind: u.scopeKind || "none",
     scope_id: u.scopeId || "", status: u.status || "active", created_at: u.createdAt || Date.now(),
+    template_id: u.templateId || "",
+  };
+}
+// "قوالب المسميات الوظيفية" (job_title_templates) — كل قالب = مجموعة صفحات
+// وإجراءات واحدة، قابلة للربط بأي عدد من "حسابات إضافية" عبر platformUserId.
+// تعديل القالب ينعكس فورًا على كل حساب مربوط به (بدل تكرار الصلاحيات بكل حساب).
+function jobTitleTemplateToRow(t) {
+  return { id: t.id, name: t.name || "", allowed_pages: t.allowedPages || [], allowed_actions: t.allowedActions || [], status: t.status || "active", created_at: t.createdAt || Date.now() };
+}
+function rowToJobTitleTemplate(r) {
+  return {
+    id: r.id, name: r.name || "", allowedPages: Array.isArray(r.allowed_pages) ? r.allowed_pages : [],
+    allowedActions: Array.isArray(r.allowed_actions) ? r.allowed_actions : [], status: r.status || "active", createdAt: Number(r.created_at) || 0,
   };
 }
 function rowToPlatformUser(r) {
@@ -716,6 +729,11 @@ function rowToPlatformUser(r) {
     password: r.password || "", allowedPages: Array.isArray(r.allowed_pages) ? r.allowed_pages : [],
     allowedActions: Array.isArray(r.allowed_actions) ? r.allowed_actions : [], scopeKind: r.scope_kind || "none",
     scopeId: r.scope_id || "", status: r.status || "active", createdAt: Number(r.created_at) || 0,
+    // ملاحظة Supabase: يتطلب جدول platform_users عمود جديد template_id (نص،
+    // يقبل NULL) — يربط الحساب بقالب مسمى وظيفي (job_title_templates) ليرث
+    // صفحاته/إجراءاته منه مباشرة بدل تخزينها مكرّرة بكل حساب. حساب بلا قالب
+    // (الحقل فاضي) يبقى يعمل تمامًا بصلاحياته الخاصة المحفوظة عليه كالسابق.
+    templateId: r.template_id || "",
   };
 }
 function siteSettingsToRow(s) {
@@ -806,7 +824,7 @@ const UNITS_KEY = "prs:units", DEPARTMENTS_KEY = "prs:departments", OFFICES_KEY 
       INDICATOR_DEFINITIONS_KEY = "prs:indicator-definitions", GOALS_DEFINITIONS_KEY = "prs:goals-definitions",
       SITE_SETTINGS_KEY = "prs:site-settings", REPORT_SECTIONS_KEY = "prs:report-sections",
       SECTION_FIELD_SCHEMAS_KEY = "prs:section-field-schemas", PLATFORM_USERS_KEY = "prs:platform-users",
-      ORG_CHART_KEY = "prs:org-chart";
+      ORG_CHART_KEY = "prs:org-chart", JOB_TITLE_TEMPLATES_KEY = "prs:job-title-templates";
 const DEFAULT_SITE_COLORS = { primary: "#6b2337", background: "#F2ECE8" };
 // إعدادات الهوية القابلة للتخصيص من "إعدادات الموقع": الشعار وحجمه، بانر لوحة
 // المعلومات (صورة + عنوان + وصف)، اسم المنصة بعنوان الشريط الجانبي، وعبارة/صورة
@@ -956,6 +974,12 @@ const dataStore = {
     if (sheetsConfigured()) queueSupabaseReplaceTable("platform_users", list.map(platformUserToRow)).catch(() => {});
   },
   cachePlatformUsersLocally(list) { lsSet(PLATFORM_USERS_KEY, JSON.stringify(list)); },
+  getJobTitleTemplates() { const v = lsGet(JOB_TITLE_TEMPLATES_KEY); return v ? JSON.parse(v) : []; },
+  saveJobTitleTemplates(list) {
+    lsSet(JOB_TITLE_TEMPLATES_KEY, JSON.stringify(list));
+    if (sheetsConfigured()) queueSupabaseReplaceTable("job_title_templates", list.map(jobTitleTemplateToRow)).catch(() => {});
+  },
+  cacheJobTitleTemplatesLocally(list) { lsSet(JOB_TITLE_TEMPLATES_KEY, JSON.stringify(list)); },
   getGoalsDefinitions() { const v = lsGet(GOALS_DEFINITIONS_KEY); return v ? JSON.parse(v) : { strategic: [], operational: [] }; },
   saveGoalsDefinitions(d) {
     lsSet(GOALS_DEFINITIONS_KEY, JSON.stringify(d));
@@ -1277,6 +1301,7 @@ const S = {
   // قائمة كل "الحسابات الإضافية" (platform_users) — تُحمَّل عند فتح صفحة
   // إدارتها فقط (مو عند كل تسجيل دخول)، لأنها صفحة نادرة الفتح.
   platformUsers: [],
+  jobTitleTemplates: [],
   sidebarOpen: true,
   mobileSidebarOpen: false,
   // report editor state
@@ -1371,6 +1396,8 @@ function render() {
     html = shellWrap(renderPlatformUsersManage());
   } else if (S.view === "platform-permissions-manage") {
     html = shellWrap(renderPlatformPermissionsManage());
+  } else if (S.view === "job-title-templates") {
+    html = shellWrap(renderJobTitleTemplatesManage());
   } else {
     html = renderLogin();
   }
@@ -1400,6 +1427,7 @@ const SIDEBAR_PAGES = [
   { id: "site-settings", label: "إعدادات الموقع", group: "الرئيسية", icon: "gauge" },
   { id: "platform-users-manage", label: "حسابات إضافية", group: "الرئيسية", icon: "layers" },
   { id: "platform-permissions-manage", label: "صلاحيات الحسابات", group: "الرئيسية", icon: "key" },
+  { id: "job-title-templates", label: "المسميات الوظيفية (القوالب)", group: "الرئيسية", icon: "layers" },
   { id: "all-reports", label: "جميع التقارير", group: "standalone", icon: "document" },
   { id: "indicators-manage", label: "إدارة مؤشرات الأداء", group: "إدارة التقارير", icon: "gauge" },
   { id: "goals-manage", label: "إدارة الأهداف والمستهدفات", group: "إدارة التقارير", icon: "target" },
@@ -1455,6 +1483,27 @@ const ACTION_CATALOG = [
 function platformActionAllowed(actionId) {
   if (!S.platformUserAllowedActions) return true;
   return S.platformUserAllowedActions.includes(actionId);
+}
+// يرجع قالب المسمى الوظيفي المطابق (أو null). نقرأ من S.jobTitleTemplates لو
+// معبّاة، وإلا من التخزين مباشرة — لازم يعمل حتى أثناء تسجيل الدخول نفسه قبل
+// ما تُحمَّل S.jobTitleTemplates (نفس أسلوب dataStore.getPlatformUsers() أثناء
+// مطابقة بيانات الدخول).
+function resolveJobTitleTemplate(templateId) {
+  if (!templateId) return null;
+  const list = (S.jobTitleTemplates && S.jobTitleTemplates.length) ? S.jobTitleTemplates : dataStore.getJobTitleTemplates();
+  return list.find((t) => t.id === templateId) || null;
+}
+// الصفحات/الإجراءات "الفعلية" لحساب إضافي: لو مربوط بقالب (templateId)، تُقرأ
+// من القالب نفسه حيّة دائمًا — أي تعديل على القالب ينعكس فورًا بدون أي خطوة
+// إضافية. لو بلا قالب (حساب قديم أو مُنشأ بصلاحيات خاصة صراحة)، نرجع لصلاحياته
+// الخاصة المحفوظة على الحساب كما كانت تعمل قبل وجود القوالب — بدون أي تغيير.
+function effectivePuAllowedPages(pu) {
+  const tpl = resolveJobTitleTemplate(pu && pu.templateId);
+  return tpl ? (tpl.allowedPages || []) : ((pu && pu.allowedPages) || []);
+}
+function effectivePuAllowedActions(pu) {
+  const tpl = resolveJobTitleTemplate(pu && pu.templateId);
+  return tpl ? (tpl.allowedActions || []) : ((pu && pu.allowedActions) || []);
 }
 function sidebarNavIcon(key, size, color) {
   const map = { home: iconHome, document: iconDocument, building: iconBuilding, gauge: iconGauge, target: iconTarget, pencil: iconPencil, layers: iconLayers, printer: iconPrinter, plus: iconPlus, bell: iconBell, key: iconKey };
@@ -1915,6 +1964,15 @@ async function refreshPlatformUsersFromSheet() {
     dataStore.cachePlatformUsersLocally(S.platformUsers);
   }
 }
+async function refreshJobTitleTemplatesFromSheet() {
+  if (!sheetsConfigured()) return;
+  await pendingSupabaseWrite("job_title_templates");
+  const res = await supabaseRequest("job_title_templates?select=*");
+  if (res.ok && Array.isArray(res.data)) {
+    S.jobTitleTemplates = res.data.map(rowToJobTitleTemplate);
+    dataStore.cacheJobTitleTemplatesLocally(S.jobTitleTemplates);
+  }
+}
 
 // يبني متغيّر SECTIONS الفعلي (المستخدم في كل مكان بالتطبيق) من قائمة التعريفات
 // الكاملة: يستبعد الأقسام المعطّلة ويرتّب الباقي حسب order.
@@ -2026,8 +2084,10 @@ function startPlatformUserLogin(matches) {
   render();
 }
 function doLoginPlatformUser(pu) {
-  S.platformUserAllowedPages = (pu.allowedPages && pu.allowedPages.length) ? pu.allowedPages : null;
-  S.platformUserAllowedActions = (pu.allowedActions && pu.allowedActions.length) ? pu.allowedActions : null;
+  const effPages = effectivePuAllowedPages(pu);
+  const effActions = effectivePuAllowedActions(pu);
+  S.platformUserAllowedPages = effPages.length ? effPages : null;
+  S.platformUserAllowedActions = effActions.length ? effActions : null;
   S.currentPlatformUserJobTitle = pu.jobTitle;
   S.pendingPlatformUserMatches = null;
   if (pu.scopeKind === "none") {
@@ -4432,7 +4492,7 @@ function permDropdownChecklistHtml({ action, selected, total, emptyLabel, render
 // "مسمى وظيفي" عادي (زي سكرتارية) يعطيه قدرة أعلى بكثير من المقصود — فتُعرض
 // بقسم منفصل محذّر بصريًا بدل ما تكون مختلطة بصفحات المحتوى العادية.
 const SENSITIVE_PAGE_IDS = [
-  "site-settings", "platform-users-manage", "platform-permissions-manage",
+  "site-settings", "platform-users-manage", "platform-permissions-manage", "job-title-templates",
   "admin-reports", "indicators-manage", "goals-manage", "sections-manage",
   "field-schemas-manage", "offices-manage", "departments-list", "units-list",
   "centers-list", "org-chart",
@@ -4496,6 +4556,10 @@ function permDropdownTargetArray(key) {
   if (key === "toggle-edit-pu-action") { capturePlatformUserFormFields("edit-pu"); S.ui.editPuForm = S.ui.editPuForm || {}; return S.ui.editPuForm.allowedActions || (S.ui.editPuForm.allowedActions = []); }
   if (key === "toggle-account-perm-page") { S.ui.editAccountPermForm = S.ui.editAccountPermForm || { allowedPages: [], allowedActions: [] }; return S.ui.editAccountPermForm.allowedPages || (S.ui.editAccountPermForm.allowedPages = []); }
   if (key === "toggle-account-perm-action") { S.ui.editAccountPermForm = S.ui.editAccountPermForm || { allowedPages: [], allowedActions: [] }; return S.ui.editAccountPermForm.allowedActions || (S.ui.editAccountPermForm.allowedActions = []); }
+  if (key === "toggle-new-template-page") { captureJobTitleTemplateFormFields("new-template"); return S.ui.newTemplateAllowedPages || (S.ui.newTemplateAllowedPages = []); }
+  if (key === "toggle-edit-template-page") { captureJobTitleTemplateFormFields("edit-template"); S.ui.editTemplateForm = S.ui.editTemplateForm || {}; return S.ui.editTemplateForm.allowedPages || (S.ui.editTemplateForm.allowedPages = []); }
+  if (key === "toggle-new-template-action") { captureJobTitleTemplateFormFields("new-template"); return S.ui.newTemplateAllowedActions || (S.ui.newTemplateAllowedActions = []); }
+  if (key === "toggle-edit-template-action") { captureJobTitleTemplateFormFields("edit-template"); S.ui.editTemplateForm = S.ui.editTemplateForm || {}; return S.ui.editTemplateForm.allowedActions || (S.ui.editTemplateForm.allowedActions = []); }
   return [];
 }
 function platformUserScopeIdSelectHtml(scopeKind, selectedId, selectId) {
@@ -4514,11 +4578,21 @@ function platformUserFormFieldsHtml(prefix, form) {
   form = form || {};
   const loginType = form.loginType || "job_title";
   const scopeKind = form.scopeKind || "none";
+  const templateId = form.templateId || "";
+  const linkedTemplate = templateId ? (S.jobTitleTemplates || []).find((t) => t.id === templateId) : null;
   return `
     <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px;">
       <input class="input" id="${prefix}-jobtitle" list="pu-jobtitle-list" style="flex:1;min-width:180px;" placeholder="المسمى الوظيفي (مثال: سكرتارية)" value="${esc(form.jobTitle || "")}" />
       <datalist id="pu-jobtitle-list">${[...new Set((S.platformUsers || []).map((u) => u.jobTitle))].map((t) => `<option value="${esc(t)}"></option>`).join("")}</datalist>
     </div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:10px;">
+      <select class="input" id="${prefix}-templateid" style="flex:1;min-width:220px;" data-action="change-pu-templateid" data-prefix="${esc(prefix)}">
+        <option value="">بدون قالب (صلاحيات خاصة بهذا الحساب فقط)</option>
+        ${(S.jobTitleTemplates || []).map((t) => `<option value="${esc(t.id)}" ${templateId === t.id ? "selected" : ""}>${esc(t.name)}</option>`).join("")}
+      </select>
+      ${pillBtn("إدارة القوالب", { variant: "ghost", icon: iconLayers(14, INK), action: "nav-to", data: { view: "job-title-templates" } })}
+    </div>
+    <div style="font-size:10.5px;color:${SUBTLE};background:${BLUE_BG};border-radius:8px;padding:7px 10px;margin-bottom:10px;">ربط الحساب بقالب مسمى وظيفي يجعله يرث صفحاته وإجراءاته تلقائيًا، وتبقى تتحدث معه فور تعديل القالب نفسه — بدون قالب، تضبطين صلاحيات هذا الحساب بنفسه فقط كالسابق.</div>
     <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;">
       <span style="font-size:11px;color:${SUBTLE};font-weight:700;">الدخول بـ:</span>
       <button type="button" class="radio-pill ${loginType === "job_title" ? "active" : ""}" data-action="set-pu-logintype" data-prefix="${esc(prefix)}" data-value="job_title">المسمى الوظيفي</button>
@@ -4535,10 +4609,16 @@ function platformUserFormFieldsHtml(prefix, form) {
       </select>
       ${["department", "office", "unit"].includes(scopeKind) ? `<div style="flex:1;min-width:180px;">${platformUserScopeIdSelectHtml(scopeKind, form.scopeId || "", `${prefix}-scopeid`)}</div>` : ""}
     </div>
+    ${linkedTemplate ? `
+    <div class="card" style="background:${GOLD_BG};margin-bottom:10px;">
+      <div style="font-size:12px;font-weight:800;margin-bottom:4px;">يرث صلاحياته من قالب "${esc(linkedTemplate.name)}"</div>
+      <div style="font-size:11px;color:${SUBTLE};">${(linkedTemplate.allowedPages || []).length} صفحة · ${(linkedTemplate.allowedActions || []).length} إجراء — أي تعديل على القالب ينعكس هنا تلقائيًا. لتخصيص صلاحيات هذا الحساب بمفرده، اختاري "بدون قالب" من القائمة أعلاه.</div>
+    </div>` : `
     <div style="margin-bottom:6px;font-size:11.5px;font-weight:800;color:${ROSE};">صلاحية الصفحات (تحدد ما تشوفه بالشريط الجانبي، إضافة لصلاحيات النطاق أعلاه إن وُجد)</div>
     ${platformUserPagesChecklistHtml(form.allowedPages || [], `toggle-${prefix}-page`)}
     <div style="margin:14px 0 6px;font-size:11.5px;font-weight:800;color:${ROSE};">صلاحية الإجراءات (أزرار مسار الاعتماد — اتركيها فاضية للسماح بكل الإجراءات المتاحة لها أصلًا)</div>
     ${platformUserActionsChecklistHtml(form.allowedActions || [], `toggle-${prefix}-action`)}
+    `}
   `;
 }
 
@@ -4552,12 +4632,14 @@ function capturePlatformUserFormFields(prefix) {
   const pw = document.getElementById(`${prefix}-password`);
   const sk = document.getElementById(`${prefix}-scopekind`);
   const si = document.getElementById(`${prefix}-scopeid`);
+  const ti = document.getElementById(`${prefix}-templateid`);
   if (prefix === "new-pu") {
     if (jt) S.ui.newPuJobTitle = jt.value;
     if (li) S.ui.newPuLoginId = li.value;
     if (pw) S.ui.newPuPassword = pw.value;
     if (sk) S.ui.newPuScopeKind = sk.value;
     if (si) S.ui.newPuScopeId = si.value;
+    if (ti) S.ui.newPuTemplateId = ti.value;
   } else {
     S.ui.editPuForm = S.ui.editPuForm || {};
     if (jt) S.ui.editPuForm.jobTitle = jt.value;
@@ -4565,6 +4647,7 @@ function capturePlatformUserFormFields(prefix) {
     if (pw) S.ui.editPuForm.password = pw.value;
     if (sk) S.ui.editPuForm.scopeKind = sk.value;
     if (si) S.ui.editPuForm.scopeId = si.value;
+    if (ti) S.ui.editPuForm.templateId = ti.value;
   }
 }
 function readPlatformUserFormFromDom(prefix, currentLoginType, currentAllowedPages, currentAllowedActions) {
@@ -4575,10 +4658,96 @@ function readPlatformUserFormFromDom(prefix, currentLoginType, currentAllowedPag
   const scopeKind = scopeKindEl ? scopeKindEl.value : "none";
   const scopeIdEl = document.getElementById(`${prefix}-scopeid`);
   const scopeId = scopeIdEl ? scopeIdEl.value : "";
+  const templateIdEl = document.getElementById(`${prefix}-templateid`);
+  const templateId = templateIdEl ? templateIdEl.value : "";
   return {
-    jobTitle, loginId, password, scopeKind, scopeId, loginType: currentLoginType || "job_title",
+    jobTitle, loginId, password, scopeKind, scopeId, templateId, loginType: currentLoginType || "job_title",
     allowedPages: currentAllowedPages || [], allowedActions: currentAllowedActions || [],
   };
+}
+
+/* ===================== قوالب المسميات الوظيفية (job_title_templates) ===================== */
+// صفحة مستقلة تديرها مديرة النظام: كل قالب = اسم + صفحات مسموحة + إجراءات
+// مسموحة. تُربط "حسابات إضافية" بقالب عبر حقل templateId (أعلى بنفس الملف)،
+// فتصبح صلاحياتها القادمة من القالب حيّة دائمًا بدل نسخة مجمّدة وقت الإنشاء.
+function captureJobTitleTemplateFormFields(prefix) {
+  const nm = document.getElementById(`${prefix}-name`);
+  if (prefix === "new-template") {
+    if (nm) S.ui.newTemplateName = nm.value;
+  } else {
+    S.ui.editTemplateForm = S.ui.editTemplateForm || {};
+    if (nm) S.ui.editTemplateForm.name = nm.value;
+  }
+}
+function jobTitleTemplateFormFieldsHtml(prefix, form) {
+  form = form || {};
+  return `
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px;">
+      <input class="input" id="${prefix}-name" style="flex:1;min-width:180px;" placeholder="اسم المسمى الوظيفي (مثال: رئيسة الوحدة)" value="${esc(form.name || "")}" />
+    </div>
+    <div style="margin-bottom:6px;font-size:11.5px;font-weight:800;color:${ROSE};">الصفحات المسموحة لهذا المسمى</div>
+    ${platformUserPagesChecklistHtml(form.allowedPages || [], `toggle-${prefix}-page`)}
+    <div style="margin:14px 0 6px;font-size:11.5px;font-weight:800;color:${ROSE};">الإجراءات المسموحة (أزرار مسار الاعتماد)</div>
+    ${platformUserActionsChecklistHtml(form.allowedActions || [], `toggle-${prefix}-action`)}
+  `;
+}
+function jobTitleTemplateUsageCount(templateId) {
+  return (S.platformUsers || []).filter((pu) => pu.templateId === templateId).length;
+}
+function jobTitleTemplateRowHtml(t) {
+  const editing = S.ui.editingTemplateId === t.id;
+  const confirming = S.ui.confirmRemoveTemplateId === t.id;
+  const usage = jobTitleTemplateUsageCount(t.id);
+
+  if (confirming) {
+    return `<div class="card" style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;">
+      <span style="font-size:12px;font-weight:700;">حذف قالب "${esc(t.name)}" نهائيًا؟${usage ? ` — ${usage} حساب مرتبط به سيفقد صلاحياته (يرجع بلا صفحات حتى تربطينه بقالب آخر)` : ""}</span>
+      <div style="display:flex;gap:6px;">${pillBtn("حذف", { variant: "danger", action: "delete-job-title-template", data: { id: t.id } })}${pillBtn("تراجع", { variant: "ghost", action: "cancel-remove-job-title-template" })}</div>
+    </div>`;
+  }
+  if (editing) {
+    const editForm = S.ui.editTemplateForm || {};
+    return `<div class="card">
+      ${jobTitleTemplateFormFieldsHtml("edit-template", editForm)}
+      ${S.ui.templateFormError ? `<div style="color:${DANGER};font-size:11.5px;font-weight:700;margin-bottom:8px;">${esc(S.ui.templateFormError)}</div>` : ""}
+      <div style="display:flex;gap:6px;">${pillBtn("حفظ", { action: "save-job-title-template-edit", data: { id: t.id } })}${pillBtn("إلغاء", { variant: "ghost", action: "cancel-job-title-template-edit" })}</div>
+    </div>`;
+  }
+  return `<div class="card" style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;">
+    <div style="display:flex;align-items:center;gap:10px;min-width:0;">
+      <div style="width:34px;height:34px;border-radius:10px;background:${DANGER_BG};display:flex;align-items:center;justify-content:center;flex-shrink:0;">${iconLayers(16, ROSE)}</div>
+      <div style="min-width:0;">
+        <div style="font-size:13.5px;font-weight:700;">${esc(t.name)}</div>
+        <div style="font-size:10.5px;color:${SUBTLE};margin-top:2px;">${(t.allowedPages || []).length} صفحة · ${(t.allowedActions || []).length} إجراء${usage ? ` · مستخدم من ${usage} حساب` : ""}</div>
+      </div>
+    </div>
+    <div style="display:flex;gap:6px;flex-shrink:0;">
+      <button class="icon-btn" style="width:32px;height:32px;border:1px solid ${BORDER}" data-action="start-job-title-template-edit" data-id="${esc(t.id)}" title="تعديل">${iconPencil(14, INK)}</button>
+      <button class="icon-btn" style="width:32px;height:32px;border:1px solid ${BORDER}" data-action="confirm-remove-job-title-template" data-id="${esc(t.id)}" title="حذف">${iconTrash(14, DANGER)}</button>
+    </div>
+  </div>`;
+}
+function renderJobTitleTemplatesManage() {
+  const ui = S.ui;
+  const list = S.jobTitleTemplates || [];
+  const newForm = { name: ui.newTemplateName || "", allowedPages: ui.newTemplateAllowedPages || [], allowedActions: ui.newTemplateAllowedActions || [] };
+  return `
+  <div class="page-wrap"><div class="page-inner narrow">
+    ${topBarHtml({ title: "المسميات الوظيفية (القوالب)", subtitle: "كل قالب = مجموعة صفحات وإجراءات واحدة؛ اربطي بها أي حساب إضافي من \"حسابات إضافية\" وتتحدث صلاحياته تلقائيًا مع أي تعديل هنا",
+      backAction: "nav-to", backData: { view: "platform-users-manage" },
+      right: pillBtn("حسابات إضافية", { variant: "ghost", icon: iconUser(15, INK), action: "nav-to", data: { view: "platform-users-manage" } }) })}
+
+    <div class="card" style="margin-bottom:18px;">
+      <div style="font-size:12.5px;font-weight:800;color:${ROSE};margin-bottom:12px;">إنشاء مسمى وظيفي (قالب) جديد</div>
+      ${jobTitleTemplateFormFieldsHtml("new-template", newForm)}
+      ${ui.templateFormError && !ui.editingTemplateId ? `<div style="color:${DANGER};font-size:11.5px;font-weight:700;margin-bottom:8px;">${esc(ui.templateFormError)}</div>` : ""}
+      ${pillBtn("إنشاء القالب", { icon: iconPlus(15, "#fff"), action: "add-job-title-template" })}
+    </div>
+
+    <div style="font-size:12.5px;font-weight:800;color:${ROSE};margin-bottom:10px;">المسميات الوظيفية الحالية (${list.length})</div>
+    ${list.length === 0 ? `<div class="card" style="text-align:center;color:${SUBTLE};padding:36px 20px;border-style:dashed;">لا توجد قوالب بعد — أنشئي أول مسمى وظيفي من الأعلى.</div>` :
+      `<div style="display:flex;flex-direction:column;gap:8px;">${list.map((t) => jobTitleTemplateRowHtml(t)).join("")}</div>`}
+  </div></div>`;
 }
 
 function renderPlatformUsersManage() {
@@ -4587,12 +4756,13 @@ function renderPlatformUsersManage() {
   const newForm = {
     jobTitle: ui.newPuJobTitle || "", loginType: ui.newPuLoginType || "job_title", loginId: ui.newPuLoginId || "",
     password: ui.newPuPassword || "", scopeKind: ui.newPuScopeKind || "none", scopeId: ui.newPuScopeId || "",
-    allowedPages: ui.newPuAllowedPages || [], allowedActions: ui.newPuAllowedActions || [],
+    templateId: ui.newPuTemplateId || "", allowedPages: ui.newPuAllowedPages || [], allowedActions: ui.newPuAllowedActions || [],
   };
   return `
   <div class="page-wrap"><div class="page-inner narrow">
     ${topBarHtml({ title: "حسابات إضافية", subtitle: "أضيفي مسمّيات وظيفية جديدة بصلاحيات دخول وصفحات خاصة — بدون أي تأثير على الحسابات الحالية", backAction: "nav-back-admin",
-      right: pillBtn("صلاحيات الحسابات", { variant: "ghost", icon: iconKey(15, INK), action: "nav-to", data: { view: "platform-permissions-manage" } }) })}
+      right: pillBtn("صلاحيات الحسابات", { variant: "ghost", icon: iconKey(15, INK), action: "nav-to", data: { view: "platform-permissions-manage" } })
+        + pillBtn("المسميات الوظيفية (القوالب)", { variant: "ghost", icon: iconLayers(15, INK), action: "nav-to", data: { view: "job-title-templates" } }) })}
 
     <div class="card" style="margin-bottom:18px;">
       <div style="font-size:12.5px;font-weight:800;color:${ROSE};margin-bottom:12px;">إضافة مسمّى وظيفي جديد</div>
@@ -4634,8 +4804,9 @@ function platformUserRowHtml(pu, allList) {
       <div style="min-width:0;">
         <div style="font-size:13.5px;font-weight:700;">${esc(pu.jobTitle)}${!isActive ? ` <span style="font-size:10px;font-weight:700;color:${DANGER};">(معطّل)</span>` : ""}</div>
         <div style="font-size:10.5px;color:${SUBTLE};margin-top:2px;">${pu.loginType === "email" ? iconMail(11, SUBTLE) : ""} ${esc(pu.loginId)} · ${esc(platformUserScopeLabel(pu))}</div>
+        ${pu.templateId ? (() => { const t = (S.jobTitleTemplates || []).find((x) => x.id === pu.templateId); return t ? `<div style="font-size:10px;color:${GOLD};margin-top:2px;font-weight:700;">قالب: ${esc(t.name)} (${(t.allowedPages || []).length} صفحة، ${(t.allowedActions || []).length} إجراء)</div>` : ""; })() : `
         ${(pu.allowedPages || []).length ? `<div style="font-size:10px;color:${GREEN};margin-top:2px;">${pu.allowedPages.length} صفحة مسموحة</div>` : ""}
-        ${(pu.allowedActions || []).length ? `<div style="font-size:10px;color:${GREEN};margin-top:2px;">${pu.allowedActions.length} إجراء مسموح (من أزرار مسار الاعتماد)</div>` : ""}
+        ${(pu.allowedActions || []).length ? `<div style="font-size:10px;color:${GREEN};margin-top:2px;">${pu.allowedActions.length} إجراء مسموح (من أزرار مسار الاعتماد)</div>` : ""}`}
         ${sharing.length ? `<div style="font-size:10px;color:${SUBTLE};margin-top:2px;">تشارك نفس الدخول مع: ${sharing.map((s) => esc(s.jobTitle)).join("، ")}</div>` : ""}
       </div>
     </div>
@@ -6912,6 +7083,14 @@ function attachFormListeners() {
       render();
       return;
     }
+    if (el.dataset && el.dataset.action === "change-pu-templateid") {
+      const prefix = el.dataset.prefix;
+      capturePlatformUserFormFields(prefix);
+      if (prefix === "new-pu") S.ui.newPuTemplateId = el.value;
+      else { S.ui.editPuForm = S.ui.editPuForm || {}; S.ui.editPuForm.templateId = el.value; }
+      render();
+      return;
+    }
     if (el.dataset && el.dataset.action === "assign-dept-office") {
       const d = S.departments.find((x) => x.id === el.dataset.id);
       if (d) { d.officeId = el.value; dataStore.saveDepartments(S.departments); }
@@ -6989,7 +7168,10 @@ function attachClickListener() {
         // نلغي أي طيّ يدوي للمجموعة اللي تحتوي الصفحة الجديدة، عشان تفتح تلقائيًا وتبيّن أين نحن.
         const targetPage = SIDEBAR_PAGES.find((p) => p.id === navView);
         if (targetPage && S.ui.sidebarGroupState) delete S.ui.sidebarGroupState[targetPage.group];
-        if (navView === "platform-users-manage" || navView === "platform-permissions-manage") S.platformUsers = dataStore.getPlatformUsers();
+        if (navView === "platform-users-manage" || navView === "platform-permissions-manage" || navView === "job-title-templates") {
+          S.platformUsers = dataStore.getPlatformUsers();
+          S.jobTitleTemplates = dataStore.getJobTitleTemplates();
+        }
         render();
         if (sheetsConfigured()) {
           if (navView === "admin-reports" || navView === "units-manage" || navView === "department-overview") {
@@ -7006,6 +7188,8 @@ function attachClickListener() {
             refreshReportsFromSheet(S.currentUnitId).then(() => { if (S.view === navView) render(); });
           } else if (navView === "platform-users-manage") {
             refreshPlatformUsersFromSheet().then(() => { if (S.view === navView) render(); });
+          } else if (navView === "job-title-templates") {
+            refreshJobTitleTemplatesFromSheet().then(() => { if (S.view === navView) render(); });
           }
         }
         break;
@@ -7721,6 +7905,90 @@ function attachClickListener() {
         render();
         break;
       }
+      case "toggle-new-template-page": {
+        captureJobTitleTemplateFormFields("new-template");
+        const arr = S.ui.newTemplateAllowedPages || (S.ui.newTemplateAllowedPages = []);
+        const idx = arr.indexOf(ds.id);
+        if (idx >= 0) arr.splice(idx, 1); else arr.push(ds.id);
+        render();
+        break;
+      }
+      case "toggle-edit-template-page": {
+        captureJobTitleTemplateFormFields("edit-template");
+        S.ui.editTemplateForm = S.ui.editTemplateForm || {};
+        const arr = S.ui.editTemplateForm.allowedPages || (S.ui.editTemplateForm.allowedPages = []);
+        const idx = arr.indexOf(ds.id);
+        if (idx >= 0) arr.splice(idx, 1); else arr.push(ds.id);
+        render();
+        break;
+      }
+      case "toggle-new-template-action": {
+        captureJobTitleTemplateFormFields("new-template");
+        const arr = S.ui.newTemplateAllowedActions || (S.ui.newTemplateAllowedActions = []);
+        const idx = arr.indexOf(ds.id);
+        if (idx >= 0) arr.splice(idx, 1); else arr.push(ds.id);
+        render();
+        break;
+      }
+      case "toggle-edit-template-action": {
+        captureJobTitleTemplateFormFields("edit-template");
+        S.ui.editTemplateForm = S.ui.editTemplateForm || {};
+        const arr = S.ui.editTemplateForm.allowedActions || (S.ui.editTemplateForm.allowedActions = []);
+        const idx = arr.indexOf(ds.id);
+        if (idx >= 0) arr.splice(idx, 1); else arr.push(ds.id);
+        render();
+        break;
+      }
+      case "add-job-title-template": {
+        captureJobTitleTemplateFormFields("new-template");
+        const name = (S.ui.newTemplateName || "").trim();
+        if (!name) { S.ui.templateFormError = "الرجاء كتابة اسم المسمى الوظيفي."; render(); break; }
+        const list = [...(S.jobTitleTemplates || []), {
+          id: uid("tpl"), name, allowedPages: S.ui.newTemplateAllowedPages || [], allowedActions: S.ui.newTemplateAllowedActions || [],
+          status: "active", createdAt: Date.now(),
+        }];
+        S.jobTitleTemplates = list;
+        dataStore.saveJobTitleTemplates(list);
+        S.ui.newTemplateName = ""; S.ui.newTemplateAllowedPages = []; S.ui.newTemplateAllowedActions = []; S.ui.templateFormError = "";
+        render();
+        break;
+      }
+      case "start-job-title-template-edit": {
+        const t = (S.jobTitleTemplates || []).find((x) => x.id === ds.id);
+        if (!t) break;
+        S.ui.editingTemplateId = t.id;
+        S.ui.editTemplateForm = { name: t.name, allowedPages: [...(t.allowedPages || [])], allowedActions: [...(t.allowedActions || [])] };
+        S.ui.templateFormError = "";
+        render();
+        break;
+      }
+      case "cancel-job-title-template-edit": S.ui.editingTemplateId = null; S.ui.editTemplateForm = null; S.ui.templateFormError = ""; render(); break;
+      case "save-job-title-template-edit": {
+        captureJobTitleTemplateFormFields("edit-template");
+        const editForm = S.ui.editTemplateForm || {};
+        const name = (editForm.name || "").trim();
+        if (!name) { S.ui.templateFormError = "الرجاء كتابة اسم المسمى الوظيفي."; render(); break; }
+        S.jobTitleTemplates = (S.jobTitleTemplates || []).map((x) => x.id === ds.id ? {
+          ...x, name, allowedPages: editForm.allowedPages || [], allowedActions: editForm.allowedActions || [],
+        } : x);
+        dataStore.saveJobTitleTemplates(S.jobTitleTemplates);
+        S.ui.editingTemplateId = null; S.ui.editTemplateForm = null; S.ui.templateFormError = "";
+        render();
+        break;
+      }
+      case "confirm-remove-job-title-template": S.ui.confirmRemoveTemplateId = ds.id; render(); break;
+      case "cancel-remove-job-title-template": S.ui.confirmRemoveTemplateId = null; render(); break;
+      case "delete-job-title-template": {
+        S.jobTitleTemplates = (S.jobTitleTemplates || []).filter((x) => x.id !== ds.id);
+        dataStore.saveJobTitleTemplates(S.jobTitleTemplates);
+        // أي حساب كان مربوطًا بهذا القالب يرجع فورًا بلا صلاحيات صفحات/إجراءات
+        // (مصفوفات فاضية) بدل ما يختفي أو يتعطّل — نفس سلوك حساب جديد بلا قالب.
+        S.platformUsers = (S.platformUsers || []).map((x) => x.templateId === ds.id ? { ...x, templateId: "" } : x);
+        dataStore.savePlatformUsers(S.platformUsers);
+        S.ui.confirmRemoveTemplateId = null;
+        render();
+        break;
+      }
       // فتح/قفل القائمة المنسدلة لصلاحيات الصفحات/الإجراءات — حالة عرض بحتة.
       // نلتقط حقول نموذج "حساب إضافي" أولًا (لو كانت هذي القائمة تابعة له)، لأن
       // render() بعدها يعيد بناء كل النموذج من S.ui، وبدون الالتقاط تنمسح القيم
@@ -7728,6 +7996,8 @@ function attachClickListener() {
       case "toggle-perm-dropdown": {
         if (ds.key === "toggle-new-pu-page" || ds.key === "toggle-new-pu-action") capturePlatformUserFormFields("new-pu");
         else if (ds.key === "toggle-edit-pu-page" || ds.key === "toggle-edit-pu-action") capturePlatformUserFormFields("edit-pu");
+        else if (ds.key === "toggle-new-template-page" || ds.key === "toggle-new-template-action") captureJobTitleTemplateFormFields("new-template");
+        else if (ds.key === "toggle-edit-template-page" || ds.key === "toggle-edit-template-action") captureJobTitleTemplateFormFields("edit-template");
         S.ui.permDropdownOpen = S.ui.permDropdownOpen || {};
         S.ui.permDropdownOpen[ds.key] = !S.ui.permDropdownOpen[ds.key];
         render();
@@ -7737,6 +8007,8 @@ function attachClickListener() {
       case "select-all-perm": {
         if (ds.key === "toggle-new-pu-page" || ds.key === "toggle-new-pu-action") capturePlatformUserFormFields("new-pu");
         else if (ds.key === "toggle-edit-pu-page" || ds.key === "toggle-edit-pu-action") capturePlatformUserFormFields("edit-pu");
+        else if (ds.key === "toggle-new-template-page" || ds.key === "toggle-new-template-action") captureJobTitleTemplateFormFields("new-template");
+        else if (ds.key === "toggle-edit-template-page" || ds.key === "toggle-edit-template-action") captureJobTitleTemplateFormFields("edit-template");
         const arr = permDropdownTargetArray(ds.key);
         const isPage = ds.key.indexOf("page") !== -1;
         const allIds = isPage ? SIDEBAR_PAGES.filter((p) => p.group !== "unit-home").map((p) => p.id) : ACTION_CATALOG.map((a) => a.id);
@@ -7804,12 +8076,13 @@ function attachClickListener() {
         if (["department", "office", "unit"].includes(form.scopeKind) && !form.scopeId) { S.ui.puFormError = "الرجاء اختيار الجهة المرتبطة بهذا النطاق."; render(); break; }
         const list = [...(S.platformUsers || []), {
           id: uid("pu"), jobTitle: form.jobTitle, loginType: form.loginType, loginId: form.loginId, password: form.password,
-          allowedPages: form.allowedPages, allowedActions: form.allowedActions, scopeKind: form.scopeKind, scopeId: form.scopeId, status: "active", createdAt: Date.now(),
+          allowedPages: form.allowedPages, allowedActions: form.allowedActions, scopeKind: form.scopeKind, scopeId: form.scopeId,
+          templateId: form.templateId || "", status: "active", createdAt: Date.now(),
         }];
         S.platformUsers = list;
         dataStore.savePlatformUsers(list);
         S.ui.newPuJobTitle = ""; S.ui.newPuLoginType = "job_title"; S.ui.newPuLoginId = ""; S.ui.newPuPassword = "";
-        S.ui.newPuScopeKind = "none"; S.ui.newPuScopeId = ""; S.ui.newPuAllowedPages = []; S.ui.newPuAllowedActions = []; S.ui.puFormError = "";
+        S.ui.newPuScopeKind = "none"; S.ui.newPuScopeId = ""; S.ui.newPuTemplateId = ""; S.ui.newPuAllowedPages = []; S.ui.newPuAllowedActions = []; S.ui.puFormError = "";
         render();
         break;
       }
@@ -7817,7 +8090,7 @@ function attachClickListener() {
         const pu = (S.platformUsers || []).find((x) => x.id === ds.id);
         if (!pu) break;
         S.ui.editingPuId = pu.id;
-        S.ui.editPuForm = { jobTitle: pu.jobTitle, loginType: pu.loginType, loginId: pu.loginId, password: pu.password, scopeKind: pu.scopeKind, scopeId: pu.scopeId, allowedPages: [...(pu.allowedPages || [])], allowedActions: [...(pu.allowedActions || [])] };
+        S.ui.editPuForm = { jobTitle: pu.jobTitle, loginType: pu.loginType, loginId: pu.loginId, password: pu.password, scopeKind: pu.scopeKind, scopeId: pu.scopeId, templateId: pu.templateId || "", allowedPages: [...(pu.allowedPages || [])], allowedActions: [...(pu.allowedActions || [])] };
         S.ui.puFormError = "";
         render();
         break;
@@ -7830,7 +8103,7 @@ function attachClickListener() {
         if (["department", "office", "unit"].includes(form.scopeKind) && !form.scopeId) { S.ui.puFormError = "الرجاء اختيار الجهة المرتبطة بهذا النطاق."; render(); break; }
         S.platformUsers = (S.platformUsers || []).map((x) => x.id === ds.id ? {
           ...x, jobTitle: form.jobTitle, loginType: form.loginType, loginId: form.loginId, password: form.password,
-          scopeKind: form.scopeKind, scopeId: form.scopeId, allowedPages: form.allowedPages, allowedActions: form.allowedActions,
+          scopeKind: form.scopeKind, scopeId: form.scopeId, templateId: form.templateId || "", allowedPages: form.allowedPages, allowedActions: form.allowedActions,
         } : x);
         dataStore.savePlatformUsers(S.platformUsers);
         S.ui.editingPuId = null; S.ui.editPuForm = null; S.ui.puFormError = "";
