@@ -2277,7 +2277,11 @@ function renderDashboard() {
   if (S.isDepartmentUser && S.currentDepartmentId) {
     const dept = S.departments.find((d) => d.id === S.currentDepartmentId);
     if (!dept) return renderDepartmentOverview();
-    const units = S.units.filter((u) => u.departmentId === dept.id && u.status === "active");
+    // "وحدة" تقرير القسم الذاتي (role: self_report) لا تُحتسب ضمن وحدات
+    // القسم التابعة هنا (ما تظهر ببطاقات الإحصاءات/الرسوم، ولا يُطلب من
+    // القسم مراجعة تقريرها الخاص) — تقريرها يظهر فقط عبر "جميع التقارير"
+    // لمن هو أعلى من القسم (مكتب الإشراف/الإدارة العليا/مديرة النظام).
+    const units = S.units.filter((u) => u.departmentId === dept.id && u.status === "active" && u.role !== "self_report");
     const pendingReports = [];
     units.forEach((u) => {
       ensureUnitReportsLoaded(u.id).filter((r) => r.status === "under_review").forEach((r) => pendingReports.push({ unit: u, report: r }));
@@ -2292,7 +2296,9 @@ function renderDashboard() {
   if (S.isOfficeUser && S.currentOfficeId) {
     const office = currentOffice();
     if (!office) return renderOfficeDashboard();
-    const units = officeUnits(office.id);
+    // نفس استثناء "وحدة" تقرير القسم/المكتب الذاتي من بطاقات إحصاءات المكتب —
+    // تظهر فقط ضمن "جميع التقارير" لمن أعلى من المكتب.
+    const units = officeUnits(office.id).filter((u) => u.role !== "self_report");
     return renderDashboardBody(units, {
       title: office.name,
       subtitle: `نظرة شاملة على ${units.length} وحدة تابعة لهذا المكتب`,
@@ -2307,8 +2313,10 @@ function renderDashboard() {
     return renderUnitDashboard();
   }
   // الحالة الافتراضية (مديرة النظام، أو أي حساب بلا نطاق محدّد، أو الإدارة
-  // العليا إن وصلت هنا) — نفس السلوك الكامل غير المُقيَّد تمامًا كما كان.
-  return renderDashboardBody(S.units.filter((u) => u.status === "active"), {});
+  // العليا إن وصلت هنا) — نفس السلوك الكامل غير المُقيَّد تمامًا كما كان،
+  // باستثناء "وحدات" التقارير الذاتية (self_report) حتى يبقى "عدد الوحدات"
+  // صحيحًا ولا تُحتسب هذي التقارير كوحدات فعلية.
+  return renderDashboardBody(S.units.filter((u) => u.status === "active" && u.role !== "self_report"), {});
 }
 
 // جسم "لوحة المعلومات" الكامل (البانر + بطاقات الإحصاءات + الرسوم البيانية +
@@ -3086,16 +3094,23 @@ function adminUnitSwitcherHtml() {
 function scopedUnitSwitcherHtml() {
   if (S.isAdmin) return adminUnitSwitcherHtml();
   if (S.isDepartmentUser || S.isOfficeUser) {
-    const list = S.isDepartmentUser
-      ? S.units.filter((u) => u.departmentId === S.currentDepartmentId && u.status === "active")
-      : officeUnits(S.currentOfficeId);
+    const kind = S.isDepartmentUser ? "department" : "office";
+    const scopeId = S.isDepartmentUser ? S.currentDepartmentId : S.currentOfficeId;
+    const realUnits = (S.isDepartmentUser
+      ? S.units.filter((u) => u.departmentId === scopeId && u.status === "active")
+      : officeUnits(scopeId)).filter((u) => u.role !== "self_report");
+    // أول خيار دائمًا: تقرير القسم/المكتب نفسه (ذاتي) — يُنشأ تلقائيًا عند
+    // الحاجة؛ هذا هو ما يتيح للقسم/المكتب نفسه إنشاء تقريره الخاص، منفصلاً
+    // عن تقارير وحداته التابعة، تمامًا بنفس فكرة لوحة المعلومات.
+    const selfUnit = ensureSelfReportUnit(kind, scopeId);
+    const list = selfUnit ? [selfUnit, ...realUnits] : realUnits;
     if (list.length < 2) return "";
     const current = S.currentUnitId;
     return `
     <div class="card" style="margin-bottom:14px;display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
       <span style="font-size:11.5px;font-weight:700;color:${SUBTLE};white-space:nowrap;">اختيار الوحدة:</span>
       <select class="input" style="flex:1;min-width:200px;" data-action="scoped-switch-unit">
-        ${list.map((u) => `<option value="${esc(u.id)}" ${current === u.id ? "selected" : ""}>${esc(u.name)}</option>`).join("")}
+        ${list.map((u) => `<option value="${esc(u.id)}" ${current === u.id ? "selected" : ""}>${u.role === "self_report" ? "📁 " : ""}${esc(u.name)}</option>`).join("")}
       </select>
     </div>`;
   }
@@ -3366,7 +3381,31 @@ function collectAllReportsFlat() {
 // الخاصة بمكتب الإشراف (renderDepartmentsPage).
 function officeUnits(officeId) {
   const deptIds = S.departments.filter((d) => d.officeId === officeId).map((d) => d.id);
-  return S.units.filter((u) => deptIds.includes(u.departmentId) && u.status === "active");
+  // تشمل أيضًا "وحدة" تقرير المكتب الذاتي نفسه (role: self_report, officeId
+  // مباشرة بلا قسم) — بهذا تظهر تلقائيًا بـ"جميع التقارير" لأي حساب أعلى من
+  // المكتب (مديرة النظام/الإدارة العليا) دون أي تعديل إضافي بتلك الصفحات.
+  return S.units.filter((u) => (deptIds.includes(u.departmentId) || u.officeId === officeId) && u.status === "active");
+}
+// "وحدة" افتراضية (role: self_report) تمثّل تقرير القسم أو المكتب نفسه —
+// يُنشأ تلقائيًا أول مرة تُطلب، وتُستخدم لتخزين/عرض هذا التقرير بنفس محرك
+// التقارير الكامل المُختبر (بدون أي محرّك جديد)، لكنها لا تُحتسب كـ"وحدة"
+// فعلية في أي عداد/رسم بياني (role !== "self_report" بكل تلك المواضع) ولا
+// تظهر لأي وحدة تابعة (أدنى بالمخطط) — فقط لصاحب القسم/المكتب نفسه ولمن
+// أعلى منه (المكتب/الإدارة العليا/مديرة النظام) عبر "جميع التقارير".
+function ensureSelfReportUnit(kind, scopeId) {
+  if (!scopeId) return null;
+  const field = kind === "office" ? "officeId" : "departmentId";
+  let u = S.units.find((x) => x.role === "self_report" && x[field] === scopeId && (kind === "office" ? !x.departmentId : true));
+  if (u) return u;
+  const owner = kind === "office" ? (S.offices || []).find((o) => o.id === scopeId) : S.departments.find((d) => d.id === scopeId);
+  u = {
+    id: uid("unit"), name: owner ? `تقرير ${owner.name} (ذاتي)` : "تقرير ذاتي",
+    role: "self_report", status: "active", createdAt: Date.now(),
+    ...(kind === "office" ? { officeId: scopeId } : { departmentId: scopeId }),
+  };
+  S.units = [...S.units, u];
+  dataStore.saveUnits(S.units);
+  return u;
 }
 // "متأخر" هنا يعني: تقرير لم يُعتمد بعد (مسودة أو قيد المراجعة) ومضى على إنشائه
 // أكثر من 14 يومًا — تقدير عملي بما إن النظام لا يحتفظ بموعد استحقاق صريح لكل تقرير.
