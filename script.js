@@ -705,8 +705,8 @@ function rowToUnit(r) {
 }
 function deptToRow(d) { return { id: d.id, name: d.name, password: d.password || "", status: d.status || "active", created_at: d.createdAt || Date.now(), curation: d.curation || { approvedKeys: [] }, email: d.email || "", office_id: d.officeId || "", allowed_pages: d.allowedPages || [], allowed_actions: d.allowedActions || [] }; }
 function rowToDept(r) { return { id: r.id, name: r.name, password: r.password || "", status: r.status || "active", createdAt: Number(r.created_at) || 0, curation: r.curation || { approvedKeys: [] }, email: r.email || "", officeId: r.office_id || "", allowedPages: r.allowed_pages || [], allowedActions: r.allowed_actions || [] }; }
-function officeToRow(o) { return { id: o.id, name: o.name, password: o.password || "", status: o.status || "active", created_at: o.createdAt || Date.now(), curation: o.curation || { approvedKeys: [] }, allowed_pages: o.allowedPages || [], allowed_actions: o.allowedActions || [] }; }
-function rowToOffice(r) { return { id: r.id, name: r.name, password: r.password || "", status: r.status || "active", createdAt: Number(r.created_at) || 0, curation: r.curation || { approvedKeys: [] }, allowedPages: r.allowed_pages || [], allowedActions: r.allowed_actions || [] }; }
+function officeToRow(o) { return { id: o.id, name: o.name, password: o.password || "", email: o.email || "", status: o.status || "active", created_at: o.createdAt || Date.now(), curation: o.curation || { approvedKeys: [] }, allowed_pages: o.allowedPages || [], allowed_actions: o.allowedActions || [] }; }
+function rowToOffice(r) { return { id: r.id, name: r.name, password: r.password || "", email: r.email || "", status: r.status || "active", createdAt: Number(r.created_at) || 0, curation: r.curation || { approvedKeys: [] }, allowedPages: r.allowed_pages || [], allowedActions: r.allowed_actions || [] }; }
 // "حسابات إضافية" (platform_users) — طبقة مرنة إضافية فوق نظام الحسابات الحالي
 // (وحدات/أقسام/مكاتب/مديرة نظام)، لمسمّيات وظيفية جديدة كليًا (سكرتارية، مديرة
 // تعليمية...) بصلاحيات صفحات مخصّصة لكل واحدة. لا تلمس أو تعدّل حسابات units/
@@ -730,6 +730,30 @@ function rowToJobTitleTemplate(r) {
     id: r.id, name: r.name || "", allowedPages: Array.isArray(r.allowed_pages) ? r.allowed_pages : [],
     allowedActions: Array.isArray(r.allowed_actions) ? r.allowed_actions : [], status: r.status || "active", createdAt: Number(r.created_at) || 0,
   };
+}
+// تُستدعى عند إضافة أي جهة جديدة (إدارة عليا/مديرة نظام/مكتب/قسم/وحدة/مركز)
+// من نموذج الإضافة الموحّد، لمّا تكتب نجود مسمى وظيفي بخانة "المسمى الوظيفي":
+// - لو المسمى موجود مسبقًا بقائمة "المسميات الوظيفية" (job_title_templates)،
+//   نطبّق صلاحياته (allowedPages/allowedActions) على الجهة الجديدة فورًا.
+// - لو مسمى جديد كليًا، ننشئ له قالبًا فارغ الصلاحيات تلقائيًا (تقدر نجود بعدين
+//   تحدد صلاحياته من تبويب "المسميات الوظيفية")، ونربطه بنفس الجهة.
+// إضافة بحتة — ما تمس أي منطق موجود، وما تسوي شي لو الخانة فاضية.
+function resolveJobTitleForEntity(jobTitleName) {
+  const name = (jobTitleName || "").trim();
+  if (!name) return { allowedPages: [], allowedActions: [] };
+  const list = (S.jobTitleTemplates && S.jobTitleTemplates.length) ? S.jobTitleTemplates : dataStore.getJobTitleTemplates();
+  const existing = list.find((t) => t.name === name);
+  if (existing) return { allowedPages: existing.allowedPages || [], allowedActions: existing.allowedActions || [] };
+  const fresh = { id: uid("jt"), name, allowedPages: [], allowedActions: [], status: "active", createdAt: Date.now() };
+  const updated = [...list, fresh];
+  S.jobTitleTemplates = updated;
+  dataStore.saveJobTitleTemplates(updated);
+  return { allowedPages: [], allowedActions: [] };
+}
+function entityJobTitleFieldHtml(inputId) {
+  const names = [...new Set(((S.jobTitleTemplates && S.jobTitleTemplates.length) ? S.jobTitleTemplates : dataStore.getJobTitleTemplates()).map((t) => t.name).filter(Boolean))];
+  return `<input class="input" id="${inputId}" list="entity-jobtitle-list" style="flex:1;min-width:160px;" placeholder="المسمى الوظيفي (اختياري)" />
+  <datalist id="entity-jobtitle-list">${names.map((n) => `<option value="${esc(n)}"></option>`).join("")}</datalist>`;
 }
 function rowToPlatformUser(r) {
   return {
@@ -4304,16 +4328,22 @@ function addEntityPickerHtml() {
     executive: `<div style="display:flex;gap:8px;flex-wrap:wrap;">
       <input class="input" id="new-executive-name" style="flex:2;min-width:160px;" placeholder="اسم الحساب" value="${esc(ui.newExecutiveName || "")}" />
       <input class="input" id="new-executive-password" style="flex:1;min-width:120px;" placeholder="كلمة المرور" value="${esc(ui.newExecutivePassword || "")}" />
+      <input class="input" id="new-executive-email" style="flex:1;min-width:160px;" type="email" placeholder="الإيميل (اختياري)" value="${esc(ui.newExecutiveEmail || "")}" />
+      ${entityJobTitleFieldHtml("new-executive-jobtitle")}
       ${pillBtn("إضافة حساب إدارة عليا", { icon: iconPlus(15, "#fff"), action: "add-executive" })}
     </div>`,
     sysadmin: `<div style="display:flex;gap:8px;flex-wrap:wrap;">
       <input class="input" id="new-sysadmin-name" style="flex:2;min-width:160px;" placeholder="اسم الحساب" value="${esc(ui.newSysadminName || "")}" />
       <input class="input" id="new-sysadmin-password" style="flex:1;min-width:120px;" placeholder="كلمة المرور" value="${esc(ui.newSysadminPassword || "")}" />
       <input class="input" id="new-sysadmin-email" style="flex:1;min-width:160px;" type="email" placeholder="الإيميل (اختياري)" value="${esc(ui.newSysadminEmail || "")}" />
+      ${entityJobTitleFieldHtml("new-sysadmin-jobtitle")}
       ${pillBtn("إضافة حساب مديرة نظام", { icon: iconPlus(15, "#fff"), action: "add-sysadmin" })}
     </div>`,
     office: `<div style="display:flex;gap:8px;flex-wrap:wrap;">
       <input class="input" id="new-office-name" style="flex:2;min-width:160px;" placeholder="اسم مكتب الإشراف الجديد" value="${esc(ui.newOfficeName || "")}" />
+      <input class="input" id="new-office-password" style="flex:1;min-width:120px;" placeholder="كلمة المرور (اختياري)" value="${esc(ui.newOfficePassword || "")}" />
+      <input class="input" id="new-office-email" style="flex:1;min-width:160px;" type="email" placeholder="الإيميل (اختياري)" value="${esc(ui.newOfficeEmail || "")}" />
+      ${entityJobTitleFieldHtml("new-office-jobtitle")}
       ${pillBtn("إضافة مكتب إشراف", { icon: iconPlus(15, "#fff"), action: "add-office" })}
     </div>`,
     department: `${sheetsConfigured() ? `<div class="hint" style="background:${BLUE_BG};border-radius:10px;padding:9px 12px;margin-bottom:10px;">كلمة مرور القسم (اختيارية) تفتح للقسم كل وحداته التابعة له دفعة واحدة.</div>` : ""}
@@ -4321,6 +4351,7 @@ function addEntityPickerHtml() {
       <input class="input" id="new-dept-name" style="flex:2;min-width:160px;" placeholder="اسم القسم الجديد" value="${esc(ui.newDeptName || "")}" />
       <input class="input" id="new-dept-password" style="flex:1;min-width:120px;" placeholder="كلمة المرور (اختياري)" value="${esc(ui.newDeptPassword || "")}" />
       <input class="input" id="new-dept-email" style="flex:1;min-width:160px;" type="email" placeholder="الإيميل (اختياري)" value="${esc(ui.newDeptEmail || "")}" />
+      ${entityJobTitleFieldHtml("new-dept-jobtitle")}
       ${pillBtn("إضافة قسم", { icon: iconPlus(15, "#fff"), action: "add-department" })}
     </div>`,
     unit: `${sheetsConfigured() ? `<div class="hint" style="background:${BLUE_BG};border-radius:10px;padding:9px 12px;margin-bottom:10px;">كلمة المرور هنا هي نفسها اللي تسجّل بيها الوحدة دخولها.</div>` : ""}
@@ -4332,6 +4363,7 @@ function addEntityPickerHtml() {
         <option value="">القسم (اختياري)</option>
         ${S.departments.map((d) => `<option value="${esc(d.id)}" ${ui.newUnitDept === d.id ? "selected" : ""}>${esc(d.name)}</option>`).join("")}
       </select>
+      ${entityJobTitleFieldHtml("new-unit-jobtitle")}
       ${pillBtn("إضافة وحدة", { icon: iconPlus(15, "#fff"), action: "add-unit" })}
     </div>`,
     center: `<div style="display:flex;gap:8px;flex-wrap:wrap;">
@@ -4342,6 +4374,7 @@ function addEntityPickerHtml() {
         <option value="">القسم (اختياري)</option>
         ${S.departments.map((d) => `<option value="${esc(d.id)}" ${ui.newCenterDept === d.id ? "selected" : ""}>${esc(d.name)}</option>`).join("")}
       </select>
+      ${entityJobTitleFieldHtml("new-center-jobtitle")}
       ${pillBtn("إضافة مركز", { icon: iconPlus(15, "#fff"), action: "add-center" })}
     </div>`,
   };
@@ -4901,7 +4934,7 @@ function jobTitleTemplateRowHtml(t) {
 // بالقائمة الجانبية. "مخطط الهيكل التنظيمي" تبقى مستقلة تمامًا (قرارها
 // الصريح: أداة تخطيط حرة بدون حسابات دخول، غير هذي الأربعة).
 const ACCOUNTS_HUB_TABS = [
-  { view: "units-manage", label: "الوحدات والأقسام" },
+  { view: "units-manage", label: "الجهات" },
   { view: "platform-users-manage", label: "حسابات إضافية" },
   { view: "platform-permissions-manage", label: "صلاحيات الحسابات" },
   { view: "job-title-templates", label: "المسميات الوظيفية" },
@@ -7875,8 +7908,10 @@ function attachClickListener() {
         const name = (nameEl.value || "").trim();
         const password = (document.getElementById("new-dept-password").value || "").trim();
         const email = (document.getElementById("new-dept-email").value || "").trim();
+        const jobTitle = (document.getElementById("new-dept-jobtitle").value || "").trim();
         if (!name) break;
-        S.departments = [...S.departments, { id: uid("dept"), name, password, email, status: "active", createdAt: Date.now() }];
+        const perms = resolveJobTitleForEntity(jobTitle);
+        S.departments = [...S.departments, { id: uid("dept"), name, password, email, status: "active", createdAt: Date.now(), allowedPages: perms.allowedPages, allowedActions: perms.allowedActions }];
         dataStore.saveDepartments(S.departments);
         S.ui.newDeptName = ""; S.ui.newDeptPassword = ""; S.ui.newDeptEmail = ""; S.ui.addEntityStep = null;
         render();
@@ -7920,10 +7955,14 @@ function attachClickListener() {
       case "add-office": {
         const nameEl = document.getElementById("new-office-name");
         const name = (nameEl.value || "").trim();
+        const password = (document.getElementById("new-office-password").value || "").trim();
+        const email = (document.getElementById("new-office-email").value || "").trim();
+        const jobTitle = (document.getElementById("new-office-jobtitle").value || "").trim();
         if (!name) break;
-        S.offices = [...(S.offices || []), { id: uid("office"), name, password: "", status: "active", createdAt: Date.now() }];
+        const perms = resolveJobTitleForEntity(jobTitle);
+        S.offices = [...(S.offices || []), { id: uid("office"), name, password, email, status: "active", createdAt: Date.now(), allowedPages: perms.allowedPages, allowedActions: perms.allowedActions }];
         dataStore.saveOffices(S.offices);
-        S.ui.newOfficeName = ""; S.ui.addEntityStep = null;
+        S.ui.newOfficeName = ""; S.ui.newOfficePassword = ""; S.ui.newOfficeEmail = ""; S.ui.addEntityStep = null;
         render();
         break;
       }
@@ -7967,8 +8006,10 @@ function attachClickListener() {
         const password = (document.getElementById("new-unit-password").value || "").trim();
         const email = (document.getElementById("new-unit-email").value || "").trim();
         const deptId = document.getElementById("new-unit-dept").value;
+        const jobTitle = (document.getElementById("new-unit-jobtitle").value || "").trim();
         if (!name) break;
-        S.units = [...S.units, { id: uid("unit"), name, password, email, role: "unit", status: "active", departmentId: deptId || "", createdAt: Date.now() }];
+        const perms = resolveJobTitleForEntity(jobTitle);
+        S.units = [...S.units, { id: uid("unit"), name, password, email, role: "unit", status: "active", departmentId: deptId || "", createdAt: Date.now(), allowedPages: perms.allowedPages, allowedActions: perms.allowedActions }];
         dataStore.saveUnits(S.units);
         S.ui.newUnitName = ""; S.ui.newUnitPassword = ""; S.ui.newUnitEmail = ""; S.ui.newUnitDept = ""; S.ui.addEntityStep = null;
         render();
@@ -7979,8 +8020,10 @@ function attachClickListener() {
         const password = (document.getElementById("new-center-password").value || "").trim();
         const email = (document.getElementById("new-center-email").value || "").trim();
         const deptId = document.getElementById("new-center-dept").value;
+        const jobTitle = (document.getElementById("new-center-jobtitle").value || "").trim();
         if (!name) break;
-        S.units = [...S.units, { id: uid("center"), name, password, email, role: "center", status: "active", departmentId: deptId || "", createdAt: Date.now() }];
+        const perms = resolveJobTitleForEntity(jobTitle);
+        S.units = [...S.units, { id: uid("center"), name, password, email, role: "center", status: "active", departmentId: deptId || "", createdAt: Date.now(), allowedPages: perms.allowedPages, allowedActions: perms.allowedActions }];
         dataStore.saveUnits(S.units);
         S.ui.newCenterName = ""; S.ui.newCenterPassword = ""; S.ui.newCenterEmail = ""; S.ui.newCenterDept = ""; S.ui.addEntityStep = null;
         render();
@@ -7989,10 +8032,13 @@ function attachClickListener() {
       case "add-executive": {
         const name = (document.getElementById("new-executive-name").value || "").trim();
         const password = (document.getElementById("new-executive-password").value || "").trim();
+        const email = (document.getElementById("new-executive-email").value || "").trim();
+        const jobTitle = (document.getElementById("new-executive-jobtitle").value || "").trim();
         if (!name) break;
-        S.units = [...S.units, { id: uid("exec"), name, password, role: "executive", status: "active", departmentId: "", createdAt: Date.now() }];
+        const perms = resolveJobTitleForEntity(jobTitle);
+        S.units = [...S.units, { id: uid("exec"), name, password, email, role: "executive", status: "active", departmentId: "", createdAt: Date.now(), allowedPages: perms.allowedPages, allowedActions: perms.allowedActions }];
         dataStore.saveUnits(S.units);
-        S.ui.newExecutiveName = ""; S.ui.newExecutivePassword = ""; S.ui.addEntityStep = null;
+        S.ui.newExecutiveName = ""; S.ui.newExecutivePassword = ""; S.ui.newExecutiveEmail = ""; S.ui.addEntityStep = null;
         render();
         break;
       }
@@ -8000,8 +8046,10 @@ function attachClickListener() {
         const name = (document.getElementById("new-sysadmin-name").value || "").trim();
         const password = (document.getElementById("new-sysadmin-password").value || "").trim();
         const email = (document.getElementById("new-sysadmin-email").value || "").trim();
+        const jobTitle = (document.getElementById("new-sysadmin-jobtitle").value || "").trim();
         if (!name) break;
-        S.units = [...S.units, { id: uid("admin"), name, password, email, role: "admin", status: "active", departmentId: "", createdAt: Date.now() }];
+        const perms = resolveJobTitleForEntity(jobTitle);
+        S.units = [...S.units, { id: uid("admin"), name, password, email, role: "admin", status: "active", departmentId: "", createdAt: Date.now(), allowedPages: perms.allowedPages, allowedActions: perms.allowedActions }];
         dataStore.saveUnits(S.units);
         S.ui.newSysadminName = ""; S.ui.newSysadminPassword = ""; S.ui.newSysadminEmail = ""; S.ui.addEntityStep = null;
         render();
