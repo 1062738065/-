@@ -678,6 +678,13 @@ function unitToRow(u) {
     // rowToUnit)، وإلا تُفقَد هذي الوحدات أو يفشل حفظها بعد أول تحديث فعلي
     // على قاعدة بيانات حقيقية (لا تُفقَد محليًا بدون Supabase).
     office_id: u.officeId || "", platform_user_id: u.platformUserId || "",
+    // "مسار الاعتماد الحر" الخاص بهذي الوحدة تحديدًا (اختياري) — مصفوفة مراحل
+    // مرتّبة بالكامل بحرية (كل مرحلة = مسمى وظيفي من "القوالب")، تحل محل مسار
+    // الوحدة→رئيسة الوحدة→مراجع إضافي→القسم الثابت القديم عند وجودها فقط.
+    // فاضية/غير موجودة = الوحدة تستمر بسلوكها القديم تمامًا (hasHead/
+    // extraReviewerTitle)، بدون أي تأثير — إضافة بحتة. يحتاج عمود جديد نصي
+    // (jsonb) بجدول units على Supabase: approval_path.
+    approval_path: u.approvalPath || [],
   };
 }
 function rowToUnit(r) {
@@ -693,6 +700,7 @@ function rowToUnit(r) {
     // (CHECK constraint)، يجب إضافة القيمة 'self_report' لها أيضًا، وإلا
     // سيفشل حفظ أي تقرير ذاتي جديد على قاعدة البيانات الحقيقية.
     officeId: r.office_id || "", platformUserId: r.platform_user_id || "",
+    approvalPath: r.approval_path || [],
   };
 }
 function deptToRow(d) { return { id: d.id, name: d.name, password: d.password || "", status: d.status || "active", created_at: d.createdAt || Date.now(), curation: d.curation || { approvedKeys: [] }, email: d.email || "", office_id: d.officeId || "", allowed_pages: d.allowedPages || [], allowed_actions: d.allowedActions || [] }; }
@@ -782,8 +790,15 @@ function rowToSectionDef(r) { return { id: r.id, label: r.label, order: Number(r
 // وقيمة fields نفسها JSON خام (jsonb) بدون أي تحويل شكل — هي نفس بنية SECTION_FIELD_SCHEMAS[id].fields.
 function fieldSchemaToRow(sectionId, fields) { return { section_id: sectionId, fields: fields || [], updated_at: Date.now() }; }
 function rowToFieldSchemaEntry(r) { return { sectionId: r.section_id, fields: Array.isArray(r.fields) ? r.fields : [] }; }
-function reportToRow(unitId, r) { return { id: r.id, unit_id: unitId, label: r.label || "", status: r.status || "draft", report_type: r.reportType || "general", created_at: r.createdAt || Date.now(), updated_at: r.updatedAt || Date.now(), shared: r.shared || {}, indicator_history: r.indicatorHistory || {}, sections: r.sections || {}, last_section_id: r.lastSectionId || "", sent_to: r.sentTo || null, sent_at: r.sentAt || null, internal_sent_at: r.internalSentAt || null, internal_sent_by: r.internalSentBy || null, internal_review_notes: r.internalReviewNotes || null, internal_returned_at: r.internalReturnedAt || null, head_reviewed_at: r.headReviewedAt || null, head_reviewed_by: r.headReviewedBy || null, head_approval_decision: r.headApprovalDecision || null, extra_reviewed_at: r.extraReviewedAt || null, extra_approval_decision: r.extraApprovalDecision || null }; }
-function rowToReport(r) { return { id: r.id, label: r.label || "", status: r.status || "draft", reportType: r.report_type || "general", createdAt: Number(r.created_at) || 0, updatedAt: Number(r.updated_at) || 0, shared: r.shared || {}, indicatorHistory: r.indicator_history || {}, sections: r.sections || {}, lastSectionId: r.last_section_id || "", sentTo: r.sent_to || null, sentAt: r.sent_at ? Number(r.sent_at) : null, internalSentAt: r.internal_sent_at ? Number(r.internal_sent_at) : null, internalSentBy: r.internal_sent_by || null, internalReviewNotes: r.internal_review_notes || null, internalReturnedAt: r.internal_returned_at ? Number(r.internal_returned_at) : null, headReviewedAt: r.head_reviewed_at ? Number(r.head_reviewed_at) : null, headReviewedBy: r.head_reviewed_by || null, headApprovalDecision: r.head_approval_decision || null, extraReviewedAt: r.extra_reviewed_at ? Number(r.extra_reviewed_at) : null, extraApprovalDecision: r.extra_approval_decision || null }; }
+function reportToRow(unitId, r) { return { id: r.id, unit_id: unitId, label: r.label || "", status: r.status || "draft", report_type: r.reportType || "general", created_at: r.createdAt || Date.now(), updated_at: r.updatedAt || Date.now(), shared: r.shared || {}, indicator_history: r.indicatorHistory || {}, sections: r.sections || {}, last_section_id: r.lastSectionId || "", sent_to: r.sentTo || null, sent_at: r.sentAt || null, internal_sent_at: r.internalSentAt || null, internal_sent_by: r.internalSentBy || null, internal_review_notes: r.internalReviewNotes || null, internal_returned_at: r.internalReturnedAt || null, head_reviewed_at: r.headReviewedAt || null, head_reviewed_by: r.headReviewedBy || null, head_approval_decision: r.headApprovalDecision || null, extra_reviewed_at: r.extraReviewedAt || null, extra_approval_decision: r.extraApprovalDecision || null,
+  // تتبّع المرحلة الحالية بمسار الاعتماد الحر (اختياري — يُستخدم فقط لو
+  // الوحدة عندها approval_path مُعرَّف؛ غير ذلك يبقى 0 بلا أي تأثير على
+  // منطق الحالة القديم). يحتاج عمود جديد (عدد صحيح) بجدول reports: path_stage_index.
+  path_stage_index: r.pathStageIndex || 0,
+}; }
+function rowToReport(r) { return { id: r.id, label: r.label || "", status: r.status || "draft", reportType: r.report_type || "general", createdAt: Number(r.created_at) || 0, updatedAt: Number(r.updated_at) || 0, shared: r.shared || {}, indicatorHistory: r.indicator_history || {}, sections: r.sections || {}, lastSectionId: r.last_section_id || "", sentTo: r.sent_to || null, sentAt: r.sent_at ? Number(r.sent_at) : null, internalSentAt: r.internal_sent_at ? Number(r.internal_sent_at) : null, internalSentBy: r.internal_sent_by || null, internalReviewNotes: r.internal_review_notes || null, internalReturnedAt: r.internal_returned_at ? Number(r.internal_returned_at) : null, headReviewedAt: r.head_reviewed_at ? Number(r.head_reviewed_at) : null, headReviewedBy: r.head_reviewed_by || null, headApprovalDecision: r.head_approval_decision || null, extraReviewedAt: r.extra_reviewed_at ? Number(r.extra_reviewed_at) : null, extraApprovalDecision: r.extra_approval_decision || null,
+  pathStageIndex: Number(r.path_stage_index) || 0,
+}; }
 
 async function supabaseLogin(name, password) {
   const uRes = await supabaseRequest(`units?name=eq.${encodeURIComponent(name)}&password=eq.${encodeURIComponent(password)}&select=*&limit=1`);
@@ -4484,6 +4499,33 @@ function unitRowHtml(u) {
     </div>`;
   }
   if (editingApproval) {
+    const pathMode = S.ui.editUnitPathMode || ((u.approvalPath && u.approvalPath.length) ? "custom" : "legacy");
+    if (pathMode === "custom") {
+      const stages = S.ui.editUnitPathStages || [];
+      const templates = (S.jobTitleTemplates && S.jobTitleTemplates.length) ? S.jobTitleTemplates : dataStore.getJobTitleTemplates();
+      return `<div class="card">
+        <div style="font-size:12.5px;font-weight:800;color:${ROSE};margin-bottom:6px;">مسار اعتماد "${esc(u.name)}" — مسار حرّ مخصص</div>
+        <div class="hint" style="margin-bottom:10px;">رتّبي المراحل بأي عدد وأي ترتيب تحبينه. كل مرحلة = مسمى وظيفي من "المسميات الوظيفية (القوالب)" — أي حساب مربوط بهذا المسمى يقدر يعتمد/يعيد بهذي المرحلة. أول مرحلة تستلم التقرير بعد إنشائه من الوحدة، وآخر مرحلة = الاعتماد النهائي.</div>
+        <div style="display:flex;gap:8px;margin-bottom:10px;">
+          <button type="button" class="radio-pill" data-action="toggle-unit-path-mode" data-value="legacy">رجوع للمسار الثابت (وحدة→رئيسة→قسم)</button>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:8px;margin-bottom:10px;">
+          ${stages.length ? stages.map((s, i) => `
+            <div style="display:flex;align-items:center;gap:6px;background:${GRAY_BG};border-radius:10px;padding:8px 10px;">
+              <span style="font-size:11px;font-weight:800;color:${SUBTLE};min-width:18px;">${i + 1}</span>
+              <select class="input" style="flex:1;" data-action="set-unit-path-stage-template" data-index="${i}">
+                <option value="">— اختاري مسمى وظيفي —</option>
+                ${templates.map((t) => `<option value="${esc(t.id)}" ${s.templateId === t.id ? "selected" : ""}>${esc(t.name)}</option>`).join("")}
+              </select>
+              <button type="button" class="icon-btn" style="width:28px;height:28px;transform:rotate(180deg);" data-action="move-unit-path-stage" data-index="${i}" data-dir="up" ${i === 0 ? "disabled" : ""} title="تحريك لأعلى">${iconChevronDown(13, i === 0 ? "#cfc3c8" : INK)}</button>
+              <button type="button" class="icon-btn" style="width:28px;height:28px;" data-action="move-unit-path-stage" data-index="${i}" data-dir="down" ${i === stages.length - 1 ? "disabled" : ""} title="تحريك لأسفل">${iconChevronDown(13, i === stages.length - 1 ? "#cfc3c8" : INK)}</button>
+              <button type="button" class="icon-btn" style="width:28px;height:28px;" data-action="remove-unit-path-stage" data-index="${i}" title="حذف المرحلة">${iconTrash(13, DANGER)}</button>
+            </div>`).join("") : `<div class="hint">ما فيه أي مرحلة بعد — أضيفي مرحلة للبدء.</div>`}
+        </div>
+        ${pillBtn("+ إضافة مرحلة", { variant: "ghost", action: "add-unit-path-stage" })}
+        <div style="display:flex;gap:6px;margin-top:12px;">${pillBtn("حفظ المسار", { action: "save-unit-approval-edit", data: { id: u.id } })}${pillBtn("إلغاء", { variant: "ghost", action: "cancel-unit-approval-edit" })}</div>
+      </div>`;
+    }
     const hasHeadVal = S.ui.editUnitHasHead !== undefined ? S.ui.editUnitHasHead : unitHasHead(u);
     const extraVal = S.ui.editUnitExtraReviewerTitle !== undefined ? S.ui.editUnitExtraReviewerTitle : (u.extraReviewerTitle || "");
     return `<div class="card">
@@ -4500,13 +4542,16 @@ function unitRowHtml(u) {
         <input class="input" id="edit-unit-extra-reviewer" placeholder="مثال: مديرة تعليمية" value="${esc(extraVal)}" />
       </div>
       <div class="hint" style="margin-bottom:10px;">ترتيب المسار: الإدارية ← ${hasHeadVal ? "رئيسة الوحدة ← " : ""}${extraVal ? esc(extraVal) + " ← " : ""}القسم.</div>
+      <div style="display:flex;gap:8px;margin-bottom:10px;">
+        <button type="button" class="radio-pill" data-action="toggle-unit-path-mode" data-value="custom">تصميم مسار حرّ مخصص بدل هذا ↗</button>
+      </div>
       <div style="display:flex;gap:6px;">${pillBtn("حفظ", { action: "save-unit-approval-edit", data: { id: u.id } })}${pillBtn("إلغاء", { variant: "ghost", action: "cancel-unit-approval-edit" })}</div>
     </div>`;
   }
   return `<div class="card" style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;opacity:${isActive ? 1 : 0.6}">
     <div style="display:flex;align-items:center;gap:10px;">
       <div style="width:34px;height:34px;border-radius:10px;background:${DANGER_BG};display:flex;align-items:center;justify-content:center;">${iconBuilding(ROSE, 16)}</div>
-      <div><div style="font-size:13.5px;font-weight:700;">${esc(u.name)} ${u.role === "center" ? `<span style="font-size:10px;font-weight:700;color:${GOLD};background:${GOLD_BG};padding:2px 7px;border-radius:999px;">مركز</span>` : ""}${!unitHasHead(u) && u.role !== "center" ? `<span style="font-size:10px;font-weight:700;color:${SUBTLE};background:${GRAY_BG};padding:2px 7px;border-radius:999px;">بدون رئيسة</span>` : ""}${unitHasExtraReview(u) ? `<span style="font-size:10px;font-weight:700;color:${ROSE};background:${DANGER_BG};padding:2px 7px;border-radius:999px;">+${esc(u.extraReviewerTitle)}</span>` : ""}</div>${!isActive ? `<div style="font-size:10.5px;color:${SUBTLE}">معطّلة</div>` : ""}${u.email ? `<div style="font-size:10.5px;color:${SUBTLE}">${esc(u.email)}</div>` : ""}</div>
+      <div><div style="font-size:13.5px;font-weight:700;">${esc(u.name)} ${u.role === "center" ? `<span style="font-size:10px;font-weight:700;color:${GOLD};background:${GOLD_BG};padding:2px 7px;border-radius:999px;">مركز</span>` : ""}${(u.approvalPath && u.approvalPath.length) ? `<span style="font-size:10px;font-weight:700;color:${ROSE};background:${DANGER_BG};padding:2px 7px;border-radius:999px;">مسار حر (${u.approvalPath.length})</span>` : `${!unitHasHead(u) && u.role !== "center" ? `<span style="font-size:10px;font-weight:700;color:${SUBTLE};background:${GRAY_BG};padding:2px 7px;border-radius:999px;">بدون رئيسة</span>` : ""}${unitHasExtraReview(u) ? `<span style="font-size:10px;font-weight:700;color:${ROSE};background:${DANGER_BG};padding:2px 7px;border-radius:999px;">+${esc(u.extraReviewerTitle)}</span>` : ""}`}</div>${!isActive ? `<div style="font-size:10.5px;color:${SUBTLE}">معطّلة</div>` : ""}${u.email ? `<div style="font-size:10.5px;color:${SUBTLE}">${esc(u.email)}</div>` : ""}</div>
     </div>
     <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;">
       <select class="input" style="padding:6px 8px;font-size:12px;width:150px;" data-action="assign-unit-dept" data-id="${esc(u.id)}">
@@ -7176,6 +7221,12 @@ function attachFormListeners() {
       render();
       return;
     }
+    if (el.dataset && el.dataset.action === "set-unit-path-stage-template") {
+      const idx = Number(el.dataset.index);
+      S.ui.editUnitPathStages = (S.ui.editUnitPathStages || []).map((s, i) => i === idx ? { ...s, templateId: el.value } : s);
+      render();
+      return;
+    }
     if (el.dataset && el.dataset.action === "assign-dept-office") {
       const d = S.departments.find((x) => x.id === el.dataset.id);
       if (d) { d.officeId = el.value; dataStore.saveDepartments(S.departments); }
@@ -7910,11 +7961,16 @@ function attachClickListener() {
         S.ui.editingUnitApprovalId = unit.id;
         S.ui.editUnitHasHead = unitHasHead(unit);
         S.ui.editUnitExtraReviewerTitle = unit.extraReviewerTitle || "";
+        S.ui.editUnitPathMode = (unit.approvalPath && unit.approvalPath.length) ? "custom" : "legacy";
+        S.ui.editUnitPathStages = unit.approvalPath && unit.approvalPath.length ? unit.approvalPath.map((s) => ({ ...s })) : [];
+        // قائمة القوالب تُستخدم بمنتقي كل مرحلة — نحمّلها لو ما كانت محمّلة أصلًا.
+        S.jobTitleTemplates = (S.jobTitleTemplates && S.jobTitleTemplates.length) ? S.jobTitleTemplates : dataStore.getJobTitleTemplates();
         render();
         break;
       }
       case "cancel-unit-approval-edit": {
         S.ui.editingUnitApprovalId = null; S.ui.editUnitHasHead = undefined; S.ui.editUnitExtraReviewerTitle = undefined;
+        S.ui.editUnitPathMode = undefined; S.ui.editUnitPathStages = undefined;
         render();
         break;
       }
@@ -7925,13 +7981,52 @@ function attachClickListener() {
         render();
         break;
       }
+      case "toggle-unit-path-mode": {
+        S.ui.editUnitPathMode = ds.value;
+        if (ds.value === "custom" && !(S.ui.editUnitPathStages && S.ui.editUnitPathStages.length)) {
+          S.ui.editUnitPathStages = [{ id: uid("stage"), templateId: "" }];
+        }
+        render();
+        break;
+      }
+      case "add-unit-path-stage": {
+        S.ui.editUnitPathStages = [...(S.ui.editUnitPathStages || []), { id: uid("stage"), templateId: "" }];
+        render();
+        break;
+      }
+      case "remove-unit-path-stage": {
+        const idx = Number(ds.index);
+        S.ui.editUnitPathStages = (S.ui.editUnitPathStages || []).filter((_, i) => i !== idx);
+        render();
+        break;
+      }
+      case "move-unit-path-stage": {
+        const idx = Number(ds.index);
+        const dir = ds.dir === "up" ? -1 : 1;
+        const list = [...(S.ui.editUnitPathStages || [])];
+        const swapWith = idx + dir;
+        if (swapWith < 0 || swapWith >= list.length) break;
+        [list[idx], list[swapWith]] = [list[swapWith], list[idx]];
+        S.ui.editUnitPathStages = list;
+        render();
+        break;
+      }
       case "save-unit-approval-edit": {
-        const extraEl = document.getElementById("edit-unit-extra-reviewer");
-        const extraVal = extraEl ? extraEl.value.trim() : (S.ui.editUnitExtraReviewerTitle || "");
-        const hasHeadVal = !!S.ui.editUnitHasHead;
-        S.units = S.units.map((u) => u.id === ds.id ? { ...u, hasHead: hasHeadVal, extraReviewerTitle: extraVal } : u);
+        const pathMode = S.ui.editUnitPathMode || "legacy";
+        if (pathMode === "custom") {
+          // مسار حرّ: نحفظ فقط المراحل اللي اخترنا لها مسمى وظيفي فعليًا —
+          // مرحلة بلا اختيار تُستبعد بدل ما تُحفظ فارغة بالغلط.
+          const cleanStages = (S.ui.editUnitPathStages || []).filter((s) => s.templateId);
+          S.units = S.units.map((u) => u.id === ds.id ? { ...u, approvalPath: cleanStages } : u);
+        } else {
+          const extraEl = document.getElementById("edit-unit-extra-reviewer");
+          const extraVal = extraEl ? extraEl.value.trim() : (S.ui.editUnitExtraReviewerTitle || "");
+          const hasHeadVal = !!S.ui.editUnitHasHead;
+          S.units = S.units.map((u) => u.id === ds.id ? { ...u, hasHead: hasHeadVal, extraReviewerTitle: extraVal, approvalPath: [] } : u);
+        }
         dataStore.saveUnits(S.units);
         S.ui.editingUnitApprovalId = null; S.ui.editUnitHasHead = undefined; S.ui.editUnitExtraReviewerTitle = undefined;
+        S.ui.editUnitPathMode = undefined; S.ui.editUnitPathStages = undefined;
         render();
         break;
       }
