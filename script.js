@@ -752,7 +752,7 @@ function resolveJobTitleForEntity(jobTitleName) {
 }
 function entityJobTitleFieldHtml(inputId) {
   const names = [...new Set(((S.jobTitleTemplates && S.jobTitleTemplates.length) ? S.jobTitleTemplates : dataStore.getJobTitleTemplates()).map((t) => t.name).filter(Boolean))];
-  return `<input class="input" id="${inputId}" list="entity-jobtitle-list" style="flex:1;min-width:160px;" placeholder="المسمى الوظيفي (اختياري)" />
+  return `<input class="input" id="${inputId}" list="entity-jobtitle-list" style="flex:1;min-width:160px;" placeholder="المسمى الوظيفي" />
   <datalist id="entity-jobtitle-list">${names.map((n) => `<option value="${esc(n)}"></option>`).join("")}</datalist>`;
 }
 function rowToPlatformUser(r) {
@@ -4328,21 +4328,21 @@ function addEntityPickerHtml() {
     executive: `<div style="display:flex;gap:8px;flex-wrap:wrap;">
       <input class="input" id="new-executive-name" style="flex:2;min-width:160px;" placeholder="اسم الحساب" value="${esc(ui.newExecutiveName || "")}" />
       <input class="input" id="new-executive-password" style="flex:1;min-width:120px;" placeholder="كلمة المرور" value="${esc(ui.newExecutivePassword || "")}" />
-      <input class="input" id="new-executive-email" style="flex:1;min-width:160px;" type="email" placeholder="الإيميل (اختياري)" value="${esc(ui.newExecutiveEmail || "")}" />
+      <input class="input" id="new-executive-email" style="flex:1;min-width:160px;" type="email" placeholder="الإيميل" value="${esc(ui.newExecutiveEmail || "")}" />
       ${entityJobTitleFieldHtml("new-executive-jobtitle")}
       ${pillBtn("إضافة حساب إدارة عليا", { icon: iconPlus(15, "#fff"), action: "add-executive" })}
     </div>`,
     sysadmin: `<div style="display:flex;gap:8px;flex-wrap:wrap;">
       <input class="input" id="new-sysadmin-name" style="flex:2;min-width:160px;" placeholder="اسم الحساب" value="${esc(ui.newSysadminName || "")}" />
       <input class="input" id="new-sysadmin-password" style="flex:1;min-width:120px;" placeholder="كلمة المرور" value="${esc(ui.newSysadminPassword || "")}" />
-      <input class="input" id="new-sysadmin-email" style="flex:1;min-width:160px;" type="email" placeholder="الإيميل (اختياري)" value="${esc(ui.newSysadminEmail || "")}" />
+      <input class="input" id="new-sysadmin-email" style="flex:1;min-width:160px;" type="email" placeholder="الإيميل" value="${esc(ui.newSysadminEmail || "")}" />
       ${entityJobTitleFieldHtml("new-sysadmin-jobtitle")}
       ${pillBtn("إضافة حساب مديرة نظام", { icon: iconPlus(15, "#fff"), action: "add-sysadmin" })}
     </div>`,
     office: `<div style="display:flex;gap:8px;flex-wrap:wrap;">
       <input class="input" id="new-office-name" style="flex:2;min-width:160px;" placeholder="اسم مكتب الإشراف الجديد" value="${esc(ui.newOfficeName || "")}" />
       <input class="input" id="new-office-password" style="flex:1;min-width:120px;" placeholder="كلمة المرور (اختياري)" value="${esc(ui.newOfficePassword || "")}" />
-      <input class="input" id="new-office-email" style="flex:1;min-width:160px;" type="email" placeholder="الإيميل (اختياري)" value="${esc(ui.newOfficeEmail || "")}" />
+      <input class="input" id="new-office-email" style="flex:1;min-width:160px;" type="email" placeholder="الإيميل" value="${esc(ui.newOfficeEmail || "")}" />
       ${entityJobTitleFieldHtml("new-office-jobtitle")}
       ${pillBtn("إضافة مكتب إشراف", { icon: iconPlus(15, "#fff"), action: "add-office" })}
     </div>`,
@@ -4350,7 +4350,7 @@ function addEntityPickerHtml() {
     <div style="display:flex;gap:8px;flex-wrap:wrap;">
       <input class="input" id="new-dept-name" style="flex:2;min-width:160px;" placeholder="اسم القسم الجديد" value="${esc(ui.newDeptName || "")}" />
       <input class="input" id="new-dept-password" style="flex:1;min-width:120px;" placeholder="كلمة المرور (اختياري)" value="${esc(ui.newDeptPassword || "")}" />
-      <input class="input" id="new-dept-email" style="flex:1;min-width:160px;" type="email" placeholder="الإيميل (اختياري)" value="${esc(ui.newDeptEmail || "")}" />
+      <input class="input" id="new-dept-email" style="flex:1;min-width:160px;" type="email" placeholder="الإيميل" value="${esc(ui.newDeptEmail || "")}" />
       ${entityJobTitleFieldHtml("new-dept-jobtitle")}
       ${pillBtn("إضافة قسم", { icon: iconPlus(15, "#fff"), action: "add-department" })}
     </div>`,
@@ -4358,7 +4358,7 @@ function addEntityPickerHtml() {
     <div style="display:flex;gap:8px;flex-wrap:wrap;">
       <input class="input" id="new-unit-name" style="flex:2;min-width:160px;" placeholder="اسم الوحدة الجديدة" value="${esc(ui.newUnitName || "")}" />
       <input class="input" id="new-unit-password" style="flex:1;min-width:120px;" placeholder="كلمة المرور" value="${esc(ui.newUnitPassword || "")}" />
-      <input class="input" id="new-unit-email" style="flex:1;min-width:160px;" type="email" placeholder="الإيميل (اختياري)" value="${esc(ui.newUnitEmail || "")}" />
+      <input class="input" id="new-unit-email" style="flex:1;min-width:160px;" type="email" placeholder="الإيميل" value="${esc(ui.newUnitEmail || "")}" />
       <select class="input" id="new-unit-dept" style="flex:1;min-width:140px;">
         <option value="">القسم (اختياري)</option>
         ${S.departments.map((d) => `<option value="${esc(d.id)}" ${ui.newUnitDept === d.id ? "selected" : ""}>${esc(d.name)}</option>`).join("")}
@@ -4369,7 +4369,7 @@ function addEntityPickerHtml() {
     center: `<div style="display:flex;gap:8px;flex-wrap:wrap;">
       <input class="input" id="new-center-name" style="flex:2;min-width:160px;" placeholder="اسم المركز الجديد" value="${esc(ui.newCenterName || "")}" />
       <input class="input" id="new-center-password" style="flex:1;min-width:120px;" placeholder="كلمة المرور" value="${esc(ui.newCenterPassword || "")}" />
-      <input class="input" id="new-center-email" style="flex:1;min-width:160px;" type="email" placeholder="الإيميل (اختياري)" value="${esc(ui.newCenterEmail || "")}" />
+      <input class="input" id="new-center-email" style="flex:1;min-width:160px;" type="email" placeholder="الإيميل" value="${esc(ui.newCenterEmail || "")}" />
       <select class="input" id="new-center-dept" style="flex:1;min-width:140px;">
         <option value="">القسم (اختياري)</option>
         ${S.departments.map((d) => `<option value="${esc(d.id)}" ${ui.newCenterDept === d.id ? "selected" : ""}>${esc(d.name)}</option>`).join("")}
@@ -4402,41 +4402,44 @@ function renderDepartmentsManage() {
 
     ${addEntityPickerHtml()}
 
-    ${collapsibleUsersSection({
+    ${execUnits.length ? collapsibleUsersSection({
       key: "executive", title: "الإدارة العليا", count: execUnits.length,
       formHtml: "",
-      listHtml: `<div style="display:flex;flex-direction:column;gap:8px;">${execUnits.map((u) => simpleAccountRowHtml(u, "إدارة عليا")).join("") || `<div class="hint">لا توجد حسابات إدارة عليا بعد.</div>`}</div>`,
-    })}
+      listHtml: `<div style="display:flex;flex-direction:column;gap:8px;">${execUnits.map((u) => simpleAccountRowHtml(u, "إدارة عليا")).join("")}</div>`,
+    }) : ""}
 
-    ${collapsibleUsersSection({
+    ${adminUnits.length ? collapsibleUsersSection({
       key: "sysadmin", title: "مديرة النظام", count: adminUnits.length,
       formHtml: "",
-      listHtml: `<div style="display:flex;flex-direction:column;gap:8px;">${adminUnits.map((u) => simpleAccountRowHtml(u, "مديرة نظام")).join("") || `<div class="hint">لا توجد حسابات مديرة نظام إضافية بعد.</div>`}</div>`,
-    })}
+      listHtml: `<div style="display:flex;flex-direction:column;gap:8px;">${adminUnits.map((u) => simpleAccountRowHtml(u, "مديرة نظام")).join("")}</div>`,
+    }) : ""}
 
-    ${collapsibleUsersSection({
+    ${(S.offices || []).length ? collapsibleUsersSection({
       key: "offices", title: "مكاتب الإشراف", count: (S.offices || []).length,
       formHtml: "",
-      listHtml: `<div style="display:flex;flex-direction:column;gap:8px;">${(S.offices || []).map((o) => officeRowHtml(o)).join("") || `<div class="hint">لا توجد مكاتب إشراف بعد.</div>`}</div>`,
-    })}
+      listHtml: `<div style="display:flex;flex-direction:column;gap:8px;">${(S.offices || []).map((o) => officeRowHtml(o)).join("")}</div>`,
+    }) : ""}
 
-    ${collapsibleUsersSection({
+    ${S.departments.length ? collapsibleUsersSection({
       key: "departments", title: "الأقسام", count: S.departments.length,
       formHtml: "",
       listHtml: `<div style="display:flex;flex-direction:column;gap:8px;">${S.departments.map((d) => departmentRowHtml(d)).join("")}</div>`,
-    })}
+    }) : ""}
 
-    ${collapsibleUsersSection({
+    ${unitUnits.length ? collapsibleUsersSection({
       key: "units", title: "الوحدات", count: unitUnits.length,
       formHtml: "",
       listHtml: `<div style="display:flex;flex-direction:column;gap:8px;">${unitUnits.map((u) => unitRowHtml(u)).join("")}</div>`,
-    })}
+    }) : ""}
 
-    ${collapsibleUsersSection({
+    ${centerUnits.length ? collapsibleUsersSection({
       key: "centers", title: "المراكز", count: centerUnits.length,
       formHtml: "",
       listHtml: `<div style="display:flex;flex-direction:column;gap:8px;">${centerUnits.map((u) => unitRowHtml(u)).join("")}</div>`,
-    })}
+    }) : ""}
+
+    ${!execUnits.length && !adminUnits.length && !(S.offices || []).length && !S.departments.length && !unitUnits.length && !centerUnits.length
+      ? `<div class="card" style="text-align:center;color:${SUBTLE};padding:36px 20px;border-style:dashed;">لا توجد أي جهات بعد — ابدئي بالضغط على "+ إضافة" أعلاه.</div>` : ""}
   </div></div>`;
 }
 
@@ -4955,15 +4958,10 @@ function renderJobTitleTemplatesManage() {
       backAction: "nav-back-admin" })}
     ${accountsHubTabBarHtml("job-title-templates")}
 
-    <div class="card" style="margin-bottom:18px;">
-      <div style="font-size:12.5px;font-weight:800;color:${ROSE};margin-bottom:12px;">إنشاء مسمى وظيفي (قالب) جديد</div>
-      ${jobTitleTemplateFormFieldsHtml("new-template", newForm)}
-      ${ui.templateFormError && !ui.editingTemplateId ? `<div style="color:${DANGER};font-size:11.5px;font-weight:700;margin-bottom:8px;">${esc(ui.templateFormError)}</div>` : ""}
-      ${pillBtn("إنشاء القالب", { icon: iconPlus(15, "#fff"), action: "add-job-title-template" })}
-    </div>
+    <div class="hint" style="margin-bottom:16px;">المسميات الوظيفية تُنشأ تلقائيًا من خانة "المسمى الوظيفي" وقت إضافة أي جهة جديدة من تبويب "الجهات" — هذه الصفحة فقط لعرض وتعديل صلاحيات المسميات الموجودة بالفعل.</div>
 
     <div style="font-size:12.5px;font-weight:800;color:${ROSE};margin-bottom:10px;">المسميات الوظيفية الحالية (${list.length})</div>
-    ${list.length === 0 ? `<div class="card" style="text-align:center;color:${SUBTLE};padding:36px 20px;border-style:dashed;">لا توجد قوالب بعد — أنشئي أول مسمى وظيفي من الأعلى.</div>` :
+    ${list.length === 0 ? `<div class="card" style="text-align:center;color:${SUBTLE};padding:36px 20px;border-style:dashed;">لا توجد مسميات وظيفية بعد — اكتبي مسمى وظيفي وقت إضافة أي جهة جديدة من تبويب "الجهات" وبيظهر هنا تلقائيًا.</div>` :
       `<div style="display:flex;flex-direction:column;gap:8px;">${list.map((t) => jobTitleTemplateRowHtml(t)).join("")}</div>`}
   </div></div>`;
 }
