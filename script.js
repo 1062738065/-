@@ -1464,7 +1464,11 @@ const SIDEBAR_PAGES = [
   { id: "unit-report", label: "إنشاء تقرير", group: "unit-home", icon: "pencil" },
   { id: "unit-settings", label: "الإعدادات", group: "unit-home", scope: "unit", icon: "gauge" },
 ];
-const SIDEBAR_GROUPS = ["الرئيسية", "إدارة التقارير", "__standalone__all-reports", "__standalone__units-manage", "الإدارة العليا", "مكتب الإشراف", "الهيكل التنظيمي", "unit-home"];
+// صفحات "unit-home" الأربع (لوحة الوحدة/تقارير/إنشاء تقرير/الإعدادات) كانت
+// مجموعة واحدة قابلة للطي ("unit-home")، فأصبحت الآن أربعة روابط رئيسية
+// مستقلة بالشريط الجانبي — بلا طي وبلا اشتراط مسبق بوحدة/قسم محدّد، تمامًا
+// بنفس أسلوب "جميع التقارير" — حسب طلب نجود الصريح.
+const SIDEBAR_GROUPS = ["الرئيسية", "إدارة التقارير", "__standalone__all-reports", "__standalone__units-manage", "الإدارة العليا", "مكتب الإشراف", "الهيكل التنظيمي", "__standalone__unit-dashboard", "__standalone__unit-reports", "__standalone__unit-report", "__standalone__unit-settings"];
 const SIDEBAR_GROUP_LABELS = { "unit-home": "الرئيسية" };
 
 // كتالوج "إجراءات" مسار اعتماد التقرير — يُستخدم لصلاحيات الأزرار لكل مسمى
@@ -1517,14 +1521,20 @@ function sidebarNavIcon(key, size, color) {
 }
 
 function computeVisibleSidebarPages() {
-  // مجموعة "unit-home" (تُعرض باسم "الرئيسية" لموظفة الوحدة/المركز) خاصة بعمل
-  // الوحدة نفسها، مو إدارة الموقع — مديرة النظام والقسم يشوفونها بس وهم فعليًا
-  // داخل صفحات وحدة معيّنة، مو بصفحتهم الرئيسية.
-  const UNIT_SCOPED_VIEWS = ["unit-dashboard", "unit-settings", "unit-reports", "unit-report", "full-report", "report-preview", "approval-path-tracking"];
+  // مجموعة "unit-home" (تُعرض الآن كروابط رئيسية مستقلة بالشريط الجانبي —
+  // زي "جميع التقارير" تمامًا، بلا طي وبلا اشتراط مسبق بوحدة/قسم محدّد، حسب
+  // طلب نجود الصريح) خاصة بعمل الوحدة نفسها، مو إدارة الموقع.
   // حساب "مسمى وظيفي" من صفحة "حسابات إضافية" له قائمة صفحات محدّدة بالضبط —
   // هذي تتجاوز كل منطق الأدوار العادي أدناه (لا تُقيَّد بأي فلترة أخرى).
   if (S.platformUserAllowedPages) {
-    return SIDEBAR_PAGES.filter((p) => S.platformUserAllowedPages.includes(p.id) && (p.group !== "unit-home" || UNIT_SCOPED_VIEWS.includes(S.view)));
+    // صفحات "unit-home" (لوحة الوحدة/تقارير/إنشاء تقرير/الإعدادات) تظهر هنا
+    // دائمًا طالما ممنوحة صراحة لهذا الحساب — بدون اشتراط إضافي بكون الصفحة
+    // الحالية داخل وحدة أصلًا. سابقًا كان الشرط الإضافي يُخفيها كلما كانت أول
+    // صفحة مسموحة (حسب ترتيبها بـ SIDEBAR_PAGES) صفحة غير "unit-home" (مثل
+    // "جميع التقارير") — فتختفي بقية الصفحات الممنوحة فعليًا من الشريط الجانبي
+    // بالكامل. الدخول إليها بنفسه يتكفّل الآن بضبط الوحدة المناسبة تلقائيًا
+    // (راجع ensureUnitContextForNav) بدل الاعتماد على وجودها مسبقًا.
+    return SIDEBAR_PAGES.filter((p) => S.platformUserAllowedPages.includes(p.id));
   }
   if (S.isAdmin) {
     // مديرة النظام تشوف كل صفحات الموقع بلا استثناء — بما فيها "قسمي" وصفحات
@@ -1533,20 +1543,27 @@ function computeVisibleSidebarPages() {
     // الجانبي مباشرة (بدل المرور بـ"الأقسام"/"مكاتب الإشراف")، تُفعَّل تلقائيًا
     // لأول قسم/مكتب نشط، وتظهر بداخل الصفحة نفسها قائمة تبديل تسمح لمديرة
     // النظام تختار أي قسم أو مكتب تبي تشوفه وتضبطه (راجع adminScopeSwitcherHtml).
-    return SIDEBAR_PAGES.filter((p) => p.group !== "unit-home" || UNIT_SCOPED_VIEWS.includes(S.view));
+    // صفحات "unit-home" ظاهرة دائمًا الآن (بلا شرط UNIT_SCOPED_VIEWS) — نفس
+    // طلب نجود الصريح: تكون رئيسية بالشريط الجانبي زي "جميع التقارير"، بلا أي
+    // اشتراط مسبق بوحدة/قسم محدّد (ensureUnitContextForNav يتكفّل بضبط الوحدة
+    // تلقائيًا عند الدخول المباشر — راجع case "nav-to").
+    return SIDEBAR_PAGES;
   } else if (S.isDepartmentUser) {
     // "لوحة المعلومات" أضيفت هنا لتصير الصفحة الافتراضية الجديدة (بدل "قسمي")
     // — "قسمي" تبقى متاحة بجانبها مؤقتًا (بدون حذف) حسب تعليمات نجود الصريحة،
     // لحد ما تتأكد إن الصفحة الجديدة تغطي كل شيء وتقرر حذف القديمة بنفسها.
-    return SIDEBAR_PAGES.filter((p) => p.id === "dashboard" || p.id === "department-overview" || p.id === "department-curation" || p.id === "all-reports" || (p.group === "unit-home" && UNIT_SCOPED_VIEWS.includes(S.view)));
+    // صفحات "unit-home" (إنشاء تقرير/تقارير/الإعدادات) ظاهرة دائمًا الآن أيضًا،
+    // بلا اشتراط كونها داخل وحدة أصلًا — نفس المبدأ أعلاه.
+    return SIDEBAR_PAGES.filter((p) => p.id === "dashboard" || p.id === "department-overview" || p.id === "department-curation" || p.id === "all-reports" || p.group === "unit-home");
   } else if (S.isExecutive) {
     return SIDEBAR_PAGES.filter((p) => p.group === "الإدارة العليا" || p.id === "all-reports");
   } else if (S.isOfficeUser) {
     return SIDEBAR_PAGES.filter((p) => ["office-dashboard", "office-archive", "all-reports", "office-summary", "office-curation", "departments-list"].includes(p.id));
   }
   // موظفة الوحدة أو المركز: تشوف "تقاريري" + "جميع التقارير" — بدون
-  // "الأقسام والوحدات" (ذاك رابط إشرافي خاص بمديرة النظام).
-  return SIDEBAR_PAGES.filter((p) => p.id === "all-reports" || (p.group === "unit-home" && UNIT_SCOPED_VIEWS.includes(S.view)));
+  // "الأقسام والوحدات" (ذاك رابط إشرافي خاص بمديرة النظام). صفحات unit-home
+  // ظاهرة دائمًا أيضًا (نفس المبدأ أعلاه).
+  return SIDEBAR_PAGES.filter((p) => p.id === "all-reports" || p.group === "unit-home");
 }
 
 // عدد التنبيهات: محسوب مباشرة من حالة التقارير — بدون أي تخزين إضافي.
@@ -1594,12 +1611,17 @@ function renderMainSidebar(mobile) {
       const soloId = g.slice("__standalone__".length);
       const page = visible.find((p) => p.id === soloId);
       if (!page) return "";
+      // "إنشاء تقرير" (unit-report) حالة خاصة: تعمل بزر إجراء (open-or-create-report)
+      // لا بتنقّل عادي مباشر — تكمل آخر تقرير مفتوح أو تنشئ واحدًا جديدًا فورًا،
+      // نفس سلوكها السابق تمامًا داخل مجموعة "unit-home" القديمة.
+      const isCreateEntry = page.id === "unit-report";
+      if (isCreateEntry && !platformActionAllowed("open-or-create-report")) return "";
       const active = S.view === page.id;
       const iconColor = active ? ROSE : INK;
       return `
         <div class="nav-group open">
           <div class="nav-list" style="padding-right:0;width:100%;">
-            <button class="nav-item ${active ? "active" : ""}" data-action="nav-to" data-view="${page.id}">${sidebarNavIcon(page.icon, 15, iconColor)}<span>${esc(page.label)}</span></button>
+            <button class="nav-item ${active ? "active" : ""}" data-action="${isCreateEntry ? "open-or-create-report" : "nav-to"}" ${isCreateEntry ? "" : `data-view="${page.id}"`}>${sidebarNavIcon(page.icon, 15, iconColor)}<span>${esc(page.label)}</span></button>
           </div>
         </div>`;
     }
@@ -3525,6 +3547,42 @@ function ensureSelfReportUnit(kind, scopeId) {
   S.units = [...S.units, u];
   dataStore.saveUnits(S.units);
   return u;
+}
+// تضمن وجود وحدة صالحة (S.currentUnitId) قبل الدخول فعليًا لأي صفحة من مجموعة
+// "unit-home" (لوحة الوحدة/تقارير/إنشاء تقرير/الإعدادات) — صارت هذه الصفحات
+// روابط رئيسية ظاهرة دومًا بالشريط الجانبي لكل أنواع الحسابات (مديرة النظام/
+// القسم/المكتب/المسمى الوظيفي)، بلا اشتراط مسبق بوحدة محدّدة (طلب نجود
+// الصريح)، فقد تُدخَل مباشرة بدون المرور بالاختيار التلقائي للوحدة الذي كان
+// يحصل فقط عند أول تسجيل دخول أو عبر صفحات أخرى (قسمي/وحدتي/مكتب الإشراف).
+// تُستدعى من معالج "nav-to" ومن "open-or-create-report". لا تفعل شيئًا لو
+// الوحدة الحالية صالحة أصلًا، فلا تغيّر شيئًا لحساب عادي (وحدة واحدة) أو لمن
+// مرّ بالفعل بهذا الاختيار.
+function ensureUnitContextForNav(navView) {
+  const targetPage = SIDEBAR_PAGES.find((p) => p.id === navView);
+  if (!targetPage || targetPage.group !== "unit-home") return;
+  // ملاحظة مهمة: "role" قد تكون غير محددة أصلًا بوحدات البذرة القديمة
+  // (undefined)، وتُعامَل بكل مكان آخر بالكود كـ"unit" افتراضيًا (راجع
+  // unitToRow: `u.role || "unit"`) — نطبّق نفس التطبيع هنا، وإلا تُستثنى هذي
+  // الوحدات خطأً فتُستبدل الوحدة الصحيحة الحالية بوحدة أخرى بالغلط.
+  const effRole = (u) => u.role || "unit";
+  const alreadyValid = (S.units || []).some((u) => u.id === S.currentUnitId && (effRole(u) === "unit" || effRole(u) === "center" || effRole(u) === "self_report"));
+  if (alreadyValid) return;
+  let scopedUnits = (S.units || []).filter((u) => effRole(u) === "unit" || effRole(u) === "center");
+  if (S.currentDepartmentId) {
+    scopedUnits = scopedUnits.filter((u) => u.departmentId === S.currentDepartmentId);
+  } else if (S.currentOfficeId) {
+    scopedUnits = scopedUnits.filter((u) => u.officeId === S.currentOfficeId);
+  } else if (S.currentUser && S.currentUser.role === "platform") {
+    // حساب "بدون نطاق" (scopeKind: none) — بلا قسم/مكتب أصلًا، فلا وحدات
+    // نشترك فيها؛ ننشئ/نستخدم تقريره الذاتي المستقل مباشرة أسفل.
+    scopedUnits = [];
+  }
+  const activeUnit = scopedUnits.find((u) => u.status === "active") || scopedUnits[0];
+  if (activeUnit) { S.currentUnitId = activeUnit.id; return; }
+  if (S.currentUser && S.currentUser.role === "platform") {
+    const selfUnit = ensureSelfReportUnit("own", S.currentUser.id);
+    if (selfUnit) S.currentUnitId = selfUnit.id;
+  }
 }
 // "متأخر" هنا يعني: تقرير لم يُعتمد بعد (مسودة أو قيد المراجعة) ومضى على إنشائه
 // أكثر من 14 يومًا — تقدير عملي بما إن النظام لا يحتفظ بموعد استحقاق صريح لكل تقرير.
@@ -7196,6 +7254,12 @@ function attachClickListener() {
         // نلغي أي طيّ يدوي للمجموعة اللي تحتوي الصفحة الجديدة، عشان تفتح تلقائيًا وتبيّن أين نحن.
         const targetPage = SIDEBAR_PAGES.find((p) => p.id === navView);
         if (targetPage && S.ui.sidebarGroupState) delete S.ui.sidebarGroupState[targetPage.group];
+        // أي حساب (مديرة نظام/قسم/مكتب/مسمى وظيفي) قد يدخل صفحة من مجموعة
+        // "unit-home" (تقارير/إنشاء تقرير/الإعدادات) مباشرة من الشريط الجانبي
+        // الآن — بما إنها صارت روابط رئيسية ظاهرة دومًا، بلا اشتراط مسبق بوحدة
+        // محدّدة (طلب نجود الصريح). نتأكد هنا من وجود وحدة صالحة قبل الدخول،
+        // بدل أن تبقى الصفحة فارغة/معطّلة.
+        ensureUnitContextForNav(navView);
         if (navView === "platform-users-manage" || navView === "platform-permissions-manage" || navView === "job-title-templates") {
           S.platformUsers = dataStore.getPlatformUsers();
           S.jobTitleTemplates = dataStore.getJobTitleTemplates();
@@ -7557,6 +7621,11 @@ function attachClickListener() {
       case "set-unit-reports-filter": S.ui.unitReportsFilter = ds.filter; render(); break;
       case "open-or-create-report": {
         if (!platformActionAllowed("open-or-create-report")) break;
+        // زر "إنشاء تقرير" صار رابطًا رئيسيًا بالشريط الجانبي يُضغط مباشرة بلا
+        // اشتراط مسبق بوحدة محدّدة (نفس مبدأ "نav-to" أعلاه) — نتأكد هنا من
+        // وجود وحدة صالحة أولًا، بدل الدخول بوحدة غير موجودة (رسالة "تعذر إيجاد
+        // الوحدة").
+        ensureUnitContextForNav("unit-report");
         // حساب نطاقه قسم أو مكتب إشراف له أكثر من وحدة — نوجّهه أولًا لصفحة
         // "تقارير" (نفس renderUnitReportsHub) ليختار/يتأكد من الوحدة عبر
         // قائمة التبديل (scopedUnitSwitcherHtml) قبل إنشاء التقرير، بدل إنشاء
