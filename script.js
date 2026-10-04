@@ -2175,11 +2175,19 @@ function doLoginPlatformUser(pu) {
     const target = SIDEBAR_PAGES.find((p) => S.platformUserAllowedPages.includes(p.id));
     if (target) {
       // صفحات "unit-home" (لوحة معلومات الوحدة/تقارير/إنشاء تقرير/الإعدادات)
-      // تحتاج وحدة واحدة محدّدة (S.currentUnitId) لتعمل — نفوّض هذا بالكامل
-      // لـ ensureUnitContextForNav (نفس الدالة المستخدمة بالدخول المباشر من
-      // الشريط الجانبي لاحقًا)، فتضمن نفس القاعدة الموحّدة: الافتراضي تقرير
-      // القسم/المكتب الذاتي، مو أي وحدة تابعة حقيقية بالغلط.
-      ensureUnitContextForNav(target.id);
+      // تحتاج وحدة واحدة محدّدة (S.currentUnitId) لتعمل. حساب نطاقه قسم أو
+      // مكتب إشراف ما له وحدة واحدة بطبيعته — فنختار أول وحدة فعّالة ضمن
+      // نطاقه تلقائيًا، وتبقى قائمة تبديل الوحدة (scopedUnitSwitcherHtml)
+      // داخل الصفحة نفسها متاحة له لتغييرها لاحقًا.
+      if (target.group === "unit-home" && (pu.scopeKind === "department" || pu.scopeKind === "office")) {
+        const scopedUnits = pu.scopeKind === "department"
+          ? S.units.filter((u) => u.departmentId === pu.scopeId && u.status === "active")
+          : officeUnits(pu.scopeId);
+        if (scopedUnits.length && !scopedUnits.some((u) => u.id === S.currentUnitId)) {
+          S.currentUnitId = scopedUnits[0].id;
+          ensureUnitReportsLoaded(S.currentUnitId);
+        }
+      }
       S.view = target.id;
     }
     render();
@@ -3559,29 +3567,22 @@ function ensureUnitContextForNav(navView) {
   const effRole = (u) => u.role || "unit";
   const alreadyValid = (S.units || []).some((u) => u.id === S.currentUnitId && (effRole(u) === "unit" || effRole(u) === "center" || effRole(u) === "self_report"));
   if (alreadyValid) return;
-  // حساب نطاقه قسم أو مكتب إشراف (يشرف على عدة وحدات تابعة): الافتراضي
-  // دائمًا تقريره الذاتي هو (تقرير القسم/المكتب نفسه)، مو أي وحدة تابعة
-  // حقيقية — حتى ما ينفتح/يُعدَّل تقرير وحدة تابعة بالغلط بمجرد الدخول بلا
-  // اختيار صريح (نفس ملاحظة نجود: "ابي اقدر أضيف إذا احتاج إنشاء تقرير").
-  // تبقى كل الوحدات التابعة متاحة بوضوح من قائمة "اختيار الوحدة" (📁 يميّز
-  // الذاتي عنها) لو احتاجت فعلًا تنشئ/تعدّل تقرير وحدة معيّنة بنفسها.
+  let scopedUnits = (S.units || []).filter((u) => effRole(u) === "unit" || effRole(u) === "center");
   if (S.currentDepartmentId) {
-    const selfUnit = ensureSelfReportUnit("department", S.currentDepartmentId);
-    if (selfUnit) { S.currentUnitId = selfUnit.id; return; }
+    scopedUnits = scopedUnits.filter((u) => u.departmentId === S.currentDepartmentId);
   } else if (S.currentOfficeId) {
-    const selfUnit = ensureSelfReportUnit("office", S.currentOfficeId);
-    if (selfUnit) { S.currentUnitId = selfUnit.id; return; }
+    scopedUnits = scopedUnits.filter((u) => u.officeId === S.currentOfficeId);
   } else if (S.currentUser && S.currentUser.role === "platform") {
-    // حساب "بدون نطاق" (scopeKind: none) — بلا قسم/مكتب أصلًا؛ تقريره الذاتي
-    // المستقل هو الخيار الوحيد أصلًا.
-    const selfUnit = ensureSelfReportUnit("own", S.currentUser.id);
-    if (selfUnit) { S.currentUnitId = selfUnit.id; return; }
+    // حساب "بدون نطاق" (scopeKind: none) — بلا قسم/مكتب أصلًا، فلا وحدات
+    // نشترك فيها؛ ننشئ/نستخدم تقريره الذاتي المستقل مباشرة أسفل.
+    scopedUnits = [];
   }
-  // مديرة النظام (أو أي حالة بلا قسم/مكتب/مسمى محدّد): تختار أول وحدة فعلية
-  // نشطة من كل الوحدات — نفس سلوك "وحدتي" القديم تمامًا، بلا تغيير هنا.
-  const scopedUnits = (S.units || []).filter((u) => effRole(u) === "unit" || effRole(u) === "center");
   const activeUnit = scopedUnits.find((u) => u.status === "active") || scopedUnits[0];
-  if (activeUnit) S.currentUnitId = activeUnit.id;
+  if (activeUnit) { S.currentUnitId = activeUnit.id; return; }
+  if (S.currentUser && S.currentUser.role === "platform") {
+    const selfUnit = ensureSelfReportUnit("own", S.currentUser.id);
+    if (selfUnit) S.currentUnitId = selfUnit.id;
+  }
 }
 // "متأخر" هنا يعني: تقرير لم يُعتمد بعد (مسودة أو قيد المراجعة) ومضى على إنشائه
 // أكثر من 14 يومًا — تقدير عملي بما إن النظام لا يحتفظ بموعد استحقاق صريح لكل تقرير.
