@@ -678,6 +678,13 @@ function unitToRow(u) {
     // rowToUnit)، وإلا تُفقَد هذي الوحدات أو يفشل حفظها بعد أول تحديث فعلي
     // على قاعدة بيانات حقيقية (لا تُفقَد محليًا بدون Supabase).
     office_id: u.officeId || "", platform_user_id: u.platformUserId || "",
+    // "مسار الاعتماد الحر" الخاص بهذي الوحدة تحديدًا (اختياري) — مصفوفة مراحل
+    // مرتّبة بالكامل بحرية (كل مرحلة = مسمى وظيفي من "القوالب")، تحل محل مسار
+    // الوحدة→رئيسة الوحدة→مراجع إضافي→القسم الثابت القديم عند وجودها فقط.
+    // فاضية/غير موجودة = الوحدة تستمر بسلوكها القديم تمامًا (hasHead/
+    // extraReviewerTitle)، بدون أي تأثير — إضافة بحتة. يحتاج عمود جديد نصي
+    // (jsonb) بجدول units على Supabase: approval_path.
+    approval_path: u.approvalPath || [],
   };
 }
 function rowToUnit(r) {
@@ -693,6 +700,7 @@ function rowToUnit(r) {
     // (CHECK constraint)، يجب إضافة القيمة 'self_report' لها أيضًا، وإلا
     // سيفشل حفظ أي تقرير ذاتي جديد على قاعدة البيانات الحقيقية.
     officeId: r.office_id || "", platformUserId: r.platform_user_id || "",
+    approvalPath: r.approval_path || [],
   };
 }
 function deptToRow(d) { return { id: d.id, name: d.name, password: d.password || "", status: d.status || "active", created_at: d.createdAt || Date.now(), curation: d.curation || { approvedKeys: [] }, email: d.email || "", office_id: d.officeId || "", allowed_pages: d.allowedPages || [], allowed_actions: d.allowedActions || [] }; }
@@ -782,8 +790,15 @@ function rowToSectionDef(r) { return { id: r.id, label: r.label, order: Number(r
 // وقيمة fields نفسها JSON خام (jsonb) بدون أي تحويل شكل — هي نفس بنية SECTION_FIELD_SCHEMAS[id].fields.
 function fieldSchemaToRow(sectionId, fields) { return { section_id: sectionId, fields: fields || [], updated_at: Date.now() }; }
 function rowToFieldSchemaEntry(r) { return { sectionId: r.section_id, fields: Array.isArray(r.fields) ? r.fields : [] }; }
-function reportToRow(unitId, r) { return { id: r.id, unit_id: unitId, label: r.label || "", status: r.status || "draft", report_type: r.reportType || "general", created_at: r.createdAt || Date.now(), updated_at: r.updatedAt || Date.now(), shared: r.shared || {}, indicator_history: r.indicatorHistory || {}, sections: r.sections || {}, last_section_id: r.lastSectionId || "", sent_to: r.sentTo || null, sent_at: r.sentAt || null, internal_sent_at: r.internalSentAt || null, internal_sent_by: r.internalSentBy || null, internal_review_notes: r.internalReviewNotes || null, internal_returned_at: r.internalReturnedAt || null, head_reviewed_at: r.headReviewedAt || null, head_reviewed_by: r.headReviewedBy || null, head_approval_decision: r.headApprovalDecision || null, extra_reviewed_at: r.extraReviewedAt || null, extra_approval_decision: r.extraApprovalDecision || null }; }
-function rowToReport(r) { return { id: r.id, label: r.label || "", status: r.status || "draft", reportType: r.report_type || "general", createdAt: Number(r.created_at) || 0, updatedAt: Number(r.updated_at) || 0, shared: r.shared || {}, indicatorHistory: r.indicator_history || {}, sections: r.sections || {}, lastSectionId: r.last_section_id || "", sentTo: r.sent_to || null, sentAt: r.sent_at ? Number(r.sent_at) : null, internalSentAt: r.internal_sent_at ? Number(r.internal_sent_at) : null, internalSentBy: r.internal_sent_by || null, internalReviewNotes: r.internal_review_notes || null, internalReturnedAt: r.internal_returned_at ? Number(r.internal_returned_at) : null, headReviewedAt: r.head_reviewed_at ? Number(r.head_reviewed_at) : null, headReviewedBy: r.head_reviewed_by || null, headApprovalDecision: r.head_approval_decision || null, extraReviewedAt: r.extra_reviewed_at ? Number(r.extra_reviewed_at) : null, extraApprovalDecision: r.extra_approval_decision || null }; }
+function reportToRow(unitId, r) { return { id: r.id, unit_id: unitId, label: r.label || "", status: r.status || "draft", report_type: r.reportType || "general", created_at: r.createdAt || Date.now(), updated_at: r.updatedAt || Date.now(), shared: r.shared || {}, indicator_history: r.indicatorHistory || {}, sections: r.sections || {}, last_section_id: r.lastSectionId || "", sent_to: r.sentTo || null, sent_at: r.sentAt || null, internal_sent_at: r.internalSentAt || null, internal_sent_by: r.internalSentBy || null, internal_review_notes: r.internalReviewNotes || null, internal_returned_at: r.internalReturnedAt || null, head_reviewed_at: r.headReviewedAt || null, head_reviewed_by: r.headReviewedBy || null, head_approval_decision: r.headApprovalDecision || null, extra_reviewed_at: r.extraReviewedAt || null, extra_approval_decision: r.extraApprovalDecision || null,
+  // تتبّع المرحلة الحالية بمسار الاعتماد الحر (اختياري — يُستخدم فقط لو
+  // الوحدة عندها approval_path مُعرَّف؛ غير ذلك يبقى 0 بلا أي تأثير على
+  // منطق الحالة القديم). يحتاج عمود جديد (عدد صحيح) بجدول reports: path_stage_index.
+  path_stage_index: r.pathStageIndex || 0,
+}; }
+function rowToReport(r) { return { id: r.id, label: r.label || "", status: r.status || "draft", reportType: r.report_type || "general", createdAt: Number(r.created_at) || 0, updatedAt: Number(r.updated_at) || 0, shared: r.shared || {}, indicatorHistory: r.indicator_history || {}, sections: r.sections || {}, lastSectionId: r.last_section_id || "", sentTo: r.sent_to || null, sentAt: r.sent_at ? Number(r.sent_at) : null, internalSentAt: r.internal_sent_at ? Number(r.internal_sent_at) : null, internalSentBy: r.internal_sent_by || null, internalReviewNotes: r.internal_review_notes || null, internalReturnedAt: r.internal_returned_at ? Number(r.internal_returned_at) : null, headReviewedAt: r.head_reviewed_at ? Number(r.head_reviewed_at) : null, headReviewedBy: r.head_reviewed_by || null, headApprovalDecision: r.head_approval_decision || null, extraReviewedAt: r.extra_reviewed_at ? Number(r.extra_reviewed_at) : null, extraApprovalDecision: r.extra_approval_decision || null,
+  pathStageIndex: Number(r.path_stage_index) || 0,
+}; }
 
 async function supabaseLogin(name, password) {
   const uRes = await supabaseRequest(`units?name=eq.${encodeURIComponent(name)}&password=eq.${encodeURIComponent(password)}&select=*&limit=1`);
@@ -1427,9 +1442,10 @@ const SIDEBAR_PAGES = [
   { id: "dashboard", label: "لوحة المعلومات", group: "الرئيسية", icon: "home" },
   { id: "admin-reports", label: "الأقسام والوحدات", group: "الرئيسية", icon: "building" },
   { id: "site-settings", label: "إعدادات الموقع", group: "الرئيسية", icon: "gauge" },
-  { id: "platform-users-manage", label: "حسابات إضافية", group: "الرئيسية", icon: "layers" },
-  { id: "platform-permissions-manage", label: "صلاحيات الحسابات", group: "الرئيسية", icon: "key" },
-  { id: "job-title-templates", label: "المسميات الوظيفية (القوالب)", group: "الرئيسية", icon: "layers" },
+  // "حسابات إضافية" و"صلاحيات الحسابات" و"المسميات الوظيفية (القوالب)" صارت
+  // تبويبات داخل صفحة "المستخدمون" نفسها (accountsHubTabBarHtml) بدل روابط
+  // منفصلة بالقائمة الجانبية — طلب نجود الصريح بدمجها. الصفحات الثلاث نفسها
+  // (views) باقية تمامًا بدون أي تغيير بمنطقها، بس ما تُسرد هنا كروابط مستقلة.
   { id: "all-reports", label: "جميع التقارير", group: "standalone", icon: "document" },
   { id: "indicators-manage", label: "إدارة مؤشرات الأداء", group: "إدارة التقارير", icon: "gauge" },
   { id: "goals-manage", label: "إدارة الأهداف والمستهدفات", group: "إدارة التقارير", icon: "target" },
@@ -2175,19 +2191,11 @@ function doLoginPlatformUser(pu) {
     const target = SIDEBAR_PAGES.find((p) => S.platformUserAllowedPages.includes(p.id));
     if (target) {
       // صفحات "unit-home" (لوحة معلومات الوحدة/تقارير/إنشاء تقرير/الإعدادات)
-      // تحتاج وحدة واحدة محدّدة (S.currentUnitId) لتعمل. حساب نطاقه قسم أو
-      // مكتب إشراف ما له وحدة واحدة بطبيعته — فنختار أول وحدة فعّالة ضمن
-      // نطاقه تلقائيًا، وتبقى قائمة تبديل الوحدة (scopedUnitSwitcherHtml)
-      // داخل الصفحة نفسها متاحة له لتغييرها لاحقًا.
-      if (target.group === "unit-home" && (pu.scopeKind === "department" || pu.scopeKind === "office")) {
-        const scopedUnits = pu.scopeKind === "department"
-          ? S.units.filter((u) => u.departmentId === pu.scopeId && u.status === "active")
-          : officeUnits(pu.scopeId);
-        if (scopedUnits.length && !scopedUnits.some((u) => u.id === S.currentUnitId)) {
-          S.currentUnitId = scopedUnits[0].id;
-          ensureUnitReportsLoaded(S.currentUnitId);
-        }
-      }
+      // تحتاج وحدة واحدة محدّدة (S.currentUnitId) لتعمل — نفوّض هذا بالكامل
+      // لـ ensureUnitContextForNav (نفس الدالة المستخدمة بالدخول المباشر من
+      // الشريط الجانبي لاحقًا)، فتضمن نفس القاعدة الموحّدة: الافتراضي تقرير
+      // القسم/المكتب الذاتي، مو أي وحدة تابعة حقيقية بالغلط.
+      ensureUnitContextForNav(target.id);
       S.view = target.id;
     }
     render();
@@ -3567,22 +3575,29 @@ function ensureUnitContextForNav(navView) {
   const effRole = (u) => u.role || "unit";
   const alreadyValid = (S.units || []).some((u) => u.id === S.currentUnitId && (effRole(u) === "unit" || effRole(u) === "center" || effRole(u) === "self_report"));
   if (alreadyValid) return;
-  let scopedUnits = (S.units || []).filter((u) => effRole(u) === "unit" || effRole(u) === "center");
+  // حساب نطاقه قسم أو مكتب إشراف (يشرف على عدة وحدات تابعة): الافتراضي
+  // دائمًا تقريره الذاتي هو (تقرير القسم/المكتب نفسه)، مو أي وحدة تابعة
+  // حقيقية — حتى ما ينفتح/يُعدَّل تقرير وحدة تابعة بالغلط بمجرد الدخول بلا
+  // اختيار صريح (نفس ملاحظة نجود: "ابي اقدر أضيف إذا احتاج إنشاء تقرير").
+  // تبقى كل الوحدات التابعة متاحة بوضوح من قائمة "اختيار الوحدة" (📁 يميّز
+  // الذاتي عنها) لو احتاجت فعلًا تنشئ/تعدّل تقرير وحدة معيّنة بنفسها.
   if (S.currentDepartmentId) {
-    scopedUnits = scopedUnits.filter((u) => u.departmentId === S.currentDepartmentId);
+    const selfUnit = ensureSelfReportUnit("department", S.currentDepartmentId);
+    if (selfUnit) { S.currentUnitId = selfUnit.id; return; }
   } else if (S.currentOfficeId) {
-    scopedUnits = scopedUnits.filter((u) => u.officeId === S.currentOfficeId);
+    const selfUnit = ensureSelfReportUnit("office", S.currentOfficeId);
+    if (selfUnit) { S.currentUnitId = selfUnit.id; return; }
   } else if (S.currentUser && S.currentUser.role === "platform") {
-    // حساب "بدون نطاق" (scopeKind: none) — بلا قسم/مكتب أصلًا، فلا وحدات
-    // نشترك فيها؛ ننشئ/نستخدم تقريره الذاتي المستقل مباشرة أسفل.
-    scopedUnits = [];
-  }
-  const activeUnit = scopedUnits.find((u) => u.status === "active") || scopedUnits[0];
-  if (activeUnit) { S.currentUnitId = activeUnit.id; return; }
-  if (S.currentUser && S.currentUser.role === "platform") {
+    // حساب "بدون نطاق" (scopeKind: none) — بلا قسم/مكتب أصلًا؛ تقريره الذاتي
+    // المستقل هو الخيار الوحيد أصلًا.
     const selfUnit = ensureSelfReportUnit("own", S.currentUser.id);
-    if (selfUnit) S.currentUnitId = selfUnit.id;
+    if (selfUnit) { S.currentUnitId = selfUnit.id; return; }
   }
+  // مديرة النظام (أو أي حالة بلا قسم/مكتب/مسمى محدّد): تختار أول وحدة فعلية
+  // نشطة من كل الوحدات — نفس سلوك "وحدتي" القديم تمامًا، بلا تغيير هنا.
+  const scopedUnits = (S.units || []).filter((u) => effRole(u) === "unit" || effRole(u) === "center");
+  const activeUnit = scopedUnits.find((u) => u.status === "active") || scopedUnits[0];
+  if (activeUnit) S.currentUnitId = activeUnit.id;
 }
 // "متأخر" هنا يعني: تقرير لم يُعتمد بعد (مسودة أو قيد المراجعة) ومضى على إنشائه
 // أكثر من 14 يومًا — تقدير عملي بما إن النظام لا يحتفظ بموعد استحقاق صريح لكل تقرير.
@@ -4257,6 +4272,89 @@ function collapsibleUsersSection({ key, title, count, formHtml, listHtml }) {
     </div>`;
 }
 
+// نقطة إضافة واحدة موحّدة بدل 6 نماذج دائمة الظهور: ضغطة "+ إضافة" تفتح قائمة
+// أنواع (تفرّع من نفس فكرة الهيكل)، واختيار نوع يفتح نموذجه الفعلي (نفس
+// الحقول وأزرار add-* القديمة تمامًا، بلا أي تغيير بالمنطق) — إضافة واجهة
+// بحتة فقط.
+const ADD_ENTITY_TYPES = [
+  { key: "executive", label: "إدارة عليا", sectionKey: "executive" },
+  { key: "sysadmin", label: "مديرة نظام", sectionKey: "sysadmin" },
+  { key: "office", label: "مكتب إشراف", sectionKey: "offices" },
+  { key: "department", label: "قسم", sectionKey: "departments" },
+  { key: "unit", label: "وحدة", sectionKey: "units" },
+  { key: "center", label: "مركز", sectionKey: "centers" },
+];
+
+function addEntityPickerHtml() {
+  const ui = S.ui;
+  const step = ui.addEntityStep;
+  if (!step) {
+    return `<div style="margin-bottom:14px;">${pillBtn("+ إضافة", { icon: iconPlus(15, "#fff"), action: "start-add-entity" })}</div>`;
+  }
+  if (step === "choose") {
+    return `<div class="card" style="margin-bottom:18px;">
+      <div style="font-size:12.5px;font-weight:800;color:${ROSE};margin-bottom:10px;">ماذا تريدين إضافته؟</div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;">
+        ${ADD_ENTITY_TYPES.map((t) => pillBtn(t.label, { variant: "ghost", action: "choose-add-entity-type", data: { type: t.key } })).join("")}
+        ${pillBtn("إلغاء", { variant: "ghost", icon: iconX(14, INK), action: "cancel-add-entity" })}
+      </div>
+    </div>`;
+  }
+  const formByType = {
+    executive: `<div style="display:flex;gap:8px;flex-wrap:wrap;">
+      <input class="input" id="new-executive-name" style="flex:2;min-width:160px;" placeholder="اسم الحساب" value="${esc(ui.newExecutiveName || "")}" />
+      <input class="input" id="new-executive-password" style="flex:1;min-width:120px;" placeholder="كلمة المرور" value="${esc(ui.newExecutivePassword || "")}" />
+      ${pillBtn("إضافة حساب إدارة عليا", { icon: iconPlus(15, "#fff"), action: "add-executive" })}
+    </div>`,
+    sysadmin: `<div style="display:flex;gap:8px;flex-wrap:wrap;">
+      <input class="input" id="new-sysadmin-name" style="flex:2;min-width:160px;" placeholder="اسم الحساب" value="${esc(ui.newSysadminName || "")}" />
+      <input class="input" id="new-sysadmin-password" style="flex:1;min-width:120px;" placeholder="كلمة المرور" value="${esc(ui.newSysadminPassword || "")}" />
+      <input class="input" id="new-sysadmin-email" style="flex:1;min-width:160px;" type="email" placeholder="الإيميل (اختياري)" value="${esc(ui.newSysadminEmail || "")}" />
+      ${pillBtn("إضافة حساب مديرة نظام", { icon: iconPlus(15, "#fff"), action: "add-sysadmin" })}
+    </div>`,
+    office: `<div style="display:flex;gap:8px;flex-wrap:wrap;">
+      <input class="input" id="new-office-name" style="flex:2;min-width:160px;" placeholder="اسم مكتب الإشراف الجديد" value="${esc(ui.newOfficeName || "")}" />
+      ${pillBtn("إضافة مكتب إشراف", { icon: iconPlus(15, "#fff"), action: "add-office" })}
+    </div>`,
+    department: `${sheetsConfigured() ? `<div class="hint" style="background:${BLUE_BG};border-radius:10px;padding:9px 12px;margin-bottom:10px;">كلمة مرور القسم (اختيارية) تفتح للقسم كل وحداته التابعة له دفعة واحدة.</div>` : ""}
+    <div style="display:flex;gap:8px;flex-wrap:wrap;">
+      <input class="input" id="new-dept-name" style="flex:2;min-width:160px;" placeholder="اسم القسم الجديد" value="${esc(ui.newDeptName || "")}" />
+      <input class="input" id="new-dept-password" style="flex:1;min-width:120px;" placeholder="كلمة المرور (اختياري)" value="${esc(ui.newDeptPassword || "")}" />
+      <input class="input" id="new-dept-email" style="flex:1;min-width:160px;" type="email" placeholder="الإيميل (اختياري)" value="${esc(ui.newDeptEmail || "")}" />
+      ${pillBtn("إضافة قسم", { icon: iconPlus(15, "#fff"), action: "add-department" })}
+    </div>`,
+    unit: `${sheetsConfigured() ? `<div class="hint" style="background:${BLUE_BG};border-radius:10px;padding:9px 12px;margin-bottom:10px;">كلمة المرور هنا هي نفسها اللي تسجّل بيها الوحدة دخولها.</div>` : ""}
+    <div style="display:flex;gap:8px;flex-wrap:wrap;">
+      <input class="input" id="new-unit-name" style="flex:2;min-width:160px;" placeholder="اسم الوحدة الجديدة" value="${esc(ui.newUnitName || "")}" />
+      <input class="input" id="new-unit-password" style="flex:1;min-width:120px;" placeholder="كلمة المرور" value="${esc(ui.newUnitPassword || "")}" />
+      <input class="input" id="new-unit-email" style="flex:1;min-width:160px;" type="email" placeholder="الإيميل (اختياري)" value="${esc(ui.newUnitEmail || "")}" />
+      <select class="input" id="new-unit-dept" style="flex:1;min-width:140px;">
+        <option value="">القسم (اختياري)</option>
+        ${S.departments.map((d) => `<option value="${esc(d.id)}" ${ui.newUnitDept === d.id ? "selected" : ""}>${esc(d.name)}</option>`).join("")}
+      </select>
+      ${pillBtn("إضافة وحدة", { icon: iconPlus(15, "#fff"), action: "add-unit" })}
+    </div>`,
+    center: `<div style="display:flex;gap:8px;flex-wrap:wrap;">
+      <input class="input" id="new-center-name" style="flex:2;min-width:160px;" placeholder="اسم المركز الجديد" value="${esc(ui.newCenterName || "")}" />
+      <input class="input" id="new-center-password" style="flex:1;min-width:120px;" placeholder="كلمة المرور" value="${esc(ui.newCenterPassword || "")}" />
+      <input class="input" id="new-center-email" style="flex:1;min-width:160px;" type="email" placeholder="الإيميل (اختياري)" value="${esc(ui.newCenterEmail || "")}" />
+      <select class="input" id="new-center-dept" style="flex:1;min-width:140px;">
+        <option value="">القسم (اختياري)</option>
+        ${S.departments.map((d) => `<option value="${esc(d.id)}" ${ui.newCenterDept === d.id ? "selected" : ""}>${esc(d.name)}</option>`).join("")}
+      </select>
+      ${pillBtn("إضافة مركز", { icon: iconPlus(15, "#fff"), action: "add-center" })}
+    </div>`,
+  };
+  const typeInfo = ADD_ENTITY_TYPES.find((t) => t.key === step);
+  return `<div class="card" style="margin-bottom:18px;">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;">
+      <span style="font-size:12.5px;font-weight:800;color:${ROSE};">إضافة ${esc(typeInfo ? typeInfo.label : "")}</span>
+      ${pillBtn("رجوع", { variant: "ghost", action: "start-add-entity" })}
+    </div>
+    ${formByType[step] || ""}
+  </div>`;
+}
+
 function renderDepartmentsManage() {
   const ui = S.ui;
   const execUnits = S.units.filter((u) => u.role === "executive");
@@ -4267,89 +4365,43 @@ function renderDepartmentsManage() {
   return `
   <div class="page-wrap"><div class="page-inner narrow">
     ${topBarHtml({ title: "المستخدمون", backAction: "nav-back-admin" })}
+    ${accountsHubTabBarHtml("units-manage")}
+
+    ${addEntityPickerHtml()}
 
     ${collapsibleUsersSection({
       key: "executive", title: "الإدارة العليا", count: execUnits.length,
-      formHtml: `<div class="card" style="margin-bottom:14px;">
-        <div style="display:flex;gap:8px;flex-wrap:wrap;">
-          <input class="input" id="new-executive-name" style="flex:2;min-width:160px;" placeholder="اسم الحساب" value="${esc(ui.newExecutiveName || "")}" />
-          <input class="input" id="new-executive-password" style="flex:1;min-width:120px;" placeholder="كلمة المرور" value="${esc(ui.newExecutivePassword || "")}" />
-          ${pillBtn("إضافة حساب إدارة عليا", { icon: iconPlus(15, "#fff"), action: "add-executive" })}
-        </div>
-      </div>`,
+      formHtml: "",
       listHtml: `<div style="display:flex;flex-direction:column;gap:8px;">${execUnits.map((u) => simpleAccountRowHtml(u, "إدارة عليا")).join("") || `<div class="hint">لا توجد حسابات إدارة عليا بعد.</div>`}</div>`,
     })}
 
     ${collapsibleUsersSection({
       key: "sysadmin", title: "مديرة النظام", count: adminUnits.length,
-      formHtml: `<div class="card" style="margin-bottom:14px;">
-        <div style="display:flex;gap:8px;flex-wrap:wrap;">
-          <input class="input" id="new-sysadmin-name" style="flex:2;min-width:160px;" placeholder="اسم الحساب" value="${esc(ui.newSysadminName || "")}" />
-          <input class="input" id="new-sysadmin-password" style="flex:1;min-width:120px;" placeholder="كلمة المرور" value="${esc(ui.newSysadminPassword || "")}" />
-          <input class="input" id="new-sysadmin-email" style="flex:1;min-width:160px;" type="email" placeholder="الإيميل (اختياري)" value="${esc(ui.newSysadminEmail || "")}" />
-          ${pillBtn("إضافة حساب مديرة نظام", { icon: iconPlus(15, "#fff"), action: "add-sysadmin" })}
-        </div>
-      </div>`,
+      formHtml: "",
       listHtml: `<div style="display:flex;flex-direction:column;gap:8px;">${adminUnits.map((u) => simpleAccountRowHtml(u, "مديرة نظام")).join("") || `<div class="hint">لا توجد حسابات مديرة نظام إضافية بعد.</div>`}</div>`,
     })}
 
     ${collapsibleUsersSection({
       key: "offices", title: "مكاتب الإشراف", count: (S.offices || []).length,
-      formHtml: `<div class="card" style="margin-bottom:14px;">
-        <div style="display:flex;gap:8px;flex-wrap:wrap;">
-          <input class="input" id="new-office-name" style="flex:2;min-width:160px;" placeholder="اسم مكتب الإشراف الجديد" value="${esc(ui.newOfficeName || "")}" />
-          ${pillBtn("إضافة مكتب إشراف", { icon: iconPlus(15, "#fff"), action: "add-office" })}
-        </div>
-      </div>`,
+      formHtml: "",
       listHtml: `<div style="display:flex;flex-direction:column;gap:8px;">${(S.offices || []).map((o) => officeRowHtml(o)).join("") || `<div class="hint">لا توجد مكاتب إشراف بعد.</div>`}</div>`,
     })}
 
-        ${collapsibleUsersSection({
+    ${collapsibleUsersSection({
       key: "departments", title: "الأقسام", count: S.departments.length,
-      formHtml: `${sheetsConfigured() ? `<div class="hint" style="background:${BLUE_BG};border-radius:10px;padding:9px 12px;margin-bottom:10px;">كلمة مرور القسم (اختيارية) تفتح للقسم كل وحداته التابعة له دفعة واحدة.</div>` : ""}
-      <div class="card" style="margin-bottom:14px;">
-        <div style="display:flex;gap:8px;flex-wrap:wrap;">
-          <input class="input" id="new-dept-name" style="flex:2;min-width:160px;" placeholder="اسم القسم الجديد" value="${esc(ui.newDeptName || "")}" />
-          <input class="input" id="new-dept-password" style="flex:1;min-width:120px;" placeholder="كلمة المرور (اختياري)" value="${esc(ui.newDeptPassword || "")}" />
-          <input class="input" id="new-dept-email" style="flex:1;min-width:160px;" type="email" placeholder="الإيميل (اختياري)" value="${esc(ui.newDeptEmail || "")}" />
-          ${pillBtn("إضافة قسم", { icon: iconPlus(15, "#fff"), action: "add-department" })}
-        </div>
-      </div>`,
+      formHtml: "",
       listHtml: `<div style="display:flex;flex-direction:column;gap:8px;">${S.departments.map((d) => departmentRowHtml(d)).join("")}</div>`,
     })}
 
     ${collapsibleUsersSection({
       key: "units", title: "الوحدات", count: unitUnits.length,
-      formHtml: `${sheetsConfigured() ? `<div class="hint" style="background:${BLUE_BG};border-radius:10px;padding:9px 12px;margin-bottom:10px;">كلمة المرور هنا هي نفسها اللي تسجّل بيها الوحدة دخولها.</div>` : ""}
-      <div class="card" style="margin-bottom:14px;">
-        <div style="display:flex;gap:8px;flex-wrap:wrap;">
-          <input class="input" id="new-unit-name" style="flex:2;min-width:160px;" placeholder="اسم الوحدة الجديدة" value="${esc(ui.newUnitName || "")}" />
-          <input class="input" id="new-unit-password" style="flex:1;min-width:120px;" placeholder="كلمة المرور" value="${esc(ui.newUnitPassword || "")}" />
-          <input class="input" id="new-unit-email" style="flex:1;min-width:160px;" type="email" placeholder="الإيميل (اختياري)" value="${esc(ui.newUnitEmail || "")}" />
-          <select class="input" id="new-unit-dept" style="flex:1;min-width:140px;">
-            <option value="">القسم (اختياري)</option>
-            ${S.departments.map((d) => `<option value="${esc(d.id)}" ${ui.newUnitDept === d.id ? "selected" : ""}>${esc(d.name)}</option>`).join("")}
-          </select>
-          ${pillBtn("إضافة وحدة", { icon: iconPlus(15, "#fff"), action: "add-unit" })}
-        </div>
-      </div>`,
+      formHtml: "",
       listHtml: `<div style="display:flex;flex-direction:column;gap:8px;">${unitUnits.map((u) => unitRowHtml(u)).join("")}</div>`,
     })}
 
     ${collapsibleUsersSection({
       key: "centers", title: "المراكز", count: centerUnits.length,
-      formHtml: `<div class="card" style="margin-bottom:14px;">
-        <div style="display:flex;gap:8px;flex-wrap:wrap;">
-          <input class="input" id="new-center-name" style="flex:2;min-width:160px;" placeholder="اسم المركز الجديد" value="${esc(ui.newCenterName || "")}" />
-          <input class="input" id="new-center-password" style="flex:1;min-width:120px;" placeholder="كلمة المرور" value="${esc(ui.newCenterPassword || "")}" />
-          <input class="input" id="new-center-email" style="flex:1;min-width:160px;" type="email" placeholder="الإيميل (اختياري)" value="${esc(ui.newCenterEmail || "")}" />
-          <select class="input" id="new-center-dept" style="flex:1;min-width:140px;">
-            <option value="">القسم (اختياري)</option>
-            ${S.departments.map((d) => `<option value="${esc(d.id)}" ${ui.newCenterDept === d.id ? "selected" : ""}>${esc(d.name)}</option>`).join("")}
-          </select>
-          ${pillBtn("إضافة مركز", { icon: iconPlus(15, "#fff"), action: "add-center" })}
-        </div>
-      </div>`,
+      formHtml: "",
       listHtml: `<div style="display:flex;flex-direction:column;gap:8px;">${centerUnits.map((u) => unitRowHtml(u)).join("")}</div>`,
     })}
   </div></div>`;
@@ -4485,6 +4537,33 @@ function unitRowHtml(u) {
     </div>`;
   }
   if (editingApproval) {
+    const pathMode = S.ui.editUnitPathMode || ((u.approvalPath && u.approvalPath.length) ? "custom" : "legacy");
+    if (pathMode === "custom") {
+      const stages = S.ui.editUnitPathStages || [];
+      const templates = (S.jobTitleTemplates && S.jobTitleTemplates.length) ? S.jobTitleTemplates : dataStore.getJobTitleTemplates();
+      return `<div class="card">
+        <div style="font-size:12.5px;font-weight:800;color:${ROSE};margin-bottom:6px;">مسار اعتماد "${esc(u.name)}" — مسار حرّ مخصص</div>
+        <div class="hint" style="margin-bottom:10px;">رتّبي المراحل بأي عدد وأي ترتيب تحبينه. كل مرحلة = مسمى وظيفي من "المسميات الوظيفية (القوالب)" — أي حساب مربوط بهذا المسمى يقدر يعتمد/يعيد بهذي المرحلة. أول مرحلة تستلم التقرير بعد إنشائه من الوحدة، وآخر مرحلة = الاعتماد النهائي.</div>
+        <div style="display:flex;gap:8px;margin-bottom:10px;">
+          <button type="button" class="radio-pill" data-action="toggle-unit-path-mode" data-value="legacy">رجوع للمسار الثابت (وحدة→رئيسة→قسم)</button>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:8px;margin-bottom:10px;">
+          ${stages.length ? stages.map((s, i) => `
+            <div style="display:flex;align-items:center;gap:6px;background:${GRAY_BG};border-radius:10px;padding:8px 10px;">
+              <span style="font-size:11px;font-weight:800;color:${SUBTLE};min-width:18px;">${i + 1}</span>
+              <select class="input" style="flex:1;" data-action="set-unit-path-stage-template" data-index="${i}">
+                <option value="">— اختاري مسمى وظيفي —</option>
+                ${templates.map((t) => `<option value="${esc(t.id)}" ${s.templateId === t.id ? "selected" : ""}>${esc(t.name)}</option>`).join("")}
+              </select>
+              <button type="button" class="icon-btn" style="width:28px;height:28px;transform:rotate(180deg);" data-action="move-unit-path-stage" data-index="${i}" data-dir="up" ${i === 0 ? "disabled" : ""} title="تحريك لأعلى">${iconChevronDown(13, i === 0 ? "#cfc3c8" : INK)}</button>
+              <button type="button" class="icon-btn" style="width:28px;height:28px;" data-action="move-unit-path-stage" data-index="${i}" data-dir="down" ${i === stages.length - 1 ? "disabled" : ""} title="تحريك لأسفل">${iconChevronDown(13, i === stages.length - 1 ? "#cfc3c8" : INK)}</button>
+              <button type="button" class="icon-btn" style="width:28px;height:28px;" data-action="remove-unit-path-stage" data-index="${i}" title="حذف المرحلة">${iconTrash(13, DANGER)}</button>
+            </div>`).join("") : `<div class="hint">ما فيه أي مرحلة بعد — أضيفي مرحلة للبدء.</div>`}
+        </div>
+        ${pillBtn("+ إضافة مرحلة", { variant: "ghost", action: "add-unit-path-stage" })}
+        <div style="display:flex;gap:6px;margin-top:12px;">${pillBtn("حفظ المسار", { action: "save-unit-approval-edit", data: { id: u.id } })}${pillBtn("إلغاء", { variant: "ghost", action: "cancel-unit-approval-edit" })}</div>
+      </div>`;
+    }
     const hasHeadVal = S.ui.editUnitHasHead !== undefined ? S.ui.editUnitHasHead : unitHasHead(u);
     const extraVal = S.ui.editUnitExtraReviewerTitle !== undefined ? S.ui.editUnitExtraReviewerTitle : (u.extraReviewerTitle || "");
     return `<div class="card">
@@ -4501,13 +4580,16 @@ function unitRowHtml(u) {
         <input class="input" id="edit-unit-extra-reviewer" placeholder="مثال: مديرة تعليمية" value="${esc(extraVal)}" />
       </div>
       <div class="hint" style="margin-bottom:10px;">ترتيب المسار: الإدارية ← ${hasHeadVal ? "رئيسة الوحدة ← " : ""}${extraVal ? esc(extraVal) + " ← " : ""}القسم.</div>
+      <div style="display:flex;gap:8px;margin-bottom:10px;">
+        <button type="button" class="radio-pill" data-action="toggle-unit-path-mode" data-value="custom">تصميم مسار حرّ مخصص بدل هذا ↗</button>
+      </div>
       <div style="display:flex;gap:6px;">${pillBtn("حفظ", { action: "save-unit-approval-edit", data: { id: u.id } })}${pillBtn("إلغاء", { variant: "ghost", action: "cancel-unit-approval-edit" })}</div>
     </div>`;
   }
   return `<div class="card" style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;opacity:${isActive ? 1 : 0.6}">
     <div style="display:flex;align-items:center;gap:10px;">
       <div style="width:34px;height:34px;border-radius:10px;background:${DANGER_BG};display:flex;align-items:center;justify-content:center;">${iconBuilding(ROSE, 16)}</div>
-      <div><div style="font-size:13.5px;font-weight:700;">${esc(u.name)} ${u.role === "center" ? `<span style="font-size:10px;font-weight:700;color:${GOLD};background:${GOLD_BG};padding:2px 7px;border-radius:999px;">مركز</span>` : ""}${!unitHasHead(u) && u.role !== "center" ? `<span style="font-size:10px;font-weight:700;color:${SUBTLE};background:${GRAY_BG};padding:2px 7px;border-radius:999px;">بدون رئيسة</span>` : ""}${unitHasExtraReview(u) ? `<span style="font-size:10px;font-weight:700;color:${ROSE};background:${DANGER_BG};padding:2px 7px;border-radius:999px;">+${esc(u.extraReviewerTitle)}</span>` : ""}</div>${!isActive ? `<div style="font-size:10.5px;color:${SUBTLE}">معطّلة</div>` : ""}${u.email ? `<div style="font-size:10.5px;color:${SUBTLE}">${esc(u.email)}</div>` : ""}</div>
+      <div><div style="font-size:13.5px;font-weight:700;">${esc(u.name)} ${u.role === "center" ? `<span style="font-size:10px;font-weight:700;color:${GOLD};background:${GOLD_BG};padding:2px 7px;border-radius:999px;">مركز</span>` : ""}${(u.approvalPath && u.approvalPath.length) ? `<span style="font-size:10px;font-weight:700;color:${ROSE};background:${DANGER_BG};padding:2px 7px;border-radius:999px;">مسار حر (${u.approvalPath.length})</span>` : `${!unitHasHead(u) && u.role !== "center" ? `<span style="font-size:10px;font-weight:700;color:${SUBTLE};background:${GRAY_BG};padding:2px 7px;border-radius:999px;">بدون رئيسة</span>` : ""}${unitHasExtraReview(u) ? `<span style="font-size:10px;font-weight:700;color:${ROSE};background:${DANGER_BG};padding:2px 7px;border-radius:999px;">+${esc(u.extraReviewerTitle)}</span>` : ""}`}</div>${!isActive ? `<div style="font-size:10.5px;color:${SUBTLE}">معطّلة</div>` : ""}${u.email ? `<div style="font-size:10.5px;color:${SUBTLE}">${esc(u.email)}</div>` : ""}</div>
     </div>
     <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;">
       <select class="input" style="padding:6px 8px;font-size:12px;width:150px;" data-action="assign-unit-dept" data-id="${esc(u.id)}">
@@ -4813,6 +4895,23 @@ function jobTitleTemplateRowHtml(t) {
     </div>
   </div>`;
 }
+// شريط تبويبات موحّد يربط الصفحات الأربع اللي صارت مدمجة منطقيًا بناءً على
+// طلب نجود الصريح ("ما اقدر ادمجها مع بعض؟") — كل صفحة باقية بمنطقها ودالتها
+// الأصلية بدون أي تغيير، بس صار التنقل بينها بتبويبات بدل روابط منفصلة
+// بالقائمة الجانبية. "مخطط الهيكل التنظيمي" تبقى مستقلة تمامًا (قرارها
+// الصريح: أداة تخطيط حرة بدون حسابات دخول، غير هذي الأربعة).
+const ACCOUNTS_HUB_TABS = [
+  { view: "units-manage", label: "الوحدات والأقسام" },
+  { view: "platform-users-manage", label: "حسابات إضافية" },
+  { view: "platform-permissions-manage", label: "صلاحيات الحسابات" },
+  { view: "job-title-templates", label: "المسميات الوظيفية" },
+];
+function accountsHubTabBarHtml(activeView) {
+  return `<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:16px;border-bottom:1px solid ${BORDER};padding-bottom:12px;">
+    ${ACCOUNTS_HUB_TABS.map((t) => pillBtn(t.label, { variant: t.view === activeView ? "primary" : "ghost", action: "nav-to", data: { view: t.view } })).join("")}
+  </div>`;
+}
+
 function renderJobTitleTemplatesManage() {
   const ui = S.ui;
   const list = S.jobTitleTemplates || [];
@@ -4820,8 +4919,8 @@ function renderJobTitleTemplatesManage() {
   return `
   <div class="page-wrap"><div class="page-inner narrow">
     ${topBarHtml({ title: "المسميات الوظيفية (القوالب)", subtitle: "كل قالب = مجموعة صفحات وإجراءات واحدة؛ اربطي بها أي حساب إضافي من \"حسابات إضافية\" وتتحدث صلاحياته تلقائيًا مع أي تعديل هنا",
-      backAction: "nav-to", backData: { view: "platform-users-manage" },
-      right: pillBtn("حسابات إضافية", { variant: "ghost", icon: iconUser(15, INK), action: "nav-to", data: { view: "platform-users-manage" } }) })}
+      backAction: "nav-back-admin" })}
+    ${accountsHubTabBarHtml("job-title-templates")}
 
     <div class="card" style="margin-bottom:18px;">
       <div style="font-size:12.5px;font-weight:800;color:${ROSE};margin-bottom:12px;">إنشاء مسمى وظيفي (قالب) جديد</div>
@@ -4846,9 +4945,8 @@ function renderPlatformUsersManage() {
   };
   return `
   <div class="page-wrap"><div class="page-inner narrow">
-    ${topBarHtml({ title: "حسابات إضافية", subtitle: "أضيفي مسمّيات وظيفية جديدة بصلاحيات دخول وصفحات خاصة — بدون أي تأثير على الحسابات الحالية", backAction: "nav-back-admin",
-      right: pillBtn("صلاحيات الحسابات", { variant: "ghost", icon: iconKey(15, INK), action: "nav-to", data: { view: "platform-permissions-manage" } })
-        + pillBtn("المسميات الوظيفية (القوالب)", { variant: "ghost", icon: iconLayers(15, INK), action: "nav-to", data: { view: "job-title-templates" } }) })}
+    ${topBarHtml({ title: "حسابات إضافية", subtitle: "أضيفي مسمّيات وظيفية جديدة بصلاحيات دخول وصفحات خاصة — بدون أي تأثير على الحسابات الحالية", backAction: "nav-back-admin" })}
+    ${accountsHubTabBarHtml("platform-users-manage")}
 
     <div class="card" style="margin-bottom:18px;">
       <div style="font-size:12.5px;font-weight:800;color:${ROSE};margin-bottom:12px;">إضافة مسمّى وظيفي جديد</div>
@@ -4965,6 +5063,7 @@ function renderPlatformPermissionsManage() {
   <div class="page-wrap"><div class="page-inner narrow">
     ${topBarHtml({ title: "صلاحيات الحسابات", subtitle: "كل حساب بالنظام — وحدات، مراكز، أقسام، مكاتب إشراف، وحسابات إضافية — بقائمة واحدة، وتعديل صفحاته وإجراءاته مباشرة", backAction: "nav-back-admin",
       right: pillBtn("إضافة حساب إضافي جديد", { variant: "ghost", icon: iconPlus(15, INK), action: "nav-to", data: { view: "platform-users-manage" } }) })}
+    ${accountsHubTabBarHtml("platform-permissions-manage")}
 
     ${list.length === 0 ? `<div class="card" style="text-align:center;color:${SUBTLE};padding:36px 20px;border-style:dashed;">لا توجد حسابات بعد.</div>` : `
     <div class="card" style="margin-bottom:14px;padding:10px 14px;">
@@ -7177,6 +7276,12 @@ function attachFormListeners() {
       render();
       return;
     }
+    if (el.dataset && el.dataset.action === "set-unit-path-stage-template") {
+      const idx = Number(el.dataset.index);
+      S.ui.editUnitPathStages = (S.ui.editUnitPathStages || []).map((s, i) => i === idx ? { ...s, templateId: el.value } : s);
+      render();
+      return;
+    }
     if (el.dataset && el.dataset.action === "assign-dept-office") {
       const d = S.departments.find((x) => x.id === el.dataset.id);
       if (d) { d.officeId = el.value; dataStore.saveDepartments(S.departments); }
@@ -7752,6 +7857,19 @@ function attachClickListener() {
       }
 
       /* ---------- departments management ---------- */
+      /* ---------- نقطة الإضافة الموحدة (إدارة عليا/مديرة نظام/مكتب/قسم/وحدة/مركز) ---------- */
+      case "start-add-entity": S.ui.addEntityStep = "choose"; render(); break;
+      case "cancel-add-entity": S.ui.addEntityStep = null; render(); break;
+      case "choose-add-entity-type": {
+        S.ui.addEntityStep = ds.type;
+        const typeInfo = ADD_ENTITY_TYPES.find((t) => t.key === ds.type);
+        if (typeInfo) {
+          S.ui.usersSectionState = { ...(S.ui.usersSectionState || {}), [typeInfo.sectionKey]: true };
+        }
+        render();
+        break;
+      }
+
       case "add-department": {
         const nameEl = document.getElementById("new-dept-name");
         const name = (nameEl.value || "").trim();
@@ -7760,7 +7878,7 @@ function attachClickListener() {
         if (!name) break;
         S.departments = [...S.departments, { id: uid("dept"), name, password, email, status: "active", createdAt: Date.now() }];
         dataStore.saveDepartments(S.departments);
-        S.ui.newDeptName = ""; S.ui.newDeptPassword = ""; S.ui.newDeptEmail = "";
+        S.ui.newDeptName = ""; S.ui.newDeptPassword = ""; S.ui.newDeptEmail = ""; S.ui.addEntityStep = null;
         render();
         break;
       }
@@ -7805,7 +7923,7 @@ function attachClickListener() {
         if (!name) break;
         S.offices = [...(S.offices || []), { id: uid("office"), name, password: "", status: "active", createdAt: Date.now() }];
         dataStore.saveOffices(S.offices);
-        S.ui.newOfficeName = "";
+        S.ui.newOfficeName = ""; S.ui.addEntityStep = null;
         render();
         break;
       }
@@ -7852,7 +7970,7 @@ function attachClickListener() {
         if (!name) break;
         S.units = [...S.units, { id: uid("unit"), name, password, email, role: "unit", status: "active", departmentId: deptId || "", createdAt: Date.now() }];
         dataStore.saveUnits(S.units);
-        S.ui.newUnitName = ""; S.ui.newUnitPassword = ""; S.ui.newUnitEmail = ""; S.ui.newUnitDept = "";
+        S.ui.newUnitName = ""; S.ui.newUnitPassword = ""; S.ui.newUnitEmail = ""; S.ui.newUnitDept = ""; S.ui.addEntityStep = null;
         render();
         break;
       }
@@ -7864,7 +7982,7 @@ function attachClickListener() {
         if (!name) break;
         S.units = [...S.units, { id: uid("center"), name, password, email, role: "center", status: "active", departmentId: deptId || "", createdAt: Date.now() }];
         dataStore.saveUnits(S.units);
-        S.ui.newCenterName = ""; S.ui.newCenterPassword = ""; S.ui.newCenterEmail = ""; S.ui.newCenterDept = "";
+        S.ui.newCenterName = ""; S.ui.newCenterPassword = ""; S.ui.newCenterEmail = ""; S.ui.newCenterDept = ""; S.ui.addEntityStep = null;
         render();
         break;
       }
@@ -7874,7 +7992,7 @@ function attachClickListener() {
         if (!name) break;
         S.units = [...S.units, { id: uid("exec"), name, password, role: "executive", status: "active", departmentId: "", createdAt: Date.now() }];
         dataStore.saveUnits(S.units);
-        S.ui.newExecutiveName = ""; S.ui.newExecutivePassword = "";
+        S.ui.newExecutiveName = ""; S.ui.newExecutivePassword = ""; S.ui.addEntityStep = null;
         render();
         break;
       }
@@ -7885,7 +8003,7 @@ function attachClickListener() {
         if (!name) break;
         S.units = [...S.units, { id: uid("admin"), name, password, email, role: "admin", status: "active", departmentId: "", createdAt: Date.now() }];
         dataStore.saveUnits(S.units);
-        S.ui.newSysadminName = ""; S.ui.newSysadminPassword = ""; S.ui.newSysadminEmail = "";
+        S.ui.newSysadminName = ""; S.ui.newSysadminPassword = ""; S.ui.newSysadminEmail = ""; S.ui.addEntityStep = null;
         render();
         break;
       }
@@ -7911,11 +8029,16 @@ function attachClickListener() {
         S.ui.editingUnitApprovalId = unit.id;
         S.ui.editUnitHasHead = unitHasHead(unit);
         S.ui.editUnitExtraReviewerTitle = unit.extraReviewerTitle || "";
+        S.ui.editUnitPathMode = (unit.approvalPath && unit.approvalPath.length) ? "custom" : "legacy";
+        S.ui.editUnitPathStages = unit.approvalPath && unit.approvalPath.length ? unit.approvalPath.map((s) => ({ ...s })) : [];
+        // قائمة القوالب تُستخدم بمنتقي كل مرحلة — نحمّلها لو ما كانت محمّلة أصلًا.
+        S.jobTitleTemplates = (S.jobTitleTemplates && S.jobTitleTemplates.length) ? S.jobTitleTemplates : dataStore.getJobTitleTemplates();
         render();
         break;
       }
       case "cancel-unit-approval-edit": {
         S.ui.editingUnitApprovalId = null; S.ui.editUnitHasHead = undefined; S.ui.editUnitExtraReviewerTitle = undefined;
+        S.ui.editUnitPathMode = undefined; S.ui.editUnitPathStages = undefined;
         render();
         break;
       }
@@ -7926,13 +8049,52 @@ function attachClickListener() {
         render();
         break;
       }
+      case "toggle-unit-path-mode": {
+        S.ui.editUnitPathMode = ds.value;
+        if (ds.value === "custom" && !(S.ui.editUnitPathStages && S.ui.editUnitPathStages.length)) {
+          S.ui.editUnitPathStages = [{ id: uid("stage"), templateId: "" }];
+        }
+        render();
+        break;
+      }
+      case "add-unit-path-stage": {
+        S.ui.editUnitPathStages = [...(S.ui.editUnitPathStages || []), { id: uid("stage"), templateId: "" }];
+        render();
+        break;
+      }
+      case "remove-unit-path-stage": {
+        const idx = Number(ds.index);
+        S.ui.editUnitPathStages = (S.ui.editUnitPathStages || []).filter((_, i) => i !== idx);
+        render();
+        break;
+      }
+      case "move-unit-path-stage": {
+        const idx = Number(ds.index);
+        const dir = ds.dir === "up" ? -1 : 1;
+        const list = [...(S.ui.editUnitPathStages || [])];
+        const swapWith = idx + dir;
+        if (swapWith < 0 || swapWith >= list.length) break;
+        [list[idx], list[swapWith]] = [list[swapWith], list[idx]];
+        S.ui.editUnitPathStages = list;
+        render();
+        break;
+      }
       case "save-unit-approval-edit": {
-        const extraEl = document.getElementById("edit-unit-extra-reviewer");
-        const extraVal = extraEl ? extraEl.value.trim() : (S.ui.editUnitExtraReviewerTitle || "");
-        const hasHeadVal = !!S.ui.editUnitHasHead;
-        S.units = S.units.map((u) => u.id === ds.id ? { ...u, hasHead: hasHeadVal, extraReviewerTitle: extraVal } : u);
+        const pathMode = S.ui.editUnitPathMode || "legacy";
+        if (pathMode === "custom") {
+          // مسار حرّ: نحفظ فقط المراحل اللي اخترنا لها مسمى وظيفي فعليًا —
+          // مرحلة بلا اختيار تُستبعد بدل ما تُحفظ فارغة بالغلط.
+          const cleanStages = (S.ui.editUnitPathStages || []).filter((s) => s.templateId);
+          S.units = S.units.map((u) => u.id === ds.id ? { ...u, approvalPath: cleanStages } : u);
+        } else {
+          const extraEl = document.getElementById("edit-unit-extra-reviewer");
+          const extraVal = extraEl ? extraEl.value.trim() : (S.ui.editUnitExtraReviewerTitle || "");
+          const hasHeadVal = !!S.ui.editUnitHasHead;
+          S.units = S.units.map((u) => u.id === ds.id ? { ...u, hasHead: hasHeadVal, extraReviewerTitle: extraVal, approvalPath: [] } : u);
+        }
         dataStore.saveUnits(S.units);
         S.ui.editingUnitApprovalId = null; S.ui.editUnitHasHead = undefined; S.ui.editUnitExtraReviewerTitle = undefined;
+        S.ui.editUnitPathMode = undefined; S.ui.editUnitPathStages = undefined;
         render();
         break;
       }
