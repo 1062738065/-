@@ -1612,7 +1612,7 @@ function render() {
   } else if (S.view === "department-overview") {
     html = shellWrap(renderDepartmentOverview());
   } else if (S.view === "department-curation") {
-    html = shellWrap(renderDepartmentCuration());
+    html = shellWrap(renderCurationUnified());
   } else if (S.view === "executive-dashboard") {
     html = shellWrap(renderExecutiveDashboard());
   } else if (S.view === "executive-summary") {
@@ -1799,24 +1799,25 @@ function sidebarNavIcon(key, size, color) {
 
 // "لوحة المعلومات" صفحة واحدة تتكيّف تلقائيًا مع نطاق الحساب (وحدة/قسم/مكتب/إدارة
 // عليا/مديرة النظام). المعرّفات القديمة تُعتبر نفس الصفحة: تُدمج بـ"dashboard".
-const MERGED_DASHBOARD_IDS = ["unit-dashboard", "office-dashboard", "executive-dashboard"];
+const MERGED_PAGE_MAP = { "unit-dashboard": "dashboard", "office-dashboard": "dashboard", "executive-dashboard": "dashboard", "office-curation": "department-curation" };
+const MERGED_DASHBOARD_IDS = Object.keys(MERGED_PAGE_MAP);
+// "اعتماد أبرز النتائج والتوصيات" كذلك صفحة واحدة: القسم يشوف نتائج قسمه، والمكتب
+// نتائج وحداته، ومديرة النظام تبدّل بين قسم/مكتب من أعلى الصفحة.
 function normalizeDashboardPages(arr) {
   if (!Array.isArray(arr)) return arr;
-  const has = arr.some((id) => id === "dashboard" || MERGED_DASHBOARD_IDS.indexOf(id) !== -1);
-  const out = arr.filter((id) => MERGED_DASHBOARD_IDS.indexOf(id) === -1 && id !== "dashboard");
-  if (has) out.unshift("dashboard");
+  const out = [];
+  arr.forEach((id) => { const t = MERGED_PAGE_MAP[id] || id; if (out.indexOf(t) === -1) out.push(t); });
+  const i = out.indexOf("dashboard");
+  if (i > 0) { out.splice(i, 1); out.unshift("dashboard"); }
   return out;
 }
 function sidebarPageActive(p) {
-  if (p.id === "dashboard") return S.view === "dashboard" || MERGED_DASHBOARD_IDS.indexOf(S.view) !== -1;
-  return S.view === p.id;
+  return S.view === p.id || MERGED_PAGE_MAP[S.view] === p.id;
 }
 function computeVisibleSidebarPages() {
   const raw = computeVisibleSidebarPagesRaw();
-  const hasDash = raw.some((p) => p.id === "dashboard" || MERGED_DASHBOARD_IDS.indexOf(p.id) !== -1);
-  const out = raw.filter((p) => MERGED_DASHBOARD_IDS.indexOf(p.id) === -1 && p.id !== "dashboard");
-  if (hasDash) out.unshift(SIDEBAR_PAGES.find((p) => p.id === "dashboard"));
-  return out;
+  const ids = new Set(raw.map((p) => MERGED_PAGE_MAP[p.id] || p.id));
+  return SIDEBAR_PAGES.filter((p) => ids.has(p.id));
 }
 function computeVisibleSidebarPagesRaw() {
   // مجموعة "unit-home" (تُعرض الآن كروابط رئيسية مستقلة بالشريط الجانبي —
@@ -3561,6 +3562,19 @@ function renderDepartmentOverview() {
 // بالضبط (deptCurationSectionHtml، بدون أي تكرار بالكود)، بنفس نمط صفحة
 // "office-curation" المستقلة أصلًا للمكتب. "قسمي" تبقى تعرض نفس القسم أيضًا
 // بدون أي حذف، لحد ما تتأكد نجود من الصفحة الجديدة وتقرر حذف القديمة بنفسها.
+function adminCurationKindTabs() {
+  if (!S.isAdmin) return "";
+  const k = S.ui.adminCurationKind === "office" ? "office" : "department";
+  return `<div style="display:flex;gap:8px;margin-bottom:12px;">
+    ${pillBtn("القسم", { variant: k === "department" ? "primary" : "ghost", action: "set-curation-kind", data: { kind: "department" } })}
+    ${pillBtn("مكتب الإشراف", { variant: k === "office" ? "primary" : "ghost", action: "set-curation-kind", data: { kind: "office" } })}
+  </div>`;
+}
+function renderCurationUnified() {
+  if (S.isAdmin) return S.ui.adminCurationKind === "office" ? renderOfficeCuration() : renderDepartmentCuration();
+  if (S.isOfficeUser && !S.isDepartmentUser) return renderOfficeCuration();
+  return renderDepartmentCuration();
+}
 function renderDepartmentCuration() {
   const dept = S.departments.find((d) => d.id === S.currentDepartmentId);
   if (!dept) return `<div class="page-wrap"><div class="page-inner">${S.isAdmin ? adminScopeSwitcherHtml("department") : ""}<div class="card" style="text-align:center;color:${SUBTLE};padding:36px;">${(S.departments || []).length ? "اختاري قسمًا من القائمة أعلاه." : "لا توجد أقسام بعد."}</div></div></div>`;
@@ -3568,6 +3582,7 @@ function renderDepartmentCuration() {
   <div class="page-wrap"><div class="page-inner">
     ${topBarHtml({ title: "اعتماد أبرز النتائج والتوصيات", subtitle: dept.name,
       right: pillBtn("خروج", { variant: "danger", icon: iconLogout(15, DANGER), action: "logout" }) })}
+    ${adminCurationKindTabs()}
     ${adminScopeSwitcherHtml("department")}
     ${deptCurationSectionHtml(dept)}
   </div></div>`;
@@ -3660,7 +3675,7 @@ function collectDeptCurationCandidates(dept) {
 // عرض عام لقسم "اعتماد أبرز النتائج والتوصيات" — يُستخدم لكل من مديرة القسم
 // ومكتب الإشراف، بفرق فقط في: مصدر العناصر المرشّحة (units)، ودالتي isCurated/
 // toggleAction + بيانات الإجراء (data-*) اللي يحتاجها كل زر.
-function curationSectionHtml(units, isCuratedFn, toggleAction, toggleData) {
+function curationSectionHtml(units, isCuratedFn, toggleAction, toggleData, blockTitle) {
   const { achievements, recommendations, challenges, strengths } = collectCurationCandidatesForUnits(units);
   const dataAttrs = Object.entries(toggleData || {}).map(([k, v]) => `data-${k}="${esc(v)}"`).join(" ");
   const renderList = (items, emptyMsg) => items.length === 0 ? emptyHint(emptyMsg) : items.map((it) => `
@@ -3672,7 +3687,7 @@ function curationSectionHtml(units, isCuratedFn, toggleAction, toggleData) {
     </div>`).join("");
   return `
     <div class="card" style="margin-top:18px;">
-      <div class="prs-title" style="font-size:14px;font-weight:800;margin-bottom:6px;">اعتماد أبرز النتائج والتوصيات</div>
+      <div class="prs-title" style="font-size:14px;font-weight:800;margin-bottom:6px;">${blockTitle ? esc(blockTitle) : "اعتماد أبرز النتائج والتوصيات"}</div>
       <div class="hint" style="margin-bottom:12px;">علّمي أهم ما يستحق الوصول للإدارة العليا — العناصر المعتمدة تظهر أولاً بالملخص التنفيذي والتقرير الإداري النهائي.</div>
       <div class="subhead">أبرز الإنجازات</div>${renderList(achievements, "لا توجد إنجازات بارزة مُدخلة بعد.")}
       <div class="subhead">نقاط القوة</div>${renderList(strengths, "لا توجد نقاط قوة مُدخلة بعد.")}
@@ -3691,7 +3706,14 @@ function toggleOfficeCuration(office, key) {
   dataStore.saveOffices(S.offices);
 }
 function officeCurationSectionHtml(office) {
-  return curationSectionHtml(officeUnits(office.id), (key) => isOfficeCurated(office, key), "toggle-office-curation", {});
+  // المكتب يرى: نتائج المكتب (كل وحداته) ثم كل قسم تابع له بوحداته، ويعتمد على كل مستوى.
+  const own = curationSectionHtml(officeUnits(office.id), (key) => isOfficeCurated(office, key), "toggle-office-curation", {}, "اعتماد المكتب — " + office.name);
+  const depts = (S.departments || []).filter((d) => d.officeId === office.id && d.status !== "inactive");
+  const deptBlocks = depts.map((d) => {
+    const dUnits = S.units.filter((u) => u.departmentId === d.id && u.status === "active");
+    return curationSectionHtml(dUnits, (key) => isDeptCurated(d, key), "toggle-dept-curation", { dept: d.id }, "اعتماد القسم — " + d.name);
+  }).join("");
+  return own + deptBlocks;
 }
 
 /* =============================== صفحات مكتب الإشراف (لوحة المعلومات، الأرشفة،
@@ -3726,6 +3748,7 @@ function renderOfficeCuration() {
   <div class="page-wrap"><div class="page-inner">
     ${topBarHtml({ title: "اعتماد أبرز النتائج والتوصيات", subtitle: office.name,
       right: pillBtn("خروج", { variant: "danger", icon: iconLogout(15, DANGER), action: "logout" }) })}
+    ${adminCurationKindTabs()}
     ${adminScopeSwitcherHtml("office")}
     ${officeCurationSectionHtml(office)}
   </div></div>`;
@@ -7687,6 +7710,7 @@ function attachClickListener() {
     try {
     switch (action) {
       /* ---------- navigation & shell ---------- */
+      case "set-curation-kind": S.ui.adminCurationKind = ds.kind === "office" ? "office" : "department"; if (S.ui.adminCurationKind === "office" && !(S.offices || []).some((o) => o.id === S.currentOfficeId)) { const fo = (S.offices || []).find((o) => o.status === "active") || (S.offices || [])[0]; S.currentOfficeId = fo ? fo.id : null; } if (S.ui.adminCurationKind === "department" && !(S.departments || []).some((d) => d.id === S.currentDepartmentId)) { const fd = (S.departments || []).find((d) => d.status === "active") || (S.departments || [])[0]; S.currentDepartmentId = fd ? fd.id : null; } render(); break;
       case "nav-to": {
         // "وحدتي" رابط ثابت لمديرة النظام فقط (بوّابة دخول) — لا يقابله عرض فعلي
         // باسمه، فنحوّله هنا فعليًا لعرض "تقارير" الوحدة (نفس مسار open-unit-preview)
@@ -7706,7 +7730,7 @@ function attachClickListener() {
         // مديرة النظام تدخل "قسمي"/صفحات مكتب الإشراف مباشرة من الشريط الجانبي —
         // بما إنهم أصلًا مرتبطين بقسم/مكتب واحد، نفعّلهم تلقائيًا لأول قسم أو مكتب
         // نشط لو ما كان فيه قيمة محفوظة أصلًا (أو كانت محفوظة أصبحت غير موجودة).
-        if (S.isAdmin && navView === "department-overview" && !(S.departments || []).some((d) => d.id === S.currentDepartmentId)) {
+        if (S.isAdmin && (navView === "department-overview" || navView === "department-curation") && !(S.departments || []).some((d) => d.id === S.currentDepartmentId)) {
           const firstDept = (S.departments || []).find((d) => d.status === "active") || (S.departments || [])[0];
           S.currentDepartmentId = firstDept ? firstDept.id : null;
         }
@@ -8255,7 +8279,7 @@ function attachClickListener() {
         break;
       }
       case "toggle-dept-curation": {
-        const dept = S.departments.find((d) => d.id === S.currentDepartmentId);
+        const dept = S.departments.find((d) => d.id === (ds.dept || S.currentDepartmentId));
         if (dept) toggleDeptCuration(dept, ds.key);
         render();
         break;
