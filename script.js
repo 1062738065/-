@@ -633,7 +633,7 @@ async function supabaseRequest(path, options) {
     try { data = await res.json(); } catch (e) { /* استجابة بلا محتوى، عادي لبعض الطلبات */ }
     return { ok: true, data };
   } catch (err) {
-    return { ok: false, error: "تعذر الاتصال بقاعدة البيانات. تحققي من الاتصال بالإنترنت." };
+    return { ok: false, error: "تعذر الاتصال بقاعدة البيانات. تحققي من الاتصال بالإنترنت. [" + ((options.method || "GET") + " " + String(path).split("?")[0] + " — " + (err && err.message ? err.message : "network")) + "]" };
   }
 }
 
@@ -862,9 +862,14 @@ function reportToRow(unitId, r) { return { id: r.id, unit_id: unitId, label: r.l
   // الوحدة عندها approval_path مُعرَّف؛ غير ذلك يبقى 0 بلا أي تأثير على
   // منطق الحالة القديم). يحتاج عمود جديد (عدد صحيح) بجدول reports: path_stage_index.
   path_stage_index: r.pathStageIndex || 0,
+  // المسار الحر الفعلي: المرحلة الحالية (id مرحلة من unit.approvalPath) + سجل الإرسال/الإعادة.
+  custom_stage_id: r.customStageId || null,
+  custom_log: r.customLog || [],
 }; }
 function rowToReport(r) { return { id: r.id, label: r.label || "", status: r.status || "draft", reportType: r.report_type || "general", createdAt: Number(r.created_at) || 0, updatedAt: Number(r.updated_at) || 0, shared: r.shared || {}, indicatorHistory: r.indicator_history || {}, sections: r.sections || {}, lastSectionId: r.last_section_id || "", sentTo: r.sent_to || null, sentAt: r.sent_at ? Number(r.sent_at) : null, internalSentAt: r.internal_sent_at ? Number(r.internal_sent_at) : null, internalSentBy: r.internal_sent_by || null, internalReviewNotes: r.internal_review_notes || null, internalReturnedAt: r.internal_returned_at ? Number(r.internal_returned_at) : null, headReviewedAt: r.head_reviewed_at ? Number(r.head_reviewed_at) : null, headReviewedBy: r.head_reviewed_by || null, headApprovalDecision: r.head_approval_decision || null, extraReviewedAt: r.extra_reviewed_at ? Number(r.extra_reviewed_at) : null, extraApprovalDecision: r.extra_approval_decision || null,
   pathStageIndex: Number(r.path_stage_index) || 0,
+  customStageId: r.custom_stage_id || null,
+  customLog: Array.isArray(r.custom_log) ? r.custom_log : [],
 }; }
 
 async function supabaseLogin(name, password) {
@@ -1150,7 +1155,9 @@ function isUnitInUserScope(unitId) {
 // التقارير تُحفظ محليًا بس وما توصل لقاعدة البيانات الحقيقية إطلاقًا. صُلّحت.
 function pushReportMetaToSheet(unitId, entry) {
   if (!sheetsConfigured()) return;
-  supabaseRequest("reports", { method: "POST", prefer: "return=minimal,resolution=merge-duplicates", body: JSON.stringify(reportToRow(unitId, entry)) }).catch(() => {});
+  supabaseRequest("reports?on_conflict=id", { method: "POST", prefer: "return=minimal,resolution=merge-duplicates", body: JSON.stringify(reportToRow(unitId, entry)) })
+    .then((res) => { if (res && !res.ok) reportSupabaseWriteError("reports", res.error); })
+    .catch(() => {});
 }
 function saveReportEntry(unitId, updatedEntry) {
   const list = ensureUnitReportsLoaded(unitId).map((r) => (r.id === updatedEntry.id ? updatedEntry : r));
@@ -1172,6 +1179,7 @@ function reportStatusMeta(status) {
   if (status === "under_review") return { label: "بانتظار المراجعة", color: GOLD, bg: GOLD_BG };
   if (status === "needs_completion") return { label: "بحاجة إلى استكمال", color: "#c9863a", bg: "#faf0e3" };
   if (status === "returned") return { label: "بحاجة إلى تعديل", color: DANGER, bg: DANGER_BG };
+  if (status === "custom_pending") return { label: "قيد المراجعة (المسار الحر)", color: GOLD, bg: GOLD_BG };
   if (status === "pending_head_review") return { label: "بانتظار مراجعة رئيسة الوحدة", color: GOLD, bg: GOLD_BG };
   if (status === "head_returned_edit") return { label: "معاد للتعديل", color: DANGER, bg: DANGER_BG };
   if (status === "head_returned_completion") return { label: "معاد للاستكمال", color: "#c9863a", bg: "#faf0e3" };
@@ -1186,6 +1194,108 @@ function reportStatusMeta(status) {
 // افتراضيًا: كل وحدة (role: "unit") لها رئيسة، وكل مركز (role: "center") بدون —
 // نفس السلوك الأصلي بالضبط لأي بيانات قديمة ما فيها الحقل الجديد بعد. يمكن
 // تخصيصه صراحة لكل وحدة من نموذج "المستخدمون" بغض النظر عن الدور.
+
+/* ===================== المسار الحر: تشغيل فعلي على التقارير =====================
+   وحدة عندها approvalPath (مراحل، كل مرحلة = مسمى وظيفي) تمشي تقاريرها عليه بدل
+   المسار الثابت. كل من يرسل/يعيد يختار المرحلة الهدف بنفسه. وحدة بلا approvalPath
+   ما يتغير عليها أي شي إطلاقًا. المرحلة الحالية = report.customStageId. */
+function unitCustomPath(unit) {
+  return unit && Array.isArray(unit.approvalPath) ? unit.approvalPath.filter((s) => s && s.templateId) : [];
+}
+function unitHasCustomPath(unit) { return unitCustomPath(unit).length > 0; }
+function customStageName(stage) {
+  const t = stage ? resolveJobTitleTemplate(stage.templateId) : null;
+  return t ? t.name : "مرحلة";
+}
+function userHoldsCustomStage(stage) {
+  if (!stage) return false;
+  if (S.isAdmin && !S.currentPlatformUserTemplateId) return true;
+  return !!S.currentPlatformUserTemplateId && S.currentPlatformUserTemplateId === stage.templateId;
+}
+// تقارير تنتظر المستخدمة الحالية (حسب مرحلة المسار الحر الحالية للتقرير)
+function customPathPendingForMe() {
+  const out = [];
+  (S.units || []).forEach((u) => {
+    const path = unitCustomPath(u);
+    if (!path.length) return;
+    ensureUnitReportsLoaded(u.id).forEach((r) => {
+      if (r.status !== "custom_pending") return;
+      const stage = path.find((st) => st.id === r.customStageId);
+      if (stage && userHoldsCustomStage(stage)) out.push({ unit: u, report: r, stage, path });
+    });
+  });
+  return out;
+}
+function userInAnyCustomPath() {
+  if (S.isAdmin && !S.currentPlatformUserTemplateId) return true;
+  if (!S.currentPlatformUserTemplateId) return false;
+  return (S.units || []).some((u) => unitCustomPath(u).some((st) => st.templateId === S.currentPlatformUserTemplateId));
+}
+// يسمح بعرض (قراءة فقط) تقرير وحدة لمن يملك المرحلة الحالية له
+function canViewReportViaCustomPath(unitId) {
+  const unit = (S.units || []).find((u) => u.id === unitId);
+  if (!unitHasCustomPath(unit)) return false;
+  return unitCustomPath(unit).some((st) => userHoldsCustomStage(st));
+}
+function customPathSendHtml(unit, report) {
+  const path = unitCustomPath(unit);
+  const picked = S.ui.customSendTarget || "";
+  return `
+  <div class="card" style="margin-top:16px;border:1.5px solid ${ROSE};">
+    <div style="font-size:13px;font-weight:800;margin-bottom:10px;">إرسال التقرير — لأي مرحلة؟</div>
+    <select class="input" id="custom-send-target" style="width:100%;margin-bottom:10px;">
+      <option value="">اختاري المرحلة...</option>
+      ${path.map((st) => `<option value="${esc(st.id)}" ${picked === st.id ? "selected" : ""}>${esc(customStageName(st))}</option>`).join("")}
+    </select>
+    <textarea id="custom-send-notes" class="input" style="width:100%;min-height:56px;margin-bottom:10px;" placeholder="ملاحظات (اختياري)..."></textarea>
+    <div style="display:flex;gap:8px;">
+      ${pillBtn("تأكيد الإرسال", { icon: iconCheckCircle(14, "#fff"), action: "confirm-custom-send" })}
+      ${pillBtn("إلغاء", { variant: "ghost", action: "cancel-custom-send" })}
+    </div>
+  </div>`;
+}
+function renderCustomPathInbox() {
+  const items = customPathPendingForMe();
+  return `
+  <div class="page-wrap"><div class="page-inner narrow">
+    ${topBarHtml({ title: "تقارير المسار الحر", subtitle: "تقارير وصلت لمرحلتك — اطّلعي عليها ثم أرسليها أو أعيديها للمرحلة اللي تختارينها" })}
+    ${items.length === 0 ? `<div class="card" style="text-align:center;color:${SUBTLE};padding:36px;border-style:dashed;">لا توجد تقارير بانتظارك حاليًا.</div>` : `
+    <div style="display:flex;flex-direction:column;gap:12px;">
+      ${items.map(({ unit, report, stage, path }) => {
+        const key = unit.id + ":" + report.id;
+        const others = path.filter((st) => st.id !== stage.id);
+        const log = (report.customLog || []).slice(-3);
+        return `
+        <div class="card">
+          <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;margin-bottom:6px;">
+            <div style="font-size:13.5px;font-weight:800;">${esc(unit.name)} — ${esc(report.label)}</div>
+            ${badgeHtml("مرحلتك: " + customStageName(stage), GOLD, GOLD_BG)}
+          </div>
+          ${log.length ? `<div style="font-size:11px;color:${SUBTLE};margin-bottom:8px;line-height:1.8;">${log.map((l) => esc(l.text || "")).join("<br>")}</div>` : ""}
+          <div style="margin-bottom:10px;">${pillBtn("عرض التقرير", { variant: "ghost", action: "view-report-pdf", data: { unitId: unit.id, reportId: report.id } })}</div>
+          <textarea id="cp-notes-${esc(key)}" class="input" style="width:100%;min-height:56px;margin-bottom:10px;" placeholder="ملاحظات (اختياري، وتلزم عند الإعادة)..."></textarea>
+          <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px;">
+            <select class="input" id="cp-send-${esc(key)}" style="flex:1;min-width:200px;">
+              <option value="">إرسال إلى...</option>
+              ${others.map((st) => `<option value="${esc(st.id)}">${esc(customStageName(st))}</option>`).join("")}
+              <option value="__final">اعتماد نهائي (انتهاء المسار)</option>
+            </select>
+            ${pillBtn("إرسال", { icon: iconCheckCircle(14, "#fff"), action: "custom-path-send", data: { unitId: unit.id, reportId: report.id } })}
+          </div>
+          <div style="display:flex;gap:8px;flex-wrap:wrap;">
+            <select class="input" id="cp-return-${esc(key)}" style="flex:1;min-width:200px;">
+              <option value="">إعادة إلى...</option>
+              <option value="__unit">الوحدة (للتعديل)</option>
+              ${others.map((st) => `<option value="${esc(st.id)}">${esc(customStageName(st))}</option>`).join("")}
+            </select>
+            ${pillBtn("إعادة", { variant: "ghost", icon: iconX(14, INK), action: "custom-path-return", data: { unitId: unit.id, reportId: report.id } })}
+          </div>
+        </div>`;
+      }).join("")}
+    </div>`}
+  </div></div>`;
+}
+
 function unitHasHead(unit) {
   if (!unit) return false;
   return unit.hasHead !== undefined && unit.hasHead !== null ? !!unit.hasHead : unit.role !== "center";
@@ -1213,6 +1323,17 @@ function computeApprovalPathStages(unit) {
   return stages;
 }
 function computeApprovalPathState(unit, entry) {
+  if (unitHasCustomPath(unit)) {
+    const log = entry.customLog || [];
+    return unitCustomPath(unit).map((st) => {
+      const acted = log.filter((l) => l.from === st.id);
+      const last = acted[acted.length - 1];
+      let state = "pending";
+      if (entry.status === "custom_pending" && entry.customStageId === st.id) state = "current";
+      else if (last) state = (last.kind === "return") ? "returned" : "done";
+      return { key: st.id, label: customStageName(st), state, dateStr: last ? approvalPathDateStr(last.at) : "", note: last ? (last.text || "") : "" };
+    });
+  }
   const stages = computeApprovalPathStages(unit).map((s) => ({ ...s, state: "pending", dateStr: "", note: "" }));
   const get = (k) => stages.find((s) => s.key === k);
   const admin = get("admin"), head = get("head"), extra = get("extra"), dept = get("dept");
@@ -1460,6 +1581,8 @@ function render() {
     html = shellWrap(renderFullReport());
   } else if (S.view === "report-preview") {
     html = shellWrap(renderReportPreview());
+  } else if (S.view === "custom-path-inbox") {
+    html = shellWrap(renderCustomPathInbox());
   } else if (S.view === "approval-path-tracking") {
     html = shellWrap(renderApprovalPathTracking());
   } else if (S.view === "offices-manage") {
@@ -1508,6 +1631,7 @@ const HOME_GROUP_ORDER = ["dashboard", "admin-reports"];
 const SIDEBAR_PAGES = [
   { id: "dashboard", label: "لوحة المعلومات", group: "الرئيسية", icon: "home" },
   { id: "admin-reports", label: "الأقسام والوحدات", group: "الرئيسية", icon: "building" },
+  { id: "custom-path-inbox", label: "تقارير المسار الحر", group: "الرئيسية", icon: "document" },
   { id: "site-settings", label: "إعدادات الموقع", group: "الرئيسية", icon: "gauge" },
   // "حسابات إضافية" و"صلاحيات الحسابات" و"المسميات الوظيفية (القوالب)" صارت
   // تبويبات داخل صفحة "المستخدمون" نفسها (accountsHubTabBarHtml) بدل روابط
@@ -1617,7 +1741,7 @@ function computeVisibleSidebarPages() {
     // "جميع التقارير") — فتختفي بقية الصفحات الممنوحة فعليًا من الشريط الجانبي
     // بالكامل. الدخول إليها بنفسه يتكفّل الآن بضبط الوحدة المناسبة تلقائيًا
     // (راجع ensureUnitContextForNav) بدل الاعتماد على وجودها مسبقًا.
-    return SIDEBAR_PAGES.filter((p) => S.platformUserAllowedPages.includes(p.id));
+    return SIDEBAR_PAGES.filter((p) => S.platformUserAllowedPages.includes(p.id) || (p.id === "custom-path-inbox" && userInAnyCustomPath()));
   }
   if (S.isAdmin) {
     // مديرة النظام تشوف كل صفحات الموقع بلا استثناء — بما فيها "قسمي" وصفحات
@@ -2202,6 +2326,7 @@ function doLoginPlatformUser(pu) {
   S.platformUserAllowedPages = effPages.length ? effPages : null;
   S.platformUserAllowedActions = effActions.length ? effActions : null;
   S.currentPlatformUserJobTitle = pu.jobTitle;
+  S.currentPlatformUserTemplateId = pu.templateId || "";
   S.pendingPlatformUserMatches = null;
   if (pu.scopeKind === "none") {
     // بدون نطاق بيانات محدد: حساب اطّلاع عام بصفحات مخصّصة فقط، بدون أي ربط
@@ -2367,7 +2492,7 @@ function doLogin(user) {
 }
 
 function doLogout() {
-  S.currentUser = null; S.currentUnitId = null; S.currentDepartmentId = null; S.currentOfficeId = null; S.isAdmin = false; S.isDepartmentUser = false; S.isExecutive = false; S.isOfficeUser = false; S.cameFromAllReports = false; S.adminPreviewOrigin = null; S.pendingUnitLoginId = null; S.currentUnitEntryMode = null; S.platformUserAllowedPages = null; S.platformUserAllowedActions = null; S.currentPlatformUserJobTitle = null; S.pendingPlatformUserMatches = null; S.view = "login"; S.ui = {};
+  S.currentUser = null; S.currentUnitId = null; S.currentDepartmentId = null; S.currentOfficeId = null; S.isAdmin = false; S.isDepartmentUser = false; S.isExecutive = false; S.isOfficeUser = false; S.cameFromAllReports = false; S.adminPreviewOrigin = null; S.pendingUnitLoginId = null; S.currentUnitEntryMode = null; S.platformUserAllowedPages = null; S.platformUserAllowedActions = null; S.currentPlatformUserTemplateId = ""; S.currentPlatformUserJobTitle = null; S.pendingPlatformUserMatches = null; S.view = "login"; S.ui = {};
   render();
 }
 
@@ -6085,17 +6210,20 @@ function sectionEditorHtml(unit, report) {
     ${fieldsHtml}
     ${S.sectionSaveError ? `<div class="error-box" style="margin-top:16px;">${esc(S.sectionSaveError)}</div>` : ""}
     ${S.ui.showSendPicker ? sendReportPickerHtml(unit) : ""}
+    ${S.ui.showCustomSendPicker ? customPathSendHtml(unit, report) : ""}
     <div class="section-editor-nav">
       ${pillBtn("السابق", { variant: "ghost", action: "section-prev", disabled: sectionIndex <= 0 })}
       <div style="flex:1;">${platformActionAllowed("section-save-draft") ? pillBtn(S.sectionSaveStatus || "حفظ كمسودة", { variant: "soft", icon: iconSave(15, GREEN), action: "section-save-draft" }) : ""}</div>
       ${sectionIndex >= SECTIONS.length - 1
         ? (report.status === "draft" || report.status === "returned" || report.status === "needs_completion" || report.status === "head_returned_edit" || report.status === "head_returned_completion" || report.status === "extra_returned_edit" || report.status === "extra_returned_completion"
             ? (() => {
-                const submitAction = S.currentUnitEntryMode === "admin" ? "submit-report-to-head" : "start-send-report";
-                return platformActionAllowed(submitAction)
+                const submitAction = unitHasCustomPath(unit) ? "start-custom-send" : (S.currentUnitEntryMode === "admin" ? "submit-report-to-head" : "start-send-report");
+                return (submitAction === "start-custom-send" || platformActionAllowed(submitAction))
                   ? pillBtn("إرسال للمراجعة", { icon: iconCheckCircle(15, "#fff"), action: submitAction })
                   : pillBtn("لا تملكين صلاحية الإرسال", { variant: "soft", icon: iconCheckCircle(15, SUBTLE), disabled: true });
               })()
+            : report.status === "custom_pending"
+            ? pillBtn("بانتظار: " + customStageName(unitCustomPath(unit).find((st) => st.id === report.customStageId)), { variant: "soft", icon: iconCheckCircle(15, GOLD), disabled: true })
             : report.status === "under_review"
             ? pillBtn("بانتظار مراجعة القسم", { variant: "soft", icon: iconCheckCircle(15, GOLD), disabled: true })
             : report.status === "completed"
@@ -7465,6 +7593,9 @@ function attachClickListener() {
         // محدّدة (طلب نجود الصريح). نتأكد هنا من وجود وحدة صالحة قبل الدخول،
         // بدل أن تبقى الصفحة فارغة/معطّلة.
         ensureUnitContextForNav(navView);
+        if (navView === "custom-path-inbox" && sheetsConfigured()) {
+          Promise.all((S.units || []).filter((u) => unitHasCustomPath(u)).map((u) => refreshReportsFromSheet(u.id))).then(() => { if (S.currentUser && S.view === "custom-path-inbox") render(); });
+        }
         if (navView === "platform-users-manage" || navView === "platform-permissions-manage" || navView === "job-title-templates") {
           S.platformUsers = dataStore.getPlatformUsers();
           S.jobTitleTemplates = dataStore.getJobTitleTemplates();
@@ -7859,9 +7990,58 @@ function attachClickListener() {
       }
       case "view-report-pdf": {
         // عرض للقراءة فقط — بعد تحقق فعلي من الصلاحية على مستوى البيانات
-        if (!isUnitInUserScope(ds.unitId)) break;
+        if (!isUnitInUserScope(ds.unitId) && !canViewReportViaCustomPath(ds.unitId)) break;
         S.currentUnitId = ds.unitId; S.currentReportId = ds.reportId; S.view = "full-report";
         S.cameFromAllReports = true;
+        render();
+        break;
+      }
+      case "start-custom-send": { S.ui.showCustomSendPicker = true; render(); break; }
+      case "cancel-custom-send": { S.ui.showCustomSendPicker = false; render(); break; }
+      case "confirm-custom-send": {
+        const entry = getCurrentReportEntry();
+        const unit = S.units.find((u) => u.id === S.currentUnitId);
+        if (!entry || !unitHasCustomPath(unit)) break;
+        const sel = document.getElementById("custom-send-target");
+        const target = unitCustomPath(unit).find((st) => st.id === (sel ? sel.value : ""));
+        if (!target) break;
+        const notes = ((document.getElementById("custom-send-notes") || {}).value || "").trim();
+        const log = [...(entry.customLog || []), { at: Date.now(), kind: "send", from: "unit", to: target.id, text: "أُرسل من الوحدة إلى " + customStageName(target) + (notes ? " — " + notes : "") }];
+        saveReportEntry(S.currentUnitId, { ...entry, status: "custom_pending", customStageId: target.id, customLog: log, internalSentAt: Date.now(), updatedAt: Date.now() });
+        S.ui.showCustomSendPicker = false;
+        render();
+        break;
+      }
+      case "custom-path-send":
+      case "custom-path-return": {
+        const isReturn = ds.action === "custom-path-return";
+        const unit = S.units.find((u) => u.id === ds.unitId);
+        const entry = unit ? getReportEntry(ds.unitId, ds.reportId) : null;
+        if (!entry || entry.status !== "custom_pending") break;
+        const path = unitCustomPath(unit);
+        const cur = path.find((st) => st.id === entry.customStageId);
+        if (!cur || !userHoldsCustomStage(cur)) break;
+        const key = ds.unitId + ":" + ds.reportId;
+        const sel = document.getElementById((isReturn ? "cp-return-" : "cp-send-") + key);
+        const target = sel ? sel.value : "";
+        if (!target) break;
+        const notes = ((document.getElementById("cp-notes-" + key) || {}).value || "").trim();
+        if (isReturn && !notes) { alert("الرجاء كتابة ملاحظات قبل إعادة التقرير."); break; }
+        const verb = isReturn ? "أُعيد" : "أُرسل";
+        let next;
+        if (target === "__final") {
+          next = { ...entry, status: "approved", customStageId: null, updatedAt: Date.now() };
+          next.customLog = [...(entry.customLog || []), { at: Date.now(), kind: "final", from: cur.id, to: "final", text: "اعتُمد نهائيًا من " + customStageName(cur) + (notes ? " — " + notes : "") }];
+        } else if (target === "__unit") {
+          next = { ...entry, status: "returned", customStageId: null, internalReviewNotes: notes, internalReturnedAt: Date.now(), updatedAt: Date.now() };
+          next.customLog = [...(entry.customLog || []), { at: Date.now(), kind: "return", from: cur.id, to: "unit", text: "أعادته " + customStageName(cur) + " للوحدة — " + notes }];
+        } else {
+          const tgt = path.find((st) => st.id === target);
+          if (!tgt) break;
+          next = { ...entry, status: "custom_pending", customStageId: tgt.id, updatedAt: Date.now() };
+          next.customLog = [...(entry.customLog || []), { at: Date.now(), kind: isReturn ? "return" : "send", from: cur.id, to: tgt.id, text: verb + " من " + customStageName(cur) + " إلى " + customStageName(tgt) + (notes ? " — " + notes : "") }];
+        }
+        saveReportEntry(ds.unitId, next);
         render();
         break;
       }
