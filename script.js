@@ -696,7 +696,7 @@ function unitToRow(u) {
     status: u.status || "active", created_at: u.createdAt || Date.now(), email: u.email || "",
     has_head: u.hasHead !== undefined && u.hasHead !== null ? !!u.hasHead : (u.role || "unit") !== "center",
     extra_reviewer_title: u.extraReviewerTitle || "",
-    allowed_pages: u.allowedPages || [], allowed_actions: u.allowedActions || [],
+    allowed_pages: u.allowedPages || [], allowed_actions: u.allowedActions || [], report_tabs: u.reportTabs || null,
     // حقلان جديدان خاصان بـ"وحدة" التقرير الذاتي (role: self_report) — يحتاجان
     // عمودين جديدين فعليًا بجدول units على Supabase (انظر الملاحظة أسفل
     // rowToUnit)، وإلا تُفقَد هذي الوحدات أو يفشل حفظها بعد أول تحديث فعلي
@@ -717,7 +717,7 @@ function rowToUnit(r) {
     status: r.status || "active", createdAt: Number(r.created_at) || 0, email: r.email || "",
     hasHead: r.has_head !== undefined && r.has_head !== null ? !!r.has_head : (r.role || "unit") !== "center",
     extraReviewerTitle: r.extra_reviewer_title || "",
-    allowedPages: r.allowed_pages || [], allowedActions: r.allowed_actions || [],
+    allowedPages: r.allowed_pages || [], allowedActions: r.allowed_actions || [], reportTabs: parseReportTabsCfg(r.report_tabs),
     // ملاحظة Supabase: يتطلب جدول units وجود عمودين جديدين (نص، تقبل NULL):
     // office_id و platform_user_id — خاصّان فقط بـ"وحدة" التقرير الذاتي
     // (role: self_report). لو role بعمود units مقيّد بقائمة قيم ثابتة
@@ -727,10 +727,10 @@ function rowToUnit(r) {
     approvalPath: r.approval_path || [],
   };
 }
-function deptToRow(d) { return { id: d.id, name: d.name, password: d.password || "", status: d.status || "active", created_at: d.createdAt || Date.now(), curation: d.curation || { approvedKeys: [] }, email: d.email || "", office_id: d.officeId || "", allowed_pages: d.allowedPages || [], allowed_actions: d.allowedActions || [] }; }
-function rowToDept(r) { return { id: r.id, name: r.name, password: r.password || "", status: r.status || "active", createdAt: Number(r.created_at) || 0, curation: r.curation || { approvedKeys: [] }, email: r.email || "", officeId: r.office_id || "", allowedPages: r.allowed_pages || [], allowedActions: r.allowed_actions || [] }; }
-function officeToRow(o) { return { id: o.id, name: o.name, password: o.password || "", email: o.email || "", status: o.status || "active", created_at: o.createdAt || Date.now(), curation: o.curation || { approvedKeys: [] }, allowed_pages: o.allowedPages || [], allowed_actions: o.allowedActions || [] }; }
-function rowToOffice(r) { return { id: r.id, name: r.name, password: r.password || "", email: r.email || "", status: r.status || "active", createdAt: Number(r.created_at) || 0, curation: r.curation || { approvedKeys: [] }, allowedPages: r.allowed_pages || [], allowedActions: r.allowed_actions || [] }; }
+function deptToRow(d) { return { id: d.id, name: d.name, password: d.password || "", status: d.status || "active", created_at: d.createdAt || Date.now(), curation: d.curation || { approvedKeys: [] }, email: d.email || "", office_id: d.officeId || "", allowed_pages: d.allowedPages || [], allowed_actions: d.allowedActions || [], report_tabs: d.reportTabs || null }; }
+function rowToDept(r) { return { id: r.id, name: r.name, password: r.password || "", status: r.status || "active", createdAt: Number(r.created_at) || 0, curation: r.curation || { approvedKeys: [] }, email: r.email || "", officeId: r.office_id || "", allowedPages: r.allowed_pages || [], allowedActions: r.allowed_actions || [], reportTabs: parseReportTabsCfg(r.report_tabs) }; }
+function officeToRow(o) { return { id: o.id, name: o.name, password: o.password || "", email: o.email || "", status: o.status || "active", created_at: o.createdAt || Date.now(), curation: o.curation || { approvedKeys: [] }, allowed_pages: o.allowedPages || [], allowed_actions: o.allowedActions || [], report_tabs: o.reportTabs || null }; }
+function rowToOffice(r) { return { id: r.id, name: r.name, password: r.password || "", email: r.email || "", status: r.status || "active", createdAt: Number(r.created_at) || 0, curation: r.curation || { approvedKeys: [] }, allowedPages: r.allowed_pages || [], allowedActions: r.allowed_actions || [], reportTabs: parseReportTabsCfg(r.report_tabs) }; }
 // "حسابات إضافية" (platform_users) — طبقة مرنة إضافية فوق نظام الحسابات الحالي
 // (وحدات/أقسام/مكاتب/مديرة نظام)، لمسمّيات وظيفية جديدة كليًا (سكرتارية، مديرة
 // تعليمية...) بصلاحيات صفحات مخصّصة لكل واحدة. لا تلمس أو تعدّل حسابات units/
@@ -747,14 +747,77 @@ function platformUserToRow(u) {
 // وإجراءات واحدة، قابلة للربط بأي عدد من "حسابات إضافية" عبر platformUserId.
 // تعديل القالب ينعكس فورًا على كل حساب مربوط به (بدل تكرار الصلاحيات بكل حساب).
 function jobTitleTemplateToRow(t) {
-  return { id: t.id, name: t.name || "", allowed_pages: t.allowedPages || [], allowed_actions: t.allowedActions || [], status: t.status || "active", created_at: t.createdAt || Date.now(), parent_id: t.parentId || "" };
+  return { id: t.id, name: t.name || "", allowed_pages: t.allowedPages || [], allowed_actions: t.allowedActions || [], status: t.status || "active", created_at: t.createdAt || Date.now(), parent_id: t.parentId || "", report_tabs: t.reportTabs || null };
 }
 function rowToJobTitleTemplate(r) {
   return {
     id: r.id, name: r.name || "", allowedPages: Array.isArray(r.allowed_pages) ? r.allowed_pages : [],
     allowedActions: Array.isArray(r.allowed_actions) ? r.allowed_actions : [], status: r.status || "active", createdAt: Number(r.created_at) || 0,
-    parentId: r.parent_id || "",
+    parentId: r.parent_id || "", reportTabs: parseReportTabsCfg(r.report_tabs),
   };
+}
+
+// أزرار صفحة "التقارير" (التبويبات) — مديرة النظام تحدد لكل وحدة/قسم/مكتب/مسمى
+// وظيفي أي أزرار تظهر له، وأيها "ينبّه" (يظهر بصفحة التنبيهات بعدد تقاريره
+// وينقل لنفس الزر). الشكل المحفوظ: { tabs: [ids], notify: [ids] } أو null (= الأزرار
+// الافتراضية القديمة بدون أي تغيير).
+const REPORT_TAB_CATALOG = [
+  { id: "all", label: "الكل" },
+  { id: "pending_head_review", label: "الواردة للمراجعة (رئيسة الوحدة)" },
+  { id: "pending_extra_review", label: "الواردة للمراجعة (المراجعة الإضافية)" },
+  { id: "draft", label: "مسوداتي" },
+  { id: "returned", label: "بحاجة إلى تعديل" },
+  { id: "needs_completion", label: "بحاجة إلى استكمال" },
+  { id: "under_review", label: "التقارير المرسلة" },
+  { id: "custom_pending", label: "قيد المراجعة (المسار الحر)" },
+  { id: "completed", label: "التقارير الكاملة" },
+  { id: "approved", label: "معتمد" },
+  { id: "archived", label: "أرشيف التقارير" },
+];
+function parseReportTabsCfg(v) {
+  if (!v || typeof v !== "object" || Array.isArray(v)) return null;
+  const tabs = Array.isArray(v.tabs) ? v.tabs : [];
+  const notify = Array.isArray(v.notify) ? v.notify : [];
+  return tabs.length || notify.length ? { tabs, notify } : null;
+}
+function reportMatchesCatalogTab(r, id) {
+  if (id === "all") return !isReportArchived(r);
+  if (id === "archived") return isReportArchived(r);
+  if (isReportArchived(r)) return false;
+  const groups = {
+    returned: ["returned", "head_returned_edit", "extra_returned_edit"],
+    needs_completion: ["needs_completion", "head_returned_completion", "extra_returned_completion"],
+    under_review: ["under_review", "pending_head_review", "pending_extra_review"],
+  };
+  return groups[id] ? groups[id].indexOf(r.status) !== -1 : r.status === id;
+}
+// إعداد الأزرار الفعلي للمستخدمة الحالية: المسمى الوظيفي (مع الفروع) أولًا، ثم
+// سجل الحساب نفسه. مديرة النظام بلا مسمى = كامل دائمًا (null). null = القديم.
+function effectiveReportTabsConfig() {
+  if (S.currentPlatformUserTemplateId) {
+    const p = effectiveTemplatePermissions(S.currentPlatformUserTemplateId);
+    if (p.reportTabs.length || p.reportNotify.length) return { tabs: p.reportTabs, notify: p.reportNotify };
+  }
+  if (S.isAdmin || S.isExecutive) return null;
+  let ent = null;
+  if (S.isDepartmentUser) ent = (S.departments || []).find((d) => d.id === S.currentDepartmentId);
+  else if (S.isOfficeUser) ent = (S.offices || []).find((o) => o.id === S.currentOfficeId);
+  else if (!S.currentPlatformUserTemplateId) ent = (S.units || []).find((u) => u.id === S.currentUnitId);
+  return ent ? parseReportTabsCfg(ent.reportTabs) : null;
+}
+function reportTabsEditorHtml(form, scope) {
+  const tabs = form.reportTabs || [], notify = form.reportNotify || [];
+  return `
+    <div style="margin:14px 0 6px;font-size:11.5px;font-weight:800;color:${ROSE};">أزرار صفحة التقارير (اتركيها فاضية للأزرار الافتراضية)</div>
+    <div class="hint" style="margin-bottom:8px;">"يظهر" = الزر بصفحة التقارير. "ينبّه" = يظهر بصفحة التنبيهات بعدد تقاريره، وعند الضغط يفتح نفس الزر.</div>
+    <div style="display:flex;flex-direction:column;gap:6px;">
+      ${REPORT_TAB_CATALOG.map((t) => `
+        <div style="display:flex;align-items:center;gap:10px;background:${GRAY_BG};border-radius:10px;padding:7px 10px;">
+          <span style="flex:1;font-size:12px;font-weight:700;">${esc(t.label)}</span>
+          <button type="button" class="radio-pill ${tabs.includes(t.id) ? "active" : ""}" data-action="toggle-rtab" data-scope="${scope}" data-mode="tab" data-id="${t.id}">يظهر</button>
+          <button type="button" class="radio-pill ${notify.includes(t.id) ? "active" : ""}" data-action="toggle-rtab" data-scope="${scope}" data-mode="notify" data-id="${t.id}">ينبّه</button>
+        </div>`).join("")}
+    </div>`;
 }
 // تجميع صلاحيات مسمى وظيفي + كل من "يتفرع منه" للأعلى (parentId) بالاتحاد
 // (Union) — أي صفحة/إجراء مسموح بأي مستوى بالسلسلة يصير مسموح بالمسمى الفرعي
@@ -764,15 +827,18 @@ function effectiveTemplatePermissions(templateId) {
   const list = (S.jobTitleTemplates && S.jobTitleTemplates.length) ? S.jobTitleTemplates : dataStore.getJobTitleTemplates();
   const pages = new Set();
   const actions = new Set();
+  const rtabs = new Set();
+  const rnotify = new Set();
   const visited = new Set();
   let current = list.find((t) => t.id === templateId) || null;
   while (current && !visited.has(current.id)) {
     visited.add(current.id);
     (current.allowedPages || []).forEach((p) => pages.add(p));
     (current.allowedActions || []).forEach((a) => actions.add(a));
+    if (current.reportTabs) { (current.reportTabs.tabs || []).forEach((x) => rtabs.add(x)); (current.reportTabs.notify || []).forEach((x) => rnotify.add(x)); }
     current = current.parentId ? (list.find((t) => t.id === current.parentId) || null) : null;
   }
-  return { allowedPages: [...pages], allowedActions: [...actions] };
+  return { allowedPages: [...pages], allowedActions: [...actions], reportTabs: [...rtabs], reportNotify: [...rnotify] };
 }
 // تُستدعى عند إضافة أي جهة جديدة (إدارة عليا/مديرة نظام/مكتب/قسم/وحدة/مركز)
 // من نموذج الإضافة الموحّد، لمّا تكتب نجود مسمى وظيفي بخانة "المسمى الوظيفي":
@@ -1670,12 +1736,16 @@ const SIDEBAR_PAGES = [
   { id: "unit-reports", label: "تقارير", group: "unit-home", scope: "unit", icon: "document" },
   { id: "unit-report", label: "إنشاء تقرير", group: "unit-home", icon: "pencil" },
   { id: "unit-settings", label: "الإعدادات", group: "unit-home", scope: "unit", icon: "gauge" },
+  // صفحات كانت بالأشرطة الثابتة القديمة (رئيسة/إدارية) فقط — صارت تُمنح بالصلاحيات.
+  // لا تظهر لمديرة النظام/القسم/المكتب (تُستثنى أدناه) ولا تتغير أشرطتهم الحالية.
+  { id: "unit-notifications", label: "التنبيهات", group: "unit-extra", scope: "unit", icon: "bell" },
+  { id: "unit-all-reports", label: "جميع تقارير الوحدة", group: "unit-extra", scope: "unit", icon: "layers" },
 ];
 // صفحات "unit-home" الأربع (لوحة الوحدة/تقارير/إنشاء تقرير/الإعدادات) كانت
 // مجموعة واحدة قابلة للطي ("unit-home")، فأصبحت الآن أربعة روابط رئيسية
 // مستقلة بالشريط الجانبي — بلا طي وبلا اشتراط مسبق بوحدة/قسم محدّد، تمامًا
 // بنفس أسلوب "جميع التقارير" — حسب طلب نجود الصريح.
-const SIDEBAR_GROUPS = ["الرئيسية", "إدارة التقارير", "__standalone__all-reports", "__standalone__units-manage", "الإدارة العليا", "مكتب الإشراف", "الهيكل التنظيمي", "__standalone__unit-dashboard", "__standalone__unit-reports", "__standalone__unit-report", "__standalone__unit-settings"];
+const SIDEBAR_GROUPS = ["الرئيسية", "إدارة التقارير", "__standalone__all-reports", "__standalone__units-manage", "الإدارة العليا", "مكتب الإشراف", "الهيكل التنظيمي", "__standalone__unit-dashboard", "__standalone__unit-reports", "__standalone__unit-report", "__standalone__unit-settings", "__standalone__unit-notifications", "__standalone__unit-all-reports"];
 const SIDEBAR_GROUP_LABELS = { "unit-home": "الرئيسية" };
 
 // كتالوج "إجراءات" مسار اعتماد التقرير — يُستخدم لصلاحيات الأزرار لكل مسمى
@@ -1754,7 +1824,7 @@ function computeVisibleSidebarPages() {
     // طلب نجود الصريح: تكون رئيسية بالشريط الجانبي زي "جميع التقارير"، بلا أي
     // اشتراط مسبق بوحدة/قسم محدّد (ensureUnitContextForNav يتكفّل بضبط الوحدة
     // تلقائيًا عند الدخول المباشر — راجع case "nav-to").
-    return SIDEBAR_PAGES;
+    return SIDEBAR_PAGES.filter((p) => p.group !== "unit-extra");
   } else if (S.isDepartmentUser) {
     // "لوحة المعلومات" أضيفت هنا لتصير الصفحة الافتراضية الجديدة (بدل "قسمي")
     // — "قسمي" تبقى متاحة بجانبها مؤقتًا (بدون حذف) حسب تعليمات نجود الصريحة،
@@ -1777,6 +1847,11 @@ function computeVisibleSidebarPages() {
 // مديرة القسم/النظام: عدد التقارير بانتظار مراجعتها. الوحدة/المركز: عدد
 // تقاريرها المحتاجة إجراء منها (بحاجة لتعديل أو استكمال).
 function computeNotificationCount() {
+  const cfgC = effectiveReportTabsConfig();
+  if (cfgC && cfgC.notify.length && S.currentUnitId) {
+    const lst = ensureUnitReportsLoaded(S.currentUnitId);
+    return lst.filter((r) => cfgC.notify.some((id) => reportMatchesCatalogTab(r, id))).length;
+  }
   if (S.isDepartmentUser) {
     const units = S.units.filter((u) => u.departmentId === S.currentDepartmentId && u.status === "active");
     return units.reduce((sum, u) => sum + ensureUnitReportsLoaded(u.id).filter((r) => r.status === "under_review").length, 0);
@@ -4335,7 +4410,7 @@ function renderUnitReportsHub() {
   if (!unit) return S.isAdmin ? unitNotFoundPageHtml() : `<div class="page-wrap">تعذر إيجاد الوحدة.</div>`;
   const dept = S.departments.find((d) => d.id === unit.departmentId);
   const list = ensureUnitReportsLoaded(unit.id);
-  const filter = S.ui.unitReportsFilter || "all";
+  let filter = S.ui.unitReportsFilter || "all";
   const typeFilter = S.ui.unitReportsTypeFilter || "";
   const yearFilter = S.ui.unitReportsYearFilter || "";
 
@@ -4367,6 +4442,15 @@ function renderUnitReportsHub() {
     { id: "approved", label: "معتمد" },
     { id: "archived", label: "أرشيف التقارير" },
   ];
+  // أزرار محددة من مديرة النظام لهذا الحساب/المسمى (إن وُجدت) تحل محل الأزرار الافتراضية.
+  const tabsCfg = effectiveReportTabsConfig();
+  if (tabsCfg && tabsCfg.tabs.length) {
+    const chosen = REPORT_TAB_CATALOG.filter((t) => tabsCfg.tabs.includes(t.id)).map((t) => (t.id === "pending_head_review" || t.id === "pending_extra_review") ? { ...t, label: "الواردة للمراجعة" } : t);
+    tabs.length = 0; chosen.forEach((t) => tabs.push(t));
+  } else if (unitHasCustomPath(unit)) {
+    tabs.splice(tabs.length - 1, 0, { id: "custom_pending", label: "قيد المراجعة (المسار الحر)" });
+  }
+  if (!tabs.some((t) => t.id === filter)) filter = tabs.length ? tabs[0].id : "all";
   const countFor = (id) => {
     if (id === "all") return list.filter((r) => !isReportArchived(r)).length;
     if (id === "archived") return list.filter((r) => isReportArchived(r)).length;
@@ -4876,7 +4960,7 @@ const SENSITIVE_PAGE_IDS = [
 ];
 // أسماء عرض مخصّصة لمجموعات الصفحات بقائمة صلاحيات "حسابات إضافية" — فقط
 // حيث اسم المجموعة الأصلي (المستخدم بالشريط الجانبي الحقيقي) غير واضح هنا.
-const PU_PAGE_GROUP_LABELS = { "unit-home": "صفحات التقارير (لوحة المعلومات/تقارير/إنشاء تقرير/الإعدادات)" };
+const PU_PAGE_GROUP_LABELS = { "unit-home": "صفحات التقارير (لوحة المعلومات/تقارير/إنشاء تقرير/الإعدادات)", "unit-extra": "صفحات الوحدة (التنبيهات/جميع تقارير الوحدة)" };
 function platformUserPagesChecklistHtml(selected, action) {
   selected = selected || [];
   const groups = [];
@@ -5088,6 +5172,7 @@ function jobTitleTemplateFormFieldsHtml(prefix, form, excludeId) {
     ${platformUserPagesChecklistHtml(form.allowedPages || [], `toggle-${prefix}-page`)}
     <div style="margin:14px 0 6px;font-size:11.5px;font-weight:800;color:${ROSE};">الإجراءات المسموحة (أزرار مسار الاعتماد)</div>
     ${platformUserActionsChecklistHtml(form.allowedActions || [], `toggle-${prefix}-action`)}
+    ${reportTabsEditorHtml(form, "template")}
   `;
 }
 function jobTitleTemplateUsageCount(templateId) {
@@ -5269,6 +5354,7 @@ function unifiedAccountPermRowHtml(rec) {
       ${platformUserPagesChecklistHtml(form.allowedPages || [], "toggle-account-perm-page")}
       <div style="margin:14px 0 6px;font-size:11.5px;font-weight:800;color:${ROSE};">صلاحية الإجراءات (اتركيها فاضية للسماح بكل الإجراءات المتاحة أصلًا)</div>
       ${platformUserActionsChecklistHtml(form.allowedActions || [], "toggle-account-perm-action")}
+      ${reportTabsEditorHtml(form, "account")}
       <div style="display:flex;gap:6px;margin-top:10px;">${pillBtn("حفظ", { action: "save-account-perm-edit", data: { kind: rec.kind, id: rec.id } })}${pillBtn("إلغاء", { variant: "ghost", action: "cancel-account-perm-edit" })}</div>
     </div>`;
   }
@@ -5832,9 +5918,26 @@ function unitPendingHeadReviewReports(unitId, statusFilter) {
   return ensureUnitReportsLoaded(unitId).filter((r) => r.status === st);
 }
 
+function renderConfiguredNotifications(unit, cfg) {
+  const list = ensureUnitReportsLoaded(unit.id);
+  const rows = cfg.notify.map((id) => ({ tab: REPORT_TAB_CATALOG.find((t) => t.id === id), n: list.filter((r) => reportMatchesCatalogTab(r, id)).length })).filter((x) => x.tab && x.n > 0);
+  return `
+  <div class="page-wrap"><div class="page-inner narrow">
+    ${topBarHtml({ title: "التنبيهات", subtitle: "حسب الأزرار المحددة لحسابك", backAction: "nav-to", backData: { view: "unit-dashboard" } })}
+    ${rows.length === 0 ? `<div class="card" style="text-align:center;color:${SUBTLE};padding:36px;">لا توجد تنبيهات حاليًا.</div>` :
+      `<div style="display:flex;flex-direction:column;gap:10px;">${rows.map(({ tab, n }) => `
+        <button class="card" data-action="goto-report-tab" data-filter="${tab.id}" style="display:flex;align-items:center;gap:12px;width:100%;text-align:right;cursor:pointer;">
+          <div style="width:38px;height:38px;border-radius:11px;background:${DANGER_BG};display:flex;align-items:center;justify-content:center;flex-shrink:0;">${iconBell(17, ROSE)}</div>
+          <div style="flex:1;min-width:0;"><div style="font-size:13px;font-weight:700;">${n} تقرير — ${esc(tab.label)}</div></div>
+          ${iconChevronLeft(14, SUBTLE)}
+        </button>`).join("")}</div>`}
+  </div></div>`;
+}
 function renderUnitNotifications() {
   const unit = S.units.find((u) => u.id === S.currentUnitId);
   if (!unit) return `<div class="page-wrap">تعذر إيجاد الوحدة.</div>`;
+  const cfgN = effectiveReportTabsConfig();
+  if (cfgN && cfgN.notify.length) return renderConfiguredNotifications(unit, cfgN);
   const isReviewer = S.currentUnitEntryMode === "head" || S.currentUnitEntryMode === "extra";
   const statusFilter = S.currentUnitEntryMode === "extra" ? "pending_extra_review" : "pending_head_review";
   const items = (isReviewer ? unitPendingHeadReviewReports(unit.id, statusFilter) : unitHeadReturnedReports(unit.id))
@@ -7999,6 +8102,24 @@ function attachClickListener() {
         render();
         break;
       }
+      case "goto-report-tab": {
+        S.ui.unitReportsFilter = ds.filter; S.view = "unit-reports";
+        if (isMobileViewport()) S.mobileSidebarOpen = false;
+        render();
+        break;
+      }
+      case "toggle-rtab": {
+        const holder = ds.scope === "template" ? (S.ui.editTemplateForm = S.ui.editTemplateForm || {}) : (S.ui.editAccountPermForm = S.ui.editAccountPermForm || { allowedPages: [], allowedActions: [] });
+        const key = ds.mode === "notify" ? "reportNotify" : "reportTabs";
+        const arr = holder[key] || (holder[key] = []);
+        const i = arr.indexOf(ds.id);
+        if (i >= 0) arr.splice(i, 1); else arr.push(ds.id);
+        // التنبيه يتطلب ظهور الزر: لو فعّلنا "ينبّه" نفعّل "يظهر" تلقائيًا
+        if (ds.mode === "notify" && i < 0) { const t = holder.reportTabs || (holder.reportTabs = []); if (!t.includes(ds.id)) t.push(ds.id); }
+        if (ds.scope === "template") captureJobTitleTemplateFormFields("edit-template");
+        render();
+        break;
+      }
       case "start-custom-send": { S.ui.showCustomSendPicker = true; render(); break; }
       case "cancel-custom-send": { S.ui.showCustomSendPicker = false; render(); break; }
       case "confirm-custom-send": {
@@ -8514,7 +8635,7 @@ function attachClickListener() {
         const t = (S.jobTitleTemplates || []).find((x) => x.id === ds.id);
         if (!t) break;
         S.ui.editingTemplateId = t.id;
-        S.ui.editTemplateForm = { name: t.name, parentId: t.parentId || "", allowedPages: [...(t.allowedPages || [])], allowedActions: [...(t.allowedActions || [])] };
+        S.ui.editTemplateForm = { name: t.name, parentId: t.parentId || "", reportTabs: [...((t.reportTabs && t.reportTabs.tabs) || [])], reportNotify: [...((t.reportTabs && t.reportTabs.notify) || [])], allowedPages: [...(t.allowedPages || [])], allowedActions: [...(t.allowedActions || [])] };
         S.ui.templateFormError = "";
         render();
         break;
@@ -8532,6 +8653,7 @@ function attachClickListener() {
         }
         S.jobTitleTemplates = (S.jobTitleTemplates || []).map((x) => x.id === ds.id ? {
           ...x, name, parentId, allowedPages: editForm.allowedPages || [], allowedActions: editForm.allowedActions || [],
+          reportTabs: ((editForm.reportTabs || []).length || (editForm.reportNotify || []).length) ? { tabs: editForm.reportTabs || [], notify: editForm.reportNotify || [] } : null,
         } : x);
         dataStore.saveJobTitleTemplates(S.jobTitleTemplates);
         S.ui.editingTemplateId = null; S.ui.editTemplateForm = null; S.ui.templateFormError = "";
@@ -8592,7 +8714,7 @@ function attachClickListener() {
         const rec = list.find((r) => r.kind === ds.kind && r.id === ds.id);
         if (!rec) break;
         S.ui.editingAccountPerm = { kind: ds.kind, id: ds.id };
-        S.ui.editAccountPermForm = { allowedPages: [...(rec.entity.allowedPages || [])], allowedActions: [...(rec.entity.allowedActions || [])] };
+        S.ui.editAccountPermForm = { allowedPages: [...(rec.entity.allowedPages || [])], allowedActions: [...(rec.entity.allowedActions || [])], reportTabs: [...((rec.entity.reportTabs && rec.entity.reportTabs.tabs) || [])], reportNotify: [...((rec.entity.reportTabs && rec.entity.reportTabs.notify) || [])] };
         render();
         break;
       }
@@ -8621,14 +8743,15 @@ function attachClickListener() {
         const form = S.ui.editAccountPermForm || { allowedPages: [], allowedActions: [] };
         const allowedPages = form.allowedPages || [];
         const allowedActions = form.allowedActions || [];
+        const reportTabs = (form.reportTabs && form.reportTabs.length) || (form.reportNotify && form.reportNotify.length) ? { tabs: form.reportTabs || [], notify: form.reportNotify || [] } : null;
         if (ds.kind === "unit") {
-          S.units = S.units.map((u) => (u.id === ds.id ? { ...u, allowedPages, allowedActions } : u));
+          S.units = S.units.map((u) => (u.id === ds.id ? { ...u, allowedPages, allowedActions, reportTabs } : u));
           dataStore.saveUnits(S.units);
         } else if (ds.kind === "department") {
-          S.departments = S.departments.map((d) => (d.id === ds.id ? { ...d, allowedPages, allowedActions } : d));
+          S.departments = S.departments.map((d) => (d.id === ds.id ? { ...d, allowedPages, allowedActions, reportTabs } : d));
           dataStore.saveDepartments(S.departments);
         } else if (ds.kind === "office") {
-          S.offices = S.offices.map((o) => (o.id === ds.id ? { ...o, allowedPages, allowedActions } : o));
+          S.offices = S.offices.map((o) => (o.id === ds.id ? { ...o, allowedPages, allowedActions, reportTabs } : o));
           dataStore.saveOffices(S.offices);
         }
         S.ui.editingAccountPerm = null; S.ui.editAccountPermForm = null;
