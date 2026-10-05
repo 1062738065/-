@@ -1797,7 +1797,28 @@ function sidebarNavIcon(key, size, color) {
   return key === "building" || key === "gauge" ? fn(color, size) : fn(size, color);
 }
 
+// "لوحة المعلومات" صفحة واحدة تتكيّف تلقائيًا مع نطاق الحساب (وحدة/قسم/مكتب/إدارة
+// عليا/مديرة النظام). المعرّفات القديمة تُعتبر نفس الصفحة: تُدمج بـ"dashboard".
+const MERGED_DASHBOARD_IDS = ["unit-dashboard", "office-dashboard", "executive-dashboard"];
+function normalizeDashboardPages(arr) {
+  if (!Array.isArray(arr)) return arr;
+  const has = arr.some((id) => id === "dashboard" || MERGED_DASHBOARD_IDS.indexOf(id) !== -1);
+  const out = arr.filter((id) => MERGED_DASHBOARD_IDS.indexOf(id) === -1 && id !== "dashboard");
+  if (has) out.unshift("dashboard");
+  return out;
+}
+function sidebarPageActive(p) {
+  if (p.id === "dashboard") return S.view === "dashboard" || MERGED_DASHBOARD_IDS.indexOf(S.view) !== -1;
+  return S.view === p.id;
+}
 function computeVisibleSidebarPages() {
+  const raw = computeVisibleSidebarPagesRaw();
+  const hasDash = raw.some((p) => p.id === "dashboard" || MERGED_DASHBOARD_IDS.indexOf(p.id) !== -1);
+  const out = raw.filter((p) => MERGED_DASHBOARD_IDS.indexOf(p.id) === -1 && p.id !== "dashboard");
+  if (hasDash) out.unshift(SIDEBAR_PAGES.find((p) => p.id === "dashboard"));
+  return out;
+}
+function computeVisibleSidebarPagesRaw() {
   // مجموعة "unit-home" (تُعرض الآن كروابط رئيسية مستقلة بالشريط الجانبي —
   // زي "جميع التقارير" تمامًا، بلا طي وبلا اشتراط مسبق بوحدة/قسم محدّد، حسب
   // طلب نجود الصريح) خاصة بعمل الوحدة نفسها، مو إدارة الموقع.
@@ -1901,7 +1922,7 @@ function renderMainSidebar(mobile) {
       // نفس سلوكها السابق تمامًا داخل مجموعة "unit-home" القديمة.
       const isCreateEntry = page.id === "unit-report";
       if (isCreateEntry && !platformActionAllowed("open-or-create-report")) return "";
-      const active = S.view === page.id;
+      const active = sidebarPageActive(page);
       const iconColor = active ? ROSE : INK;
       return `
         <div class="nav-group open">
@@ -1933,7 +1954,7 @@ function renderMainSidebar(mobile) {
             const isCreateEntry = p.id === "unit-report";
             if (isCreateEntry && !platformActionAllowed("open-or-create-report")) return "";
             const disabled = (p.scope === "unit" && !S.currentUnitId) || (p.scope === "unitreport" && !(S.currentUnitId && S.currentReportId));
-            const active = S.view === p.id;
+            const active = sidebarPageActive(p);
             const iconColor = disabled ? "#cfc3c8" : active ? ROSE : INK;
             return `<button class="nav-item ${active ? "active" : ""}" ${disabled ? "disabled" : ""} data-action="${isCreateEntry ? "open-or-create-report" : "nav-to"}" ${isCreateEntry ? "" : `data-view="${p.id}"`}>${sidebarNavIcon(p.icon, 15, iconColor)}<span>${esc(p.label)}</span></button>`;
           }).join("")}
@@ -2401,7 +2422,7 @@ function startPlatformUserLogin(matches) {
 function doLoginPlatformUser(pu) {
   const effPages = effectivePuAllowedPages(pu);
   const effActions = effectivePuAllowedActions(pu);
-  S.platformUserAllowedPages = effPages.length ? effPages : null;
+  S.platformUserAllowedPages = effPages.length ? normalizeDashboardPages(effPages) : null;
   S.platformUserAllowedActions = effActions.length ? effActions : null;
   S.currentPlatformUserJobTitle = pu.jobTitle;
   S.currentPlatformUserTemplateId = pu.templateId || "";
@@ -2482,7 +2503,7 @@ function doLoginPlatformUser(pu) {
 function applyScopedAccountPermissions(entity) {
   if (!entity) return;
   if (S.platformUserAllowedPages === null && entity.allowedPages && entity.allowedPages.length) {
-    S.platformUserAllowedPages = entity.allowedPages;
+    S.platformUserAllowedPages = normalizeDashboardPages(entity.allowedPages);
   }
   if (S.platformUserAllowedActions === null && entity.allowedActions && entity.allowedActions.length) {
     S.platformUserAllowedActions = entity.allowedActions;
@@ -2670,6 +2691,7 @@ function renderDashboard() {
   // — مستقل تمامًا عن اسم الصفحة. هذا فقط لحساب نطاق "لوحة المعلومات"
   // الموحّدة؛ الصفحات المخصّصة الأصلية (قسمي/مكتب الإشراف/لوحة معلومات
   // الوحدة) تبقى موجودة تمامًا بدون أي حذف أو تغيير.
+  if (S.isExecutive) return renderExecutiveDashboard();
   if (S.isDepartmentUser && S.currentDepartmentId) {
     const dept = S.departments.find((d) => d.id === S.currentDepartmentId);
     if (!dept) return renderDepartmentOverview();
@@ -2701,6 +2723,7 @@ function renderDashboard() {
       topBarRight: pillBtn("خروج", { variant: "danger", icon: iconLogout(15, DANGER), action: "logout" }),
     });
   }
+  if (!S.isAdmin && !S.isExecutive && !S.isDepartmentUser && !S.isOfficeUser && !S.currentUnitId) ensureUnitContextForNav("unit-dashboard");
   if (!S.isAdmin && !S.isExecutive && !S.isDepartmentUser && !S.isOfficeUser && S.currentUnitId) {
     // حساب بنطاق وحدة: نفس بالضبط "لوحة معلومات الوحدة" الحقيقية (renderUnitDashboard)
     // — هي أصلًا مصمَّمة بنفس روح لوحة المعلومات (بانر + بطاقات إحصاءات + رسوم
@@ -4962,10 +4985,11 @@ const SENSITIVE_PAGE_IDS = [
 // حيث اسم المجموعة الأصلي (المستخدم بالشريط الجانبي الحقيقي) غير واضح هنا.
 const PU_PAGE_GROUP_LABELS = { "unit-home": "صفحات التقارير (لوحة المعلومات/تقارير/إنشاء تقرير/الإعدادات)", "unit-extra": "صفحات الوحدة (التنبيهات/جميع تقارير الوحدة)" };
 function platformUserPagesChecklistHtml(selected, action) {
-  selected = selected || [];
+  selected = normalizeDashboardPages(selected || []);
   const groups = [];
   const sensitivePages = [];
   SIDEBAR_PAGES.forEach((p) => {
+    if (MERGED_DASHBOARD_IDS.indexOf(p.id) !== -1) return;
     // صفحات "unit-home" (لوحة معلومات الوحدة/تقارير/إنشاء تقرير/الإعدادات)
     // الآن قابلة للمنح لأي مسمى وظيفي — تحتاج فقط نطاق بيانات محدّد (قسم/مكتب
     // إشراف/وحدة) ليعرف النظام لأي وحدة/قسم ينشئ التقرير (انظر ملاحظة أسفل
@@ -8698,7 +8722,7 @@ function attachClickListener() {
         else if (ds.key === "toggle-edit-template-page" || ds.key === "toggle-edit-template-action") captureJobTitleTemplateFormFields("edit-template");
         const arr = permDropdownTargetArray(ds.key);
         const isPage = ds.key.indexOf("page") !== -1;
-        const allIds = isPage ? SIDEBAR_PAGES.filter((p) => p.group !== "unit-home").map((p) => p.id) : ACTION_CATALOG.map((a) => a.id);
+        const allIds = isPage ? SIDEBAR_PAGES.filter((p) => p.group !== "unit-home" && MERGED_DASHBOARD_IDS.indexOf(p.id) === -1).map((p) => p.id) : ACTION_CATALOG.map((a) => a.id);
         if (ds.mode === "all") {
           allIds.forEach((id) => { if (arr.indexOf(id) < 0) arr.push(id); });
         } else {
