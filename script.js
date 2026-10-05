@@ -723,13 +723,32 @@ function platformUserToRow(u) {
 // وإجراءات واحدة، قابلة للربط بأي عدد من "حسابات إضافية" عبر platformUserId.
 // تعديل القالب ينعكس فورًا على كل حساب مربوط به (بدل تكرار الصلاحيات بكل حساب).
 function jobTitleTemplateToRow(t) {
-  return { id: t.id, name: t.name || "", allowed_pages: t.allowedPages || [], allowed_actions: t.allowedActions || [], status: t.status || "active", created_at: t.createdAt || Date.now() };
+  return { id: t.id, name: t.name || "", allowed_pages: t.allowedPages || [], allowed_actions: t.allowedActions || [], status: t.status || "active", created_at: t.createdAt || Date.now(), parent_id: t.parentId || "" };
 }
 function rowToJobTitleTemplate(r) {
   return {
     id: r.id, name: r.name || "", allowedPages: Array.isArray(r.allowed_pages) ? r.allowed_pages : [],
     allowedActions: Array.isArray(r.allowed_actions) ? r.allowed_actions : [], status: r.status || "active", createdAt: Number(r.created_at) || 0,
+    parentId: r.parent_id || "",
   };
+}
+// تجميع صلاحيات مسمى وظيفي + كل من "يتفرع منه" للأعلى (parentId) بالاتحاد
+// (Union) — أي صفحة/إجراء مسموح بأي مستوى بالسلسلة يصير مسموح بالمسمى الفرعي
+// تلقائيًا. حماية من حلقة لا نهائية (A يتفرع من B وB يتفرع من A) عبر تتبّع
+// المسميات المُزارة؛ لو حصلت حلقة نتوقف بدل التعليق.
+function effectiveTemplatePermissions(templateId) {
+  const list = (S.jobTitleTemplates && S.jobTitleTemplates.length) ? S.jobTitleTemplates : dataStore.getJobTitleTemplates();
+  const pages = new Set();
+  const actions = new Set();
+  const visited = new Set();
+  let current = list.find((t) => t.id === templateId) || null;
+  while (current && !visited.has(current.id)) {
+    visited.add(current.id);
+    (current.allowedPages || []).forEach((p) => pages.add(p));
+    (current.allowedActions || []).forEach((a) => actions.add(a));
+    current = current.parentId ? (list.find((t) => t.id === current.parentId) || null) : null;
+  }
+  return { allowedPages: [...pages], allowedActions: [...actions] };
 }
 // تُستدعى عند إضافة أي جهة جديدة (إدارة عليا/مديرة نظام/مكتب/قسم/وحدة/مركز)
 // من نموذج الإضافة الموحّد، لمّا تكتب نجود مسمى وظيفي بخانة "المسمى الوظيفي":
@@ -743,7 +762,7 @@ function resolveJobTitleForEntity(jobTitleName) {
   if (!name) return { allowedPages: [], allowedActions: [] };
   const list = (S.jobTitleTemplates && S.jobTitleTemplates.length) ? S.jobTitleTemplates : dataStore.getJobTitleTemplates();
   const existing = list.find((t) => t.name === name);
-  if (existing) return { allowedPages: existing.allowedPages || [], allowedActions: existing.allowedActions || [] };
+  if (existing) return effectiveTemplatePermissions(existing.id);
   const fresh = { id: uid("jt"), name, allowedPages: [], allowedActions: [], status: "active", createdAt: Date.now() };
   const updated = [...list, fresh];
   S.jobTitleTemplates = updated;
@@ -1548,11 +1567,11 @@ function resolveJobTitleTemplate(templateId) {
 // الخاصة المحفوظة على الحساب كما كانت تعمل قبل وجود القوالب — بدون أي تغيير.
 function effectivePuAllowedPages(pu) {
   const tpl = resolveJobTitleTemplate(pu && pu.templateId);
-  return tpl ? (tpl.allowedPages || []) : ((pu && pu.allowedPages) || []);
+  return tpl ? effectiveTemplatePermissions(tpl.id).allowedPages : ((pu && pu.allowedPages) || []);
 }
 function effectivePuAllowedActions(pu) {
   const tpl = resolveJobTitleTemplate(pu && pu.templateId);
-  return tpl ? (tpl.allowedActions || []) : ((pu && pu.allowedActions) || []);
+  return tpl ? effectiveTemplatePermissions(tpl.id).allowedActions : ((pu && pu.allowedActions) || []);
 }
 function sidebarNavIcon(key, size, color) {
   const map = { home: iconHome, document: iconDocument, building: iconBuilding, gauge: iconGauge, target: iconTarget, pencil: iconPencil, layers: iconLayers, printer: iconPrinter, plus: iconPlus, bell: iconBell, key: iconKey };
@@ -4271,12 +4290,14 @@ function simpleAccountRowHtml(u, roleLabel) {
       <button data-action="cancel-unit-password" style="background:${DANGER_BG};border:none;border-radius:8px;padding:0 10px;cursor:pointer;">${iconX(16, DANGER)}</button>
     </div>`;
   }
-  return `<div class="card" style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;">
+  const isActive = u.status !== "disabled";
+  return `<div class="card" style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;opacity:${isActive ? 1 : 0.6}">
     <div style="display:flex;align-items:center;gap:10px;">
       <div style="width:34px;height:34px;border-radius:10px;background:${DANGER_BG};display:flex;align-items:center;justify-content:center;">${iconBuilding(ROSE, 16)}</div>
-      <div style="font-size:13.5px;font-weight:700;">${esc(u.name)} <span style="font-size:10px;font-weight:700;color:${ROSE};background:${DANGER_BG};padding:2px 7px;border-radius:999px;">${esc(roleLabel)}</span></div>
+      <div><div style="font-size:13.5px;font-weight:700;">${esc(u.name)} <span style="font-size:10px;font-weight:700;color:${ROSE};background:${DANGER_BG};padding:2px 7px;border-radius:999px;">${esc(roleLabel)}</span></div>${!isActive ? `<div style="font-size:10.5px;color:${SUBTLE}">معطّل</div>` : ""}</div>
     </div>
     <div style="display:flex;gap:6px;align-items:center;">
+      <button class="icon-btn" style="width:32px;height:32px;background:${isActive ? DANGER_BG : GREEN_BG}" data-action="toggle-unit" data-id="${esc(u.id)}" title="${isActive ? "تعطيل" : "تفعيل"}">${iconPower(14, isActive ? DANGER : GREEN)}</button>
       <button class="icon-btn" style="width:32px;height:32px;border:1px solid ${BORDER}" data-action="start-unit-password" data-id="${esc(u.id)}" title="تغيير كلمة المرور">${iconKey(14, INK)}</button>
       <button class="icon-btn" style="width:32px;height:32px;border:1px solid ${BORDER}" data-action="confirm-delete-unit" data-id="${esc(u.id)}" title="حذف">${iconTrash(14, DANGER)}</button>
     </div>
@@ -4330,21 +4351,21 @@ function addEntityPickerHtml() {
       <input class="input" id="new-executive-password" style="flex:1;min-width:120px;" placeholder="كلمة المرور" value="${esc(ui.newExecutivePassword || "")}" />
       <input class="input" id="new-executive-email" style="flex:1;min-width:160px;" type="email" placeholder="الإيميل" value="${esc(ui.newExecutiveEmail || "")}" />
       ${entityJobTitleFieldHtml("new-executive-jobtitle")}
-      ${pillBtn("إضافة حساب إدارة عليا", { icon: iconPlus(15, "#fff"), action: "add-executive" })}
+      ${pillBtn("إضافة", { icon: iconPlus(15, "#fff"), action: "add-executive" })}
     </div>`,
     sysadmin: `<div style="display:flex;gap:8px;flex-wrap:wrap;">
       <input class="input" id="new-sysadmin-name" style="flex:2;min-width:160px;" placeholder="اسم الحساب" value="${esc(ui.newSysadminName || "")}" />
       <input class="input" id="new-sysadmin-password" style="flex:1;min-width:120px;" placeholder="كلمة المرور" value="${esc(ui.newSysadminPassword || "")}" />
       <input class="input" id="new-sysadmin-email" style="flex:1;min-width:160px;" type="email" placeholder="الإيميل" value="${esc(ui.newSysadminEmail || "")}" />
       ${entityJobTitleFieldHtml("new-sysadmin-jobtitle")}
-      ${pillBtn("إضافة حساب مديرة نظام", { icon: iconPlus(15, "#fff"), action: "add-sysadmin" })}
+      ${pillBtn("إضافة", { icon: iconPlus(15, "#fff"), action: "add-sysadmin" })}
     </div>`,
     office: `<div style="display:flex;gap:8px;flex-wrap:wrap;">
       <input class="input" id="new-office-name" style="flex:2;min-width:160px;" placeholder="اسم مكتب الإشراف الجديد" value="${esc(ui.newOfficeName || "")}" />
       <input class="input" id="new-office-password" style="flex:1;min-width:120px;" placeholder="كلمة المرور (اختياري)" value="${esc(ui.newOfficePassword || "")}" />
       <input class="input" id="new-office-email" style="flex:1;min-width:160px;" type="email" placeholder="الإيميل" value="${esc(ui.newOfficeEmail || "")}" />
       ${entityJobTitleFieldHtml("new-office-jobtitle")}
-      ${pillBtn("إضافة مكتب إشراف", { icon: iconPlus(15, "#fff"), action: "add-office" })}
+      ${pillBtn("إضافة", { icon: iconPlus(15, "#fff"), action: "add-office" })}
     </div>`,
     department: `${sheetsConfigured() ? `<div class="hint" style="background:${BLUE_BG};border-radius:10px;padding:9px 12px;margin-bottom:10px;">كلمة مرور القسم (اختيارية) تفتح للقسم كل وحداته التابعة له دفعة واحدة.</div>` : ""}
     <div style="display:flex;gap:8px;flex-wrap:wrap;">
@@ -4352,7 +4373,7 @@ function addEntityPickerHtml() {
       <input class="input" id="new-dept-password" style="flex:1;min-width:120px;" placeholder="كلمة المرور (اختياري)" value="${esc(ui.newDeptPassword || "")}" />
       <input class="input" id="new-dept-email" style="flex:1;min-width:160px;" type="email" placeholder="الإيميل" value="${esc(ui.newDeptEmail || "")}" />
       ${entityJobTitleFieldHtml("new-dept-jobtitle")}
-      ${pillBtn("إضافة قسم", { icon: iconPlus(15, "#fff"), action: "add-department" })}
+      ${pillBtn("إضافة", { icon: iconPlus(15, "#fff"), action: "add-department" })}
     </div>`,
     unit: `${sheetsConfigured() ? `<div class="hint" style="background:${BLUE_BG};border-radius:10px;padding:9px 12px;margin-bottom:10px;">كلمة المرور هنا هي نفسها اللي تسجّل بيها الوحدة دخولها.</div>` : ""}
     <div style="display:flex;gap:8px;flex-wrap:wrap;">
@@ -4364,7 +4385,7 @@ function addEntityPickerHtml() {
         ${S.departments.map((d) => `<option value="${esc(d.id)}" ${ui.newUnitDept === d.id ? "selected" : ""}>${esc(d.name)}</option>`).join("")}
       </select>
       ${entityJobTitleFieldHtml("new-unit-jobtitle")}
-      ${pillBtn("إضافة وحدة", { icon: iconPlus(15, "#fff"), action: "add-unit" })}
+      ${pillBtn("إضافة", { icon: iconPlus(15, "#fff"), action: "add-unit" })}
     </div>`,
     center: `<div style="display:flex;gap:8px;flex-wrap:wrap;">
       <input class="input" id="new-center-name" style="flex:2;min-width:160px;" placeholder="اسم المركز الجديد" value="${esc(ui.newCenterName || "")}" />
@@ -4375,7 +4396,7 @@ function addEntityPickerHtml() {
         ${S.departments.map((d) => `<option value="${esc(d.id)}" ${ui.newCenterDept === d.id ? "selected" : ""}>${esc(d.name)}</option>`).join("")}
       </select>
       ${entityJobTitleFieldHtml("new-center-jobtitle")}
-      ${pillBtn("إضافة مركز", { icon: iconPlus(15, "#fff"), action: "add-center" })}
+      ${pillBtn("إضافة", { icon: iconPlus(15, "#fff"), action: "add-center" })}
     </div>`,
   };
   const typeInfo = ADD_ENTITY_TYPES.find((t) => t.key === step);
@@ -4876,18 +4897,40 @@ function readPlatformUserFormFromDom(prefix, currentLoginType, currentAllowedPag
 // فتصبح صلاحياتها القادمة من القالب حيّة دائمًا بدل نسخة مجمّدة وقت الإنشاء.
 function captureJobTitleTemplateFormFields(prefix) {
   const nm = document.getElementById(`${prefix}-name`);
+  const parentSel = document.getElementById(`${prefix}-parent`);
   if (prefix === "new-template") {
     if (nm) S.ui.newTemplateName = nm.value;
+    if (parentSel) S.ui.newTemplateParentId = parentSel.value;
   } else {
     S.ui.editTemplateForm = S.ui.editTemplateForm || {};
     if (nm) S.ui.editTemplateForm.name = nm.value;
+    if (parentSel) S.ui.editTemplateForm.parentId = parentSel.value;
   }
 }
-function jobTitleTemplateFormFieldsHtml(prefix, form) {
+// يرجع كل المسميات "الفرعية" لمسمى معيّن (تتفرع منه مباشرة أو بعد عدة مستويات)
+// — تُستبعد من قائمة "يتفرع من" حتى ما يصير حلقة (مسمى يتفرع من فرعه هو نفسه).
+function jobTitleTemplateDescendantIds(templateId) {
+  const list = S.jobTitleTemplates || [];
+  const result = new Set();
+  let frontier = [templateId];
+  while (frontier.length) {
+    const next = list.filter((t) => frontier.includes(t.parentId)).map((t) => t.id).filter((id) => !result.has(id));
+    next.forEach((id) => result.add(id));
+    frontier = next;
+  }
+  return result;
+}
+function jobTitleTemplateFormFieldsHtml(prefix, form, excludeId) {
   form = form || {};
+  const blocked = excludeId ? new Set([excludeId, ...jobTitleTemplateDescendantIds(excludeId)]) : new Set();
+  const parentOptions = (S.jobTitleTemplates || []).filter((t) => !blocked.has(t.id));
   return `
     <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px;">
       <input class="input" id="${prefix}-name" style="flex:1;min-width:180px;" placeholder="اسم المسمى الوظيفي (مثال: رئيسة الوحدة)" value="${esc(form.name || "")}" />
+      <select class="input" id="${prefix}-parent" style="flex:1;min-width:180px;">
+        <option value="">يتفرع من (اختياري)</option>
+        ${parentOptions.map((t) => `<option value="${esc(t.id)}" ${form.parentId === t.id ? "selected" : ""}>${esc(t.name)}</option>`).join("")}
+      </select>
     </div>
     <div style="margin-bottom:6px;font-size:11.5px;font-weight:800;color:${ROSE};">الصفحات المسموحة لهذا المسمى</div>
     ${platformUserPagesChecklistHtml(form.allowedPages || [], `toggle-${prefix}-page`)}
@@ -4912,17 +4955,19 @@ function jobTitleTemplateRowHtml(t) {
   if (editing) {
     const editForm = S.ui.editTemplateForm || {};
     return `<div class="card">
-      ${jobTitleTemplateFormFieldsHtml("edit-template", editForm)}
+      ${jobTitleTemplateFormFieldsHtml("edit-template", editForm, t.id)}
       ${S.ui.templateFormError ? `<div style="color:${DANGER};font-size:11.5px;font-weight:700;margin-bottom:8px;">${esc(S.ui.templateFormError)}</div>` : ""}
       <div style="display:flex;gap:6px;">${pillBtn("حفظ", { action: "save-job-title-template-edit", data: { id: t.id } })}${pillBtn("إلغاء", { variant: "ghost", action: "cancel-job-title-template-edit" })}</div>
     </div>`;
   }
+  const parentTpl = t.parentId ? (S.jobTitleTemplates || []).find((x) => x.id === t.parentId) : null;
+  const eff = effectiveTemplatePermissions(t.id);
   return `<div class="card" style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;">
     <div style="display:flex;align-items:center;gap:10px;min-width:0;">
       <div style="width:34px;height:34px;border-radius:10px;background:${DANGER_BG};display:flex;align-items:center;justify-content:center;flex-shrink:0;">${iconLayers(16, ROSE)}</div>
       <div style="min-width:0;">
-        <div style="font-size:13.5px;font-weight:700;">${esc(t.name)}</div>
-        <div style="font-size:10.5px;color:${SUBTLE};margin-top:2px;">${(t.allowedPages || []).length} صفحة · ${(t.allowedActions || []).length} إجراء${usage ? ` · مستخدم من ${usage} حساب` : ""}</div>
+        <div style="font-size:13.5px;font-weight:700;">${esc(t.name)}${parentTpl ? ` <span style="font-size:10px;font-weight:700;color:${SUBTLE};">(فرع من: ${esc(parentTpl.name)})</span>` : ""}</div>
+        <div style="font-size:10.5px;color:${SUBTLE};margin-top:2px;">${eff.allowedPages.length} صفحة · ${eff.allowedActions.length} إجراء${usage ? ` · مستخدم من ${usage} حساب` : ""}</div>
       </div>
     </div>
     <div style="display:flex;gap:6px;flex-shrink:0;">
@@ -8262,7 +8307,7 @@ function attachClickListener() {
         const t = (S.jobTitleTemplates || []).find((x) => x.id === ds.id);
         if (!t) break;
         S.ui.editingTemplateId = t.id;
-        S.ui.editTemplateForm = { name: t.name, allowedPages: [...(t.allowedPages || [])], allowedActions: [...(t.allowedActions || [])] };
+        S.ui.editTemplateForm = { name: t.name, parentId: t.parentId || "", allowedPages: [...(t.allowedPages || [])], allowedActions: [...(t.allowedActions || [])] };
         S.ui.templateFormError = "";
         render();
         break;
@@ -8273,8 +8318,13 @@ function attachClickListener() {
         const editForm = S.ui.editTemplateForm || {};
         const name = (editForm.name || "").trim();
         if (!name) { S.ui.templateFormError = "الرجاء كتابة اسم المسمى الوظيفي."; render(); break; }
+        let parentId = editForm.parentId || "";
+        if (parentId && (parentId === ds.id || jobTitleTemplateDescendantIds(ds.id).has(parentId))) {
+          // حماية إضافية من حلقة (القائمة بالواجهة مستبعدة أصلًا، لكن نحتاط هنا برضه)
+          parentId = "";
+        }
         S.jobTitleTemplates = (S.jobTitleTemplates || []).map((x) => x.id === ds.id ? {
-          ...x, name, allowedPages: editForm.allowedPages || [], allowedActions: editForm.allowedActions || [],
+          ...x, name, parentId, allowedPages: editForm.allowedPages || [], allowedActions: editForm.allowedActions || [],
         } : x);
         dataStore.saveJobTitleTemplates(S.jobTitleTemplates);
         S.ui.editingTemplateId = null; S.ui.editTemplateForm = null; S.ui.templateFormError = "";
@@ -8284,7 +8334,10 @@ function attachClickListener() {
       case "confirm-remove-job-title-template": S.ui.confirmRemoveTemplateId = ds.id; render(); break;
       case "cancel-remove-job-title-template": S.ui.confirmRemoveTemplateId = null; render(); break;
       case "delete-job-title-template": {
-        S.jobTitleTemplates = (S.jobTitleTemplates || []).filter((x) => x.id !== ds.id);
+        S.jobTitleTemplates = (S.jobTitleTemplates || [])
+          .filter((x) => x.id !== ds.id)
+          // أي مسمى كان يتفرع من القالب المحذوف يصير مستقلًا بدل ما يشير لقالب غير موجود
+          .map((x) => x.parentId === ds.id ? { ...x, parentId: "" } : x);
         dataStore.saveJobTitleTemplates(S.jobTitleTemplates);
         // أي حساب كان مربوطًا بهذا القالب يرجع فورًا بلا صلاحيات صفحات/إجراءات
         // (مصفوفات فاضية) بدل ما يختفي أو يتعطّل — نفس سلوك حساب جديد بلا قالب.
