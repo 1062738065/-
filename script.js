@@ -3562,19 +3562,23 @@ function renderDepartmentOverview() {
 // بالضبط (deptCurationSectionHtml، بدون أي تكرار بالكود)، بنفس نمط صفحة
 // "office-curation" المستقلة أصلًا للمكتب. "قسمي" تبقى تعرض نفس القسم أيضًا
 // بدون أي حذف، لحد ما تتأكد نجود من الصفحة الجديدة وتقرر حذف القديمة بنفسها.
-function adminCurationKindTabs() {
-  if (!S.isAdmin) return "";
-  const k = S.ui.adminCurationKind === "office" ? "office" : "department";
-  return `<div style="display:flex;gap:8px;margin-bottom:12px;">
-    ${pillBtn("القسم", { variant: k === "department" ? "primary" : "ghost", action: "set-curation-kind", data: { kind: "department" } })}
-    ${pillBtn("مكتب الإشراف", { variant: k === "office" ? "primary" : "ghost", action: "set-curation-kind", data: { kind: "office" } })}
-  </div>`;
-}
 function renderCurationUnified() {
-  if (S.isAdmin) return S.ui.adminCurationKind === "office" ? renderOfficeCuration() : renderDepartmentCuration();
+  if (S.isAdmin) {
+    // مديرة النظام: صفحة واحدة تعرض كل مكتب (بأقسامه ووحداته) ثم الأقسام بلا مكتب — بدون أزرار تبديل.
+    const offices = (S.offices || []).filter((o) => o.status !== "inactive");
+    const loose = (S.departments || []).filter((d) => d.status !== "inactive" && !(S.offices || []).some((o) => o.id === d.officeId));
+    const blocks = offices.map((o) => officeCurationSectionHtml(o)).join("") + loose.map((d) => deptCurationSectionHtml(d, "اعتماد القسم — " + d.name)).join("");
+    return `
+  <div class="page-wrap"><div class="page-inner">
+    ${topBarHtml({ title: "اعتماد أبرز النتائج والتوصيات", subtitle: "كل المكاتب والأقسام والوحدات",
+      right: pillBtn("خروج", { variant: "danger", icon: iconLogout(15, DANGER), action: "logout" }) })}
+    ${blocks || `<div class="card" style="text-align:center;color:${SUBTLE};padding:36px;">لا توجد مكاتب أو أقسام بعد.</div>`}
+  </div></div>`;
+  }
   if (S.isOfficeUser && !S.isDepartmentUser) return renderOfficeCuration();
   return renderDepartmentCuration();
 }
+function adminCurationKindTabs() { return ""; }
 function renderDepartmentCuration() {
   const dept = S.departments.find((d) => d.id === S.currentDepartmentId);
   if (!dept) return `<div class="page-wrap"><div class="page-inner">${S.isAdmin ? adminScopeSwitcherHtml("department") : ""}<div class="card" style="text-align:center;color:${SUBTLE};padding:36px;">${(S.departments || []).length ? "اختاري قسمًا من القائمة أعلاه." : "لا توجد أقسام بعد."}</div></div></div>`;
@@ -3695,9 +3699,9 @@ function curationSectionHtml(units, isCuratedFn, toggleAction, toggleData, block
       <div class="subhead">التحديات</div>${renderList(challenges, "لا توجد تحديات مُدخلة بعد.")}
     </div>`;
 }
-function deptCurationSectionHtml(dept) {
+function deptCurationSectionHtml(dept, blockTitle) {
   const deptUnits = S.units.filter((u) => u.departmentId === dept.id && u.status === "active");
-  return curationSectionHtml(deptUnits, (key) => isDeptCurated(dept, key), "toggle-dept-curation", {});
+  return curationSectionHtml(deptUnits, (key) => isDeptCurated(dept, key), "toggle-dept-curation", blockTitle ? { dept: dept.id } : {}, blockTitle);
 }
 function toggleOfficeCuration(office, key) {
   const current = (office.curation && office.curation.approvedKeys) || [];
@@ -3707,7 +3711,7 @@ function toggleOfficeCuration(office, key) {
 }
 function officeCurationSectionHtml(office) {
   // المكتب يرى: نتائج المكتب (كل وحداته) ثم كل قسم تابع له بوحداته، ويعتمد على كل مستوى.
-  const own = curationSectionHtml(officeUnits(office.id), (key) => isOfficeCurated(office, key), "toggle-office-curation", {}, "اعتماد المكتب — " + office.name);
+  const own = curationSectionHtml(officeUnits(office.id), (key) => isOfficeCurated(office, key), "toggle-office-curation", { office: office.id }, "اعتماد المكتب — " + office.name);
   const depts = (S.departments || []).filter((d) => d.officeId === office.id && d.status !== "inactive");
   const deptBlocks = depts.map((d) => {
     const dUnits = S.units.filter((u) => u.departmentId === d.id && u.status === "active");
@@ -8285,7 +8289,7 @@ function attachClickListener() {
         break;
       }
       case "toggle-office-curation": {
-        const office = (S.offices || []).find((o) => o.id === S.currentOfficeId);
+        const office = (S.offices || []).find((o) => o.id === (ds.office || S.currentOfficeId));
         if (office) toggleOfficeCuration(office, ds.key);
         render();
         break;
