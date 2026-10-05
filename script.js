@@ -1801,10 +1801,13 @@ function computeReportRecipients(unit) {
   return list;
 }
 function renderMainSidebar(mobile) {
-  if (S.currentUnitEntryMode === "admin" && !S.isAdmin && !S.isDepartmentUser && !S.isExecutive && !S.isOfficeUser) {
+  // الأشرطة الثابتة (إدارية/رئيسة) تُستخدم فقط للحساب اللي ما حددت له مديرة النظام
+  // صفحات (allowedPages فاضية). لو حددت له صفحات من "صلاحيات الحسابات" أو من
+  // مسماه الوظيفي، يظهر له الشريط المبني من هذي الصفحات بالضبط.
+  if (S.currentUnitEntryMode === "admin" && !S.isAdmin && !S.isDepartmentUser && !S.isExecutive && !S.isOfficeUser && !S.platformUserAllowedPages) {
     return renderUnitAdminSidebar(mobile);
   }
-  if ((S.currentUnitEntryMode === "head" || S.currentUnitEntryMode === "extra") && !S.isAdmin && !S.isDepartmentUser && !S.isExecutive && !S.isOfficeUser) {
+  if ((S.currentUnitEntryMode === "head" || S.currentUnitEntryMode === "extra") && !S.isAdmin && !S.isDepartmentUser && !S.isExecutive && !S.isOfficeUser && !S.platformUserAllowedPages) {
     const unit = S.units.find((u) => u.id === S.currentUnitId);
     const roleLabel = S.currentUnitEntryMode === "extra" ? ((unit && unit.extraReviewerTitle) || "مراجعة إضافية") : "رئيسة الوحدة";
     return renderUnitHeadSidebar(mobile, roleLabel, S.currentUnitEntryMode);
