@@ -639,12 +639,36 @@ async function supabaseRequest(path, options) {
 
 // يمسح الجدول كامل ثم يعيد إدخال الصفوف الحالية — نفس أسلوب "استبدال الكل"
 // المستخدم بباقي الموقع، أبسط للتفكير فيه من مطابقة الفروقات صفًا بصف.
+// نسخة آمنة (إصلاح): كانت تمسح الجدول كامل أولًا ثم تُدخل — فلو فشل الإدخال
+// (عمود ناقص بالقاعدة مثلًا) يبقى الجدول فاضي وتضيع كل الصفوف. الآن: نكتب
+// الصفوف أولًا (upsert بالـ id)، وفقط لو نجحت نحذف الصفوف اللي لم تعد موجودة.
+// لو فشلت الكتابة، ما نمسح أي شي ونُظهر سبب الفشل بشريط أحمر أعلى الصفحة.
+function reportSupabaseWriteError(table, msg) {
+  try { console.error("Supabase write failed:", table, msg); } catch (e) { /* تجاهل */ }
+  try {
+    let bar = document.getElementById("sb-write-error");
+    if (!bar) {
+      bar = document.createElement("div");
+      bar.id = "sb-write-error";
+      bar.style.cssText = "position:fixed;top:0;left:0;right:0;z-index:99999;background:#b42318;color:#fff;padding:10px 14px;font-size:13px;font-weight:700;text-align:center;cursor:pointer;";
+      bar.onclick = () => bar.remove();
+      document.body.appendChild(bar);
+    }
+    bar.textContent = "تعذّر حفظ التغيير بقاعدة البيانات (جدول " + table + "): " + msg + " — لم يُحذف شيء. (اضغطي لإغلاق)";
+  } catch (e) { /* تجاهل */ }
+}
 async function supabaseReplaceTable(table, rows) {
   if (!sheetsConfigured()) return;
-  await supabaseRequest(`${table}?id=neq.__none__`, { method: "DELETE", prefer: "return=minimal" });
-  if (rows.length) {
-    await supabaseRequest(table, { method: "POST", prefer: "return=minimal", body: JSON.stringify(rows) });
+  if (!rows.length) {
+    const del = await supabaseRequest(`${table}?id=neq.__none__`, { method: "DELETE", prefer: "return=minimal" });
+    if (!del.ok) reportSupabaseWriteError(table, del.error);
+    return;
   }
+  const up = await supabaseRequest(`${table}?on_conflict=id`, { method: "POST", prefer: "resolution=merge-duplicates,return=minimal", body: JSON.stringify(rows) });
+  if (!up.ok) { reportSupabaseWriteError(table, up.error); return; }
+  const ids = rows.map((r) => '"' + String(r.id).replace(/"/g, "") + '"').join(",");
+  const del = await supabaseRequest(`${table}?id=not.in.(${encodeURIComponent(ids)})`, { method: "DELETE", prefer: "return=minimal" });
+  if (!del.ok) reportSupabaseWriteError(table, del.error);
 }
 
 // طابور كتابة لكل جدول: لو صار أكثر من تعديل سريع بعد بعض (مثال: ضغط "نقل لأعلى"
