@@ -4778,7 +4778,7 @@ function structureTreeHtml() {
   const offices = S.offices || [];
   const units = S.units.filter((u) => u.role !== "admin" && u.role !== "executive" && u.role !== "self_report");
   const sel = (action, id, first, opts, cur) => `<select class="input" style="padding:5px 8px;font-size:12px;width:130px;" data-action="${action}" data-id="${esc(id)}" title="نقل">
-    <option value="">${first}</option>${opts.map((o) => `<option value="${esc(o.id)}" ${cur === o.id ? "selected" : ""}>${esc(o.name)}</option>`).join("")}</select>`;
+    <option value="__" selected disabled>نقل</option><option value="">${first}</option>${opts.map((o) => `<option value="${esc(o.id)}">${esc(o.name)}</option>`).join("")}</select>`;
   const unitNode = (u, depth) => treeNodeHtml(u, u.role === "center" ? "مركز" : "وحدة", "unit", sel("assign-unit-dept", u.id, "بدون قسم", S.departments, u.departmentId), "", depth);
   const deptNode = (d, depth) => treeNodeHtml(d, "قسم", "dept", sel("assign-dept-office", d.id, "بلا مكتب", offices, d.officeId),
     units.filter((u) => u.departmentId === d.id).map((u) => unitNode(u, depth + 1)).join(""), depth);
@@ -4797,7 +4797,6 @@ function structureTreeHtml() {
   return `<div style="margin-bottom:18px;">
     <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px;">
       ${pillBtn("إضافة", { icon: iconPlus(14, "#fff"), action: "tree-add-root", data: { type: "office" } })}
-      ${pillBtn("إضافة قسم", { variant: "ghost", action: "tree-add-root", data: { type: "dept" } })}
     </div>
     ${S.ui.treeAddRoot ? `<div class="card" style="margin-bottom:10px;background:${GRAY_BG};"><div style="display:flex;gap:6px;flex-wrap:wrap;">
       ${entityJobTitleFieldHtml("tree-root-name")}
@@ -4826,11 +4825,11 @@ function renderDepartmentsManage() {
     ${topBarHtml({ title: "المستخدمون", backAction: "nav-back-admin" })}
     ${accountsHubTabBarHtml("units-manage")}
 
-    ${addEntityPickerHtml()}
-
-    <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px;">
-      ${pillBtn("شجرة الهيكل", { variant: S.ui.structView !== "lists" ? "primary" : "ghost", action: "set-struct-view", data: { mode: "tree" } })}
-      ${pillBtn("قوائم", { variant: S.ui.structView === "lists" ? "primary" : "ghost", action: "set-struct-view", data: { mode: "lists" } })}
+    <div style="margin-bottom:12px;">
+      <select class="input" style="width:170px;font-weight:700;" data-action="set-struct-view-select">
+        <option value="tree" ${S.ui.structView !== "lists" ? "selected" : ""}>شجرة الهيكل</option>
+        <option value="lists" ${S.ui.structView === "lists" ? "selected" : ""}>قوائم</option>
+      </select>
     </div>
     ${S.ui.structView !== "lists" ? structureTreeHtml() : ""}
 
@@ -7702,6 +7701,10 @@ function attachFormListeners() {
       const idx = Number(el.dataset.index);
       S.ui.editUnitPathStages = (S.ui.editUnitPathStages || []).map((s, i) => i === idx ? { ...s, templateId: el.value } : s);
       render();
+      return;
+    }
+    if (el.dataset && el.dataset.action === "set-struct-view-select") {
+      S.ui.structView = el.value === "lists" ? "lists" : "tree"; render();
       return;
     }
     if (el.dataset && el.dataset.action === "assign-office-parent") {
