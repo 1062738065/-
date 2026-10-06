@@ -5289,10 +5289,15 @@ function renderJobTitleTemplatesManage() {
       backAction: "nav-back-admin" })}
     ${accountsHubTabBarHtml("job-title-templates")}
 
-    <div class="hint" style="margin-bottom:16px;">المسميات الوظيفية تُنشأ تلقائيًا من خانة "المسمى الوظيفي" وقت إضافة أي جهة جديدة من تبويب "الجهات" — هذه الصفحة فقط لعرض وتعديل صلاحيات المسميات الموجودة بالفعل.</div>
+    ${ui.editingTemplateId ? "" : `<div class="card" style="margin-bottom:18px;">
+      <div style="font-size:12.5px;font-weight:800;color:${ROSE};margin-bottom:12px;">إضافة</div>
+      ${jobTitleTemplateFormFieldsHtml("new-template", { name: ui.newTemplateName || "", parentId: ui.newTemplateParentId || "", allowedPages: ui.newTemplateAllowedPages || [], allowedActions: ui.newTemplateAllowedActions || [], reportTabs: ui.newTemplateReportTabs || [], reportNotify: ui.newTemplateReportNotify || [] })}
+      ${ui.templateFormError ? `<div style="color:${DANGER};font-size:11.5px;font-weight:700;margin-bottom:8px;">${esc(ui.templateFormError)}</div>` : ""}
+      ${pillBtn("إضافة", { icon: iconPlus(15, "#fff"), action: "add-job-title-template" })}
+    </div>`}
 
     <div style="font-size:12.5px;font-weight:800;color:${ROSE};margin-bottom:10px;">المسميات الوظيفية الحالية (${list.length})</div>
-    ${list.length === 0 ? `<div class="card" style="text-align:center;color:${SUBTLE};padding:36px 20px;border-style:dashed;">لا توجد مسميات وظيفية بعد — اكتبي مسمى وظيفي وقت إضافة أي جهة جديدة من تبويب "الجهات" وبيظهر هنا تلقائيًا.</div>` :
+    ${list.length === 0 ? `<div class="card" style="text-align:center;color:${SUBTLE};padding:36px 20px;border-style:dashed;">لا توجد مسميات وظيفية بعد — أضيفي أول مسمى من الأعلى. تلقائيًا.</div>` :
       `<div style="display:flex;flex-direction:column;gap:8px;">${list.map((t) => jobTitleTemplateRowHtml(t)).join("")}</div>`}
   </div></div>`;
 }
@@ -8058,14 +8063,14 @@ function attachClickListener() {
         break;
       }
       case "toggle-rtab": {
-        const holder = ds.scope === "template" ? (S.ui.editTemplateForm = S.ui.editTemplateForm || {}) : (S.ui.editAccountPermForm = S.ui.editAccountPermForm || { allowedPages: [], allowedActions: [] });
+        const holder = ds.scope === "template" && S.ui.editingTemplateId == null ? (S.ui.__newTplHolder = { get reportTabs() { return S.ui.newTemplateReportTabs || (S.ui.newTemplateReportTabs = []); }, set reportTabs(v) { S.ui.newTemplateReportTabs = v; }, get reportNotify() { return S.ui.newTemplateReportNotify || (S.ui.newTemplateReportNotify = []); }, set reportNotify(v) { S.ui.newTemplateReportNotify = v; } }) : ds.scope === "template" ? (S.ui.editTemplateForm = S.ui.editTemplateForm || {}) : (S.ui.editAccountPermForm = S.ui.editAccountPermForm || { allowedPages: [], allowedActions: [] });
         const key = ds.mode === "notify" ? "reportNotify" : "reportTabs";
         const arr = holder[key] || (holder[key] = []);
         const i = arr.indexOf(ds.id);
         if (i >= 0) arr.splice(i, 1); else arr.push(ds.id);
         // التنبيه يتطلب ظهور الزر: لو فعّلنا "ينبّه" نفعّل "يظهر" تلقائيًا
         if (ds.mode === "notify" && i < 0) { const t = holder.reportTabs || (holder.reportTabs = []); if (!t.includes(ds.id)) t.push(ds.id); }
-        if (ds.scope === "template") captureJobTitleTemplateFormFields("edit-template");
+        if (ds.scope === "template") captureJobTitleTemplateFormFields(S.ui.editingTemplateId == null ? "new-template" : "edit-template");
         render();
         break;
       }
@@ -8571,12 +8576,13 @@ function attachClickListener() {
         const name = (S.ui.newTemplateName || "").trim();
         if (!name) { S.ui.templateFormError = "الرجاء كتابة اسم المسمى الوظيفي."; render(); break; }
         const list = [...(S.jobTitleTemplates || []), {
-          id: uid("tpl"), name, allowedPages: S.ui.newTemplateAllowedPages || [], allowedActions: S.ui.newTemplateAllowedActions || [],
+          id: uid("tpl"), name, parentId: S.ui.newTemplateParentId || "", allowedPages: S.ui.newTemplateAllowedPages || [], allowedActions: S.ui.newTemplateAllowedActions || [],
+          reportTabs: ((S.ui.newTemplateReportTabs || []).length || (S.ui.newTemplateReportNotify || []).length) ? { tabs: [...(S.ui.newTemplateReportTabs || [])], notify: [...(S.ui.newTemplateReportNotify || [])] } : null,
           status: "active", createdAt: Date.now(),
         }];
         S.jobTitleTemplates = list;
         dataStore.saveJobTitleTemplates(list);
-        S.ui.newTemplateName = ""; S.ui.newTemplateAllowedPages = []; S.ui.newTemplateAllowedActions = []; S.ui.templateFormError = "";
+        S.ui.newTemplateName = ""; S.ui.newTemplateParentId = ""; S.ui.newTemplateReportTabs = []; S.ui.newTemplateReportNotify = []; S.ui.newTemplateAllowedPages = []; S.ui.newTemplateAllowedActions = []; S.ui.templateFormError = "";
         render();
         break;
       }
