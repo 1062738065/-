@@ -1595,6 +1595,10 @@ function render() {
   let html = "";
   if (S.view === "login" || !S.currentUser) {
     html = renderLogin();
+  } else if (!S.isAdmin && !S.isExecutive && !S.platformUserAllowedPages && S.view !== "unit-role-select" && S.view !== "platform-user-role-select") {
+    html = shellWrap(`<div class="page-wrap"><div class="page-inner narrow"><div class="card" style="text-align:center;color:${SUBTLE};padding:44px 20px;">
+      <div style="font-size:15px;font-weight:800;color:${INK};margin-bottom:8px;">لم تُحدَّد صلاحيات لهذا الحساب بعد</div>
+      <div style="font-size:12.5px;">تواصلي مع مديرة النظام لتفعيل الصفحات المناسبة لك.</div></div></div></div>`);
   } else if (S.view === "dashboard") {
     html = shellWrap(renderDashboard());
   } else if (S.view === "admin-reports") {
@@ -1835,6 +1839,8 @@ function computeVisibleSidebarPagesRaw() {
     // (راجع ensureUnitContextForNav) بدل الاعتماد على وجودها مسبقًا.
     return SIDEBAR_PAGES.filter((p) => S.platformUserAllowedPages.includes(p.id) || (p.id === "custom-path-inbox" && userInAnyCustomPath()));
   }
+  // قرار نجود: أي حساب (غير مديرة النظام والإدارة العليا) ما حُددت له صفحات = ما يظهر له شيء.
+  if (!S.isAdmin && !S.isExecutive) return [];
   if (S.isAdmin) {
     // مديرة النظام تشوف كل صفحات الموقع بلا استثناء — بما فيها "قسمي" وصفحات
     // "مكتب الإشراف" الأربع، رغم إنها أصلًا مرتبطة بـ currentDepartmentId/
@@ -1881,6 +1887,9 @@ function computeNotificationCount() {
   if (S.isAdmin) {
     return S.units.reduce((sum, u) => sum + ensureUnitReportsLoaded(u.id).filter((r) => r.status === "under_review").length, 0);
   }
+  if (!S.isExecutive && S.currentUnitId && (S.currentUnitEntryMode === "head" || S.currentUnitEntryMode === "extra")) {
+    return unitPendingHeadReviewReports(S.currentUnitId, S.currentUnitEntryMode === "extra" ? "pending_extra_review" : "pending_head_review").length;
+  }
   if (!S.isExecutive && S.currentUnitId) {
     return ensureUnitReportsLoaded(S.currentUnitId).filter((r) => r.status === "returned" || r.status === "needs_completion").length;
   }
@@ -1898,17 +1907,6 @@ function computeReportRecipients(unit) {
   return list;
 }
 function renderMainSidebar(mobile) {
-  // الأشرطة الثابتة (إدارية/رئيسة) تُستخدم فقط للحساب اللي ما حددت له مديرة النظام
-  // صفحات (allowedPages فاضية). لو حددت له صفحات من "صلاحيات الحسابات" أو من
-  // مسماه الوظيفي، يظهر له الشريط المبني من هذي الصفحات بالضبط.
-  if (S.currentUnitEntryMode === "admin" && !S.isAdmin && !S.isDepartmentUser && !S.isExecutive && !S.isOfficeUser && !S.platformUserAllowedPages) {
-    return renderUnitAdminSidebar(mobile);
-  }
-  if ((S.currentUnitEntryMode === "head" || S.currentUnitEntryMode === "extra") && !S.isAdmin && !S.isDepartmentUser && !S.isExecutive && !S.isOfficeUser && !S.platformUserAllowedPages) {
-    const unit = S.units.find((u) => u.id === S.currentUnitId);
-    const roleLabel = S.currentUnitEntryMode === "extra" ? ((unit && unit.extraReviewerTitle) || "مراجعة إضافية") : "رئيسة الوحدة";
-    return renderUnitHeadSidebar(mobile, roleLabel, S.currentUnitEntryMode);
-  }
   const visible = computeVisibleSidebarPages();
   const notifCount = computeNotificationCount();
   const groupsHtml = SIDEBAR_GROUPS.map((g) => {
@@ -1928,7 +1926,7 @@ function renderMainSidebar(mobile) {
       return `
         <div class="nav-group open">
           <div class="nav-list" style="padding-right:0;width:100%;">
-            <button class="nav-item ${active ? "active" : ""}" data-action="${isCreateEntry ? "open-or-create-report" : "nav-to"}" ${isCreateEntry ? "" : `data-view="${page.id}"`}>${sidebarNavIcon(page.icon, 15, iconColor)}<span>${esc(page.label)}</span></button>
+            <button class="nav-item ${active ? "active" : ""}" data-action="${isCreateEntry ? "open-or-create-report" : "nav-to"}" ${isCreateEntry ? "" : `data-view="${page.id}"`}>${sidebarNavIcon(page.icon, 15, iconColor)}<span>${esc(page.label)}</span>${page.id === "unit-notifications" && notifCount > 0 ? `<span style="margin-inline-start:auto;background:#d65b57;color:#fff;font-size:10px;font-weight:800;min-width:18px;height:18px;border-radius:9px;display:inline-flex;align-items:center;justify-content:center;padding:0 5px;">${notifCount > 9 ? "9+" : notifCount}</span>` : ""}</button>
           </div>
         </div>`;
     }
@@ -1957,14 +1955,14 @@ function renderMainSidebar(mobile) {
             const disabled = (p.scope === "unit" && !S.currentUnitId) || (p.scope === "unitreport" && !(S.currentUnitId && S.currentReportId));
             const active = sidebarPageActive(p);
             const iconColor = disabled ? "#cfc3c8" : active ? ROSE : INK;
-            return `<button class="nav-item ${active ? "active" : ""}" ${disabled ? "disabled" : ""} data-action="${isCreateEntry ? "open-or-create-report" : "nav-to"}" ${isCreateEntry ? "" : `data-view="${p.id}"`}>${sidebarNavIcon(p.icon, 15, iconColor)}<span>${esc(p.label)}</span></button>`;
+            return `<button class="nav-item ${active ? "active" : ""}" ${disabled ? "disabled" : ""} data-action="${isCreateEntry ? "open-or-create-report" : "nav-to"}" ${isCreateEntry ? "" : `data-view="${p.id}"`}>${sidebarNavIcon(p.icon, 15, iconColor)}<span>${esc(p.label)}</span>${p.id === "unit-notifications" && notifCount > 0 ? `<span style="margin-inline-start:auto;background:#d65b57;color:#fff;font-size:10px;font-weight:800;min-width:18px;height:18px;border-radius:9px;display:inline-flex;align-items:center;justify-content:center;padding:0 5px;">${notifCount > 9 ? "9+" : notifCount}</span>` : ""}</button>`;
           }).join("")}
         </div>` : ""}
       </div>`;
   }).join("");
 
   const initial = (S.currentUser && S.currentUser.name ? S.currentUser.name.trim()[0] : "؟");
-  const roleLabel = S.isAdmin ? "مديرة النظام" : S.isDepartmentUser ? "مديرة قسم" : S.isExecutive ? "الإدارة العليا" : S.isOfficeUser ? "مكتب إشراف" : "مسؤولة الوحدة";
+  const roleLabel = S.isAdmin ? "مديرة النظام" : S.isDepartmentUser ? "مديرة قسم" : S.isExecutive ? "الإدارة العليا" : S.isOfficeUser ? "مكتب إشراف" : S.currentUnitEntryMode === "head" ? "رئيسة الوحدة" : S.currentUnitEntryMode === "extra" ? (((S.units.find((u) => u.id === S.currentUnitId) || {}).extraReviewerTitle) || "مراجعة إضافية") : "مسؤولة الوحدة";
   const site = currentSiteSettings();
   const taglineHtml = S.isAdmin ? "" : `
     <div class="sidebar-tagline-block">
@@ -5401,7 +5399,7 @@ function unifiedAccountPermRowHtml(rec) {
     const form = S.ui.editAccountPermForm || { allowedPages: [], allowedActions: [] };
     return `<div class="card">
       <div style="font-size:13px;font-weight:800;margin-bottom:10px;">${esc(rec.label)} <span style="font-size:10.5px;font-weight:700;color:${SUBTLE}">(${esc(rec.typeLabel)})</span></div>
-      <div style="margin-bottom:6px;font-size:11.5px;font-weight:800;color:${ROSE};">صلاحية الصفحات (اتركيها فاضية للسماح بكل الصفحات المتاحة لهذا الحساب أصلًا حسب دوره)</div>
+      <div style="margin-bottom:6px;font-size:11.5px;font-weight:800;color:${ROSE};">صلاحية الصفحات (إذا تركتِها فاضية ما يظهر للحساب أي صفحة)</div>
       ${platformUserPagesChecklistHtml(form.allowedPages || [], "toggle-account-perm-page")}
       <div style="margin:14px 0 6px;font-size:11.5px;font-weight:800;color:${ROSE};">صلاحية الإجراءات (اتركيها فاضية للسماح بكل الإجراءات المتاحة أصلًا)</div>
       ${platformUserActionsChecklistHtml(form.allowedActions || [], "toggle-account-perm-action")}
@@ -5422,6 +5420,54 @@ function unifiedAccountPermRowHtml(rec) {
     <button class="icon-btn" style="width:32px;height:32px;border:1px solid ${BORDER}" data-action="start-account-perm-edit" data-kind="${esc(rec.kind)}" data-id="${esc(rec.id)}" title="تعديل الصلاحيات">${iconPencil(14, INK)}</button>
   </div>`;
 }
+const BULK_PERM_TYPES = [
+  { id: "unit", label: "الوحدات" },
+  { id: "center", label: "المراكز" },
+  { id: "department", label: "الأقسام" },
+  { id: "office", label: "مكاتب الإشراف" },
+];
+// الصفحات التي كانت تظهر بالأشرطة الثابتة القديمة — تعبئة جاهزة (تقدرين تعدّلينها)
+const BULK_PERM_PRESETS = {
+  unit: ["dashboard", "unit-report", "unit-reports", "unit-notifications", "unit-all-reports"],
+  center: ["dashboard", "unit-report", "unit-reports", "unit-notifications"],
+  department: ["dashboard", "department-overview", "department-curation", "all-reports", "unit-report", "unit-reports", "unit-settings"],
+  office: ["dashboard", "office-archive", "all-reports", "office-summary", "department-curation", "departments-list"],
+};
+function bulkPermTargets(type) {
+  if (type === "department") return (S.departments || []).slice();
+  if (type === "office") return (S.offices || []).slice();
+  if (type === "center") return (S.units || []).filter((u) => u.role === "center");
+  return (S.units || []).filter((u) => u.role !== "center" && u.role !== "admin" && u.role !== "executive" && u.role !== "self_report");
+}
+function bulkPermCardHtml() {
+  const b = S.ui.bulkPerm;
+  if (!b) {
+    return `<div class="card" style="margin-bottom:14px;">
+      <div style="font-size:12.5px;font-weight:800;color:${ROSE};margin-bottom:4px;">تطبيق صلاحيات على الكل</div>
+      <div class="hint" style="margin-bottom:10px;">حددي الصلاحيات مرة واحدة وتُطبَّق على كل حسابات نوع معيّن. بعدها تقدرين تعدّلين أي حساب على حدة من القائمة تحت.</div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;">${BULK_PERM_TYPES.map((t) => pillBtn(t.label + " (" + bulkPermTargets(t.id).length + ")", { variant: "ghost", action: "start-bulk-perm", data: { type: t.id } })).join("")}</div>
+    </div>`;
+  }
+  const t = BULK_PERM_TYPES.find((x) => x.id === b.type) || BULK_PERM_TYPES[0];
+  const n = bulkPermTargets(b.type).length;
+  const form = S.ui.editAccountPermForm || { allowedPages: [], allowedActions: [] };
+  return `<div class="card" style="margin-bottom:14px;border:1.5px solid ${ROSE};">
+    <div style="font-size:13px;font-weight:800;margin-bottom:6px;">تطبيق على كل ${esc(t.label)} (${n})</div>
+    <div class="hint" style="margin-bottom:10px;">سيستبدل صلاحيات كل ${esc(t.label)} الحالية بما تحددينه هنا. إذا تركتِ الصفحات فاضية ما يظهر لهذه الحسابات أي صفحة.</div>
+    <div style="margin-bottom:8px;">${pillBtn("تعبئة بالصفحات الافتراضية السابقة", { variant: "soft", action: "bulk-perm-preset" })}</div>
+    <div style="margin-bottom:6px;font-size:11.5px;font-weight:800;color:${ROSE};">صلاحية الصفحات</div>
+    ${platformUserPagesChecklistHtml(form.allowedPages || [], "toggle-account-perm-page")}
+    <div style="margin:14px 0 6px;font-size:11.5px;font-weight:800;color:${ROSE};">صلاحية الإجراءات</div>
+    ${platformUserActionsChecklistHtml(form.allowedActions || [], "toggle-account-perm-action")}
+    ${reportTabsEditorHtml(form, "account")}
+    <div style="display:flex;gap:6px;margin-top:12px;flex-wrap:wrap;align-items:center;">
+      ${b.confirm
+        ? `<span style="font-size:12px;font-weight:700;color:${DANGER};">متأكدة؟ سيُستبدل ${n} حساب.</span>${pillBtn("نعم، طبّقي", { action: "apply-bulk-perm" })}`
+        : pillBtn("تطبيق على الكل", { action: "confirm-bulk-perm" })}
+      ${pillBtn("إلغاء", { variant: "ghost", action: "cancel-bulk-perm" })}
+    </div>
+  </div>`;
+}
 function renderPlatformPermissionsManage() {
   const list = collectPermissionAccounts();
   return `
@@ -5429,6 +5475,7 @@ function renderPlatformPermissionsManage() {
     ${topBarHtml({ title: "صلاحيات الحسابات", subtitle: "كل حساب بالنظام — وحدات، مراكز، أقسام، مكاتب إشراف، وحسابات إضافية — بقائمة واحدة، وتعديل صفحاته وإجراءاته مباشرة", backAction: "nav-back-admin",
       right: pillBtn("إضافة حساب إضافي جديد", { variant: "ghost", icon: iconPlus(15, INK), action: "nav-to", data: { view: "platform-users-manage" } }) })}
     ${accountsHubTabBarHtml("platform-permissions-manage")}
+    ${bulkPermCardHtml()}
 
     ${list.length === 0 ? `<div class="card" style="text-align:center;color:${SUBTLE};padding:36px 20px;border-style:dashed;">لا توجد حسابات بعد.</div>` : `
     <div class="card" style="margin-bottom:14px;padding:10px 14px;">
@@ -5879,75 +5926,6 @@ function unitHeadReturnedReports(unitId) {
   return ensureUnitReportsLoaded(unitId).filter((r) => r.status === "head_returned_edit" || r.status === "head_returned_completion" || r.status === "extra_returned_edit" || r.status === "extra_returned_completion");
 }
 
-// شريط جانبي مخصص لصفة "الإدارية" فقط: الرئيسية (لوحة المعلومات) — التقارير
-// (إنشاء تقرير / التقارير / التنبيهات). لا صفحات إضافية غير هذه الثلاث حسب هذي
-// الخطوة بالضبط. صفة "رئيسة الوحدة" ومركز تسجيل الدخول يستمران بنفس الشريط
-// الجانبي العام الموجود مسبقًا (renderMainSidebar الأصلي) بدون أي تغيير عليه.
-function renderUnitAdminSidebar(mobile) {
-  const notifCount = S.currentUnitId ? unitHeadReturnedReports(S.currentUnitId).length : 0;
-  const activeDash = S.view === "unit-dashboard";
-  const activeReports = S.view === "unit-reports";
-  const activeNotif = S.view === "unit-notifications";
-
-  const groupsHtml = `
-    <div class="nav-group open">
-      <div class="nav-group-label" style="display:flex;align-items:center;gap:6px;">${sidebarNavIcon("home", 13, SUBTLE)}الرئيسية</div>
-      <div class="nav-list">
-        <button class="nav-item ${activeDash ? "active" : ""}" data-action="nav-to" data-view="unit-dashboard">${sidebarNavIcon("home", 15, activeDash ? ROSE : INK)}<span>لوحة المعلومات</span></button>
-      </div>
-    </div>
-    <div class="nav-group open">
-      <div class="nav-group-label" style="display:flex;align-items:center;gap:6px;">${sidebarNavIcon("document", 13, SUBTLE)}التقارير</div>
-      <div class="nav-list">
-        ${platformActionAllowed("open-or-create-report") ? `<button class="nav-item" data-action="open-or-create-report">${sidebarNavIcon("pencil", 15, INK)}<span>إنشاء تقرير</span></button>` : ""}
-        <button class="nav-item ${activeReports ? "active" : ""}" data-action="nav-to" data-view="unit-reports">${sidebarNavIcon("document", 15, activeReports ? ROSE : INK)}<span>التقارير</span></button>
-        <button class="nav-item ${activeNotif ? "active" : ""}" data-action="nav-to" data-view="unit-notifications" style="display:flex;align-items:center;justify-content:space-between;">
-          <span style="display:flex;align-items:center;gap:10px;">${sidebarNavIcon("bell", 15, activeNotif ? ROSE : INK)}<span>التنبيهات</span></span>
-          ${notifCount > 0 ? `<span style="background:#d65b57;color:#fff;font-size:10px;font-weight:800;min-width:18px;height:18px;border-radius:9px;display:inline-flex;align-items:center;justify-content:center;padding:0 5px;">${notifCount > 9 ? "9+" : notifCount}</span>` : ""}
-        </button>
-      </div>
-    </div>`;
-
-  const initial = (S.currentUser && S.currentUser.name ? S.currentUser.name.trim()[0] : "؟");
-  const site = currentSiteSettings();
-  const taglineHtml = `
-    <div class="sidebar-tagline-block">
-      ${site.sidebarTaglineImage ? `<img src="${esc(site.sidebarTaglineImage)}" class="sidebar-tagline-img" alt="" />` : ""}
-      ${site.sidebarTagline ? `<div class="sidebar-tagline">${esc(site.sidebarTagline)}</div>` : ""}
-    </div>`;
-  const inner = `
-    <div class="sidebar-head">
-      <div class="sidebar-head-icons-row">
-        <div class="icon-badge">${iconGauge(ROSE)}</div>
-        <div style="display:flex;gap:6px;">
-          <button class="sidebar-bell" title="الإشعارات">${iconBell(15, INK)}${notifCount > 0 ? `<span class="notif-badge">${notifCount > 9 ? "9+" : notifCount}</span>` : ""}</button>
-          <button class="icon-btn" data-action="${mobile ? "close-mobile-sidebar" : "close-sidebar"}" title="إغلاق القائمة">${iconX(14, INK)}</button>
-        </div>
-      </div>
-      <img src="${esc(siteLogoSrc(site))}" class="sidebar-logo" style="width:${Number(site.logoSize) || 30}px;height:${Number(site.logoSize) || 30}px;" alt="جمعية فرقان" />
-      <div class="prs-title sidebar-title">${esc(site.platformName || "منصة التقارير")}</div>
-    </div>
-    <div class="sidebar-user-block">
-      <div class="sidebar-user-avatar">${esc(initial)}</div>
-      <div style="min-width:0;">
-        <div class="sidebar-role-badge">الإدارية</div>
-        <div class="sidebar-user-name">${esc(S.currentUser ? S.currentUser.name : "")}</div>
-      </div>
-    </div>
-    <div style="display:flex;flex-direction:column;gap:16px;">${groupsHtml}</div>
-    <div class="sidebar-spacer"></div>
-    <div class="sidebar-sep"></div>
-    ${taglineHtml}
-    <button class="logout-btn" data-action="logout">${iconLogout(16, ROSE)} تسجيل الخروج</button>
-  `;
-
-  if (!mobile) return `<div class="sidebar">${inner}</div>`;
-  return `
-    <div class="mobile-backdrop" data-action="close-mobile-sidebar"></div>
-    <div class="sidebar-mobile-panel"><div class="sidebar" style="margin:0;border-radius:0;height:100vh;max-height:100vh;">${inner}</div></div>
-  `;
-}
-
 // صفحة قفل التقرير أثناء وجوده لدى رئيسة الوحدة — نفس نموذج التقرير بدون أي
 // تغيير في حقوله؛ فقط لا يُعرض للتعديل أثناء هذي الحالة تحديدًا.
 function unitReportLockedHtml(entry, unit) {
@@ -6013,87 +5991,6 @@ function renderUnitNotifications() {
         </button>`;
       }).join("")}</div>`}
   </div></div>`;
-}
-
-// ============ واجهة "رئيسة الوحدة" الخاصة بالوحدة (نفس حساب الوحدة، صفة دخول فقط) ==
-// شريط جانبي مخصص لصفة "رئيسة الوحدة": الرئيسية (لوحة المعلومات) — التقارير
-// (التقارير الواردة للمراجعة / التقارير / جميع التقارير) — التنبيهات. صفة
-// "الإدارية" ومركز تسجيل الدخول لا يتأثران بأي شيء هنا.
-function renderUnitHeadSidebar(mobile, roleLabel, mode) {
-  roleLabel = roleLabel || "رئيسة الوحدة";
-  const statusFilter = mode === "extra" ? "pending_extra_review" : "pending_head_review";
-  const pendingCount = S.currentUnitId ? unitPendingHeadReviewReports(S.currentUnitId, statusFilter).length : 0;
-  const badgeHtmlSmall = (n) => n > 0 ? `<span style="background:#d65b57;color:#fff;font-size:10px;font-weight:800;min-width:18px;height:18px;border-radius:9px;display:inline-flex;align-items:center;justify-content:center;padding:0 5px;">${n > 9 ? "9+" : n}</span>` : "";
-  const activeDash = S.view === "unit-dashboard";
-  const activeReports = S.view === "unit-reports";
-  const activeAll = S.view === "unit-all-reports";
-  const activeNotif = S.view === "unit-notifications";
-
-  const groupsHtml = `
-    <div class="nav-group open">
-      <div class="nav-group-label" style="display:flex;align-items:center;gap:6px;">${sidebarNavIcon("home", 13, SUBTLE)}الرئيسية</div>
-      <div class="nav-list">
-        <button class="nav-item ${activeDash ? "active" : ""}" data-action="nav-to" data-view="unit-dashboard">${sidebarNavIcon("home", 15, activeDash ? ROSE : INK)}<span>لوحة المعلومات</span></button>
-      </div>
-    </div>
-    <div class="nav-group open">
-      <div class="nav-group-label" style="display:flex;align-items:center;gap:6px;">${sidebarNavIcon("document", 13, SUBTLE)}التقارير</div>
-      <div class="nav-list">
-        <button class="nav-item ${activeReports ? "active" : ""}" data-action="nav-to" data-view="unit-reports" style="display:flex;align-items:center;justify-content:space-between;">
-          <span style="display:flex;align-items:center;gap:10px;">${sidebarNavIcon("document", 15, activeReports ? ROSE : INK)}<span>التقارير</span></span>
-          ${badgeHtmlSmall(pendingCount)}
-        </button>
-        <button class="nav-item ${activeAll ? "active" : ""}" data-action="nav-to" data-view="unit-all-reports">${sidebarNavIcon("layers", 15, activeAll ? ROSE : INK)}<span>جميع التقارير</span></button>
-      </div>
-    </div>
-    <div class="nav-group open">
-      <div class="nav-group-label" style="display:flex;align-items:center;gap:6px;">${sidebarNavIcon("bell", 13, SUBTLE)}التنبيهات</div>
-      <div class="nav-list">
-        <button class="nav-item ${activeNotif ? "active" : ""}" data-action="nav-to" data-view="unit-notifications" style="display:flex;align-items:center;justify-content:space-between;">
-          <span style="display:flex;align-items:center;gap:10px;">${sidebarNavIcon("bell", 15, activeNotif ? ROSE : INK)}<span>التنبيهات</span></span>
-          ${badgeHtmlSmall(pendingCount)}
-        </button>
-      </div>
-    </div>`;
-
-  const initial = (S.currentUser && S.currentUser.name ? S.currentUser.name.trim()[0] : "؟");
-  const site = currentSiteSettings();
-  const taglineHtml = `
-    <div class="sidebar-tagline-block">
-      ${site.sidebarTaglineImage ? `<img src="${esc(site.sidebarTaglineImage)}" class="sidebar-tagline-img" alt="" />` : ""}
-      ${site.sidebarTagline ? `<div class="sidebar-tagline">${esc(site.sidebarTagline)}</div>` : ""}
-    </div>`;
-  const inner = `
-    <div class="sidebar-head">
-      <div class="sidebar-head-icons-row">
-        <div class="icon-badge">${iconGauge(ROSE)}</div>
-        <div style="display:flex;gap:6px;">
-          <button class="sidebar-bell" title="الإشعارات">${iconBell(15, INK)}${pendingCount > 0 ? `<span class="notif-badge">${pendingCount > 9 ? "9+" : pendingCount}</span>` : ""}</button>
-          <button class="icon-btn" data-action="${mobile ? "close-mobile-sidebar" : "close-sidebar"}" title="إغلاق القائمة">${iconX(14, INK)}</button>
-        </div>
-      </div>
-      <img src="${esc(siteLogoSrc(site))}" class="sidebar-logo" style="width:${Number(site.logoSize) || 30}px;height:${Number(site.logoSize) || 30}px;" alt="جمعية فرقان" />
-      <div class="prs-title sidebar-title">${esc(site.platformName || "منصة التقارير")}</div>
-    </div>
-    <div class="sidebar-user-block">
-      <div class="sidebar-user-avatar">${esc(initial)}</div>
-      <div style="min-width:0;">
-        <div class="sidebar-role-badge">${esc(roleLabel)}</div>
-        <div class="sidebar-user-name">${esc(S.currentUser ? S.currentUser.name : "")}</div>
-      </div>
-    </div>
-    <div style="display:flex;flex-direction:column;gap:16px;">${groupsHtml}</div>
-    <div class="sidebar-spacer"></div>
-    <div class="sidebar-sep"></div>
-    ${taglineHtml}
-    <button class="logout-btn" data-action="logout">${iconLogout(16, ROSE)} تسجيل الخروج</button>
-  `;
-
-  if (!mobile) return `<div class="sidebar">${inner}</div>`;
-  return `
-    <div class="mobile-backdrop" data-action="close-mobile-sidebar"></div>
-    <div class="sidebar-mobile-panel"><div class="sidebar" style="margin:0;border-radius:0;height:100vh;max-height:100vh;">${inner}</div></div>
-  `;
 }
 
 // لوحة المراجعة داخل التقرير نفسه — تظهر فقط لرئيسة الوحدة على تقرير بانتظار
@@ -8761,10 +8658,48 @@ function attachClickListener() {
       }
       // تعديل صلاحيات (صفحات/إجراءات) حساب أساسي (وحدة/مركز/قسم/مكتب) مباشرة
       // من صفحة "صلاحيات الحسابات" — دمج حقيقي مع نفس نظام الحسابات الإضافية.
+      case "start-bulk-perm": {
+        S.ui.editingAccountPerm = null;
+        S.ui.bulkPerm = { type: ds.type, confirm: false };
+        S.ui.editAccountPermForm = { allowedPages: [], allowedActions: [], reportTabs: [], reportNotify: [] };
+        render();
+        break;
+      }
+      case "bulk-perm-preset": {
+        const b = S.ui.bulkPerm; if (!b) break;
+        S.ui.editAccountPermForm = S.ui.editAccountPermForm || { allowedPages: [], allowedActions: [] };
+        S.ui.editAccountPermForm.allowedPages = [...(BULK_PERM_PRESETS[b.type] || [])];
+        render();
+        break;
+      }
+      case "confirm-bulk-perm": { if (S.ui.bulkPerm) S.ui.bulkPerm.confirm = true; render(); break; }
+      case "cancel-bulk-perm": { S.ui.bulkPerm = null; S.ui.editAccountPermForm = null; render(); break; }
+      case "apply-bulk-perm": {
+        const b = S.ui.bulkPerm; if (!b) break;
+        const form = S.ui.editAccountPermForm || { allowedPages: [], allowedActions: [] };
+        const allowedPages = normalizeDashboardPages([...(form.allowedPages || [])]);
+        const allowedActions = [...(form.allowedActions || [])];
+        const reportTabs = (form.reportTabs && form.reportTabs.length) || (form.reportNotify && form.reportNotify.length) ? { tabs: [...(form.reportTabs || [])], notify: [...(form.reportNotify || [])] } : null;
+        const ids = new Set(bulkPermTargets(b.type).map((x) => x.id));
+        if (b.type === "department") {
+          S.departments = S.departments.map((d) => ids.has(d.id) ? { ...d, allowedPages, allowedActions, reportTabs } : d);
+          dataStore.saveDepartments(S.departments);
+        } else if (b.type === "office") {
+          S.offices = S.offices.map((o) => ids.has(o.id) ? { ...o, allowedPages, allowedActions, reportTabs } : o);
+          dataStore.saveOffices(S.offices);
+        } else {
+          S.units = S.units.map((u) => ids.has(u.id) ? { ...u, allowedPages, allowedActions, reportTabs } : u);
+          dataStore.saveUnits(S.units);
+        }
+        S.ui.bulkPerm = null; S.ui.editAccountPermForm = null;
+        render();
+        break;
+      }
       case "start-account-perm-edit": {
         const list = collectPermissionAccounts();
         const rec = list.find((r) => r.kind === ds.kind && r.id === ds.id);
         if (!rec) break;
+        S.ui.bulkPerm = null;
         S.ui.editingAccountPerm = { kind: ds.kind, id: ds.id };
         S.ui.editAccountPermForm = { allowedPages: [...(rec.entity.allowedPages || [])], allowedActions: [...(rec.entity.allowedActions || [])], reportTabs: [...((rec.entity.reportTabs && rec.entity.reportTabs.tabs) || [])], reportNotify: [...((rec.entity.reportTabs && rec.entity.reportTabs.notify) || [])] };
         render();
