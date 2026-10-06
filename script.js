@@ -3113,7 +3113,7 @@ function renderDepartmentsPage() {
 function renderEntityPickerPage(kind) {
   const config = {
     departments: { title: "الأقسام", items: S.departments.filter((d) => d.status === "active"), action: "open-department-preview", sub: (d) => `${S.units.filter((u) => u.departmentId === d.id).length} وحدة/مركز` },
-    units: { title: "الوحدات", items: S.units.filter((u) => u.role !== "center" && u.role !== "admin" && u.role !== "executive" && u.status === "active"), action: "open-unit-preview", sub: (u) => S.departments.find((d) => d.id === u.departmentId)?.name || "بدون قسم" },
+    units: { title: "الوحدات", items: S.units.filter((u) => u.role !== "center" && u.role !== "admin" && u.role !== "executive" && u.role !== "self_report" && u.status === "active"), action: "open-unit-preview", sub: (u) => S.departments.find((d) => d.id === u.departmentId)?.name || "بدون قسم" },
     centers: { title: "المراكز", items: S.units.filter((u) => u.role === "center" && u.status === "active"), action: "open-unit-preview", sub: (u) => S.departments.find((d) => d.id === u.departmentId)?.name || "بدون قسم" },
   }[kind];
   return `
@@ -4697,7 +4697,7 @@ function renderDepartmentsManage() {
   const ui = S.ui;
   const execUnits = S.units.filter((u) => u.role === "executive");
   const adminUnits = S.units.filter((u) => u.role === "admin");
-  const unitUnits = S.units.filter((u) => u.role !== "center" && u.role !== "admin" && u.role !== "executive");
+  const unitUnits = S.units.filter((u) => u.role !== "center" && u.role !== "admin" && u.role !== "executive" && u.role !== "self_report");
   const centerUnits = S.units.filter((u) => u.role === "center");
 
   return `
@@ -5389,7 +5389,7 @@ function platformUserRowHtml(pu, allList) {
 function collectPermissionAccounts() {
   const list = [];
   (S.units || []).forEach((u) => {
-    if (u.role === "admin" || u.role === "executive") return;
+    if (u.role === "admin" || u.role === "executive" || u.role === "self_report") return;
     list.push({ kind: "unit", id: u.id, entity: u, label: u.name, typeLabel: u.role === "center" ? "مركز" : "وحدة" });
   });
   (S.departments || []).forEach((d) => {
