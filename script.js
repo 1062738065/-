@@ -729,8 +729,8 @@ function rowToUnit(r) {
 }
 function deptToRow(d) { return { id: d.id, name: d.name, password: d.password || "", status: d.status || "active", created_at: d.createdAt || Date.now(), curation: d.curation || { approvedKeys: [] }, email: d.email || "", office_id: d.officeId || "", allowed_pages: d.allowedPages || [], allowed_actions: d.allowedActions || [], report_tabs: d.reportTabs || null }; }
 function rowToDept(r) { return { id: r.id, name: r.name, password: r.password || "", status: r.status || "active", createdAt: Number(r.created_at) || 0, curation: r.curation || { approvedKeys: [] }, email: r.email || "", officeId: r.office_id || "", allowedPages: r.allowed_pages || [], allowedActions: r.allowed_actions || [], reportTabs: parseReportTabsCfg(r.report_tabs) }; }
-function officeToRow(o) { return { id: o.id, name: o.name, password: o.password || "", email: o.email || "", status: o.status || "active", created_at: o.createdAt || Date.now(), curation: o.curation || { approvedKeys: [] }, allowed_pages: o.allowedPages || [], allowed_actions: o.allowedActions || [], report_tabs: o.reportTabs || null }; }
-function rowToOffice(r) { return { id: r.id, name: r.name, password: r.password || "", email: r.email || "", status: r.status || "active", createdAt: Number(r.created_at) || 0, curation: r.curation || { approvedKeys: [] }, allowedPages: r.allowed_pages || [], allowedActions: r.allowed_actions || [], reportTabs: parseReportTabsCfg(r.report_tabs) }; }
+function officeToRow(o) { return { id: o.id, name: o.name, password: o.password || "", email: o.email || "", status: o.status || "active", created_at: o.createdAt || Date.now(), curation: o.curation || { approvedKeys: [] }, allowed_pages: o.allowedPages || [], allowed_actions: o.allowedActions || [], report_tabs: o.reportTabs || null, parent_office_id: o.parentOfficeId || "" }; }
+function rowToOffice(r) { return { id: r.id, name: r.name, password: r.password || "", email: r.email || "", status: r.status || "active", createdAt: Number(r.created_at) || 0, curation: r.curation || { approvedKeys: [] }, allowedPages: r.allowed_pages || [], allowedActions: r.allowed_actions || [], reportTabs: parseReportTabsCfg(r.report_tabs), parentOfficeId: r.parent_office_id || "" }; }
 // "حسابات إضافية" (platform_users) — طبقة مرنة إضافية فوق نظام الحسابات الحالي
 // (وحدات/أقسام/مكاتب/مديرة نظام)، لمسمّيات وظيفية جديدة كليًا (سكرتارية، مديرة
 // تعليمية...) بصلاحيات صفحات مخصّصة لكل واحدة. لا تلمس أو تعدّل حسابات units/
@@ -3076,7 +3076,7 @@ function unitCardHtml(unit, department, report) {
 // الأقسام المرتبطة به (عبر officeId) — بنفس العلاقة الموجودة فعليًا، بدون أي
 // بيانات مكررة. الضغط على قسم يعرض الوحدات التابعة له فقط (اطلاع، بدون تقارير).
 function renderDepartmentsPage() {
-  const scopedDepartments = S.isOfficeUser ? S.departments.filter((d) => d.officeId === S.currentOfficeId) : S.departments;
+  const scopedDepartments = S.isOfficeUser ? S.departments.filter((d) => officeScopeIds(S.currentOfficeId).includes(d.officeId)) : S.departments;
   const selectedDept = S.ui.departmentsPageSelectedId ? scopedDepartments.find((d) => d.id === S.ui.departmentsPageSelectedId) : null;
 
   if (selectedDept) {
@@ -3138,7 +3138,7 @@ function renderOfficesManagePage() {
   const selectedOffice = S.ui.officesManageOfficeId ? (S.offices || []).find((o) => o.id === S.ui.officesManageOfficeId) : null;
 
   if (selectedOffice) {
-    const linkedDepartments = S.departments.filter((d) => d.officeId === selectedOffice.id);
+    const linkedDepartments = S.departments.filter((d) => officeScopeIds(selectedOffice.id).includes(d.officeId));
     const selectedDept = S.ui.officesManageDeptId ? linkedDepartments.find((d) => d.id === S.ui.officesManageDeptId) : null;
 
     if (selectedDept) {
@@ -3712,7 +3712,7 @@ function toggleOfficeCuration(office, key) {
 function officeCurationSectionHtml(office) {
   // المكتب يرى: نتائج المكتب (كل وحداته) ثم كل قسم تابع له بوحداته، ويعتمد على كل مستوى.
   const own = curationSectionHtml(officeUnits(office.id), (key) => isOfficeCurated(office, key), "toggle-office-curation", { office: office.id }, "اعتماد المكتب — " + office.name);
-  const depts = (S.departments || []).filter((d) => d.officeId === office.id && d.status !== "inactive");
+  const depts = (S.departments || []).filter((d) => officeScopeIds(office.id).includes(d.officeId) && d.status !== "inactive");
   const deptBlocks = depts.map((d) => {
     const dUnits = S.units.filter((u) => u.departmentId === d.id && u.status === "active");
     return curationSectionHtml(dUnits, (key) => isDeptCurated(d, key), "toggle-dept-curation", { dept: d.id }, "اعتماد القسم — " + d.name);
@@ -3724,6 +3724,14 @@ function officeCurationSectionHtml(office) {
    الملخص، الاعتماد) — كل صفحة مقتصرة على وحدات أقسام هذا المكتب فقط، عبر
    officeUnits(officeId). صفحة "التقارير" لا تحتاج دالة خاصة: تُستخدم renderAllReports
    نفسها (مُعمَّمة أعلاه لتشمل فرع S.isOfficeUser). ============================= */
+// المكتب الأب يرى كل ما تحت المكاتب التابعة له (مكتب ← مكاتب فرعية ← أقسام ← وحدات).
+function officeScopeIds(officeId) {
+  const out = [officeId]; const seen = new Set(out);
+  for (let i = 0; i < out.length; i++) {
+    (S.offices || []).forEach((o) => { if (o.parentOfficeId === out[i] && !seen.has(o.id)) { seen.add(o.id); out.push(o.id); } });
+  }
+  return out;
+}
 function currentOffice() { return (S.offices || []).find((o) => o.id === S.currentOfficeId) || null; }
 
 function officeNotFoundPageHtml() {
@@ -3733,7 +3741,7 @@ function renderOfficeDashboard() {
   const office = currentOffice();
   if (!office) return officeNotFoundPageHtml();
   const units = officeUnits(office.id);
-  const depts = S.departments.filter((d) => d.officeId === office.id && d.status === "active");
+  const depts = S.departments.filter((d) => officeScopeIds(office.id).includes(d.officeId) && d.status === "active");
   return renderExecutiveDashboard(units, depts, { subtitle: `نظرة إشرافية شاملة على وحدات ${office.name}`, extraTop: adminScopeSwitcherHtml("office") });
 }
 
@@ -3741,7 +3749,7 @@ function renderOfficeSummary() {
   const office = currentOffice();
   if (!office) return officeNotFoundPageHtml();
   const units = officeUnits(office.id);
-  const depts = S.departments.filter((d) => d.officeId === office.id && d.status === "active");
+  const depts = S.departments.filter((d) => officeScopeIds(office.id).includes(d.officeId) && d.status === "active");
   return renderExecutiveSummary(units, depts, { title: `ملخص ${office.name}`, showAiSummary: false, extraTop: adminScopeSwitcherHtml("office") });
 }
 
@@ -3843,11 +3851,11 @@ function collectAllReportsFlat() {
 // <- department.id <- unit.departmentId، بنفس العلاقة المستخدمة أصلاً بصفحة "الأقسام"
 // الخاصة بمكتب الإشراف (renderDepartmentsPage).
 function officeUnits(officeId) {
-  const deptIds = S.departments.filter((d) => d.officeId === officeId).map((d) => d.id);
+  const deptIds = S.departments.filter((d) => officeScopeIds(officeId).includes(d.officeId)).map((d) => d.id);
   // تشمل أيضًا "وحدة" تقرير المكتب الذاتي نفسه (role: self_report, officeId
   // مباشرة بلا قسم) — بهذا تظهر تلقائيًا بـ"جميع التقارير" لأي حساب أعلى من
   // المكتب (مديرة النظام/الإدارة العليا) دون أي تعديل إضافي بتلك الصفحات.
-  return S.units.filter((u) => (deptIds.includes(u.departmentId) || u.officeId === officeId) && u.status === "active");
+  return S.units.filter((u) => (deptIds.includes(u.departmentId) || officeScopeIds(officeId).includes(u.officeId)) && u.status === "active");
 }
 // "وحدة" افتراضية (role: self_report) تمثّل تقرير القسم أو المكتب نفسه —
 // يُنشأ تلقائيًا أول مرة تُطلب، وتُستخدم لتخزين/عرض هذا التقرير بنفس محرك
@@ -4337,7 +4345,7 @@ function renderAllReports() {
   }).join("");
 
   const scopeDeptOptions = S.isAdmin || S.isExecutive ? S.departments.filter((d) => d.status === "active")
-    : S.isOfficeUser ? S.departments.filter((d) => d.status === "active" && d.officeId === S.currentOfficeId)
+    : S.isOfficeUser ? S.departments.filter((d) => d.status === "active" && officeScopeIds(S.currentOfficeId).includes(d.officeId))
     : [];
   const scopeUnitOptions = canSeeMultipleEntities ? scopeUnits : [];
 
@@ -4696,53 +4704,108 @@ function addEntityPickerHtml() {
 }
 
 
-/* ---------- شجرة الهيكل (مكتب ← قسم ← وحدة) مع "إضافة" (تابع/أب) و"نقل" ---------- */
+/* ---------- شجرة الهيكل (مكتب ← قسم ← وحدة) بنفس شكل المخطط الحر:
+   طيّ، إضافة (تابع/أب)، تعديل (الاسم + الإيميل + الرقم السري)، حذف، نقل ---------- */
+function treeEntity(type, id) {
+  const list = type === "office" ? (S.offices || []) : type === "dept" ? S.departments : S.units;
+  return list.find((x) => x.id === id) || null;
+}
+function treeSetEntity(type, id, patch) {
+  if (type === "office") { S.offices = (S.offices || []).map((x) => x.id === id ? { ...x, ...patch } : x); dataStore.saveOffices(S.offices); }
+  else if (type === "dept") { S.departments = S.departments.map((x) => x.id === id ? { ...x, ...patch } : x); dataStore.saveDepartments(S.departments); }
+  else { S.units = S.units.map((x) => x.id === id ? { ...x, ...patch } : x); dataStore.saveUnits(S.units); }
+}
 function treeAddFormHtml(type, id) {
   const f = S.ui.treeAddFor;
   if (!f || f.type !== type || f.id !== id) return "";
-  const opts = type === "office" ? [["child", "تابع (قسم تحته)"]]
-    : type === "dept" ? [["child", "تابع (وحدة تحته)"], ["parent", "أب (مكتب فوقه)"]]
-    : [["parent", "أب (قسم فوقه)"]];
+  const opts = type === "office" ? [["child", "تابع: قسم تحته"], ["child-office", "تابع: مكتب تحته"], ["parent", "أب: مكتب فوقه"]]
+    : type === "dept" ? [["child", "تابع: وحدة تحته"], ["parent", "أب: مكتب فوقه"]]
+    : [["parent", "أب: قسم فوقه"]];
   const kind = opts.some((o) => o[0] === S.ui.treeAddKind) ? S.ui.treeAddKind : opts[0][0];
   return `<div class="card" style="margin:6px 0;background:${GRAY_BG};">
     <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px;">
       ${opts.map((o) => pillBtn(o[1], { variant: kind === o[0] ? "primary" : "ghost", action: "tree-add-kind", data: { kind: o[0] } })).join("")}
     </div>
     <div style="display:flex;gap:6px;flex-wrap:wrap;">
-      <input class="input" id="tree-add-name" style="flex:1;min-width:160px;" placeholder="الاسم" />
+      <input class="input" id="tree-add-name" style="flex:2;min-width:140px;" placeholder="الاسم" />
+      <input class="input" id="tree-add-email" style="flex:1;min-width:140px;" type="email" placeholder="الإيميل (اختياري)" />
+      <input class="input" id="tree-add-password" style="flex:1;min-width:110px;" placeholder="الرقم السري (اختياري)" />
       ${pillBtn("حفظ", { action: "tree-add-save", data: { kind } })}
       ${pillBtn("إلغاء", { variant: "ghost", action: "tree-add-cancel" })}
     </div>
   </div>`;
 }
-function treeNodeHtml(label, tag, type, id, moveHtml, childrenHtml, depth) {
-  return `<div style="margin-right:${depth * 18}px;">
-    <div class="card" style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;padding:8px 12px;margin-bottom:6px;">
-      <div style="font-size:13px;font-weight:700;">${esc(label)} <span style="font-size:10px;font-weight:700;color:${SUBTLE};background:${GRAY_BG};padding:2px 7px;border-radius:999px;">${tag}</span></div>
-      <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;">${moveHtml}${pillBtn("إضافة", { icon: iconPlus(14, "#fff"), action: "tree-add-start", data: { type, id } })}</div>
+function treeEditFormHtml(type, id) {
+  const f = S.ui.treeEditFor;
+  if (!f || f.type !== type || f.id !== id) return "";
+  const e = treeEntity(type, id); if (!e) return "";
+  return `<div class="card" style="margin:6px 0;background:${GRAY_BG};">
+    <div style="display:flex;gap:6px;flex-wrap:wrap;">
+      <input class="input" id="tree-edit-name" style="flex:2;min-width:140px;" placeholder="الاسم" value="${esc(e.name)}" />
+      <input class="input" id="tree-edit-email" style="flex:1;min-width:140px;" type="email" placeholder="الإيميل" value="${esc(e.email || "")}" />
+      <input class="input" id="tree-edit-password" style="flex:1;min-width:110px;" placeholder="رقم سري جديد (فارغ = بدون تغيير)" />
+      ${pillBtn("حفظ", { action: "tree-edit-save", data: { type, id } })}
+      ${pillBtn("إلغاء", { variant: "ghost", action: "tree-edit-cancel" })}
     </div>
-    ${treeAddFormHtml(type, id)}
-    ${childrenHtml}
+  </div>`;
+}
+function treeNodeHtml(e, tag, type, moveHtml, childrenHtml, depth) {
+  const key = type + ":" + e.id;
+  const collapsed = !!(S.ui.treeCollapsed || {})[key];
+  const hasChildren = !!childrenHtml;
+  const confirming = S.ui.treeConfirmDel && S.ui.treeConfirmDel.type === type && S.ui.treeConfirmDel.id === e.id;
+  const actions = confirming
+    ? `<span style="font-size:12px;font-weight:700;">حذف "${esc(e.name)}"؟</span>${pillBtn("حذف", { variant: "danger", action: "tree-delete", data: { type, id: e.id } })}${pillBtn("تراجع", { variant: "ghost", action: "tree-cancel-delete" })}`
+    : `${moveHtml}
+      <button class="icon-btn" style="width:28px;height:28px;border:1px solid ${BORDER}" data-action="tree-add-start" data-type="${type}" data-id="${esc(e.id)}" title="إضافة">${iconPlus(13, INK)}</button>
+      <button class="icon-btn" style="width:28px;height:28px;border:1px solid ${BORDER}" data-action="tree-edit-start" data-type="${type}" data-id="${esc(e.id)}" title="تعديل">${iconPencil(13, INK)}</button>
+      <button class="icon-btn" style="width:28px;height:28px;background:${DANGER_BG}" data-action="tree-confirm-delete" data-type="${type}" data-id="${esc(e.id)}" title="حذف">${iconTrash(13, DANGER)}</button>`;
+  return `<div style="margin-right:${depth > 0 ? 22 : 0}px;${depth > 0 ? `border-right:2px solid ${BORDER};padding-right:14px;` : ""}">
+    <div class="card" style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:8px;">
+      <button class="icon-btn" style="width:26px;height:26px;flex-shrink:0;${hasChildren ? "" : "visibility:hidden;"}" data-action="tree-toggle" data-key="${esc(key)}" title="${collapsed ? "توسيع" : "طيّ"}">${collapsed ? iconChevronLeft(14, INK) : iconChevronDown ? iconChevronDown(14, INK) : "▾"}</button>
+      <div style="flex:1;min-width:120px;">
+        <div style="font-size:13px;font-weight:700;">${esc(e.name)} <span style="font-size:10px;font-weight:700;color:${SUBTLE};background:${GRAY_BG};padding:2px 7px;border-radius:999px;">${tag}</span></div>
+        ${e.email ? `<div style="font-size:10.5px;color:${SUBTLE}">${esc(e.email)}</div>` : ""}
+      </div>
+      <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;">${actions}</div>
+    </div>
+    ${treeAddFormHtml(type, e.id)}${treeEditFormHtml(type, e.id)}
+    ${collapsed ? "" : childrenHtml}
   </div>`;
 }
 function structureTreeHtml() {
   const offices = S.offices || [];
   const units = S.units.filter((u) => u.role !== "admin" && u.role !== "executive" && u.role !== "self_report");
-  const unitNode = (u, depth) => treeNodeHtml(u.name, u.role === "center" ? "مركز" : "وحدة", "unit", u.id,
-    `<select class="input" style="padding:5px 8px;font-size:12px;width:140px;" data-action="assign-unit-dept" data-id="${esc(u.id)}" title="نقل">
-      <option value="">بدون قسم</option>${S.departments.map((d) => `<option value="${esc(d.id)}" ${u.departmentId === d.id ? "selected" : ""}>${esc(d.name)}</option>`).join("")}</select>`, "", depth);
-  const deptNode = (d, depth) => treeNodeHtml(d.name, "قسم", "dept", d.id,
-    `<select class="input" style="padding:5px 8px;font-size:12px;width:140px;" data-action="assign-dept-office" data-id="${esc(d.id)}" title="نقل">
-      <option value="">بلا مكتب</option>${offices.map((o) => `<option value="${esc(o.id)}" ${d.officeId === o.id ? "selected" : ""}>${esc(o.name)}</option>`).join("")}</select>`,
+  const sel = (action, id, first, opts, cur) => `<select class="input" style="padding:5px 8px;font-size:12px;width:130px;" data-action="${action}" data-id="${esc(id)}" title="نقل">
+    <option value="">${first}</option>${opts.map((o) => `<option value="${esc(o.id)}" ${cur === o.id ? "selected" : ""}>${esc(o.name)}</option>`).join("")}</select>`;
+  const unitNode = (u, depth) => treeNodeHtml(u, u.role === "center" ? "مركز" : "وحدة", "unit", sel("assign-unit-dept", u.id, "بدون قسم", S.departments, u.departmentId), "", depth);
+  const deptNode = (d, depth) => treeNodeHtml(d, "قسم", "dept", sel("assign-dept-office", d.id, "بلا مكتب", offices, d.officeId),
     units.filter((u) => u.departmentId === d.id).map((u) => unitNode(u, depth + 1)).join(""), depth);
-  const officeBlocks = offices.map((o) => treeNodeHtml(o.name, "مكتب", "office", o.id, "",
-    S.departments.filter((d) => d.officeId === o.id).map((d) => deptNode(d, 1)).join(""), 0)).join("");
+  const officeNode = (o, depth, guard) => {
+    const kids = offices.filter((x) => x.parentOfficeId === o.id && guard.indexOf(x.id) === -1).map((x) => officeNode(x, depth + 1, guard.concat(o.id))).join("");
+    const deps = S.departments.filter((d) => d.officeId === o.id).map((d) => deptNode(d, depth + 1)).join("");
+    const blocked = officeScopeIds(o.id);
+    return treeNodeHtml(o, "مكتب", "office", sel("assign-office-parent", o.id, "بلا مكتب أب", offices.filter((x) => blocked.indexOf(x.id) === -1), o.parentOfficeId), kids + deps, depth);
+  };
+  const isRoot = (o) => !o.parentOfficeId || !offices.some((x) => x.id === o.parentOfficeId);
   const looseDepts = S.departments.filter((d) => !offices.some((o) => o.id === d.officeId));
   const looseUnits = units.filter((u) => !S.departments.some((d) => d.id === u.departmentId));
   return `<div style="margin-bottom:18px;">
-    ${officeBlocks}
+    <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px;">
+      ${pillBtn("إضافة مكتب رئيسي", { icon: iconPlus(14, "#fff"), action: "tree-add-root", data: { type: "office" } })}
+      ${pillBtn("إضافة قسم", { variant: "ghost", action: "tree-add-root", data: { type: "dept" } })}
+    </div>
+    ${S.ui.treeAddRoot ? `<div class="card" style="margin-bottom:10px;background:${GRAY_BG};"><div style="display:flex;gap:6px;flex-wrap:wrap;">
+      <input class="input" id="tree-root-name" style="flex:2;min-width:140px;" placeholder="الاسم" />
+      <input class="input" id="tree-root-email" style="flex:1;min-width:140px;" type="email" placeholder="الإيميل (اختياري)" />
+      <input class="input" id="tree-root-password" style="flex:1;min-width:110px;" placeholder="الرقم السري (اختياري)" />
+      ${pillBtn("حفظ", { action: "tree-root-save", data: { type: S.ui.treeAddRoot } })}
+      ${pillBtn("إلغاء", { variant: "ghost", action: "tree-root-cancel" })}
+    </div></div>` : ""}
+    ${offices.filter(isRoot).map((o) => officeNode(o, 0, [])).join("")}
     ${looseDepts.length ? `<div style="font-size:12px;font-weight:800;color:${ROSE};margin:10px 0 6px;">بلا مكتب</div>${looseDepts.map((d) => deptNode(d, 0)).join("")}` : ""}
     ${looseUnits.length ? `<div style="font-size:12px;font-weight:800;color:${ROSE};margin:10px 0 6px;">بلا قسم</div>${looseUnits.map((u) => unitNode(u, 0)).join("")}` : ""}
+    ${!offices.length && !S.departments.length && !units.length ? `<div class="card" style="text-align:center;color:${SUBTLE};padding:30px;border-style:dashed;">لا يوجد شيء بعد — اضغطي "إضافة مكتب رئيسي" لبدء أول عنصر.</div>` : ""}
   </div>`;
 }
 
@@ -7636,6 +7699,12 @@ function attachFormListeners() {
       render();
       return;
     }
+    if (el.dataset && el.dataset.action === "assign-office-parent") {
+      const o = (S.offices || []).find((x) => x.id === el.dataset.id);
+      if (o && officeScopeIds(o.id).indexOf(el.value) === -1) { o.parentOfficeId = el.value; dataStore.saveOffices(S.offices); }
+      render();
+      return;
+    }
     if (el.dataset && el.dataset.action === "assign-dept-office") {
       const d = S.departments.find((x) => x.id === el.dataset.id);
       if (d) { d.officeId = el.value; dataStore.saveDepartments(S.departments); }
@@ -8296,23 +8365,73 @@ function attachClickListener() {
       }
 
       case "set-struct-view": S.ui.structView = ds.mode; render(); break;
-      case "tree-add-start": S.ui.treeAddFor = { type: ds.type, id: ds.id }; S.ui.treeAddKind = null; render(); break;
+      case "tree-add-start": S.ui.treeAddFor = { type: ds.type, id: ds.id }; S.ui.treeEditFor = null; S.ui.treeAddKind = null; render(); break;
       case "tree-add-cancel": S.ui.treeAddFor = null; render(); break;
       case "tree-add-kind": S.ui.treeAddKind = ds.kind; render(); break;
+      case "tree-toggle": { const c = { ...(S.ui.treeCollapsed || {}) }; c[ds.key] = !c[ds.key]; S.ui.treeCollapsed = c; render(); break; }
+      case "tree-edit-start": S.ui.treeEditFor = { type: ds.type, id: ds.id }; S.ui.treeAddFor = null; render(); break;
+      case "tree-edit-cancel": S.ui.treeEditFor = null; render(); break;
+      case "tree-edit-save": {
+        const nm = (document.getElementById("tree-edit-name").value || "").trim();
+        const em = (document.getElementById("tree-edit-email").value || "").trim();
+        const pw = (document.getElementById("tree-edit-password").value || "").trim();
+        if (!nm) break;
+        const patch = { name: nm, email: em }; if (pw) patch.password = pw;
+        treeSetEntity(ds.type, ds.id, patch);
+        S.ui.treeEditFor = null; render();
+        break;
+      }
+      case "tree-confirm-delete": S.ui.treeConfirmDel = { type: ds.type, id: ds.id }; render(); break;
+      case "tree-cancel-delete": S.ui.treeConfirmDel = null; render(); break;
+      case "tree-delete": {
+        if (ds.type === "office") {
+          S.offices = (S.offices || []).filter((o) => o.id !== ds.id).map((o) => o.parentOfficeId === ds.id ? { ...o, parentOfficeId: "" } : o);
+          S.departments = S.departments.map((d) => d.officeId === ds.id ? { ...d, officeId: "" } : d);
+          dataStore.saveOffices(S.offices); dataStore.saveDepartments(S.departments);
+        } else if (ds.type === "dept") {
+          S.departments = S.departments.filter((d) => d.id !== ds.id);
+          S.units = S.units.map((u) => u.departmentId === ds.id ? { ...u, departmentId: "" } : u);
+          dataStore.saveDepartments(S.departments); dataStore.saveUnits(S.units);
+        } else {
+          S.units = S.units.filter((u) => u.id !== ds.id); delete S.reports[ds.id];
+          dataStore.saveUnits(S.units); dataStore.deleteReports(ds.id);
+        }
+        S.ui.treeConfirmDel = null; render();
+        break;
+      }
+      case "tree-add-root": S.ui.treeAddRoot = ds.type; render(); break;
+      case "tree-root-cancel": S.ui.treeAddRoot = null; render(); break;
+      case "tree-root-save": {
+        const nm = (document.getElementById("tree-root-name").value || "").trim();
+        if (!nm) break;
+        const base = { password: (document.getElementById("tree-root-password").value || "").trim(), email: (document.getElementById("tree-root-email").value || "").trim(), status: "active", createdAt: Date.now(), allowedPages: [], allowedActions: [], name: nm };
+        if (ds.type === "dept") { S.departments = [...S.departments, { ...base, id: uid("dept"), officeId: "" }]; dataStore.saveDepartments(S.departments); }
+        else { S.offices = [...(S.offices || []), { ...base, id: uid("office"), parentOfficeId: "" }]; dataStore.saveOffices(S.offices); }
+        S.ui.treeAddRoot = null; render();
+        break;
+      }
       case "tree-add-save": {
         const f = S.ui.treeAddFor; const el = document.getElementById("tree-add-name");
         const name = el ? (el.value || "").trim() : "";
         if (!f || !name) break;
-        const base = { password: "", email: "", status: "active", createdAt: Date.now(), allowedPages: [], allowedActions: [] };
+        const base = { password: (document.getElementById("tree-add-password").value || "").trim(), email: (document.getElementById("tree-add-email").value || "").trim(), status: "active", createdAt: Date.now(), allowedPages: [], allowedActions: [] };
         if (f.type === "office" && ds.kind === "child") {
           S.departments = [...S.departments, { ...base, id: uid("dept"), name, officeId: f.id }];
           dataStore.saveDepartments(S.departments);
+        } else if (f.type === "office" && ds.kind === "child-office") {
+          S.offices = [...(S.offices || []), { ...base, id: uid("office"), name, parentOfficeId: f.id }];
+          dataStore.saveOffices(S.offices);
+        } else if (f.type === "office" && ds.kind === "parent") {
+          const o0 = (S.offices || []).find((o) => o.id === f.id);
+          const oid = uid("office");
+          S.offices = [...(S.offices || []).map((o) => o.id === f.id ? { ...o, parentOfficeId: oid } : o), { ...base, id: oid, name, parentOfficeId: o0 ? (o0.parentOfficeId || "") : "" }];
+          dataStore.saveOffices(S.offices);
         } else if (f.type === "dept" && ds.kind === "child") {
           S.units = [...S.units, { ...base, id: uid("unit"), name, role: "unit", departmentId: f.id }];
           dataStore.saveUnits(S.units);
         } else if (f.type === "dept" && ds.kind === "parent") {
           const oid = uid("office");
-          S.offices = [...(S.offices || []), { ...base, id: oid, name }];
+          S.offices = [...(S.offices || []), { ...base, id: oid, name, parentOfficeId: "" }];
           S.departments = S.departments.map((d) => d.id === f.id ? { ...d, officeId: oid } : d);
           dataStore.saveOffices(S.offices); dataStore.saveDepartments(S.departments);
         } else if (f.type === "unit" && ds.kind === "parent") {
