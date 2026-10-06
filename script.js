@@ -4779,14 +4779,14 @@ function structureTreeHtml() {
   const units = S.units.filter((u) => u.role !== "admin" && u.role !== "executive" && u.role !== "self_report");
   const sel = (action, id, first, opts, cur) => `<select class="input" style="padding:5px 8px;font-size:12px;width:130px;" data-action="${action}" data-id="${esc(id)}" title="نقل">
     <option value="">${first}</option>${opts.map((o) => `<option value="${esc(o.id)}" ${cur === o.id ? "selected" : ""}>${esc(o.name)}</option>`).join("")}</select>`;
-  const unitNode = (u, depth) => treeNodeHtml(u, u.role === "center" ? "مركز" : "وحدة", "unit", sel("assign-unit-dept", u.id, "بدون قسم", S.departments, u.departmentId), "", depth);
-  const deptNode = (d, depth) => treeNodeHtml(d, "قسم", "dept", sel("assign-dept-office", d.id, "بلا مكتب", offices, d.officeId),
+  const unitNode = (u, depth) => treeNodeHtml(u, u.role === "center" ? "مركز" : "وحدة", "unit", sel("assign-unit-dept", u.id, "بلا", S.departments, u.departmentId), "", depth);
+  const deptNode = (d, depth) => treeNodeHtml(d, "قسم", "dept", sel("assign-dept-office", d.id, "بلا", offices, d.officeId),
     units.filter((u) => u.departmentId === d.id).map((u) => unitNode(u, depth + 1)).join(""), depth);
   const officeNode = (o, depth, guard) => {
     const kids = offices.filter((x) => x.parentOfficeId === o.id && guard.indexOf(x.id) === -1).map((x) => officeNode(x, depth + 1, guard.concat(o.id))).join("");
     const deps = S.departments.filter((d) => d.officeId === o.id).map((d) => deptNode(d, depth + 1)).join("");
     const blocked = officeScopeIds(o.id);
-    return treeNodeHtml(o, "مكتب", "office", sel("assign-office-parent", o.id, "بلا أب", offices.filter((x) => blocked.indexOf(x.id) === -1).concat(S.units.filter((u) => u.role === "executive")), o.parentOfficeId), kids + deps, depth);
+    return treeNodeHtml(o, "مكتب", "office", sel("assign-office-parent", o.id, "بلا", offices.filter((x) => blocked.indexOf(x.id) === -1).concat(S.units.filter((u) => u.role === "executive")), o.parentOfficeId), kids + deps, depth);
   };
   const execs = S.units.filter((u) => u.role === "executive");
   const isRoot = (o) => !o.parentOfficeId || (!offices.some((x) => x.id === o.parentOfficeId) && !execs.some((x) => x.id === o.parentOfficeId));
