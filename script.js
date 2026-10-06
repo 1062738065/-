@@ -4618,7 +4618,7 @@ function addEntityPickerHtml() {
   const ui = S.ui;
   const step = ui.addEntityStep;
   if (!step) {
-    return `<div style="margin-bottom:14px;">${pillBtn("+ إضافة", { icon: iconPlus(15, "#fff"), action: "start-add-entity" })}</div>`;
+    return `<div style="margin-bottom:14px;">${pillBtn("إضافة", { icon: iconPlus(15, "#fff"), action: "start-add-entity" })}</div>`;
   }
   if (step === "choose") {
     return `<div class="card" style="margin-bottom:18px;">
@@ -4744,7 +4744,7 @@ function renderDepartmentsManage() {
     }) : ""}
 
     ${!execUnits.length && !adminUnits.length && !(S.offices || []).length && !S.departments.length && !unitUnits.length && !centerUnits.length
-      ? `<div class="card" style="text-align:center;color:${SUBTLE};padding:36px 20px;border-style:dashed;">لا توجد أي جهات بعد — ابدئي بالضغط على "+ إضافة" أعلاه.</div>` : ""}
+      ? `<div class="card" style="text-align:center;color:${SUBTLE};padding:36px 20px;border-style:dashed;">لا توجد أي جهات بعد — ابدئي بالضغط على "إضافة" أعلاه.</div>` : ""}
   </div></div>`;
 }
 
@@ -5100,7 +5100,6 @@ function platformUserFormFieldsHtml(prefix, form) {
         <option value="">بدون قالب (صلاحيات خاصة بهذا الحساب فقط)</option>
         ${(S.jobTitleTemplates || []).map((t) => `<option value="${esc(t.id)}" ${templateId === t.id ? "selected" : ""}>${esc(t.name)}</option>`).join("")}
       </select>
-      ${pillBtn("إدارة القوالب", { variant: "ghost", icon: iconLayers(14, INK), action: "nav-to", data: { view: "job-title-templates" } })}
     </div>
     <div style="font-size:10.5px;color:${SUBTLE};background:${BLUE_BG};border-radius:8px;padding:7px 10px;margin-bottom:10px;">ربط الحساب بقالب مسمى وظيفي يجعله يرث صفحاته وإجراءاته تلقائيًا، وتبقى تتحدث معه فور تعديل القالب نفسه — بدون قالب، تضبطين صلاحيات هذا الحساب بنفسه فقط كالسابق.</div>
     <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;">
@@ -5267,15 +5266,22 @@ function jobTitleTemplateRowHtml(t) {
 // الأصلية بدون أي تغيير، بس صار التنقل بينها بتبويبات بدل روابط منفصلة
 // بالقائمة الجانبية. "مخطط الهيكل التنظيمي" تبقى مستقلة تمامًا (قرارها
 // الصريح: أداة تخطيط حرة بدون حسابات دخول، غير هذي الأربعة).
+// ثلاثة تبويبات واضحة: الهيكل (من يوجد بالنظام) — الأشخاص (حسابات بمسميات) — الصلاحيات
+// (ماذا يرى كل حساب، ومعها القوالب الجاهزة كتبويب فرعي).
 const ACCOUNTS_HUB_TABS = [
-  { view: "units-manage", label: "الجهات" },
-  { view: "platform-users-manage", label: "حسابات إضافية" },
-  { view: "platform-permissions-manage", label: "صلاحيات الحسابات" },
-  { view: "job-title-templates", label: "المسميات الوظيفية" },
+  { view: "units-manage", label: "الهيكل" },
+  { view: "platform-users-manage", label: "الأشخاص" },
+  { view: "platform-permissions-manage", label: "الصلاحيات", also: ["job-title-templates"] },
 ];
+function permissionsSubTabsHtml(active) {
+  return `<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:14px;">
+    ${pillBtn("صلاحيات الحسابات", { variant: active === "platform-permissions-manage" ? "primary" : "ghost", action: "nav-to", data: { view: "platform-permissions-manage" } })}
+    ${pillBtn("المسميات الوظيفية (قوالب جاهزة)", { variant: active === "job-title-templates" ? "primary" : "ghost", action: "nav-to", data: { view: "job-title-templates" } })}
+  </div>`;
+}
 function accountsHubTabBarHtml(activeView) {
   return `<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:16px;border-bottom:1px solid ${BORDER};padding-bottom:12px;">
-    ${ACCOUNTS_HUB_TABS.map((t) => pillBtn(t.label, { variant: t.view === activeView ? "primary" : "ghost", action: "nav-to", data: { view: t.view } })).join("")}
+    ${ACCOUNTS_HUB_TABS.map((t) => pillBtn(t.label, { variant: (t.view === activeView || (t.also || []).indexOf(activeView) !== -1) ? "primary" : "ghost", action: "nav-to", data: { view: t.view } })).join("")}
   </div>`;
 }
 
@@ -5288,6 +5294,7 @@ function renderJobTitleTemplatesManage() {
     ${topBarHtml({ title: "المسميات الوظيفية (القوالب)", subtitle: "كل قالب = مجموعة صفحات وإجراءات واحدة؛ اربطي بها أي حساب إضافي من \"حسابات إضافية\" وتتحدث صلاحياته تلقائيًا مع أي تعديل هنا",
       backAction: "nav-back-admin" })}
     ${accountsHubTabBarHtml("job-title-templates")}
+    ${permissionsSubTabsHtml("job-title-templates")}
 
     ${ui.editingTemplateId ? "" : `<div class="card" style="margin-bottom:18px;">
       <div style="font-size:12.5px;font-weight:800;color:${ROSE};margin-bottom:12px;">إضافة</div>
@@ -5477,9 +5484,9 @@ function renderPlatformPermissionsManage() {
   const list = collectPermissionAccounts();
   return `
   <div class="page-wrap"><div class="page-inner narrow">
-    ${topBarHtml({ title: "صلاحيات الحسابات", subtitle: "كل حساب بالنظام — وحدات، مراكز، أقسام، مكاتب إشراف، وحسابات إضافية — بقائمة واحدة، وتعديل صفحاته وإجراءاته مباشرة", backAction: "nav-back-admin",
-      right: pillBtn("إضافة حساب إضافي جديد", { variant: "ghost", icon: iconPlus(15, INK), action: "nav-to", data: { view: "platform-users-manage" } }) })}
+    ${topBarHtml({ title: "صلاحيات الحسابات", subtitle: "كل حساب بالنظام — وحدات، مراكز، أقسام، مكاتب إشراف، وحسابات إضافية — بقائمة واحدة، وتعديل صفحاته وإجراءاته مباشرة", backAction: "nav-back-admin" })}
     ${accountsHubTabBarHtml("platform-permissions-manage")}
+    ${permissionsSubTabsHtml("platform-permissions-manage")}
     ${bulkPermCardHtml()}
 
     ${list.length === 0 ? `<div class="card" style="text-align:center;color:${SUBTLE};padding:36px 20px;border-style:dashed;">لا توجد حسابات بعد.</div>` : `
