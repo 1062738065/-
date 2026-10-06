@@ -4825,24 +4825,18 @@ function renderDepartmentsManage() {
     ${topBarHtml({ title: "المستخدمون", backAction: "nav-back-admin" })}
     ${accountsHubTabBarHtml("units-manage")}
 
-    <div style="margin-bottom:12px;">
-      <select class="input" style="width:170px;font-weight:700;" data-action="set-struct-view-select">
-        <option value="tree" ${S.ui.structView !== "lists" ? "selected" : ""}>شجرة الهيكل</option>
-        <option value="lists" ${S.ui.structView === "lists" ? "selected" : ""}>قوائم</option>
-      </select>
-    </div>
-    ${S.ui.structView !== "lists" ? structureTreeHtml() : ""}
-
-    ${execUnits.length ? collapsibleUsersSection({
-      key: "executive", title: "الإدارة العليا", count: execUnits.length,
-      formHtml: "",
-      listHtml: `<div style="display:flex;flex-direction:column;gap:8px;">${execUnits.map((u) => simpleAccountRowHtml(u, "إدارة عليا")).join("")}</div>`,
-    }) : ""}
-
     ${adminUnits.length ? collapsibleUsersSection({
       key: "sysadmin", title: "مديرة النظام", count: adminUnits.length,
       formHtml: "",
       listHtml: `<div style="display:flex;flex-direction:column;gap:8px;">${adminUnits.map((u) => simpleAccountRowHtml(u, "مديرة نظام")).join("")}</div>`,
+    }) : ""}
+
+    ${S.ui.structView !== "lists" ? structureTreeHtml() : ""}
+
+    ${(S.ui.structView === "lists" && execUnits.length) ? collapsibleUsersSection({
+      key: "executive", title: "الإدارة العليا", count: execUnits.length,
+      formHtml: "",
+      listHtml: `<div style="display:flex;flex-direction:column;gap:8px;">${execUnits.map((u) => simpleAccountRowHtml(u, "إدارة عليا")).join("")}</div>`,
     }) : ""}
 
     ${(S.ui.structView === "lists" && (S.offices || []).length) ? collapsibleUsersSection({
@@ -4869,7 +4863,7 @@ function renderDepartmentsManage() {
       listHtml: `<div style="display:flex;flex-direction:column;gap:8px;">${centerUnits.map((u) => unitRowHtml(u)).join("")}</div>`,
     }) : ""}
 
-    ${!execUnits.length && !adminUnits.length && !(S.offices || []).length && !S.departments.length && !unitUnits.length && !centerUnits.length
+    ${S.ui.structView === "lists" && !execUnits.length && !adminUnits.length && !(S.offices || []).length && !S.departments.length && !unitUnits.length && !centerUnits.length
       ? `<div class="card" style="text-align:center;color:${SUBTLE};padding:36px 20px;border-style:dashed;">لا توجد أي جهات بعد — ابدئي بالضغط على "إضافة" أعلاه.</div>` : ""}
   </div></div>`;
 }
@@ -5407,8 +5401,10 @@ function permissionsSubTabsHtml(active) {
   </div>`;
 }
 function accountsHubTabBarHtml(activeView) {
-  return `<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:16px;border-bottom:1px solid ${BORDER};padding-bottom:12px;">
-    ${ACCOUNTS_HUB_TABS.map((t) => pillBtn(t.label, { variant: (t.view === activeView || (t.also || []).indexOf(activeView) !== -1) ? "primary" : "ghost", action: "nav-to", data: { view: t.view } })).join("")}
+  return `<div style="margin-bottom:14px;">
+    <select class="input" style="width:190px;padding:7px 10px;font-size:13px;font-weight:700;" data-action="hub-nav-select">
+      ${ACCOUNTS_HUB_TABS.map((t) => `<option value="${esc(t.view)}" ${(t.view === activeView || (t.also || []).indexOf(activeView) !== -1) ? "selected" : ""}>${esc(t.label)}</option>`).join("")}
+    </select>
   </div>`;
 }
 
@@ -7701,6 +7697,11 @@ function attachFormListeners() {
       const idx = Number(el.dataset.index);
       S.ui.editUnitPathStages = (S.ui.editUnitPathStages || []).map((s, i) => i === idx ? { ...s, templateId: el.value } : s);
       render();
+      return;
+    }
+    if (el.dataset && el.dataset.action === "hub-nav-select") {
+      const b = document.createElement("button"); b.dataset.action = "nav-to"; b.dataset.view = el.value;
+      b.style.display = "none"; appEl.appendChild(b); b.click(); if (b.parentNode) b.parentNode.removeChild(b);
       return;
     }
     if (el.dataset && el.dataset.action === "set-struct-view-select") {
