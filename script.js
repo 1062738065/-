@@ -1821,7 +1821,8 @@ function sidebarPageActive(p) {
 function computeVisibleSidebarPages() {
   const raw = computeVisibleSidebarPagesRaw();
   const ids = new Set(raw.map((p) => MERGED_PAGE_MAP[p.id] || p.id));
-  return SIDEBAR_PAGES.filter((p) => ids.has(p.id));
+  // "مخطط الهيكل التنظيمي" صار تبويبًا داخل المستخدمون (لا رابط مستقل بالشريط).
+  return SIDEBAR_PAGES.filter((p) => ids.has(p.id) && p.id !== "org-chart");
 }
 function computeVisibleSidebarPagesRaw() {
   // مجموعة "unit-home" (تُعرض الآن كروابط رئيسية مستقلة بالشريط الجانبي —
@@ -3306,6 +3307,7 @@ function renderOrgChartPage() {
   const addingRoot = !!S.ui.orgChartAddingRoot;
   return `
   <div class="page-wrap"><div class="page-inner">
+    ${accountsHubTabBarHtml("org-chart")}
     ${topBarHtml({ title: "مخطط الهيكل التنظيمي", subtitle: "مخطط مسميات وظيفية حرّ للتخطيط فقط — بدون حسابات تسجيل دخول، ومنفصل تمامًا عن صفحات مكاتب الإشراف/الأقسام/الوحدات/المراكز",
       right: pillBtn("إضافة", { icon: iconPlus(15, "#fff"), action: "org-chart-start-add-root" }) })}
     ${addingRoot ? `
@@ -4693,6 +4695,57 @@ function addEntityPickerHtml() {
   </div>`;
 }
 
+
+/* ---------- شجرة الهيكل (مكتب ← قسم ← وحدة) مع "إضافة" (تابع/أب) و"نقل" ---------- */
+function treeAddFormHtml(type, id) {
+  const f = S.ui.treeAddFor;
+  if (!f || f.type !== type || f.id !== id) return "";
+  const opts = type === "office" ? [["child", "تابع (قسم تحته)"]]
+    : type === "dept" ? [["child", "تابع (وحدة تحته)"], ["parent", "أب (مكتب فوقه)"]]
+    : [["parent", "أب (قسم فوقه)"]];
+  const kind = opts.some((o) => o[0] === S.ui.treeAddKind) ? S.ui.treeAddKind : opts[0][0];
+  return `<div class="card" style="margin:6px 0;background:${GRAY_BG};">
+    <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px;">
+      ${opts.map((o) => pillBtn(o[1], { variant: kind === o[0] ? "primary" : "ghost", action: "tree-add-kind", data: { kind: o[0] } })).join("")}
+    </div>
+    <div style="display:flex;gap:6px;flex-wrap:wrap;">
+      <input class="input" id="tree-add-name" style="flex:1;min-width:160px;" placeholder="الاسم" />
+      ${pillBtn("حفظ", { action: "tree-add-save", data: { kind } })}
+      ${pillBtn("إلغاء", { variant: "ghost", action: "tree-add-cancel" })}
+    </div>
+  </div>`;
+}
+function treeNodeHtml(label, tag, type, id, moveHtml, childrenHtml, depth) {
+  return `<div style="margin-right:${depth * 18}px;">
+    <div class="card" style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;padding:8px 12px;margin-bottom:6px;">
+      <div style="font-size:13px;font-weight:700;">${esc(label)} <span style="font-size:10px;font-weight:700;color:${SUBTLE};background:${GRAY_BG};padding:2px 7px;border-radius:999px;">${tag}</span></div>
+      <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;">${moveHtml}${pillBtn("إضافة", { icon: iconPlus(14, "#fff"), action: "tree-add-start", data: { type, id } })}</div>
+    </div>
+    ${treeAddFormHtml(type, id)}
+    ${childrenHtml}
+  </div>`;
+}
+function structureTreeHtml() {
+  const offices = S.offices || [];
+  const units = S.units.filter((u) => u.role !== "admin" && u.role !== "executive" && u.role !== "self_report");
+  const unitNode = (u, depth) => treeNodeHtml(u.name, u.role === "center" ? "مركز" : "وحدة", "unit", u.id,
+    `<select class="input" style="padding:5px 8px;font-size:12px;width:140px;" data-action="assign-unit-dept" data-id="${esc(u.id)}" title="نقل">
+      <option value="">بدون قسم</option>${S.departments.map((d) => `<option value="${esc(d.id)}" ${u.departmentId === d.id ? "selected" : ""}>${esc(d.name)}</option>`).join("")}</select>`, "", depth);
+  const deptNode = (d, depth) => treeNodeHtml(d.name, "قسم", "dept", d.id,
+    `<select class="input" style="padding:5px 8px;font-size:12px;width:140px;" data-action="assign-dept-office" data-id="${esc(d.id)}" title="نقل">
+      <option value="">بلا مكتب</option>${offices.map((o) => `<option value="${esc(o.id)}" ${d.officeId === o.id ? "selected" : ""}>${esc(o.name)}</option>`).join("")}</select>`,
+    units.filter((u) => u.departmentId === d.id).map((u) => unitNode(u, depth + 1)).join(""), depth);
+  const officeBlocks = offices.map((o) => treeNodeHtml(o.name, "مكتب", "office", o.id, "",
+    S.departments.filter((d) => d.officeId === o.id).map((d) => deptNode(d, 1)).join(""), 0)).join("");
+  const looseDepts = S.departments.filter((d) => !offices.some((o) => o.id === d.officeId));
+  const looseUnits = units.filter((u) => !S.departments.some((d) => d.id === u.departmentId));
+  return `<div style="margin-bottom:18px;">
+    ${officeBlocks}
+    ${looseDepts.length ? `<div style="font-size:12px;font-weight:800;color:${ROSE};margin:10px 0 6px;">بلا مكتب</div>${looseDepts.map((d) => deptNode(d, 0)).join("")}` : ""}
+    ${looseUnits.length ? `<div style="font-size:12px;font-weight:800;color:${ROSE};margin:10px 0 6px;">بلا قسم</div>${looseUnits.map((u) => unitNode(u, 0)).join("")}` : ""}
+  </div>`;
+}
+
 function renderDepartmentsManage() {
   const ui = S.ui;
   const execUnits = S.units.filter((u) => u.role === "executive");
@@ -4707,6 +4760,12 @@ function renderDepartmentsManage() {
 
     ${addEntityPickerHtml()}
 
+    <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px;">
+      ${pillBtn("شجرة الهيكل", { variant: S.ui.structView !== "lists" ? "primary" : "ghost", action: "set-struct-view", data: { mode: "tree" } })}
+      ${pillBtn("قوائم", { variant: S.ui.structView === "lists" ? "primary" : "ghost", action: "set-struct-view", data: { mode: "lists" } })}
+    </div>
+    ${S.ui.structView !== "lists" ? structureTreeHtml() : ""}
+
     ${execUnits.length ? collapsibleUsersSection({
       key: "executive", title: "الإدارة العليا", count: execUnits.length,
       formHtml: "",
@@ -4719,25 +4778,25 @@ function renderDepartmentsManage() {
       listHtml: `<div style="display:flex;flex-direction:column;gap:8px;">${adminUnits.map((u) => simpleAccountRowHtml(u, "مديرة نظام")).join("")}</div>`,
     }) : ""}
 
-    ${(S.offices || []).length ? collapsibleUsersSection({
+    ${(S.ui.structView === "lists" && (S.offices || []).length) ? collapsibleUsersSection({
       key: "offices", title: "مكاتب الإشراف", count: (S.offices || []).length,
       formHtml: "",
       listHtml: `<div style="display:flex;flex-direction:column;gap:8px;">${(S.offices || []).map((o) => officeRowHtml(o)).join("")}</div>`,
     }) : ""}
 
-    ${S.departments.length ? collapsibleUsersSection({
+    ${(S.ui.structView === "lists" && S.departments.length) ? collapsibleUsersSection({
       key: "departments", title: "الأقسام", count: S.departments.length,
       formHtml: "",
       listHtml: `<div style="display:flex;flex-direction:column;gap:8px;">${S.departments.map((d) => departmentRowHtml(d)).join("")}</div>`,
     }) : ""}
 
-    ${unitUnits.length ? collapsibleUsersSection({
+    ${(S.ui.structView === "lists" && unitUnits.length) ? collapsibleUsersSection({
       key: "units", title: "الوحدات", count: unitUnits.length,
       formHtml: "",
       listHtml: `<div style="display:flex;flex-direction:column;gap:8px;">${unitUnits.map((u) => unitRowHtml(u)).join("")}</div>`,
     }) : ""}
 
-    ${centerUnits.length ? collapsibleUsersSection({
+    ${(S.ui.structView === "lists" && centerUnits.length) ? collapsibleUsersSection({
       key: "centers", title: "المراكز", count: centerUnits.length,
       formHtml: "",
       listHtml: `<div style="display:flex;flex-direction:column;gap:8px;">${centerUnits.map((u) => unitRowHtml(u)).join("")}</div>`,
@@ -5272,6 +5331,7 @@ const ACCOUNTS_HUB_TABS = [
   { view: "units-manage", label: "الهيكل" },
   { view: "platform-users-manage", label: "الأشخاص" },
   { view: "platform-permissions-manage", label: "الصلاحيات", also: ["job-title-templates"] },
+  { view: "org-chart", label: "مخطط حر" },
 ];
 function permissionsSubTabsHtml(active) {
   return `<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:14px;">
@@ -8235,6 +8295,37 @@ function attachClickListener() {
         break;
       }
 
+      case "set-struct-view": S.ui.structView = ds.mode; render(); break;
+      case "tree-add-start": S.ui.treeAddFor = { type: ds.type, id: ds.id }; S.ui.treeAddKind = null; render(); break;
+      case "tree-add-cancel": S.ui.treeAddFor = null; render(); break;
+      case "tree-add-kind": S.ui.treeAddKind = ds.kind; render(); break;
+      case "tree-add-save": {
+        const f = S.ui.treeAddFor; const el = document.getElementById("tree-add-name");
+        const name = el ? (el.value || "").trim() : "";
+        if (!f || !name) break;
+        const base = { password: "", email: "", status: "active", createdAt: Date.now(), allowedPages: [], allowedActions: [] };
+        if (f.type === "office" && ds.kind === "child") {
+          S.departments = [...S.departments, { ...base, id: uid("dept"), name, officeId: f.id }];
+          dataStore.saveDepartments(S.departments);
+        } else if (f.type === "dept" && ds.kind === "child") {
+          S.units = [...S.units, { ...base, id: uid("unit"), name, role: "unit", departmentId: f.id }];
+          dataStore.saveUnits(S.units);
+        } else if (f.type === "dept" && ds.kind === "parent") {
+          const oid = uid("office");
+          S.offices = [...(S.offices || []), { ...base, id: oid, name }];
+          S.departments = S.departments.map((d) => d.id === f.id ? { ...d, officeId: oid } : d);
+          dataStore.saveOffices(S.offices); dataStore.saveDepartments(S.departments);
+        } else if (f.type === "unit" && ds.kind === "parent") {
+          const u0 = S.units.find((u) => u.id === f.id);
+          const old = u0 && S.departments.find((d) => d.id === u0.departmentId);
+          const did = uid("dept");
+          S.departments = [...S.departments, { ...base, id: did, name, officeId: old ? (old.officeId || "") : "" }];
+          S.units = S.units.map((u) => u.id === f.id ? { ...u, departmentId: did } : u);
+          dataStore.saveDepartments(S.departments); dataStore.saveUnits(S.units);
+        }
+        S.ui.treeAddFor = null; render();
+        break;
+      }
       case "add-department": {
         const nameEl = document.getElementById("new-dept-name");
         const name = (nameEl.value || "").trim();
