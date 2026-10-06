@@ -4718,17 +4718,17 @@ function treeSetEntity(type, id, patch) {
 function treeAddFormHtml(type, id) {
   const f = S.ui.treeAddFor;
   if (!f || f.type !== type || f.id !== id) return "";
-  const opts = type === "exec" ? [["child-office", "تابع: مكتب تحته"]]
-    : type === "office" ? [["child", "تابع: قسم تحته"], ["child-office", "تابع: مكتب تحته"], ["parent", "أب: مكتب فوقه"], ["parent-exec", "أب: إدارة عليا فوقه"]]
-    : type === "dept" ? [["child", "تابع: وحدة تحته"], ["parent", "أب: مكتب فوقه"]]
-    : [["parent", "أب: قسم فوقه"]];
+  const opts = type === "exec" ? [["child-office", "تحته"]]
+    : type === "office" ? [["child", "تحته"], ["parent-exec", "فوقه"]]
+    : type === "dept" ? [["child", "تحته"], ["parent", "فوقه"]]
+    : [["parent", "فوقه"]];
   const kind = opts.some((o) => o[0] === S.ui.treeAddKind) ? S.ui.treeAddKind : opts[0][0];
   return `<div class="card" style="margin:6px 0;background:${GRAY_BG};">
     <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px;">
-      ${opts.map((o) => pillBtn(o[1], { variant: kind === o[0] ? "primary" : "ghost", action: "tree-add-kind", data: { kind: o[0] } })).join("")}
+      ${opts.length > 1 ? opts.map((o) => pillBtn(o[1], { variant: kind === o[0] ? "primary" : "ghost", action: "tree-add-kind", data: { kind: o[0] } })).join("") : ""}
     </div>
     <div style="display:flex;gap:6px;flex-wrap:wrap;">
-      <input class="input" id="tree-add-name" style="flex:2;min-width:140px;" placeholder="الاسم" />
+      ${entityJobTitleFieldHtml("tree-add-name")}
       <input class="input" id="tree-add-email" style="flex:1;min-width:140px;" type="email" placeholder="الإيميل (اختياري)" />
       <input class="input" id="tree-add-password" style="flex:1;min-width:110px;" placeholder="الرقم السري (اختياري)" />
       ${pillBtn("حفظ", { action: "tree-add-save", data: { kind } })}
@@ -4742,7 +4742,7 @@ function treeEditFormHtml(type, id) {
   const e = treeEntity(type, id); if (!e) return "";
   return `<div class="card" style="margin:6px 0;background:${GRAY_BG};">
     <div style="display:flex;gap:6px;flex-wrap:wrap;">
-      <input class="input" id="tree-edit-name" style="flex:2;min-width:140px;" placeholder="الاسم" value="${esc(e.name)}" />
+      <input class="input" id="tree-edit-name" style="flex:2;min-width:140px;" placeholder="المسمى الوظيفي" value="${esc(e.name)}" />
       <input class="input" id="tree-edit-email" style="flex:1;min-width:140px;" type="email" placeholder="الإيميل" value="${esc(e.email || "")}" />
       <input class="input" id="tree-edit-password" style="flex:1;min-width:110px;" placeholder="رقم سري جديد (فارغ = بدون تغيير)" />
       ${pillBtn("حفظ", { action: "tree-edit-save", data: { type, id } })}
@@ -4765,7 +4765,7 @@ function treeNodeHtml(e, tag, type, moveHtml, childrenHtml, depth) {
     <div class="card" style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:8px;">
       <button class="icon-btn" style="width:26px;height:26px;flex-shrink:0;${hasChildren ? "" : "visibility:hidden;"}" data-action="tree-toggle" data-key="${esc(key)}" title="${collapsed ? "توسيع" : "طيّ"}">${collapsed ? iconChevronLeft(14, INK) : iconChevronDown ? iconChevronDown(14, INK) : "▾"}</button>
       <div style="flex:1;min-width:120px;">
-        <div style="font-size:13px;font-weight:700;">${esc(e.name)} <span style="font-size:10px;font-weight:700;color:${SUBTLE};background:${GRAY_BG};padding:2px 7px;border-radius:999px;">${tag}</span></div>
+        <div style="font-size:13px;font-weight:700;">${esc(e.name)}</div>
         ${e.email ? `<div style="font-size:10.5px;color:${SUBTLE}">${esc(e.email)}</div>` : ""}
       </div>
       <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;">${actions}</div>
@@ -4796,12 +4796,11 @@ function structureTreeHtml() {
   const looseUnits = units.filter((u) => !S.departments.some((d) => d.id === u.departmentId));
   return `<div style="margin-bottom:18px;">
     <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px;">
-      ${pillBtn("إضافة إدارة عليا", { icon: iconPlus(14, "#fff"), action: "tree-add-root", data: { type: "exec" } })}
-      ${pillBtn("إضافة مكتب رئيسي", { variant: "ghost", action: "tree-add-root", data: { type: "office" } })}
+      ${pillBtn("إضافة", { icon: iconPlus(14, "#fff"), action: "tree-add-root", data: { type: "office" } })}
       ${pillBtn("إضافة قسم", { variant: "ghost", action: "tree-add-root", data: { type: "dept" } })}
     </div>
     ${S.ui.treeAddRoot ? `<div class="card" style="margin-bottom:10px;background:${GRAY_BG};"><div style="display:flex;gap:6px;flex-wrap:wrap;">
-      <input class="input" id="tree-root-name" style="flex:2;min-width:140px;" placeholder="الاسم" />
+      ${entityJobTitleFieldHtml("tree-root-name")}
       <input class="input" id="tree-root-email" style="flex:1;min-width:140px;" type="email" placeholder="الإيميل (اختياري)" />
       <input class="input" id="tree-root-password" style="flex:1;min-width:110px;" placeholder="الرقم السري (اختياري)" />
       ${pillBtn("حفظ", { action: "tree-root-save", data: { type: S.ui.treeAddRoot } })}
@@ -4811,7 +4810,7 @@ function structureTreeHtml() {
     ${offices.filter(isRoot).map((o) => officeNode(o, 0, [])).join("")}
     ${looseDepts.length ? `<div style="font-size:12px;font-weight:800;color:${ROSE};margin:10px 0 6px;">بلا مكتب</div>${looseDepts.map((d) => deptNode(d, 0)).join("")}` : ""}
     ${looseUnits.length ? `<div style="font-size:12px;font-weight:800;color:${ROSE};margin:10px 0 6px;">بلا قسم</div>${looseUnits.map((u) => unitNode(u, 0)).join("")}` : ""}
-    ${!offices.length && !S.departments.length && !units.length && !execs.length ? `<div class="card" style="text-align:center;color:${SUBTLE};padding:30px;border-style:dashed;">لا يوجد شيء بعد — اضغطي "إضافة مكتب رئيسي" لبدء أول عنصر.</div>` : ""}
+    ${!offices.length && !S.departments.length && !units.length && !execs.length ? `<div class="card" style="text-align:center;color:${SUBTLE};padding:30px;border-style:dashed;">لا يوجد شيء بعد — اضغطي "إضافة" لبدء أول عنصر.</div>` : ""}
   </div>`;
 }
 
@@ -8410,7 +8409,8 @@ function attachClickListener() {
       case "tree-root-save": {
         const nm = (document.getElementById("tree-root-name").value || "").trim();
         if (!nm) break;
-        const base = { password: (document.getElementById("tree-root-password").value || "").trim(), email: (document.getElementById("tree-root-email").value || "").trim(), status: "active", createdAt: Date.now(), allowedPages: [], allowedActions: [], name: nm };
+        const perms0 = resolveJobTitleForEntity(nm);
+        const base = { password: (document.getElementById("tree-root-password").value || "").trim(), email: (document.getElementById("tree-root-email").value || "").trim(), status: "active", createdAt: Date.now(), allowedPages: perms0.allowedPages, allowedActions: perms0.allowedActions, name: nm };
         if (ds.type === "exec") { S.units = [...S.units, { ...base, id: uid("exec"), role: "executive", departmentId: "" }]; dataStore.saveUnits(S.units); }
         else if (ds.type === "dept") { S.departments = [...S.departments, { ...base, id: uid("dept"), officeId: "" }]; dataStore.saveDepartments(S.departments); }
         else { S.offices = [...(S.offices || []), { ...base, id: uid("office"), parentOfficeId: "" }]; dataStore.saveOffices(S.offices); }
@@ -8421,7 +8421,8 @@ function attachClickListener() {
         const f = S.ui.treeAddFor; const el = document.getElementById("tree-add-name");
         const name = el ? (el.value || "").trim() : "";
         if (!f || !name) break;
-        const base = { password: (document.getElementById("tree-add-password").value || "").trim(), email: (document.getElementById("tree-add-email").value || "").trim(), status: "active", createdAt: Date.now(), allowedPages: [], allowedActions: [] };
+        const perms1 = resolveJobTitleForEntity(name);
+        const base = { password: (document.getElementById("tree-add-password").value || "").trim(), email: (document.getElementById("tree-add-email").value || "").trim(), status: "active", createdAt: Date.now(), allowedPages: perms1.allowedPages, allowedActions: perms1.allowedActions };
         if (f.type === "exec" && ds.kind === "child-office") {
           S.offices = [...(S.offices || []), { ...base, id: uid("office"), name, parentOfficeId: f.id }];
           dataStore.saveOffices(S.offices);
