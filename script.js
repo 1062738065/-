@@ -4760,7 +4760,9 @@ function treeNodeHtml(e, tag, type, moveHtml, childrenHtml, depth, opts) {
   const hasChildren = !!childrenHtml;
   const confirming = S.ui.treeConfirmDel && S.ui.treeConfirmDel.type === type && S.ui.treeConfirmDel.id === e.id;
   const actions = confirming
-    ? `<span style="font-size:12px;font-weight:700;">حذف "${esc(e.name)}"؟</span>${pillBtn("حذف", { variant: "danger", action: "tree-delete", data: { type, id: e.id } })}${pillBtn("تراجع", { variant: "ghost", action: "tree-cancel-delete" })}`
+    ? (opts.lastAdmin
+      ? `<span style="font-size:12px;font-weight:700;color:${DANGER};">لا يمكن حذف آخر حساب لمديرة النظام — أضيفي حساباً آخر أولاً.</span>${pillBtn("حسناً", { variant: "ghost", action: "tree-cancel-delete" })}`
+      : `<span style="font-size:12px;font-weight:700;">حذف "${esc(e.name)}"؟</span>${pillBtn("حذف", { variant: "danger", action: "tree-delete", data: { type, id: e.id } })}${pillBtn("تراجع", { variant: "ghost", action: "tree-cancel-delete" })}`)
     : `${moveHtml}
       ${opts.noAdd ? "" : `<button class="icon-btn" style="width:28px;height:28px;border:1px solid ${BORDER}" data-action="tree-add-start" data-type="${type}" data-id="${esc(e.id)}" title="إضافة">${iconPlus(13, INK)}</button>`}
       <button class="icon-btn" style="width:28px;height:28px;border:1px solid ${BORDER}" data-action="tree-edit-start" data-type="${type}" data-id="${esc(e.id)}" title="تعديل">${iconPencil(13, INK)}</button>
@@ -4811,7 +4813,7 @@ function structureTreeHtml() {
       ${pillBtn("حفظ", { action: "tree-root-save", data: { type: S.ui.treeAddRoot } })}
       ${pillBtn("إلغاء", { variant: "ghost", action: "tree-root-cancel" })}
     </div></div>` : ""}
-    ${admins.map((u) => treeNodeHtml(u, "", "admin", "", "", 0, { noAdd: true, noDelete: true, badge: "مديرة النظام" })).join("")}
+    ${admins.map((u) => treeNodeHtml(u, "", "admin", "", "", 0, { noAdd: true, lastAdmin: admins.length <= 1, badge: "مديرة النظام" })).join("")}
     <div style="${admins.length ? `margin-right:22px;border-right:2px solid ${BORDER};padding-right:14px;` : ""}">
     ${execs.map((u) => execNode(u)).join("")}
     ${offices.filter(isRoot).map((o) => officeNode(o, 0, [])).join("")}
