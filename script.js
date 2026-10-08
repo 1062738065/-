@@ -4753,7 +4753,8 @@ function treeEditFormHtml(type, id) {
     </div>
   </div>`;
 }
-function treeNodeHtml(e, tag, type, moveHtml, childrenHtml, depth) {
+function treeNodeHtml(e, tag, type, moveHtml, childrenHtml, depth, opts) {
+  opts = opts || {};
   const key = type + ":" + e.id;
   const collapsed = !!(S.ui.treeCollapsed || {})[key];
   const hasChildren = !!childrenHtml;
@@ -4761,14 +4762,14 @@ function treeNodeHtml(e, tag, type, moveHtml, childrenHtml, depth) {
   const actions = confirming
     ? `<span style="font-size:12px;font-weight:700;">حذف "${esc(e.name)}"؟</span>${pillBtn("حذف", { variant: "danger", action: "tree-delete", data: { type, id: e.id } })}${pillBtn("تراجع", { variant: "ghost", action: "tree-cancel-delete" })}`
     : `${moveHtml}
-      <button class="icon-btn" style="width:28px;height:28px;border:1px solid ${BORDER}" data-action="tree-add-start" data-type="${type}" data-id="${esc(e.id)}" title="إضافة">${iconPlus(13, INK)}</button>
+      ${opts.noAdd ? "" : `<button class="icon-btn" style="width:28px;height:28px;border:1px solid ${BORDER}" data-action="tree-add-start" data-type="${type}" data-id="${esc(e.id)}" title="إضافة">${iconPlus(13, INK)}</button>`}
       <button class="icon-btn" style="width:28px;height:28px;border:1px solid ${BORDER}" data-action="tree-edit-start" data-type="${type}" data-id="${esc(e.id)}" title="تعديل">${iconPencil(13, INK)}</button>
-      <button class="icon-btn" style="width:28px;height:28px;background:${DANGER_BG}" data-action="tree-confirm-delete" data-type="${type}" data-id="${esc(e.id)}" title="حذف">${iconTrash(13, DANGER)}</button>`;
+      ${opts.noDelete ? "" : `<button class="icon-btn" style="width:28px;height:28px;background:${DANGER_BG}" data-action="tree-confirm-delete" data-type="${type}" data-id="${esc(e.id)}" title="حذف">${iconTrash(13, DANGER)}</button>`}`;
   return `<div style="margin-right:${depth > 0 ? 22 : 0}px;${depth > 0 ? `border-right:2px solid ${BORDER};padding-right:14px;` : ""}">
-    <div class="card" style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:8px;">
+    <div class="card" style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:6px;padding:7px 12px;border-radius:12px;">
       <button class="icon-btn" style="width:26px;height:26px;flex-shrink:0;${hasChildren ? "" : "visibility:hidden;"}" data-action="tree-toggle" data-key="${esc(key)}" title="${collapsed ? "توسيع" : "طيّ"}">${collapsed ? iconChevronLeft(14, INK) : iconChevronDown ? iconChevronDown(14, INK) : "▾"}</button>
       <div style="flex:1;min-width:120px;">
-        <div style="font-size:13px;font-weight:700;">${esc(e.name)}</div>
+        <div style="font-size:13px;font-weight:800;">${esc(e.name)}${opts.badge ? ` <span style="font-size:10px;font-weight:700;color:${ROSE};background:${DANGER_BG};padding:2px 8px;border-radius:999px;">${opts.badge}</span>` : ""}</div>
         ${e.email ? `<div style="font-size:10.5px;color:${SUBTLE}">${esc(e.email)}</div>` : ""}
       </div>
       <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;">${actions}</div>
@@ -4780,7 +4781,7 @@ function treeNodeHtml(e, tag, type, moveHtml, childrenHtml, depth) {
 function structureTreeHtml() {
   const offices = S.offices || [];
   const units = S.units.filter((u) => u.role !== "admin" && u.role !== "executive" && u.role !== "self_report");
-  const sel = (action, id, first, opts, cur) => `<select class="input" style="padding:5px 8px;font-size:12px;width:130px;" data-action="${action}" data-id="${esc(id)}" title="نقل">
+  const sel = (action, id, first, opts, cur) => `<select class="input" style="padding:5px 8px;font-size:12px;width:120px;" data-action="${action}" data-id="${esc(id)}" title="نقل">
     <option value="">${first}</option>${opts.map((o) => `<option value="${esc(o.id)}" ${cur === o.id ? "selected" : ""}>${esc(o.name)}</option>`).join("")}</select>`;
   const unitNode = (u, depth) => treeNodeHtml(u, u.role === "center" ? "مركز" : "وحدة", "unit", sel("assign-unit-dept", u.id, "بلا", S.departments, u.departmentId), "", depth);
   const deptNode = (d, depth) => treeNodeHtml(d, "قسم", "dept", sel("assign-dept-office", d.id, "بلا", offices, d.officeId),
@@ -4792,6 +4793,7 @@ function structureTreeHtml() {
     return treeNodeHtml(o, "مكتب", "office", sel("assign-office-parent", o.id, "بلا", offices.filter((x) => blocked.indexOf(x.id) === -1).concat(S.units.filter((u) => u.role === "executive")), o.parentOfficeId), kids + deps, depth);
   };
   const execs = S.units.filter((u) => u.role === "executive");
+  const admins = S.units.filter((u) => u.role === "admin");
   const isRoot = (o) => !o.parentOfficeId || (!offices.some((x) => x.id === o.parentOfficeId) && !execs.some((x) => x.id === o.parentOfficeId));
   const execNode = (u) => treeNodeHtml(u, "إدارة عليا", "exec", "",
     offices.filter((o) => o.parentOfficeId === u.id).map((o) => officeNode(o, 1, [])).join(""), 0);
@@ -4809,10 +4811,13 @@ function structureTreeHtml() {
       ${pillBtn("حفظ", { action: "tree-root-save", data: { type: S.ui.treeAddRoot } })}
       ${pillBtn("إلغاء", { variant: "ghost", action: "tree-root-cancel" })}
     </div></div>` : ""}
+    ${admins.map((u) => treeNodeHtml(u, "", "admin", "", "", 0, { noAdd: true, noDelete: true, badge: "مديرة النظام" })).join("")}
+    <div style="${admins.length ? `margin-right:22px;border-right:2px solid ${BORDER};padding-right:14px;` : ""}">
     ${execs.map((u) => execNode(u)).join("")}
     ${offices.filter(isRoot).map((o) => officeNode(o, 0, [])).join("")}
     ${looseDepts.length ? `<div style="font-size:12px;font-weight:800;color:${ROSE};margin:10px 0 6px;">بلا مكتب</div>${looseDepts.map((d) => deptNode(d, 0)).join("")}` : ""}
     ${looseUnits.length ? `<div style="font-size:12px;font-weight:800;color:${ROSE};margin:10px 0 6px;">بلا قسم</div>${looseUnits.map((u) => unitNode(u, 0)).join("")}` : ""}
+    </div>
     ${!offices.length && !S.departments.length && !units.length && !execs.length ? `<div class="card" style="text-align:center;color:${SUBTLE};padding:30px;border-style:dashed;">لا يوجد شيء بعد — اضغطي "إضافة" لبدء أول عنصر.</div>` : ""}
   </div>`;
 }
@@ -4829,13 +4834,7 @@ function renderDepartmentsManage() {
     ${topBarHtml({ title: "المستخدمون", subtitle: USERS_HUB_SUBTITLE, icon: iconUser(18, ROSE), backAction: "nav-back-admin" })}
     ${accountsHubTabBarHtml("units-manage")}
 
-    ${adminUnits.length ? collapsibleUsersSection({
-      key: "sysadmin", title: "مديرة النظام", count: adminUnits.length,
-      formHtml: "",
-      listHtml: `<div style="display:flex;flex-direction:column;gap:8px;">${adminUnits.map((u) => simpleAccountRowHtml(u, "مديرة نظام")).join("")}</div>`,
-    }) : ""}
-
-    ${S.ui.structView !== "lists" ? structureTreeHtml() : ""}
+${S.ui.structView !== "lists" ? structureTreeHtml() : (adminUnits.length ? collapsibleUsersSection({ key: "sysadmin", title: "مديرة النظام", count: adminUnits.length, formHtml: "", listHtml: `<div style="display:flex;flex-direction:column;gap:8px;">${adminUnits.map((u) => simpleAccountRowHtml(u, "مديرة نظام")).join("")}</div>` }) : "")}
 
     ${(S.ui.structView === "lists" && execUnits.length) ? collapsibleUsersSection({
       key: "executive", title: "الإدارة العليا", count: execUnits.length,
@@ -5401,7 +5400,7 @@ const ACCOUNTS_HUB_TABS = [
 const USERS_HUB_SUBTITLE = "إدارة المستخدمين وصلاحياتهم في النظام مع إمكانية إضافة وحذف وتعديل بياناتهم";
 function usersHubIcon(name, active) {
   const c = active ? ROSE : SUBTLE;
-  return name === "layers" ? iconLayers(20, c) : name === "user" ? iconUser(20, c) : name === "key" ? iconKey(20, c) : iconTarget(20, c);
+  return name === "layers" ? iconLayers(16, c) : name === "user" ? iconUser(16, c) : name === "key" ? iconKey(16, c) : iconTarget(16, c);
 }
 function permissionsSubTabsHtml(active) {
   return `<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:14px;">
@@ -5410,12 +5409,12 @@ function permissionsSubTabsHtml(active) {
   </div>`;
 }
 function accountsHubTabBarHtml(activeView) {
-  return `<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin-bottom:20px;">
+  return `<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:10px;margin-bottom:16px;">
     ${ACCOUNTS_HUB_TABS.map((t) => {
       const active = t.view === activeView || (t.also || []).indexOf(activeView) !== -1;
-      return `<button type="button" data-action="nav-to" data-view="${esc(t.view)}" style="display:flex;align-items:center;justify-content:space-between;gap:10px;padding:16px 18px;border-radius:16px;cursor:pointer;font-family:inherit;background:#fff;border:1px solid ${active ? ROSE : BORDER};box-shadow:${active ? "0 4px 14px rgba(120,30,50,.12)" : "0 2px 8px rgba(0,0,0,.04)"};">
-        <span style="font-size:14px;font-weight:800;color:${active ? ROSE : INK};">${esc(t.label)}</span>
-        <span style="width:44px;height:44px;border-radius:12px;background:${active ? DANGER_BG : GRAY_BG};display:flex;align-items:center;justify-content:center;flex-shrink:0;">${usersHubIcon(t.icon, active)}</span>
+      return `<button type="button" data-action="nav-to" data-view="${esc(t.view)}" style="display:flex;align-items:center;justify-content:space-between;gap:10px;padding:8px 12px;border-radius:12px;cursor:pointer;font-family:inherit;background:#fff;border:1px solid ${active ? ROSE : BORDER};box-shadow:${active ? "0 4px 14px rgba(120,30,50,.12)" : "0 2px 8px rgba(0,0,0,.04)"};">
+        <span style="font-size:12.5px;font-weight:800;color:${active ? ROSE : INK};">${esc(t.label)}</span>
+        <span style="width:30px;height:30px;border-radius:9px;background:${active ? DANGER_BG : GRAY_BG};display:flex;align-items:center;justify-content:center;flex-shrink:0;">${usersHubIcon(t.icon, active)}</span>
       </button>`;
     }).join("")}
   </div>`;
