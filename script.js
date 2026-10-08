@@ -2074,14 +2074,14 @@ function pillBtn(label, opts) {
   const attrs = Object.entries(opts.data || {}).map(([k, v]) => `data-${k.replace(/([A-Z])/g, "-$1").toLowerCase()}="${esc(v)}"`).join(" ");
   return `<button type="${opts.type || "button"}" class="pill-btn ${cls}" ${opts.disabled ? "disabled" : ""} data-action="${esc(opts.action || "")}" ${attrs}>${icon}${esc(label)}</button>`;
 }
-function topBarHtml({ title, subtitle, backAction, backData, right }) {
+function topBarHtml({ title, subtitle, backAction, backData, right, icon }) {
   const backAttrs = backData ? Object.entries(backData).map(([k, v]) => `data-${k.replace(/([A-Z])/g, "-$1").toLowerCase()}="${esc(v)}"`).join(" ") : "";
   return `
     <div class="topbar">
       <div class="topbar-left">
         ${backAction ? `<button class="back-btn" data-action="${backAction}" ${backAttrs}>${iconArrowRight()}</button>` : ""}
         <div>
-          <div class="prs-title topbar-title">${esc(title)}</div>
+          <div class="prs-title topbar-title"${icon ? ` style="display:flex;align-items:center;gap:10px;"` : ""}>${icon ? `<span style="width:34px;height:34px;border-radius:10px;background:${DANGER_BG};display:inline-flex;align-items:center;justify-content:center;flex-shrink:0;">${icon}</span>` : ""}${esc(title)}</div>
           ${subtitle ? `<div class="topbar-subtitle">${esc(subtitle)}</div>` : ""}
         </div>
       </div>
@@ -3307,9 +3307,12 @@ function renderOrgChartPage() {
   const addingRoot = !!S.ui.orgChartAddingRoot;
   return `
   <div class="page-wrap"><div class="page-inner">
+    ${topBarHtml({ title: "المستخدمون", subtitle: USERS_HUB_SUBTITLE, icon: iconUser(18, ROSE), backAction: "nav-back-admin" })}
     ${accountsHubTabBarHtml("org-chart")}
-    ${topBarHtml({ title: "مخطط الهيكل التنظيمي", subtitle: "مخطط مسميات وظيفية حرّ للتخطيط فقط — بدون حسابات تسجيل دخول، ومنفصل تمامًا عن صفحات مكاتب الإشراف/الأقسام/الوحدات/المراكز",
-      right: pillBtn("إضافة", { icon: iconPlus(15, "#fff"), action: "org-chart-start-add-root" }) })}
+    <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-bottom:12px;">
+      <div style="font-size:15px;font-weight:800;display:flex;align-items:center;gap:8px;">${iconTarget(18, ROSE)} المخطط الحر <span style="font-size:11px;color:${SUBTLE};font-weight:600;">مسميات وظيفية للتخطيط فقط، بدون حسابات دخول</span></div>
+      ${pillBtn("إضافة", { icon: iconPlus(15, "#fff"), action: "org-chart-start-add-root" })}
+    </div>
     ${addingRoot ? `
       <div class="card" style="display:flex;gap:6px;margin-bottom:14px;">
         <input class="input" id="org-chart-new-root" style="flex:1;" placeholder="المسمى الوظيفي الجديد (عنصر رئيسي)" />
@@ -4795,7 +4798,8 @@ function structureTreeHtml() {
   const looseDepts = S.departments.filter((d) => !offices.some((o) => o.id === d.officeId));
   const looseUnits = units.filter((u) => !S.departments.some((d) => d.id === u.departmentId));
   return `<div style="margin-bottom:18px;">
-    <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px;justify-content:flex-end;">
+    <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-bottom:12px;">
+      <div style="font-size:15px;font-weight:800;display:flex;align-items:center;gap:8px;">${iconLayers(18, ROSE)} الهيكل التنظيمي</div>
       ${pillBtn("إضافة", { icon: iconPlus(14, "#fff"), action: "tree-add-root", data: { type: "office" } })}
     </div>
     ${S.ui.treeAddRoot ? `<div class="card" style="margin-bottom:10px;background:${GRAY_BG};"><div style="display:flex;gap:6px;flex-wrap:wrap;">
@@ -4821,8 +4825,8 @@ function renderDepartmentsManage() {
   const centerUnits = S.units.filter((u) => u.role === "center");
 
   return `
-  <div class="page-wrap"><div class="page-inner narrow">
-    ${topBarHtml({ title: "المستخدمون", backAction: "nav-back-admin" })}
+  <div class="page-wrap"><div class="page-inner">
+    ${topBarHtml({ title: "المستخدمون", subtitle: USERS_HUB_SUBTITLE, icon: iconUser(18, ROSE), backAction: "nav-back-admin" })}
     ${accountsHubTabBarHtml("units-manage")}
 
     ${adminUnits.length ? collapsibleUsersSection({
@@ -5389,11 +5393,16 @@ function jobTitleTemplateRowHtml(t) {
 // ثلاثة تبويبات واضحة: الهيكل (من يوجد بالنظام) — الأشخاص (حسابات بمسميات) — الصلاحيات
 // (ماذا يرى كل حساب، ومعها القوالب الجاهزة كتبويب فرعي).
 const ACCOUNTS_HUB_TABS = [
-  { view: "units-manage", label: "الهيكل" },
-  { view: "platform-users-manage", label: "الأشخاص" },
-  { view: "platform-permissions-manage", label: "الصلاحيات", also: ["job-title-templates"] },
-  { view: "org-chart", label: "مخطط حر" },
+  { view: "units-manage", label: "الهيكل التنظيمي", icon: "layers" },
+  { view: "platform-users-manage", label: "الأشخاص", icon: "user" },
+  { view: "platform-permissions-manage", label: "الصلاحيات", icon: "key", also: ["job-title-templates"] },
+  { view: "org-chart", label: "المخطط الحر", icon: "gauge" },
 ];
+const USERS_HUB_SUBTITLE = "إدارة المستخدمين وصلاحياتهم في النظام مع إمكانية إضافة وحذف وتعديل بياناتهم";
+function usersHubIcon(name, active) {
+  const c = active ? ROSE : SUBTLE;
+  return name === "layers" ? iconLayers(20, c) : name === "user" ? iconUser(20, c) : name === "key" ? iconKey(20, c) : iconTarget(20, c);
+}
 function permissionsSubTabsHtml(active) {
   return `<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:14px;">
     ${pillBtn("صلاحيات الحسابات", { variant: active === "platform-permissions-manage" ? "primary" : "ghost", action: "nav-to", data: { view: "platform-permissions-manage" } })}
@@ -5401,10 +5410,14 @@ function permissionsSubTabsHtml(active) {
   </div>`;
 }
 function accountsHubTabBarHtml(activeView) {
-  return `<div style="margin-bottom:14px;">
-    <select class="input" style="width:190px;padding:7px 10px;font-size:13px;font-weight:700;" data-action="hub-nav-select">
-      ${ACCOUNTS_HUB_TABS.map((t) => `<option value="${esc(t.view)}" ${(t.view === activeView || (t.also || []).indexOf(activeView) !== -1) ? "selected" : ""}>${esc(t.label)}</option>`).join("")}
-    </select>
+  return `<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin-bottom:20px;">
+    ${ACCOUNTS_HUB_TABS.map((t) => {
+      const active = t.view === activeView || (t.also || []).indexOf(activeView) !== -1;
+      return `<button type="button" data-action="nav-to" data-view="${esc(t.view)}" style="display:flex;align-items:center;justify-content:space-between;gap:10px;padding:16px 18px;border-radius:16px;cursor:pointer;font-family:inherit;background:#fff;border:1px solid ${active ? ROSE : BORDER};box-shadow:${active ? "0 4px 14px rgba(120,30,50,.12)" : "0 2px 8px rgba(0,0,0,.04)"};">
+        <span style="font-size:14px;font-weight:800;color:${active ? ROSE : INK};">${esc(t.label)}</span>
+        <span style="width:44px;height:44px;border-radius:12px;background:${active ? DANGER_BG : GRAY_BG};display:flex;align-items:center;justify-content:center;flex-shrink:0;">${usersHubIcon(t.icon, active)}</span>
+      </button>`;
+    }).join("")}
   </div>`;
 }
 
@@ -5414,8 +5427,7 @@ function renderJobTitleTemplatesManage() {
   const newForm = { name: ui.newTemplateName || "", allowedPages: ui.newTemplateAllowedPages || [], allowedActions: ui.newTemplateAllowedActions || [] };
   return `
   <div class="page-wrap"><div class="page-inner narrow">
-    ${topBarHtml({ title: "المسميات الوظيفية (القوالب)", subtitle: "كل قالب = مجموعة صفحات وإجراءات واحدة؛ اربطي بها أي حساب إضافي من \"حسابات إضافية\" وتتحدث صلاحياته تلقائيًا مع أي تعديل هنا",
-      backAction: "nav-back-admin" })}
+    ${topBarHtml({ title: "المستخدمون", subtitle: USERS_HUB_SUBTITLE, icon: iconUser(18, ROSE), backAction: "nav-back-admin" })}
     ${accountsHubTabBarHtml("job-title-templates")}
     ${permissionsSubTabsHtml("job-title-templates")}
 
@@ -5440,21 +5452,51 @@ function renderPlatformUsersManage() {
     password: ui.newPuPassword || "", scopeKind: ui.newPuScopeKind || "none", scopeId: ui.newPuScopeId || "",
     templateId: ui.newPuTemplateId || "", allowedPages: ui.newPuAllowedPages || [], allowedActions: ui.newPuAllowedActions || [],
   };
+  const showAdd = !!ui.puShowAdd || !!ui.puFormError;
+  const rowsHtml = list.map((pu) => {
+    const isActive = pu.status !== "disabled";
+    const t = pu.templateId ? (S.jobTitleTemplates || []).find((x) => x.id === pu.templateId) : null;
+    const searchText = [pu.jobTitle, pu.loginId, platformUserScopeLabel(pu), t ? t.name : ""].filter(Boolean).join(" ").toLowerCase();
+    if (ui.editingPuId === pu.id || ui.confirmRemovePuId === pu.id) {
+      return `<tr data-search="${esc(searchText)}"><td colspan="6" style="padding:10px;">${platformUserRowHtml(pu, list)}</td></tr>`;
+    }
+    return `<tr data-search="${esc(searchText)}" style="opacity:${isActive ? 1 : 0.6}">
+      <td style="font-weight:700;"><span style="display:inline-flex;align-items:center;gap:8px;">${iconUser(15, ROSE)} ${esc(pu.jobTitle)}</span></td>
+      <td style="color:${SUBTLE};direction:ltr;text-align:right;">${esc(pu.loginId)}</td>
+      <td>${esc(platformUserScopeLabel(pu))}</td>
+      <td>${t ? esc(t.name) : "—"}</td>
+      <td>${badgeHtml(isActive ? "مفعّل" : "معطّل", isActive ? GREEN : DANGER, isActive ? GREEN_BG : DANGER_BG)}</td>
+      <td><span style="display:inline-flex;gap:6px;">
+        <button class="icon-btn" style="width:30px;height:30px;border:1px solid ${BORDER}" data-action="start-platform-user-edit" data-id="${esc(pu.id)}" title="تعديل">${iconPencil(13, INK)}</button>
+        <button class="icon-btn" style="width:30px;height:30px;background:${isActive ? DANGER_BG : GREEN_BG}" data-action="toggle-platform-user" data-id="${esc(pu.id)}" title="${isActive ? "تعطيل" : "تفعيل"}">${iconPower(13, isActive ? DANGER : GREEN)}</button>
+        <button class="icon-btn" style="width:30px;height:30px;background:${DANGER_BG}" data-action="confirm-remove-platform-user" data-id="${esc(pu.id)}" title="حذف">${iconTrash(13, DANGER)}</button>
+      </span></td>
+    </tr>`;
+  }).join("");
   return `
-  <div class="page-wrap"><div class="page-inner narrow">
-    ${topBarHtml({ title: "حسابات إضافية", subtitle: "أضيفي مسمّيات وظيفية جديدة بصلاحيات دخول وصفحات خاصة — بدون أي تأثير على الحسابات الحالية", backAction: "nav-back-admin" })}
+  <div class="page-wrap"><div class="page-inner">
+    ${topBarHtml({ title: "المستخدمون", subtitle: USERS_HUB_SUBTITLE, icon: iconUser(18, ROSE), backAction: "nav-back-admin" })}
     ${accountsHubTabBarHtml("platform-users-manage")}
 
-    <div class="card" style="margin-bottom:18px;">
+    <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-bottom:12px;">
+      <div style="font-size:15px;font-weight:800;display:flex;align-items:center;gap:8px;">${iconUser(18, ROSE)} قائمة المستخدمين <span style="font-size:11px;color:${SUBTLE};font-weight:600;">(${list.length})</span></div>
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+        <input class="input" id="pu-list-search" placeholder="ابحثي عن مستخدم..." style="width:220px;" />
+        ${pillBtn("إضافة مستخدم", { icon: iconPlus(15, "#fff"), action: "toggle-pu-add" })}
+      </div>
+    </div>
+
+    ${showAdd ? `<div class="card" style="margin-bottom:16px;">
       <div style="font-size:12.5px;font-weight:800;color:${ROSE};margin-bottom:12px;">إضافة مسمّى وظيفي جديد</div>
       ${platformUserFormFieldsHtml("new-pu", newForm)}
       ${ui.puFormError ? `<div style="color:${DANGER};font-size:11.5px;font-weight:700;margin-bottom:8px;">${esc(ui.puFormError)}</div>` : ""}
       ${pillBtn("إضافة الحساب", { icon: iconPlus(15, "#fff"), action: "add-platform-user" })}
-    </div>
+    </div>` : ""}
 
-    <div style="font-size:12.5px;font-weight:800;color:${ROSE};margin-bottom:10px;">الحسابات الإضافية (${list.length})</div>
-    ${list.length === 0 ? `<div class="card" style="text-align:center;color:${SUBTLE};padding:36px 20px;border-style:dashed;">لا توجد حسابات إضافية بعد — أضيفي أول مسمّى وظيفي من الأعلى.</div>` :
-      `<div style="display:flex;flex-direction:column;gap:8px;">${list.map((pu) => platformUserRowHtml(pu, list)).join("")}</div>`}
+    ${list.length === 0 ? `<div class="card" style="text-align:center;color:${SUBTLE};padding:36px 20px;border-style:dashed;">لا يوجد مستخدمون بعد — اضغطي "إضافة مستخدم".</div>` :
+      `<div class="card" style="padding:6px 10px;"><div class="table-wrap"><table class="prs-table" id="pu-list-table"><thead><tr style="background:${GRAY_BG}">
+        <th>الاسم</th><th>البريد الإلكتروني</th><th>الجهة</th><th>القالب الوظيفي</th><th>الحالة</th><th>الإجراءات</th>
+      </tr></thead><tbody>${rowsHtml}</tbody></table></div></div>`}
   </div></div>`;
 }
 
@@ -5607,7 +5649,7 @@ function renderPlatformPermissionsManage() {
   const list = collectPermissionAccounts();
   return `
   <div class="page-wrap"><div class="page-inner narrow">
-    ${topBarHtml({ title: "صلاحيات الحسابات", subtitle: "كل حساب بالنظام — وحدات، مراكز، أقسام، مكاتب إشراف، وحسابات إضافية — بقائمة واحدة، وتعديل صفحاته وإجراءاته مباشرة", backAction: "nav-back-admin" })}
+    ${topBarHtml({ title: "المستخدمون", subtitle: USERS_HUB_SUBTITLE, icon: iconUser(18, ROSE), backAction: "nav-back-admin" })}
     ${accountsHubTabBarHtml("platform-permissions-manage")}
     ${permissionsSubTabsHtml("platform-permissions-manage")}
     ${bulkPermCardHtml()}
@@ -5877,16 +5919,22 @@ function fieldEditFormHtml(draft, isNew) {
 function fieldSchemaRowHtml(field, index, total, sectionId) {
   const typeLabel = SCHEMA_FIELD_TYPE_LABELS[field.type] || field.type;
   const isComputed = field.type === "computed";
-  return `<div class="card" style="display:flex;align-items:center;justify-content:space-between;gap:10px;${isComputed ? "opacity:.75;" : ""}">
-    <div style="min-width:0;">
-      <div style="font-size:13.5px;font-weight:700;">${esc(field.label)}${field.required ? ` <span style="color:${ROSE};">*</span>` : ""}</div>
-      <div style="font-size:10.5px;color:${SUBTLE};margin-top:2px;">${esc(typeLabel)}</div>
+  const btn = "width:30px;height:30px;border:1px solid " + BORDER;
+  return `<div class="card" style="display:flex;align-items:center;justify-content:space-between;gap:10px;padding:12px 14px;${isComputed ? "opacity:.8;" : ""}">
+    <div style="display:flex;align-items:center;gap:12px;min-width:0;">
+      <span style="width:42px;height:42px;border-radius:50%;background:${DANGER_BG};display:flex;align-items:center;justify-content:center;flex-shrink:0;">${iconDocument(18, ROSE)}</span>
+      <div style="min-width:0;">
+        <div style="font-size:13.5px;font-weight:800;">${esc(field.label)}${field.required ? ` <span style="color:${ROSE};">*</span>` : ""}</div>
+        <div style="font-size:10.5px;color:${SUBTLE};margin-top:2px;">${isComputed ? "محسوبة تلقائيًا" : "متاحة لإدخال البيانات"} · ${esc(typeLabel)}</div>
+      </div>
     </div>
-    <div style="display:flex;gap:6px;flex-shrink:0;">
-      <button class="icon-btn" style="width:32px;height:32px;border:1px solid ${BORDER}" data-action="move-schema-field" data-section="${esc(sectionId)}" data-id="${esc(field.id)}" data-dir="up" ${index === 0 ? "disabled" : ""} title="نقل لأعلى">${iconChevronUp(14, INK)}</button>
-      <button class="icon-btn" style="width:32px;height:32px;border:1px solid ${BORDER}" data-action="move-schema-field" data-section="${esc(sectionId)}" data-id="${esc(field.id)}" data-dir="down" ${index === total - 1 ? "disabled" : ""} title="نقل لأسفل">${iconChevronDown(14, INK)}</button>
-      ${isComputed ? "" : `<button class="icon-btn" style="width:32px;height:32px;border:1px solid ${BORDER}" data-action="start-edit-field" data-section="${esc(sectionId)}" data-id="${esc(field.id)}" title="تعديل">${iconPencil(14, INK)}</button>
-      <button class="icon-btn" style="width:32px;height:32px;background:${DANGER_BG}" data-action="remove-schema-field" data-section="${esc(sectionId)}" data-id="${esc(field.id)}" title="حذف">${iconTrash(14, DANGER)}</button>`}
+    <div style="display:flex;gap:5px;flex-shrink:0;align-items:center;">
+      <span style="display:inline-flex;flex-direction:column;gap:2px;">
+        <button class="icon-btn" style="width:22px;height:15px;border:1px solid ${BORDER}" data-action="move-schema-field" data-section="${esc(sectionId)}" data-id="${esc(field.id)}" data-dir="up" ${index === 0 ? "disabled" : ""} title="نقل لأعلى">${iconChevronUp(10, INK)}</button>
+        <button class="icon-btn" style="width:22px;height:15px;border:1px solid ${BORDER}" data-action="move-schema-field" data-section="${esc(sectionId)}" data-id="${esc(field.id)}" data-dir="down" ${index === total - 1 ? "disabled" : ""} title="نقل لأسفل">${iconChevronDown(10, INK)}</button>
+      </span>
+      ${isComputed ? "" : `<button class="icon-btn" style="${btn}" data-action="start-edit-field" data-section="${esc(sectionId)}" data-id="${esc(field.id)}" title="تعديل">${iconPencil(13, INK)}</button>
+      <button class="icon-btn" style="width:30px;height:30px;background:${DANGER_BG}" data-action="remove-schema-field" data-section="${esc(sectionId)}" data-id="${esc(field.id)}" title="حذف">${iconTrash(13, DANGER)}</button>`}
     </div>
   </div>`;
 }
@@ -5906,23 +5954,19 @@ function renderFieldSchemasManage() {
   const draft = S.ui.fieldEditDraft || {};
 
   return `
-  <div class="page-wrap"><div class="page-inner narrow">
-    ${topBarHtml({ title: "إدارة حقول الأقسام", subtitle: "أضيفي أو عدّلي أو رتّبي حقول الأقسام المبنية على المحرك العام، بدون الحاجة لتعديل الكود", backAction: "nav-back-admin" })}
+  <div class="page-wrap"><div class="page-inner">
+    ${topBarHtml({ title: "إدارة حقول الأقسام", subtitle: "أضف أو عدّل أي من حقول الأقسام التالية، مع إمكانية تحديد الترتيب.", icon: iconPencil(18, ROSE), backAction: "nav-back-admin" })}
 
-    <div class="card" style="background:${BLUE_BG};border:1px solid #cfe0f5;margin-bottom:18px;">
-      <div style="font-size:11.5px;color:#3a5a85;line-height:1.7;">
-        هذه القائمة تعرض فقط الأقسام اللي انتقلت للمحرك الجديد (زي "التوصيات" و"الأعمال والبرامج"). بقية الأقسام لسا لها نماذج مكتوبة بالكود ولا تظهر هنا حتى تنتقل هي كمان.
+    <div class="card" style="padding:10px 12px;margin-bottom:20px;">
+      <div style="display:flex;gap:8px;flex-wrap:wrap;">
+        ${sections.map((s) => `<button type="button" class="pill-btn ${s.id === activeSectionId ? "pill-primary" : "pill-ghost"}" style="${s.id === activeSectionId ? "" : "border:1px solid " + BORDER + ";"}flex:1;justify-content:center;min-width:110px;" data-action="select-field-schema-section" data-section="${esc(s.id)}">${esc(s.label)}</button>`).join("")}
       </div>
-    </div>
-
-    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:18px;">
-      ${sections.map((s) => `<button type="button" class="pill-btn ${s.id === activeSectionId ? "pill-primary" : "pill-ghost"}" data-action="select-field-schema-section" data-section="${esc(s.id)}">${esc(s.label)}</button>`).join("")}
     </div>
 
     ${editingId === "__new__" ? fieldEditFormHtml(draft, true) : ""}
 
-    <div style="font-size:12.5px;font-weight:800;color:${ROSE};margin-bottom:10px;">حقول "${esc((sections.find((s) => s.id === activeSectionId) || {}).label || activeSectionId)}" (${fields.length})</div>
-    <div style="display:flex;flex-direction:column;gap:8px;margin-bottom:16px;">
+    <div style="font-size:15px;font-weight:800;margin-bottom:12px;display:flex;align-items:center;gap:8px;">${iconLayers(18, ROSE)} حقول (${esc((sections.find((s) => s.id === activeSectionId) || {}).label || activeSectionId)}) (${fields.length})</div>
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:12px;margin-bottom:16px;">
       ${fields.map((f, i) => editingId === f.id ? fieldEditFormHtml(draft, false) : fieldSchemaRowHtml(f, i, fields.length, activeSectionId)).join("") || `<div class="card" style="color:${SUBTLE};font-size:12.5px;">لا توجد حقول بعد.</div>`}
     </div>
 
@@ -7492,6 +7536,11 @@ function attachFormListeners() {
       rows.forEach((row) => { row.style.display = !q || (row.dataset.search || "").includes(q) ? "" : "none"; });
       return;
     }
+    if (el.id === "pu-list-search") {
+      const q = el.value.trim().toLowerCase();
+      document.querySelectorAll("#pu-list-table tbody tr").forEach((row) => { row.style.display = !q || (row.dataset.search || "").includes(q) ? "" : "none"; });
+      return;
+    }
     if (el.id === "pu-perm-search") {
       const q = el.value.trim().toLowerCase();
       const rows = document.querySelectorAll("#pu-perm-list > [data-search]");
@@ -9000,7 +9049,7 @@ function attachClickListener() {
         S.platformUsers = list;
         dataStore.savePlatformUsers(list);
         S.ui.newPuJobTitle = ""; S.ui.newPuLoginType = "job_title"; S.ui.newPuLoginId = ""; S.ui.newPuPassword = "";
-        S.ui.newPuScopeKind = "none"; S.ui.newPuScopeId = ""; S.ui.newPuTemplateId = ""; S.ui.newPuAllowedPages = []; S.ui.newPuAllowedActions = []; S.ui.puFormError = "";
+        S.ui.newPuScopeKind = "none"; S.ui.newPuScopeId = ""; S.ui.newPuTemplateId = ""; S.ui.newPuAllowedPages = []; S.ui.newPuAllowedActions = []; S.ui.puFormError = ""; S.ui.puShowAdd = false;
         render();
         break;
       }
@@ -9013,6 +9062,7 @@ function attachClickListener() {
         render();
         break;
       }
+      case "toggle-pu-add": S.ui.puShowAdd = !S.ui.puShowAdd; render(); break;
       case "cancel-platform-user-edit": S.ui.editingPuId = null; S.ui.editPuForm = null; S.ui.puFormError = ""; render(); break;
       case "save-platform-user-edit": {
         const editForm = S.ui.editPuForm || {};
