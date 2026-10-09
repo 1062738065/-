@@ -4172,6 +4172,18 @@ function officeArchiveTree(units) {
   });
   return tree;
 }
+// أيقونة مجلد ملوّنة (تدرّج) بنمط مدير الملفات — gid لازم يكون فريدًا بكل بطاقة.
+const ARC_FOLDER_COLORS = [["#9fb0ff", "#6174f3"], ["#e8b4f7", "#c77be8"], ["#86e8c4", "#3cc79a"], ["#fbb27a", "#ec7a30"]];
+function archiveFolderSvg(idx) {
+  const c = ARC_FOLDER_COLORS[idx % ARC_FOLDER_COLORS.length];
+  const g = "arcf" + idx;
+  return `<svg width="64" height="52" viewBox="0 0 64 52" aria-hidden="true"><defs><linearGradient id="${g}" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="${c[0]}"/><stop offset="1" stop-color="${c[1]}"/></linearGradient></defs>
+    <path d="M4 8a4 4 0 0 1 4-4h14l6 6h28a4 4 0 0 1 4 4v6H4z" fill="${c[1]}" opacity=".55"/>
+    <rect x="4" y="14" width="56" height="34" rx="5" fill="url(#${g})"/></svg>`;
+}
+function archiveFileSvg(color) {
+  return `<svg width="46" height="58" viewBox="0 0 46 58" aria-hidden="true"><path d="M5 2h26l11 11v39a4 4 0 0 1-4 4H5a4 4 0 0 1-4-4V6a4 4 0 0 1 4-4z" fill="#fff" stroke="#e4d9d6" stroke-width="1.5"/><path d="M31 2v9a2 2 0 0 0 2 2h9" fill="#f3ecea" stroke="#e4d9d6" stroke-width="1.5"/><rect x="9" y="26" width="28" height="3" rx="1.5" fill="#e4d9d6"/><rect x="9" y="33" width="22" height="3" rx="1.5" fill="#e4d9d6"/><rect x="9" y="40" width="26" height="3" rx="1.5" fill="#e4d9d6"/><circle cx="15" cy="19" r="4.5" fill="${color}"/></svg>`;
+}
 function renderOfficeArchive() {
   const office = usesOfficeScope() ? currentOffice() : { id: "", name: "نطاق حسابك" };
   if (usesOfficeScope() && !currentOffice()) return officeNotFoundPageHtml();
@@ -4185,40 +4197,70 @@ function renderOfficeArchive() {
   if (selectedYear) crumbs.push(`<span style="color:${SUBTLE};">/</span><button class="pill-btn pill-ghost" data-action="office-archive-nav" data-year="${esc(selectedYear)}" data-period="">${esc(selectedYear)}</button>`);
   if (selectedPeriod) crumbs.push(`<span style="color:${SUBTLE};">/</span><span class="pill-btn pill-primary" style="cursor:default;">${esc(selectedPeriod)}</span>`);
 
-  let body;
+  // المجلدات = المستوى التالي (سنوات ← أنواع فترات)، والملفات = تقارير المستوى الحالي.
+  let folders = [], items = [];
   if (!selectedYear) {
-    body = years.length === 0 ? `<div class="card" style="text-align:center;color:${SUBTLE};padding:36px;">لا توجد تقارير مؤرشفة بعد.</div>` :
-      `<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:12px;">${years.map((y) => {
-        const count = Object.values(tree[y]).reduce((s, arr) => s + arr.length, 0);
-        return `<button type="button" class="card" style="text-align:right;cursor:pointer;border:none;" data-action="office-archive-nav" data-year="${esc(y)}" data-period="">
-          <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;">${iconLayers(18, GOLD)}<div style="font-size:14px;font-weight:800;">${esc(y)}</div></div>
-          <div class="hint">${count} تقرير</div>
+    folders = years.map((y) => ({ name: y, count: Object.values(tree[y]).reduce((n, arr) => n + arr.length, 0), year: y, period: "" }));
+    years.forEach((y) => Object.values(tree[y]).forEach((arr) => { items = items.concat(arr); }));
+  } else if (!selectedPeriod) {
+    folders = Object.keys(tree[selectedYear]).map((p) => ({ name: p, count: tree[selectedYear][p].length, year: selectedYear, period: p }));
+    Object.values(tree[selectedYear]).forEach((arr) => { items = items.concat(arr); });
+  } else {
+    items = tree[selectedYear][selectedPeriod].slice();
+  }
+  items.sort((x, y) => (y.report.createdAt || 0) - (x.report.createdAt || 0));
+
+  const foldersHtml = folders.length ? `<div class="arc-folders">${folders.map((f, i) => `
+    <button type="button" class="arc-folder" data-action="office-archive-nav" data-year="${esc(f.year)}" data-period="${esc(f.period)}">
+      ${archiveFolderSvg(i)}
+      <div class="arc-folder-name">${esc(f.name)}</div>
+      <div class="arc-folder-meta"><b>${f.count}</b> تقرير</div>
+    </button>`).join("")}</div>` : "";
+
+  const filesHtml = items.length === 0
+    ? `<div class="card" style="text-align:center;color:${SUBTLE};padding:36px;">لا توجد تقارير مؤرشفة بعد.</div>`
+    : `<div class="arc-files" id="archive-grid">${items.map(({ unit, report }) => {
+        const meta = reportStatusMeta(report.status);
+        const dateStr = new Date(report.createdAt).toLocaleDateString("ar-SA-u-ca-islamic", { year: "numeric", month: "short", day: "numeric" });
+        const title = report.label || "تقرير";
+        return `<button type="button" class="arc-file" data-search="${esc((title + " " + unit.name + " " + meta.label).toLowerCase())}" data-action="view-report-pdf" data-unit-id="${esc(unit.id)}" data-report-id="${esc(report.id)}" title="عرض PDF">
+          ${archiveFileSvg(meta.color)}
+          <div class="arc-file-name">${esc(title)}</div>
+          <div class="arc-file-unit">${esc(unit.name)}</div>
+          <div class="arc-file-foot"><span>${esc(dateStr)}</span><span class="arc-dot" style="background:${meta.color};" title="${esc(meta.label)}"></span></div>
         </button>`;
       }).join("")}</div>`;
-  } else if (!selectedPeriod) {
-    const periods = Object.keys(tree[selectedYear]);
-    body = `<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:12px;">${periods.map((p) => `
-      <button type="button" class="card" style="text-align:right;cursor:pointer;border:none;" data-action="office-archive-nav" data-year="${esc(selectedYear)}" data-period="${esc(p)}">
-        <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;">${iconDocument(18, ROSE)}<div style="font-size:14px;font-weight:800;">${esc(p)}</div></div>
-        <div class="hint">${tree[selectedYear][p].length} تقرير</div>
-      </button>`).join("")}</div>`;
-  } else {
-    const items = tree[selectedYear][selectedPeriod];
-    body = reportTable(["الوحدة", "التقرير", "الحالة", "تاريخ الإنشاء", ""], items.map(({ unit, report }) => {
-      const meta = reportStatusMeta(report.status);
-      const dateStr = new Date(report.createdAt).toLocaleDateString("ar-SA-u-ca-islamic", { year: "numeric", month: "long", day: "numeric" });
-      return [esc(unit.name), esc(report.label || "تقرير"), badgeHtml(meta.label, meta.color, meta.bg), esc(dateStr),
-        `<button class="pill-btn pill-ghost" style="padding:5px 10px;" data-action="view-report-pdf" data-unit-id="${esc(unit.id)}" data-report-id="${esc(report.id)}">${iconDocument(13, ROSE)} عرض PDF</button>`];
-    }));
-  }
+
+  // العمود الجانبي: إحصاءات المستوى الحالي (إجمالي + توزيع الحالات).
+  const total = items.length;
+  const byStatus = {};
+  items.forEach(({ report }) => { const m = reportStatusMeta(report.status); (byStatus[m.label] = byStatus[m.label] || { m, n: 0 }).n++; });
+  const approved = (byStatus["معتمد"] || { n: 0 }).n;
+  const pct = total ? Math.round((approved / total) * 100) : 0;
+  const chips = Object.values(byStatus).sort((x, y) => y.n - x.n).map(({ m, n }) => `
+    <div class="arc-chip" style="background:${m.bg};color:${m.color};"><span class="arc-chip-dot" style="background:${m.color};"></span><span style="flex:1;">${esc(m.label)}</span><b>${n}</b></div>`).join("");
+  const side = `<div class="arc-side">
+    <div class="arc-card">
+      <div class="arc-card-label">إجمالي التقارير</div>
+      <div class="arc-big"><b>${total}</b> <span>تقرير${folders.length ? " · " + folders.length + " مجلد" : ""}</span></div>
+      <div class="arc-bar"><i style="width:${pct}%;"></i></div>
+      <div class="arc-card-label" style="margin:6px 0 0;">${approved} معتمد (${pct}٪)</div>
+    </div>
+    ${chips ? `<div class="arc-card arc-chips">${chips}</div>` : ""}
+    <div class="arc-card arc-tip">${iconDocument(26, ROSE)}<div>اضغطي على أي تقرير لعرضه بصيغة PDF، أو على أي مجلد لفتحه.</div></div>
+  </div>`;
 
   return `
   <div class="page-wrap"><div class="page-inner">
     ${topBarHtml({ title: "أرشيف التقارير", subtitle: `منظَّم تلقائيًا حسب السنة الهجرية ونوع الفترة — ${office.name}`,
       right: pillBtn("خروج", { variant: "danger", icon: iconLogout(15, DANGER), action: "logout" }) })}
     ${usesOfficeScope() ? adminScopeSwitcherHtml("office") : ""}
-    <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-bottom:16px;">${crumbs.join("")}</div>
-    ${body}
+    <div class="arc-search"><input id="archive-search" class="input" placeholder="ابحثي باسم التقرير أو الوحدة أو الحالة..." /></div>
+    <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-bottom:14px;">${crumbs.join("")}</div>
+    <div class="arc-layout">
+      <div class="arc-main">${foldersHtml}${folders.length && items.length ? `<div class="arc-section-title">${selectedYear ? "تقارير " + esc(selectedPeriod || selectedYear) : "أحدث التقارير"}</div>` : ""}${filesHtml}</div>
+      ${side}
+    </div>
   </div></div>`;
 }
 
@@ -8003,6 +8045,11 @@ function attachFormListeners() {
       const q = el.value.trim().toLowerCase();
       const rows = document.querySelectorAll("#all-reports-table tbody tr");
       rows.forEach((row) => { row.style.display = !q || (row.dataset.search || "").includes(q) ? "" : "none"; });
+      return;
+    }
+    if (el.id === "archive-search") {
+      const q = el.value.trim().toLowerCase();
+      document.querySelectorAll("#archive-grid > [data-search]").forEach((card) => { card.style.display = !q || (card.dataset.search || "").includes(q) ? "" : "none"; });
       return;
     }
     if (el.id === "unit-reports-search") {
