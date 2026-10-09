@@ -126,7 +126,7 @@ img { max-width: 100%; }
   background: transparent; color: var(--nav-color, var(--ink)); font-size: var(--nav-size, 12px); font-weight: 600; cursor: pointer; text-align: right; width: 100%;
   transition: background 0.15s ease, color 0.15s ease;
 }
-.nav-item.active { background: linear-gradient(135deg, #8B4A73, #6b2337); color: #fff; font-weight: 800; }
+.nav-item.active { background: var(--nav-active-bg, linear-gradient(135deg, #8B4A73, #6b2337)); color: #fff; font-weight: 800; }
 .nav-item.active svg { stroke: #fff !important; }
 .nav-item.active::before { content: none; }
 .nav-item:not(.active):not([disabled]):hover { background: var(--gray-bg); }

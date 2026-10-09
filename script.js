@@ -987,7 +987,7 @@ const DEFAULT_SITE_COLORS = { primary: "#6b2337", background: "#F2ECE8" };
 const DEFAULT_THEME = {
   ink: "#2E2430", subtle: "#9c8b92", border: "#eddde2",
   green: "#2E8B67", gold: "#D89A57", danger: "#D65B57", blue: "#8B4A73",
-  sidebarBg: "#faf6f4", sidebarActive: "#DDCCC2", sidebarBgImage: "", sidebarBgVeil: 35, iconColor: "", fieldIconColor: "",
+  sidebarBg: "#faf6f4", navActive: "#6b2337", sidebarBgImage: "", sidebarBgVeil: 35, iconColor: "", fieldIconColor: "",
   navColor: "", navSize: 12, sbTitleColor: "", sbTitleSize: 15, bannerTitleColor: "", bannerTitleSize: 27, bannerSubColor: "", bannerSubSize: 13,
   taglineOffset: 0, taglineSize: 13, taglineImgH: 70, taglineColor: "",
   bs: ["#f1d0d9", "#e6c1cf", "#d9b6c9", "#eed3ab", "#dac3cf"],
@@ -998,7 +998,7 @@ const THEME_COLOR_FIELDS = [
   { key: "subtle", label: "لون النصوص الفرعية الباهتة" },
   { key: "border", label: "لون الحدود والخطوط" },
   { key: "sidebarBg", label: "خلفية الشريط الجانبي" },
-  { key: "sidebarActive", label: "لون الصفحة المحددة بالشريط الجانبي" },
+  { key: "navActive", label: "لون الصفحة المحددة بالشريط الجانبي (مثل «جميع تقارير الوحدة»)" },
   { key: "green", label: "الأخضر (مكتمل / نجاح)" },
   { key: "gold", label: "الذهبي (قيد المراجعة)" },
   { key: "danger", label: "الأحمر (تنبيه / حذف)" },
@@ -10027,7 +10027,7 @@ function applySiteColors(settings) {
   DANGER_BG = th.danger === DEFAULT_THEME.danger ? DEFAULT_THEME_BG.danger : mixHex(th.danger, "#ffffff", 0.88);
   BLUE_BG = th.blue === DEFAULT_THEME.blue ? DEFAULT_THEME_BG.blue : mixHex(th.blue, "#ffffff", 0.88);
   [["--ink", INK], ["--subtle", SUBTLE], ["--border", BORDER], ["--green", GREEN], ["--green-bg", GREEN_BG], ["--gold", GOLD], ["--gold-bg", GOLD_BG],
-   ["--danger", DANGER], ["--danger-bg", DANGER_BG], ["--blue", BLUE], ["--blue-bg", BLUE_BG], ["--sidebar-bg", th.sidebarBg], ["--sidebar-active", th.sidebarActive]]
+   ["--danger", DANGER], ["--danger-bg", DANGER_BG], ["--blue", BLUE], ["--blue-bg", BLUE_BG], ["--sidebar-bg", th.sidebarBg], ["--nav-active-bg", th.navActive === "#6b2337" ? "linear-gradient(135deg, #8B4A73, #6b2337)" : `linear-gradient(135deg, ${mixHex(th.navActive, "#ffffff", 0.25)}, ${th.navActive})`]]
     .forEach(([k, v]) => root.style.setProperty(k, v));
   TEXT_STYLE_FIELDS.forEach((f) => {
     const cssName = { nav: "--nav", sbTitle: "--sb-title", bannerTitle: "--banner-title", bannerSub: "--banner-sub" }[f.k];
