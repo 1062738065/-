@@ -1286,13 +1286,20 @@ function pushReportMetaToSheet(unitId, entry) {
     .then((res) => { if (res && !res.ok) reportSupabaseWriteError("reports", res.error); })
     .catch(() => {});
 }
+// وضع "الاطلاع فقط" لمديرة النظام (الحساب الأصلي): تشوف كل التقارير والأرشيف
+// وتتصفحها، لكن بدون تعديل أو إرسال أو اعتماد أو إعادة أو حذف. حسابات "المسمى
+// الوظيفي" والأقسام والوحدات الحقيقية لا تتأثر إطلاقًا.
+function adminReportsReadOnly() { return !!(S.isAdmin && !S.currentPlatformUserJobTitle && !S.__adminAllowWrite); }
+const ADMIN_READONLY_BLOCKED = ["open-or-create-report", "approve-report-by-head", "confirm-head-return", "submit-report-to-head", "confirm-send-report", "mark-report-completed", "request-report-completion", "approve-report", "return-report-for-revision", "submit-department-review-decision", "delete-report", "confirm-delete-report", "custom-path-send", "custom-path-return", "confirm-custom-send", "start-custom-send"];
 function saveReportEntry(unitId, updatedEntry) {
+  if (adminReportsReadOnly()) return;
   const list = ensureUnitReportsLoaded(unitId).map((r) => (r.id === updatedEntry.id ? updatedEntry : r));
   S.reports[unitId] = list;
   dataStore.saveReports(unitId, list);
   pushReportMetaToSheet(unitId, updatedEntry);
 }
 function createNewReportEntry(unitId) {
+  if (adminReportsReadOnly()) return null;
   const list = ensureUnitReportsLoaded(unitId);
   const entry = { id: uid("rep"), label: "تقرير جديد", status: "draft", createdAt: Date.now(), updatedAt: Date.now(), sections: {}, shared: {}, indicatorHistory: {} };
   S.reports[unitId] = [...list, entry];
@@ -1702,6 +1709,9 @@ function render() {
     html = shellWrap(renderUnitSettings());
   } else if (S.view === "unit-reports") {
     html = shellWrap(renderUnitReportsHub());
+  } else if (S.view === "unit-report" && adminReportsReadOnly()) {
+    if (S.currentReportId) { S.view = "full-report"; S.cameFromAllReports = true; html = shellWrap(renderFullReport()); }
+    else { S.view = "unit-reports"; html = shellWrap(renderUnitReportsHub()); }
   } else if (S.view === "unit-report") {
     html = shellWrap(renderUnitReport());
   } else if (S.view === "unit-notifications") {
@@ -1882,7 +1892,7 @@ function computeVisibleSidebarPages() {
   const raw = computeVisibleSidebarPagesRaw();
   const ids = new Set(raw.map((p) => MERGED_PAGE_MAP[p.id] || p.id));
   // "مخطط الهيكل التنظيمي" صار تبويبًا داخل المستخدمون (لا رابط مستقل بالشريط).
-  return SIDEBAR_PAGES.filter((p) => ids.has(p.id) && p.id !== "org-chart");
+  return SIDEBAR_PAGES.filter((p) => ids.has(p.id) && p.id !== "org-chart" && !(p.id === "unit-report" && adminReportsReadOnly()));
 }
 function computeVisibleSidebarPagesRaw() {
   // مجموعة "unit-home" (تُعرض الآن كروابط رئيسية مستقلة بالشريط الجانبي —
@@ -4968,7 +4978,7 @@ function renderUnitReportsHub() {
       // زر الشريط الجانبي نفسه غير ظاهر له لأن صفحة "إنشاء تقرير" تحديدًا لم
       // تُمنح له ضمن قائمة الصفحات — فتظل الصفحة تَعِد بالزر "من الشريط
       // الجانبي" بينما هو غير موجود أصلًا.
-      right: platformActionAllowed("open-or-create-report") && !computeVisibleSidebarPages().some((p) => p.id === "unit-report") ? pillBtn("إنشاء تقرير", { icon: iconPencil(14, "#fff"), action: "open-or-create-report" }) : "" })}
+      right: platformActionAllowed("open-or-create-report") && !adminReportsReadOnly() && !computeVisibleSidebarPages().some((p) => p.id === "unit-report") ? pillBtn("إنشاء تقرير", { icon: iconPencil(14, "#fff"), action: "open-or-create-report" }) : "" })}
     ${scopedUnitSwitcherHtml()}
 
     <div class="hero-banner">
@@ -8364,6 +8374,7 @@ function attachClickListener() {
     if (!btn) return;
     const action = btn.dataset.action;
     const ds = btn.dataset;
+    if (adminReportsReadOnly() && ADMIN_READONLY_BLOCKED.includes(action)) { alert("حساب مديرة النظام للاطلاع فقط — لا يمكن تعديل التقارير أو اعتمادها من هنا."); return; }
 
     try {
     switch (action) {
@@ -8880,8 +8891,8 @@ function attachClickListener() {
       }
       case "open-report": {
         if (!isUnitInUserScope(ds.unitId)) break;
-        S.currentUnitId = ds.unitId; S.currentReportId = ds.reportId; S.view = "unit-report"; S.openPhaseId = null; S.activeSectionId = null;
-        S.cameFromAllReports = false;
+        S.currentUnitId = ds.unitId; S.currentReportId = ds.reportId; S.view = adminReportsReadOnly() ? "full-report" : "unit-report"; S.openPhaseId = null; S.activeSectionId = null;
+        S.cameFromAllReports = adminReportsReadOnly();
         render();
         break;
       }
@@ -9772,6 +9783,7 @@ function attachClickListener() {
         break;
       }
       case "load-sample-data": {
+        S.__adminAllowWrite = true;
         const merged = [...S.indicatorDefinitions];
         SAMPLE_INDICATOR_DEFINITIONS.forEach((def) => { if (!merged.some((d) => d.name === def.name)) merged.push({ id: `ind-sample-${def.name}`, ...def }); });
         S.indicatorDefinitions = merged; dataStore.saveIndicatorDefinitions(merged);
@@ -9783,6 +9795,7 @@ function attachClickListener() {
             indicatorHistory: { ...existing.indicatorHistory, ...buildSampleIndicatorHistory() } };
           saveReportEntry(targetUnit.id, updated);
         }
+        S.__adminAllowWrite = false;
         S.ui.sampleStatus = "تم تحميل البيانات التجريبية ✓";
         render();
         setTimeout(() => { S.ui.sampleStatus = ""; if (S.view === "indicators-manage") render(); }, 2500);
