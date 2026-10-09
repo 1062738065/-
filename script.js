@@ -2232,6 +2232,10 @@ async function handleLoginSubmit() {
     const result = await supabaseLogin(username, password);
     if (result.ok) {
       await refreshUnitsAndDepartmentsFromSheet();
+      if (result.user && result.user.role !== "admin" && result.user.unitId) {
+        // نحتاج الأشخاص (platform_users) والقوالب قبل شاشة "كيف تريدين الدخول؟"
+        try { await refreshPlatformUsersFromSheet(); await refreshJobTitleTemplatesFromSheet(); } catch (e) { /* نكمل بالنسخة المحلية */ }
+      }
       S.ui.loginBusy = false;
       S.ui.loginError = "";
       doLogin(result.user);
