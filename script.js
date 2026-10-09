@@ -1615,8 +1615,6 @@ function render() {
     html = shellWrap(renderEntityPickerPage("centers"));
   } else if (S.view === "org-chart") {
     html = shellWrap(renderOrgChartPage());
-  } else if (S.view === "department-overview") {
-    html = shellWrap(renderDepartmentOverview());
   } else if (S.view === "department-curation") {
     html = shellWrap(renderCurationUnified());
   } else if (S.view === "executive-dashboard") {
@@ -1724,14 +1722,12 @@ const SIDEBAR_PAGES = [
   // الأصلية تبقى كما هي تمامًا، هذي إضافة فقط (راجع renderOrgChartPage).
   { id: "org-chart", label: "مخطط الهيكل التنظيمي", group: "الهيكل التنظيمي", icon: "layers" },
   { id: "browse-structure", label: "تصفّح الهيكل", group: "standalone", icon: "layers" },
-  { id: "department-overview", label: "قسمي", group: "الرئيسية", icon: "building" },
   // صفحة مستقلة قائمة بذاتها (نفس نمط "office-curation" للمكتب) — بدل ما تكون
   // قسمًا مدمجًا داخل صفحة أخرى، حسب طلب نجود الصريح.
   { id: "department-curation", label: "اعتماد أبرز النتائج والتوصيات", group: "الرئيسية", icon: "target" },
   // رابط ثابت لمديرة النظام فقط: بوّابة دخول لصفحات "unit-home" (نفس أفكار
   // "قسمي")، يختار أول وحدة/مركز نشط تلقائيًا ثم يحوّل فعليًا لعرض "تقارير"
   // (راجع case "nav-to" ومعالجته الخاصة لـ"unit-overview").
-  { id: "unit-overview", label: "وحدتي", group: "الرئيسية", icon: "document" },
   { id: "executive-dashboard", label: "لوحة المعلومات", group: "الإدارة العليا", icon: "home" },
   { id: "executive-summary", label: "الملخص التنفيذي", group: "الإدارة العليا", icon: "document" },
   { id: "executive-final-report", label: "التقرير الإداري النهائي", group: "الإدارة العليا", icon: "layers" },
@@ -1806,7 +1802,7 @@ function sidebarNavIcon(key, size, color) {
 
 // "لوحة المعلومات" صفحة واحدة تتكيّف تلقائيًا مع نطاق الحساب (وحدة/قسم/مكتب/إدارة
 // عليا/مديرة النظام). المعرّفات القديمة تُعتبر نفس الصفحة: تُدمج بـ"dashboard".
-const MERGED_PAGE_MAP = { "unit-dashboard": "dashboard", "office-dashboard": "dashboard", "executive-dashboard": "dashboard", "office-curation": "department-curation" };
+const MERGED_PAGE_MAP = { "unit-dashboard": "dashboard", "office-dashboard": "dashboard", "executive-dashboard": "dashboard", "office-curation": "department-curation", "unit-overview": "dashboard", "department-overview": "dashboard" };
 const MERGED_DASHBOARD_IDS = Object.keys(MERGED_PAGE_MAP);
 // "اعتماد أبرز النتائج والتوصيات" كذلك صفحة واحدة: القسم يشوف نتائج قسمه، والمكتب
 // نتائج وحداته، ومديرة النظام تبدّل بين قسم/مكتب من أعلى الصفحة.
@@ -1864,7 +1860,7 @@ function computeVisibleSidebarPagesRaw() {
     // لحد ما تتأكد إن الصفحة الجديدة تغطي كل شيء وتقرر حذف القديمة بنفسها.
     // صفحات "unit-home" (إنشاء تقرير/تقارير/الإعدادات) ظاهرة دائمًا الآن أيضًا،
     // بلا اشتراط كونها داخل وحدة أصلًا — نفس المبدأ أعلاه.
-    return SIDEBAR_PAGES.filter((p) => p.id === "dashboard" || p.id === "department-overview" || p.id === "department-curation" || p.id === "all-reports" || p.group === "unit-home");
+    return SIDEBAR_PAGES.filter((p) => p.id === "dashboard" || p.id === "department-curation" || p.id === "all-reports" || p.group === "unit-home");
   } else if (S.isExecutive) {
     return SIDEBAR_PAGES.filter((p) => p.group === "الإدارة العليا" || p.id === "all-reports");
   } else if (S.isOfficeUser) {
@@ -2717,9 +2713,10 @@ function renderDashboard() {
   // الموحّدة؛ الصفحات المخصّصة الأصلية (قسمي/مكتب الإشراف/لوحة معلومات
   // الوحدة) تبقى موجودة تمامًا بدون أي حذف أو تغيير.
   if (S.isExecutive) return renderExecutiveDashboard();
-  if (S.isDepartmentUser && S.currentDepartmentId) {
-    const dept = S.departments.find((d) => d.id === S.currentDepartmentId);
-    if (!dept) return renderDepartmentOverview();
+  const adminDeptPreview = S.isAdmin && S.ui.previewDeptId && (S.departments || []).some((d) => d.id === S.ui.previewDeptId);
+  if ((S.isDepartmentUser && S.currentDepartmentId) || adminDeptPreview) {
+    const dept = S.departments.find((d) => d.id === (adminDeptPreview ? S.ui.previewDeptId : S.currentDepartmentId));
+    if (!dept) return `<div class="page-wrap"><div class="page-inner"><div class="card" style="text-align:center;color:${SUBTLE};padding:36px;">لا يوجد قسم مرتبط بهذا الحساب.</div></div></div>`;
     // "وحدة" تقرير القسم الذاتي (role: self_report) لا تُحتسب ضمن وحدات
     // القسم التابعة هنا (ما تظهر ببطاقات الإحصاءات/الرسوم، ولا يُطلب من
     // القسم مراجعة تقريرها الخاص) — تقريرها يظهر فقط عبر "جميع التقارير"
@@ -2732,7 +2729,9 @@ function renderDashboard() {
     return renderDashboardBody(units, {
       title: dept.name,
       subtitle: `مرحبًا — نظرة شاملة على ${units.length} وحدة تابعة لهذا القسم`,
-      topBarRight: pillBtn("خروج", { variant: "danger", icon: iconLogout(15, DANGER), action: "logout" }),
+      topBarRight: adminDeptPreview && S.adminPreviewOrigin
+        ? pillBtn("رجوع", { variant: "ghost", icon: iconChevronRight(15, INK), action: "nav-to", data: { view: S.adminPreviewOrigin } })
+        : pillBtn("خروج", { variant: "danger", icon: iconLogout(15, DANGER), action: "logout" }),
       extraTop: reviewDecisionsSectionHtml(pendingReports),
     });
   }
@@ -3273,11 +3272,15 @@ function renderBrowseStructure() {
       ? `<div class="card" style="text-align:center;color:${SUBTLE};padding:36px;border-style:dashed;">لا يوجد شيء هنا بعد.</div>`
       : `<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:14px;" id="bs-grid">${folders.map((f, i) => f(i)).join("")}</div>`;
   }
+  const uiBtns = (S.isAdmin && node && node.k === "dept") ? pillBtn("فتح واجهة القسم", { variant: "ghost", icon: iconBuilding(ROSE, 14), action: "bs-open-dept-ui", data: { id: node.id } })
+    : (S.isAdmin && node && node.k === "office") ? pillBtn("ملخص المكتب", { variant: "ghost", icon: iconDocument(14, ROSE), action: "bs-open-office-ui", data: { id: node.id, view: "office-summary" } }) + pillBtn("أرشيف المكتب", { variant: "ghost", icon: iconLayers(14, ROSE), action: "bs-open-office-ui", data: { id: node.id, view: "office-archive" } })
+    : "";
   const tiles = (node && node.k === "unit") ? "" : `<div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:18px;">${bsStatTile("الأقسام", cnt.depts, 0)}${bsStatTile("الوحدات والمراكز", cnt.units, 1)}${bsStatTile("التقارير", cnt.reports, 2)}${bsStatTile("بانتظار المراجعة", cnt.pending, 3)}</div>`;
   return `
   <div class="page-wrap"><div class="page-inner">
     ${topBarHtml({ title, subtitle, icon: iconLayers(18, ROSE), backAction: path.length ? "bs-up" : "", backData: path.length ? { index: path.length - 2 } : undefined })}
     <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-bottom:16px;">${crumbs}</div>
+    ${uiBtns ? `<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px;">${uiBtns}</div>` : ""}
     ${tiles}
     ${(!node || node.k !== "unit") && folders.length > 6 ? `<div style="margin-bottom:14px;"><input class="input" id="bs-search" placeholder="ابحثي بالاسم..." style="width:100%;max-width:320px;" /></div>` : ""}
     ${body}
@@ -3713,27 +3716,6 @@ function scopedUnitSwitcherHtml() {
   }
   return "";
 }
-function renderDepartmentOverview() {
-  const dept = S.departments.find((d) => d.id === S.currentDepartmentId);
-  if (!dept) return `<div class="page-wrap"><div class="page-inner">${S.isAdmin ? adminScopeSwitcherHtml("department") : ""}<div class="card" style="text-align:center;color:${SUBTLE};padding:36px;">${(S.departments || []).length ? "اختاري قسمًا من القائمة أعلاه." : "لا توجد أقسام بعد."}</div></div></div>`;
-  const units = S.units.filter((u) => u.departmentId === dept.id && u.status === "active");
-  const pendingReports = [];
-  units.forEach((u) => {
-    ensureUnitReportsLoaded(u.id).filter((r) => r.status === "under_review").forEach((r) => pendingReports.push({ unit: u, report: r }));
-  });
-
-  return `
-  <div class="page-wrap"><div class="page-inner">
-    ${topBarHtml({ title: dept.name, subtitle: `مرحبًا — ${units.length} وحدة تابعة لهذا القسم`,
-      right: S.isAdmin && S.adminPreviewOrigin ? pillBtn("رجوع", { variant: "ghost", icon: iconChevronRight(15, INK), action: "nav-to", data: { view: S.adminPreviewOrigin } }) : pillBtn("خروج", { variant: "danger", icon: iconLogout(15, DANGER), action: "logout" }) })}
-    ${adminScopeSwitcherHtml("department")}
-    ${reviewDecisionsSectionHtml(pendingReports)}
-    ${units.length === 0 ? `<div class="card" style="text-align:center;color:${SUBTLE};padding:36px;">لا توجد وحدات نشطة تابعة لهذا القسم بعد.</div>` :
-      `<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:12px;">${units.map((u) => unitCardHtml(u, null, latestReportForUnit(u.id))).join("")}</div>`}
-    ${deptCurationSectionHtml(dept)}
-  </div></div>`;
-}
-
 // صفحة مستقلة قائمة بذاتها لـ"اعتماد أبرز النتائج والتوصيات" — نفس القسم
 // بالضبط (deptCurationSectionHtml، بدون أي تكرار بالكود)، بنفس نمط صفحة
 // "office-curation" المستقلة أصلًا للمكتب. "قسمي" تبقى تعرض نفس القسم أيضًا
@@ -5799,7 +5781,7 @@ const BULK_PERM_TYPES = [
 const BULK_PERM_PRESETS = {
   unit: ["dashboard", "unit-report", "unit-reports", "unit-notifications", "unit-all-reports"],
   center: ["dashboard", "unit-report", "unit-reports", "unit-notifications"],
-  department: ["dashboard", "department-overview", "department-curation", "all-reports", "unit-report", "unit-reports", "unit-settings"],
+  department: ["dashboard", "department-curation", "all-reports", "unit-report", "unit-reports", "unit-settings"],
   office: ["dashboard", "office-archive", "all-reports", "office-summary", "department-curation", "departments-list"],
 };
 function bulkPermTargets(type) {
@@ -8014,21 +7996,12 @@ function attachClickListener() {
         // باسمه، فنحوّله هنا فعليًا لعرض "تقارير" الوحدة (نفس مسار open-unit-preview)
         // بعد التأكد من اختيار وحدة/مركز صالح ووضع دخول افتراضي (الإدارية).
         let navView = ds.view;
-        if (S.isAdmin && navView === "unit-overview") {
-          const eligibleUnits = (S.units || []).filter((u) => u.role === "unit" || u.role === "center");
-          if (!eligibleUnits.some((u) => u.id === S.currentUnitId)) {
-            const firstUnit = eligibleUnits.find((u) => u.status === "active") || eligibleUnits[0];
-            S.currentUnitId = firstUnit ? firstUnit.id : null;
-          }
-          if (S.currentUnitEntryMode !== "admin" && S.currentUnitEntryMode !== "head") S.currentUnitEntryMode = "admin";
-          S.adminPreviewOrigin = null;
-          navView = "unit-reports";
-        }
+        S.ui.previewDeptId = null;
         S.view = navView; if (navView !== "unit-report") S.activeSectionId = null; if (isMobileViewport()) S.mobileSidebarOpen = false;
         // مديرة النظام تدخل "قسمي"/صفحات مكتب الإشراف مباشرة من الشريط الجانبي —
         // بما إنهم أصلًا مرتبطين بقسم/مكتب واحد، نفعّلهم تلقائيًا لأول قسم أو مكتب
         // نشط لو ما كان فيه قيمة محفوظة أصلًا (أو كانت محفوظة أصبحت غير موجودة).
-        if (S.isAdmin && (navView === "department-overview" || navView === "department-curation") && !(S.departments || []).some((d) => d.id === S.currentDepartmentId)) {
+        if (S.isAdmin && (navView === "department-curation") && !(S.departments || []).some((d) => d.id === S.currentDepartmentId)) {
           const firstDept = (S.departments || []).find((d) => d.status === "active") || (S.departments || [])[0];
           S.currentDepartmentId = firstDept ? firstDept.id : null;
         }
@@ -8054,7 +8027,7 @@ function attachClickListener() {
         }
         render();
         if (sheetsConfigured()) {
-          if (navView === "admin-reports" || navView === "units-manage" || navView === "department-overview") {
+          if (navView === "admin-reports" || navView === "units-manage" || navView === "dashboard") {
             refreshUnitsAndDepartmentsFromSheet().then(() => { if (S.view === navView) render(); });
           } else if (navView === "indicators-manage") {
             refreshIndicatorDefinitionsFromSheet().then(() => { if (S.view === navView) render(); });
@@ -8116,7 +8089,7 @@ function attachClickListener() {
         render();
         break;
       }
-      case "nav-back-department": S.view = "department-overview"; render(); break;
+      case "nav-back-department": S.view = "dashboard"; render(); break;
       case "nav-back-from-report": S.view = "unit-reports"; S.activeSectionId = null; render(); break;
       case "nav-back-to-report": S.view = "unit-report"; render(); break;
       case "nav-to-unit-report": S.view = "unit-report"; render(); break;
@@ -8322,6 +8295,21 @@ function attachClickListener() {
         render();
         break;
       }
+      case "bs-open-dept-ui": {
+        S.adminPreviewOrigin = "browse-structure";
+        S.currentDepartmentId = ds.id;
+        S.ui.previewDeptId = ds.id;
+        S.view = "dashboard";
+        render();
+        break;
+      }
+      case "bs-open-office-ui": {
+        S.adminPreviewOrigin = "browse-structure";
+        S.currentOfficeId = ds.id;
+        S.view = ds.view === "office-archive" ? "office-archive" : "office-summary";
+        render();
+        break;
+      }
       case "bs-open-unit-ui": {
         const unit = S.units.find((u) => u.id === ds.id);
         if (!unit) break;
@@ -8425,7 +8413,8 @@ function attachClickListener() {
         // اطلاع مديرة النظام على واجهة "قسمي" الحقيقية لقسم معيّن — نفس الصفحة تمامًا.
         S.adminPreviewOrigin = "departments-list";
         S.currentDepartmentId = ds.id;
-        S.view = "department-overview";
+        S.ui.previewDeptId = ds.id;
+        S.view = "dashboard";
         render();
         break;
       }
