@@ -3861,8 +3861,15 @@ function adminUnitSwitcherHtml() {
   if (!list.length) return "";
   const current = S.currentUnitId;
   const curUnit = (S.units || []).find((u) => u.id === current);
-  const hasHead = !curUnit || unitHasHead(curUnit);
-  const hasExtra = unitHasExtraReview(curUnit);
+  // الأشخاص (platform_users) المرتبطون بهذي الوحدة بنفس اسم الدخول والرقم السري:
+  // "رئيس…" ← منظور رئيسة الوحدة، "مساعد…" ← منظور المراجعة الإضافية.
+  const allPu = (S.platformUsers && S.platformUsers.length) ? S.platformUsers : (dataStore.getPlatformUsers() || []);
+  const persons = curUnit ? [...new Map([...unitSharedPlatformUsers(curUnit), ...allPu.filter((pu) => pu.status !== "disabled" && pu.scopeKind === "unit" && pu.scopeId === curUnit.id)].map((pu) => [pu.id, pu])).values()] : [];
+  const headPerson = persons.find((pu) => /رئيس/.test(pu.jobTitle || ""));
+  const assistPerson = persons.find((pu) => /مساعد/.test(pu.jobTitle || ""));
+  const hasHead = !curUnit || unitHasHead(curUnit) || !!headPerson;
+  const extraLabel = (curUnit && unitHasExtraReview(curUnit)) ? curUnit.extraReviewerTitle.trim() : (assistPerson ? assistPerson.jobTitle : "");
+  const hasExtra = !!extraLabel;
   // المنظور المعروض يتبع إعداد الوحدة: الإدارية دائمًا، رئيسة الوحدة/المراجعة الإضافية فقط إن أُضيفت للوحدة.
   const mode = S.currentUnitEntryMode === "extra" && hasExtra ? "extra" : S.currentUnitEntryMode === "head" && hasHead ? "head" : "admin";
   return `
@@ -3874,7 +3881,7 @@ function adminUnitSwitcherHtml() {
     <div style="display:flex;gap:6px;">
       ${pillBtn("الإدارية", { variant: mode === "admin" ? "primary" : "ghost", action: "admin-set-unit-entry-mode", data: { mode: "admin" } })}
       ${hasHead ? pillBtn("رئيسة الوحدة", { variant: mode === "head" ? "primary" : "ghost", action: "admin-set-unit-entry-mode", data: { mode: "head" } }) : ""}
-      ${hasExtra ? pillBtn(curUnit.extraReviewerTitle.trim(), { variant: mode === "extra" ? "primary" : "ghost", action: "admin-set-unit-entry-mode", data: { mode: "extra" } }) : ""}
+      ${hasExtra ? pillBtn(extraLabel, { variant: mode === "extra" ? "primary" : "ghost", action: "admin-set-unit-entry-mode", data: { mode: "extra" } }) : ""}
     </div>
   </div>`;
 }
