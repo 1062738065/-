@@ -134,7 +134,7 @@ img { max-width: 100%; }
 .sidebar-tagline { font-family: var(--font-heading), 'Cairo', 'IBM Plex Sans Arabic', sans-serif; font-size: 13px; font-weight: 800; color: var(--rose); text-align: center; margin: 14px 0 8px; line-height: 1.5; }
 .sidebar-spacer { flex: 1; min-height: 10px; }
 .sidebar-sep { border-top: none; margin: 6px 0; }
-.logout-btn { display: flex; align-items: center; justify-content: center; gap: 8px; padding: 10px 6px; border-radius: 12px; border: none; background: #fff; color: var(--rose); font-size: 12.5px; font-weight: 700; cursor: pointer; text-align: center; width: calc(100% - 22px); margin-right: 22px; margin-bottom: 28px; box-shadow: 0 1px 3px rgba(107,35,55,0.08); transition: background 0.15s ease; }
+.logout-btn { display: flex; align-items: center; justify-content: center; gap: 8px; padding: 10px 6px; border-radius: 12px; border: none; background: #fff; color: var(--rose); font-size: 12.5px; font-weight: 700; cursor: pointer; text-align: center; width: calc(100% - 46px); margin-right: 22px; margin-bottom: 28px; box-shadow: 0 1px 3px rgba(107,35,55,0.08); transition: background 0.15s ease; }
 .logout-btn:hover { background: rgba(214,91,87,0.1); }
 .mobile-menu-toggle { width: 38px; height: 38px; border-radius: 10px; border: 1px solid #fff; box-shadow: var(--card-shadow); background: #fff; display: flex; align-items: center; justify-content: center; cursor: pointer; }
 .mobile-backdrop { position: fixed; inset: 0; background: rgba(46,36,42,0.4); z-index: 40; }

@@ -6190,7 +6190,7 @@ function fieldEditFormHtml(draft, isNew) {
       ${fieldWrap("نوع الحقل", true, `<select class="input" data-action="set-field-draft" data-key="type" data-rerender="1">${SCHEMA_FIELD_TYPES_SELECTABLE.map((t) => `<option value="${t}" ${t === type ? "selected" : ""}>${esc(SCHEMA_FIELD_TYPE_LABELS[t])}</option>`).join("")}</select>`)}
       ${showOptions ? fieldWrap("الخيارات (كل خيار بسطر)", true, `<textarea class="input" id="field-draft-options" style="min-height:90px">${esc(optionsText)}</textarea>`) : ""}
       ${type === "expandableSelect" ? fieldWrap('نص خيار "إضافة قيمة جديدة"', false, `<input class="input" id="field-draft-other-label" value="${esc(draft.otherLabel || "أخرى")}" placeholder="أخرى" />`) : ""}
-      ${fieldWrap("أيقونة الحقل", false, `<div style="display:flex;flex-wrap:wrap;gap:8px;">${FIELD_ICON_CHOICES.map((k, n) => { const sel = (draft.icon || FIELD_TYPE_DEFAULT_ICON[type]) === k; return `<button type="button" data-action="set-field-draft-icon" data-icon="${k}" title="${k}" style="padding:3px;border-radius:14px;cursor:pointer;background:#fff;border:2px solid ${sel ? ROSE : "transparent"};">${fieldIconTileHtml(k, 38, n)}</button>`; }).join("")}</div>`)}
+      ${fieldWrap("أيقونة الحقل", false, `<div style="display:flex;flex-wrap:wrap;gap:8px;">${FIELD_ICON_CHOICES.map((k, n) => { const sel = (draft.icon || FIELD_TYPE_DEFAULT_ICON[type]) === k; return `<button type="button" data-action="set-field-draft-icon" data-icon="${k}" title="${k}" style="padding:3px;border-radius:14px;cursor:pointer;background:#fff;border:2px solid ${sel ? ROSE : "transparent"};">${fieldIconTileHtml(k, 30, n)}</button>`; }).join("")}</div>`)}
       ${fieldWrap("نص توضيحي داخل الحقل (اختياري)", false, `<input class="input" id="field-draft-placeholder" value="${esc(draft.placeholder || "")}" placeholder="مثال: اكتبي هنا..." />`)}
       <button type="button" class="pill-btn ${draft.required ? "pill-primary" : "pill-ghost"}" data-action="toggle-field-draft-required" style="align-self:flex-start;">${draft.required ? "✓ حقل إلزامي" : "حقل اختياري — اضغطي لجعله إلزاميًا"}</button>
       <div style="display:flex;gap:8px;margin-top:4px;">
@@ -6247,7 +6247,7 @@ function fieldSchemaRowHtml(field, index, total, sectionId) {
   const btn = "width:30px;height:30px;border:1px solid " + BORDER;
   return `<div class="card prs-card" style="display:flex;align-items:center;justify-content:space-between;gap:10px;padding:14px 16px;border-radius:18px;${isComputed ? "opacity:.85;" : ""}">
     <div style="display:flex;align-items:center;gap:12px;min-width:0;">
-      ${fieldIconTileHtml(fieldIconKeyOf(field), 48)}
+      ${fieldIconTileHtml(fieldIconKeyOf(field), 34)}
       <div style="min-width:0;">
         <div style="font-size:13.5px;font-weight:800;">${esc(field.label)}${field.required ? ` <span style="color:${ROSE};">*</span>` : ""}</div>
         <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:5px;">
@@ -6289,7 +6289,7 @@ function renderFieldSchemasManage() {
     <div style="display:flex;gap:14px;overflow-x:auto;padding:16px 8px 22px;margin-bottom:6px;">
       ${editingId === "__new__" ? "" : `<button type="button" data-action="start-add-field" data-section="${esc(activeSectionId)}" style="flex-shrink:0;width:110px;min-height:150px;border-radius:22px;border:2px dashed ${BORDER};background:transparent;cursor:pointer;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;color:${SUBTLE};font-size:11.5px;font-weight:700;">${iconPlus(22, SUBTLE)}إضافة حقل</button>`}
       ${sections.map((sec, n) => { const PAL = bsPalette(); const c = PAL[n % PAL.length]; const on = sec.id === activeSectionId; return `<button type="button" data-action="select-field-schema-section" data-section="${esc(sec.id)}" style="flex-shrink:0;width:170px;min-height:150px;border-radius:22px;border:none;cursor:pointer;text-align:right;padding:16px;display:flex;flex-direction:column;justify-content:space-between;background:${c.bg};box-shadow:${on ? "0 14px 26px rgba(80,40,60,0.20)" : "0 6px 14px rgba(80,40,60,0.08)"};outline:${on ? "3px solid " + ROSE : "none"};outline-offset:2px;transform:${on ? "translateY(-4px)" : "none"};transition:transform .15s ease, box-shadow .15s ease;font-family:inherit;">
-        ${fieldIconTileHtml(["text", "target", "chart", "users", "bulb", "trophy"][n % 6], 42, n)}
+        ${fieldIconTileHtml(["text", "target", "chart", "users", "bulb", "trophy"][n % 6], 32, n)}
         <span style="font-size:14.5px;font-weight:800;color:${INK};line-height:1.4;">${esc(sec.label)}</span></button>`; }).join("")}
     </div>
 
