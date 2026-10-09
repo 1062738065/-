@@ -1790,8 +1790,8 @@ const SIDEBAR_PAGES = [
   // "قسمي")، يختار أول وحدة/مركز نشط تلقائيًا ثم يحوّل فعليًا لعرض "تقارير"
   // (راجع case "nav-to" ومعالجته الخاصة لـ"unit-overview").
   { id: "executive-dashboard", label: "لوحة المعلومات", group: "الإدارة العليا", icon: "home" },
-  { id: "executive-summary", label: "الملخص التنفيذي", group: "الإدارة العليا", icon: "document" },
-  { id: "executive-final-report", label: "التقرير الإداري النهائي", group: "الإدارة العليا", icon: "layers" },
+  { id: "executive-summary", label: "الملخص التنفيذي", group: "standalone", icon: "document" },
+  { id: "executive-final-report", label: "التقرير الإداري النهائي", group: "standalone", icon: "layers" },
   { id: "office-dashboard", label: "لوحة المعلومات", group: "مكتب الإشراف", icon: "home" },
   { id: "office-archive", label: "الأرشفة", group: "standalone", icon: "layers" },
   { id: "office-summary", label: "ملخص الوحدات", group: "standalone", icon: "document" },
@@ -1809,7 +1809,7 @@ const SIDEBAR_PAGES = [
 // مجموعة واحدة قابلة للطي ("unit-home")، فأصبحت الآن أربعة روابط رئيسية
 // مستقلة بالشريط الجانبي — بلا طي وبلا اشتراط مسبق بوحدة/قسم محدّد، تمامًا
 // بنفس أسلوب "جميع التقارير" — حسب طلب نجود الصريح.
-const SIDEBAR_GROUPS = ["الرئيسية", "إدارة التقارير", "__standalone__all-reports", "__standalone__units-manage", "__standalone__browse-structure", "__standalone__office-archive", "__standalone__office-summary", "الإدارة العليا", "مكتب الإشراف", "الهيكل التنظيمي", "__standalone__unit-dashboard", "__standalone__unit-reports", "__standalone__unit-report", "__standalone__unit-settings", "__standalone__unit-notifications", "__standalone__unit-all-reports"];
+const SIDEBAR_GROUPS = ["الرئيسية", "إدارة التقارير", "__standalone__all-reports", "__standalone__units-manage", "__standalone__browse-structure", "__standalone__office-archive", "__standalone__office-summary", "__standalone__executive-summary", "__standalone__executive-final-report", "الإدارة العليا", "مكتب الإشراف", "الهيكل التنظيمي", "__standalone__unit-dashboard", "__standalone__unit-reports", "__standalone__unit-report", "__standalone__unit-settings", "__standalone__unit-notifications", "__standalone__unit-all-reports"];
 const SIDEBAR_GROUP_LABELS = { "unit-home": "الرئيسية" };
 
 // كتالوج "إجراءات" مسار اعتماد التقرير — يُستخدم لصلاحيات الأزرار لكل مسمى
@@ -1923,7 +1923,7 @@ function computeVisibleSidebarPagesRaw() {
     // بلا اشتراط كونها داخل وحدة أصلًا — نفس المبدأ أعلاه.
     return SIDEBAR_PAGES.filter((p) => p.id === "dashboard" || p.id === "department-curation" || p.id === "all-reports" || p.group === "unit-home");
   } else if (S.isExecutive) {
-    return SIDEBAR_PAGES.filter((p) => p.group === "الإدارة العليا" || p.id === "all-reports");
+    return SIDEBAR_PAGES.filter((p) => p.group === "الإدارة العليا" || p.id === "executive-summary" || p.id === "executive-final-report" || p.id === "all-reports");
   } else if (S.isOfficeUser) {
     return SIDEBAR_PAGES.filter((p) => ["office-dashboard", "office-archive", "all-reports", "office-summary", "office-curation", "departments-list"].includes(p.id));
   }
@@ -2628,6 +2628,10 @@ function doLogin(user) {
     S.units.forEach((u) => { reports[u.id] = dataStore.getReports(u.id); });
     S.reports = reports;
     S.view = "executive-dashboard";
+    // إضافة: لو مديرة النظام حدّدت صفحات لحساب الإدارة العليا تُطبَّق عليه (مثل بقية
+    // الحسابات)؛ ولو ما حدّدت شيئًا يبقى على الوضع السابق تمامًا.
+    applyScopedAccountPermissions(S.units.find((u) => u.id === user.unitId));
+    if (S.platformUserAllowedPages && !S.platformUserAllowedPages.includes("dashboard")) S.view = S.platformUserAllowedPages[0];
   } else if (S.isOfficeUser) {
     // اطلاع مكتب الإشراف: لوحة معلومات + أرشفة + تقارير + ملخص + اعتماد أبرز
     // النتائج، كلها مقتصرة على وحدات أقسامه التابعة فقط — بدون أي دخول لتقارير
@@ -3893,21 +3897,54 @@ function scopedUnitSwitcherHtml() {
 // بالضبط (deptCurationSectionHtml، بدون أي تكرار بالكود)، بنفس نمط صفحة
 // "office-curation" المستقلة أصلًا للمكتب. "قسمي" تبقى تعرض نفس القسم أيضًا
 // بدون أي حذف، لحد ما تتأكد نجود من الصفحة الجديدة وتقرر حذف القديمة بنفسها.
-function renderCurationUnified() {
-  if (S.isAdmin) {
-    // مديرة النظام: صفحة واحدة تعرض كل مكتب (بأقسامه ووحداته) ثم الأقسام بلا مكتب — بدون أزرار تبديل.
-    const offices = (S.offices || []).filter((o) => o.status !== "inactive");
-    const loose = (S.departments || []).filter((d) => d.status !== "inactive" && !(S.offices || []).some((o) => o.id === d.officeId));
-    const blocks = offices.map((o) => officeCurationSectionHtml(o)).join("") + loose.map((d) => deptCurationSectionHtml(d, "اعتماد القسم — " + d.name)).join("");
-    return `
-  <div class="page-wrap"><div class="page-inner">
-    ${topBarHtml({ title: "اعتماد أبرز النتائج والتوصيات", subtitle: "كل المكاتب والأقسام والوحدات",
-      right: pillBtn("خروج", { variant: "danger", icon: iconLogout(15, DANGER), action: "logout" }) })}
-    ${blocks || `<div class="card" style="text-align:center;color:${SUBTLE};padding:36px;">لا توجد مكاتب أو أقسام بعد.</div>`}
-  </div></div>`;
+// الجهات التي يقدر الحساب الحالي يعتمد لها — تتكيّف مع نطاق الحساب (نفس فكرة
+// "لوحة المعلومات"): مديرة النظام/الإدارة العليا = كل المكاتب والأقسام، المكتب =
+// مكتبه وأقسامه، القسم = قسمه، الوحدة = قسم وحدتها.
+function curationTargets() {
+  const depts = (S.departments || []).filter((d) => d.status !== "inactive");
+  const offices = (S.offices || []).filter((o) => o.status !== "inactive");
+  const T = [];
+  const addO = (o) => T.push({ key: "o:" + o.id, kind: "office", id: o.id, label: "مكتب — " + o.name });
+  const addD = (d) => T.push({ key: "d:" + d.id, kind: "dept", id: d.id, label: "قسم — " + d.name });
+  if (S.isAdmin || S.isExecutive) { offices.forEach(addO); depts.forEach(addD); return T; }
+  if (S.currentOfficeId) {
+    const o = offices.find((x) => x.id === S.currentOfficeId);
+    if (o) addO(o);
+    const ids = officeScopeIds(S.currentOfficeId);
+    depts.filter((d) => ids.includes(d.officeId)).forEach(addD);
+    return T;
   }
-  if (S.isOfficeUser && !S.isDepartmentUser) return renderOfficeCuration();
-  return renderDepartmentCuration();
+  let deptId = S.currentDepartmentId;
+  if (!deptId && S.currentUnitId) { const u = (S.units || []).find((x) => x.id === S.currentUnitId); deptId = u && u.departmentId; }
+  if (deptId) { const d = depts.find((x) => x.id === deptId); if (d) addD(d); return T; }
+  offices.forEach(addO); depts.forEach(addD);
+  return T;
+}
+function renderCurationUnified() {
+  const targets = curationTargets();
+  const cur = targets.find((t) => t.key === S.ui.curationTarget) || targets[0];
+  const sw = targets.length > 1 ? `<div class="card" style="margin-top:14px;display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+      <div style="font-size:12.5px;font-weight:800;color:${ROSE};">اعتماد لـ:</div>
+      <select class="input" style="flex:1;min-width:200px;" data-action="curation-target">
+        ${targets.map((t) => `<option value="${esc(t.key)}" ${cur && cur.key === t.key ? "selected" : ""}>${esc(t.label)}</option>`).join("")}
+      </select>
+    </div>` : "";
+  let body;
+  if (!cur) body = `<div class="card" style="text-align:center;color:${SUBTLE};padding:36px;">لا توجد مكاتب أو أقسام بعد.</div>`;
+  else if (cur.kind === "office") {
+    const o = (S.offices || []).find((x) => x.id === cur.id);
+    body = curationSectionHtml(officeUnits(o.id), (key) => isOfficeCurated(o, key), "toggle-office-curation", { office: o.id }, "اعتماد المكتب — " + o.name);
+  } else {
+    const d = S.departments.find((x) => x.id === cur.id);
+    body = deptCurationSectionHtml(d, "اعتماد القسم — " + d.name);
+  }
+  return `
+  <div class="page-wrap"><div class="page-inner">
+    ${topBarHtml({ title: "اعتماد أبرز النتائج والتوصيات", subtitle: cur ? cur.label : "",
+      right: pillBtn("خروج", { variant: "danger", icon: iconLogout(15, DANGER), action: "logout" }) })}
+    ${sw}
+    ${body}
+  </div></div>`;
 }
 function adminCurationKindTabs() { return ""; }
 function renderDepartmentCuration() {
@@ -8174,6 +8211,11 @@ function attachFormListeners() {
     }
     // نفس فكرة admin-switch-unit، لكن لحساب نطاقه قسم أو مكتب إشراف — يتحقق
     // فعليًا إن الوحدة المختارة ضمن نطاقه (isUnitInUserScope) قبل تبديلها.
+    if (el.dataset && el.dataset.action === "curation-target") {
+      S.ui.curationTarget = el.value;
+      render();
+      return;
+    }
     if (el.dataset && el.dataset.action === "scoped-switch-unit") {
       if (isUnitInUserScope(el.value)) {
         S.currentUnitId = el.value; S.currentReportId = null; S.view = "unit-reports";
