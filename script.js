@@ -987,7 +987,7 @@ const DEFAULT_SITE_COLORS = { primary: "#6b2337", background: "#F2ECE8" };
 const DEFAULT_THEME = {
   ink: "#2E2430", subtle: "#9c8b92", border: "#eddde2",
   green: "#2E8B67", gold: "#D89A57", danger: "#D65B57", blue: "#8B4A73",
-  sidebarBg: "#faf6f4", sidebarActive: "#DDCCC2", sidebarBgImage: "", sidebarBgVeil: 35,
+  sidebarBg: "#faf6f4", sidebarActive: "#DDCCC2", sidebarBgImage: "", sidebarBgVeil: 35, iconColor: "", fieldIconColor: "",
   navColor: "", navSize: 12, sbTitleColor: "", sbTitleSize: 15, bannerTitleColor: "", bannerTitleSize: 27, bannerSubColor: "", bannerSubSize: 13,
   taglineOffset: 0, taglineSize: 13, taglineImgH: 70, taglineColor: "",
   bs: ["#f1d0d9", "#e6c1cf", "#d9b6c9", "#eed3ab", "#dac3cf"],
@@ -2043,8 +2043,10 @@ function renderMainSidebar(mobile) {
 }
 
 /* =============================== Minimal inline icon set ===================== */
+let ICON_OVERRIDE = "";
 function svgIcon(paths, size, color, strokeWidth) {
-  size = size || 16; color = color || "currentColor"; strokeWidth = strokeWidth || 1.9;
+  size = size || 16; color = color || "currentColor";
+  if (ICON_OVERRIDE && (color === INK || color === SUBTLE || color === ROSE || color === ROSE_DARK)) color = ICON_OVERRIDE; strokeWidth = strokeWidth || 1.9;
   return `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="${color}" stroke-width="${strokeWidth}" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;display:inline-block;vertical-align:middle">${paths}</svg>`;
 }
 const iconMenu = (c) => svgIcon(`<line x1="4" y1="7" x2="20" y2="7"/><line x1="4" y1="12" x2="20" y2="12"/><line x1="4" y1="17" x2="20" y2="17"/>`, 17, c);
@@ -3604,6 +3606,14 @@ function renderSiteSettings() {
       <div style="display:flex;gap:8px;flex-wrap:wrap;">
         ${pillBtn("استعادة الألوان المتقدمة الافتراضية", { variant: "ghost", icon: iconX(14, INK), action: "restore-theme-defaults" })}
       </div>
+    </div>
+
+    <div class="card" style="max-width:560px;margin-bottom:16px;">
+      <div class="subhead" style="margin-top:0;">ألوان الأيقونات</div>
+      ${[["iconColor", "لون كل أيقونات الموقع (القوائم، الأزرار، البطاقات)", current.primary], ["fieldIconColor", "لون أيقونات إدارة حقول الأقسام (تتجاوز اللون العام)", theme.iconColor || current.primary]].map(([k, lb, def]) => `<div style="margin-bottom:14px;">${fieldLabel(lb)}
+        <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;"><input type="color" id="site-x-${k}" value="${esc(theme[k] || def)}" style="width:46px;height:36px;border:1px solid ${BORDER};border-radius:8px;cursor:pointer;padding:2px;" />
+        ${theme[k] ? pillBtn("اللون الأصلي", { variant: "ghost", icon: iconX(14, INK), action: "reset-theme-key", data: { key: k } }) : `<span style="font-size:11.5px;color:${SUBTLE};">(الافتراضي)</span>`}</div></div>`).join("")}
+      <div class="hint">ولكل حقل لونه الخاص من نافذة تعديل الحقل بإدارة حقول الأقسام. الأيقونات الحمراء/الخضراء/البيضاء ذات المعنى (حذف، نجاح، على الزر) تبقى كما هي.</div>
     </div>
 
     <div class="card" style="max-width:560px;margin-bottom:16px;">
@@ -6191,7 +6201,12 @@ function fieldEditFormHtml(draft, isNew) {
       ${fieldWrap("نوع الحقل", true, `<select class="input" data-action="set-field-draft" data-key="type" data-rerender="1">${SCHEMA_FIELD_TYPES_SELECTABLE.map((t) => `<option value="${t}" ${t === type ? "selected" : ""}>${esc(SCHEMA_FIELD_TYPE_LABELS[t])}</option>`).join("")}</select>`)}
       ${showOptions ? fieldWrap("الخيارات (كل خيار بسطر)", true, `<textarea class="input" id="field-draft-options" style="min-height:90px">${esc(optionsText)}</textarea>`) : ""}
       ${type === "expandableSelect" ? fieldWrap('نص خيار "إضافة قيمة جديدة"', false, `<input class="input" id="field-draft-other-label" value="${esc(draft.otherLabel || "أخرى")}" placeholder="أخرى" />`) : ""}
-      ${fieldWrap("أيقونة الحقل", false, `<div style="display:flex;flex-wrap:wrap;gap:8px;">${FIELD_ICON_CHOICES.map((k, n) => { const sel = (draft.icon || FIELD_TYPE_DEFAULT_ICON[type]) === k; return `<button type="button" data-action="set-field-draft-icon" data-icon="${k}" title="${k}" style="padding:3px;border-radius:14px;cursor:pointer;background:#fff;border:2px solid ${sel ? ROSE : "transparent"};">${fieldIconTileHtml(k, 30, n)}</button>`; }).join("")}</div>`)}
+      ${fieldWrap("أيقونة الحقل", false, `<div style="display:flex;flex-wrap:wrap;gap:8px;">${FIELD_ICON_CHOICES.map((k, n) => { const sel = (draft.icon || FIELD_TYPE_DEFAULT_ICON[type]) === k; return `<button type="button" data-action="set-field-draft-icon" data-icon="${k}" title="${k}" style="padding:3px;border-radius:14px;cursor:pointer;background:#fff;border:2px solid ${sel ? ROSE : "transparent"};">${fieldIconTileHtml(k, 30, n, draft)}</button>`; }).join("")}</div>`)}
+      ${fieldWrap("ألوان أيقونة هذا الحقل (اختياري)", false, `<div style="display:flex;gap:16px;flex-wrap:wrap;align-items:center;">
+        <label style="display:flex;align-items:center;gap:8px;font-size:12px;">لون الأيقونة <input type="color" id="field-draft-iconcolor" value="${esc(draft.iconColor || ROSE)}" style="width:42px;height:34px;border:1px solid ${BORDER};border-radius:8px;padding:2px;cursor:pointer;" /></label>
+        <label style="display:flex;align-items:center;gap:8px;font-size:12px;">لون الخلفية <input type="color" id="field-draft-iconbg" value="${esc(draft.iconBg || "#f1d0d9")}" style="width:42px;height:34px;border:1px solid ${BORDER};border-radius:8px;padding:2px;cursor:pointer;" /></label>
+        ${(draft.iconColor || draft.iconBg) ? `<button type="button" class="pill-btn pill-ghost" data-action="reset-field-draft-colors">الألوان الافتراضية</button>` : ""}
+      </div>`)}
       ${fieldWrap("نص توضيحي داخل الحقل (اختياري)", false, `<input class="input" id="field-draft-placeholder" value="${esc(draft.placeholder || "")}" placeholder="مثال: اكتبي هنا..." />`)}
       <button type="button" class="pill-btn ${draft.required ? "pill-primary" : "pill-ghost"}" data-action="toggle-field-draft-required" style="align-self:flex-start;">${draft.required ? "✓ حقل إلزامي" : "حقل اختياري — اضغطي لجعله إلزاميًا"}</button>
       <div style="display:flex;gap:8px;margin-top:4px;">
@@ -6234,13 +6249,16 @@ const FIELD_TYPE_DEFAULT_ICON = { text: "text", textarea: "textarea", number: "n
 const FIELD_ICON_CHOICES = Object.keys(FIELD_SVG).filter((k) => !["computed"].includes(k));
 function fieldIconKeyOf(field) { return field.icon || FIELD_TYPE_DEFAULT_ICON[field.type] || "text"; }
 // بلاطة أيقونة ملوّنة بألوان الموقع (تتبع ألوان بطاقات تصفّح الهيكل المختارة من إعدادات الموقع)
-function fieldIconTileHtml(key, size, colorIdx) {
+function fieldIconTileHtml(key, size, colorIdx, custom) {
   const PAL = bsPalette();
   const idx = typeof colorIdx === "number" ? colorIdx : Math.max(0, Object.keys(FIELD_SVG).indexOf(key));
   const c = PAL[idx % PAL.length];
   const svg = FIELD_SVG[key];
-  const inner = svg ? svgIcon(svg, Math.round(size * 0.5), ROSE) : `<span style="font-size:${Math.round(size * 0.5)}px;line-height:1;">${esc(key)}</span>`;
-  return `<span style="width:${size}px;height:${size}px;border-radius:${Math.round(size * 0.32)}px;background:${c.bg};display:inline-flex;align-items:center;justify-content:center;flex-shrink:0;box-shadow:0 4px 10px rgba(80,40,60,0.10);">${inner}</span>`;
+  const th_ = themeOf(S.siteSettings || dataStore.getSiteSettings());
+  const stroke = (custom && custom.iconColor) || th_.fieldIconColor || th_.iconColor || ROSE;
+  const bgCss = custom && custom.iconBg ? `linear-gradient(135deg,${mixHex(custom.iconBg, "#ffffff", 0.55)},${mixHex(custom.iconBg, "#ffffff", 0.1)})` : c.bg;
+  const inner = svg ? `<svg width="${Math.round(size * 0.5)}" height="${Math.round(size * 0.5)}" viewBox="0 0 24 24" fill="none" stroke="${esc(stroke)}" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" style="display:inline-block">${svg}</svg>` : `<span style="font-size:${Math.round(size * 0.5)}px;line-height:1;">${esc(key)}</span>`;
+  return `<span style="width:${size}px;height:${size}px;border-radius:${Math.round(size * 0.32)}px;background:${bgCss};display:inline-flex;align-items:center;justify-content:center;flex-shrink:0;box-shadow:0 4px 10px rgba(80,40,60,0.10);">${inner}</span>`;
 }
 function fieldSchemaRowHtml(field, index, total, sectionId) {
   const typeLabel = SCHEMA_FIELD_TYPE_LABELS[field.type] || field.type;
@@ -6248,7 +6266,7 @@ function fieldSchemaRowHtml(field, index, total, sectionId) {
   const btn = "width:30px;height:30px;border:1px solid " + BORDER;
   return `<div class="card prs-card" style="display:flex;align-items:center;justify-content:space-between;gap:10px;padding:14px 16px;border-radius:18px;${isComputed ? "opacity:.85;" : ""}">
     <div style="display:flex;align-items:center;gap:12px;min-width:0;">
-      ${fieldIconTileHtml(fieldIconKeyOf(field), 34)}
+      ${fieldIconTileHtml(fieldIconKeyOf(field), 34, undefined, field)}
       <div style="min-width:0;">
         <div style="font-size:13.5px;font-weight:800;">${esc(field.label)}${field.required ? ` <span style="color:${ROSE};">*</span>` : ""}</div>
         <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:5px;">
@@ -7935,6 +7953,11 @@ function attachFormListeners() {
       if (m[2] === "size") { const lb = document.getElementById(el.id + "-label"); if (lb) lb.textContent = el.value + "px"; }
       return;
     }
+    if (el.id === "field-draft-iconcolor" || el.id === "field-draft-iconbg") {
+      S.ui.fieldEditDraft = S.ui.fieldEditDraft || {};
+      S.ui.fieldEditDraft[el.id === "field-draft-iconcolor" ? "iconColor" : "iconBg"] = el.value;
+      return;
+    }
     if (el.id === "site-sidebar-bg-veil") {
       S.siteSettings = S.siteSettings || dataStore.getSiteSettings();
       S.siteSettings = { ...S.siteSettings, theme: { ...(S.siteSettings.theme || {}), sidebarBgVeil: Number(el.value) } };
@@ -8270,6 +8293,13 @@ function attachClickListener() {
         applySiteColors(S.siteSettings);
         dataStore.saveSiteSettings(S.siteSettings);
         S.ui.siteSettingsSaved = true;
+        render();
+        break;
+      }
+      case "reset-theme-key": {
+        S.siteSettings = { ...(S.siteSettings || dataStore.getSiteSettings()), theme: { ...((S.siteSettings || {}).theme || {}), [ds.key]: "" } };
+        applySiteColors(S.siteSettings);
+        S.ui.siteSettingsSaved = false;
         render();
         break;
       }
@@ -9664,6 +9694,15 @@ function attachClickListener() {
         S.ui.fieldEditDraft = { ...field, optionsText: (field.options || field.baseOptions || []).join("\n") };
         render(); break;
       }
+      case "reset-field-draft-colors": {
+        S.ui.fieldEditDraft = S.ui.fieldEditDraft || {};
+        const g2_ = (id) => document.getElementById(id);
+        if (g2_("field-draft-label")) S.ui.fieldEditDraft.label = g2_("field-draft-label").value;
+        if (g2_("field-draft-options")) S.ui.fieldEditDraft.optionsText = g2_("field-draft-options").value;
+        if (g2_("field-draft-placeholder")) S.ui.fieldEditDraft.placeholder = g2_("field-draft-placeholder").value;
+        S.ui.fieldEditDraft.iconColor = ""; S.ui.fieldEditDraft.iconBg = "";
+        render(); break;
+      }
       case "set-field-draft-icon": {
         S.ui.fieldEditDraft = S.ui.fieldEditDraft || {};
         const d_ = S.ui.fieldEditDraft;
@@ -9699,6 +9738,8 @@ function attachClickListener() {
         const fieldId = isNew ? uid("fld") : S.ui.editingFieldId;
         const newField = { id: fieldId, type, label, required: !!draft.required, placeholder };
         if (draft.icon && FIELD_SVG[draft.icon]) newField.icon = draft.icon;
+        if (draft.iconColor) newField.iconColor = draft.iconColor;
+        if (draft.iconBg) newField.iconBg = draft.iconBg;
         if (type === "select" || type === "radio" || type === "checklist") newField.options = optionsList;
         if (type === "expandableSelect") {
           newField.baseOptions = optionsList;
@@ -9993,6 +10034,7 @@ function applySiteColors(settings) {
     if (th[f.k + "Color"]) root.style.setProperty(cssName + "-color", th[f.k + "Color"]); else root.style.removeProperty(cssName + "-color");
     root.style.setProperty(cssName + "-size", (Number(th[f.k + "Size"]) || f.def) + "px");
   });
+  ICON_OVERRIDE = th.iconColor || "";
   const veil = Math.max(0, Math.min(90, Number(th.sidebarBgVeil) || 0)) / 100;
   root.style.setProperty("--sidebar-bg-image", th.sidebarBgImage ? `linear-gradient(rgba(255,255,255,${veil}),rgba(255,255,255,${veil})), url("${String(th.sidebarBgImage).replace(/"/g, "")}")` : "none");
   const font = settings.fontFamily || DEFAULT_BRANDING.fontFamily;
