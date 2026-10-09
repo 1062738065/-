@@ -55,6 +55,25 @@ const PHASES = [
 ];
 
 const PERIOD_TYPES = ["شهري", "ربع سنوي", "فصلي", "نصف سنوي", "سنوي", "تقرير برنامج أو مشروع", "صيفي"];
+const PERIOD_TYPES_DEFAULT = PERIOD_TYPES.slice();
+// "شهري" و"فصلي" مرتبطتان بحقلَي "الشهر" و"الفصل" (يظهران فقط عند اختيارهما)،
+// فتبقيان دائمًا بالقائمة بأسمائهما ولا تُحذفان/تُعاد تسميتهما. الباقي حر بالكامل.
+const PERIOD_TYPES_LOCKED = ["شهري", "فصلي"];
+// تُعدَّل المصفوفة نفسها "في مكانها" (لا إعادة إسناد) لأن تعريف حقل periodType
+// بالبيانات الأساسية يحمل مرجعها مباشرة، فيتحدّث فورًا بكل مكان.
+function applyPeriodTypes(list) {
+  if (!Array.isArray(list) || !list.length) list = PERIOD_TYPES_DEFAULT.slice();
+  let next = Array.isArray(list) ? list.map((x) => String(x == null ? "" : x).trim()).filter(Boolean) : [];
+  next = next.filter((x, i) => next.indexOf(x) === i);
+  PERIOD_TYPES_LOCKED.forEach((n) => { if (!next.includes(n)) next.push(n); });
+  if (!next.length) next = PERIOD_TYPES_DEFAULT.slice();
+  PERIOD_TYPES.splice(0, PERIOD_TYPES.length, ...next);
+}
+function periodOptionsFor(reports) {
+  const extra = [];
+  (reports || []).forEach((r) => { const v = r && r.sections && r.sections.basic && r.sections.basic.data && r.sections.basic.data.periodType; if (v && !PERIOD_TYPES.includes(v) && !extra.includes(v)) extra.push(v); });
+  return PERIOD_TYPES.concat(extra);
+}
 const HIJRI_YEARS = Array.from({ length: 41 }, (_, i) => `${1420 + i}هـ`);
 const MONTHS = ["محرم", "صفر", "ربيع الأول", "ربيع الآخر", "جمادى الأولى", "جمادى الآخرة", "رجب", "شعبان", "رمضان", "شوال", "ذو القعدة", "ذو الحجة"];
 
@@ -492,7 +511,7 @@ function renderSchemaFieldHtml(f, arrKey, itemId, value, customOptionsList, item
   const html =
     f.type === "computed" ? readonlyBox((SCHEMA_COMPUTED_FIELDS[f.compute] || (() => ""))(item || {})) :
     f.type === "textarea" ? (subArrKey ? txtSub(arrKey, itemId, subArrKey, subItemId, f.id, value, f.placeholder) : txt(arrKey, itemId, f.id, value, f.placeholder)) :
-    f.type === "select" ? (subArrKey ? selSub(arrKey, itemId, subArrKey, subItemId, f.id, value, f.options || [], f.placeholder) : sel(arrKey, itemId, f.id, value, f.options || [], f.placeholder)) :
+    f.type === "select" ? (() => { const o_ = (f.options || []).includes(value) || !value ? (f.options || []) : [...(f.options || []), value]; return subArrKey ? selSub(arrKey, itemId, subArrKey, subItemId, f.id, value, o_, f.placeholder) : sel(arrKey, itemId, f.id, value, o_, f.placeholder); })() :
     f.type === "radio" ? (subArrKey ? radioSub(arrKey, itemId, subArrKey, subItemId, f.id, value, f.options || []) : radio(arrKey, itemId, f.id, value, f.options || [])) :
     f.type === "expandableSelect" ? expandableSelectHtml(f.id, value, f.baseOptions || [], customOptionsList || [], f.placeholder, f.otherLabel || "أخرى", arrKey, itemId, subArrKey, subItemId) :
     (subArrKey ? inpSub(arrKey, itemId, subArrKey, subItemId, f.id, value, f.placeholder, inputType) : inp(arrKey, itemId, f.id, value, f.placeholder, inputType));
@@ -3609,6 +3628,25 @@ function renderSiteSettings() {
     </div>
 
     <div class="card" style="max-width:560px;margin-bottom:16px;">
+      <div class="subhead" style="margin-top:0;">خيارات «الفترة التي يغطيها التقرير»</div>
+      <div class="hint" style="margin-bottom:12px;">تظهر في البيانات الأساسية للتقرير وفي فلتر الفترة. «شهري» و«فصلي» مثبّتتان لأنهما تفتحان حقل الشهر وحقل الفصل. التقارير القديمة تحتفظ بقيمتها حتى لو حذفتِ الخيار أو غيّرتِ اسمه.</div>
+      <div style="display:flex;flex-direction:column;gap:8px;margin-bottom:12px;">
+        ${PERIOD_TYPES.map((pt, i) => { const locked = PERIOD_TYPES_LOCKED.includes(pt); return `<div style="display:flex;align-items:center;gap:6px;">
+          <input type="text" class="input" id="site-pt-${i}" value="${esc(pt)}" ${locked ? "disabled" : ""} style="flex:1;" />
+          ${locked ? `<span style="font-size:10.5px;color:${SUBTLE};min-width:56px;text-align:center;">مثبّت</span>` : `<span style="min-width:56px;"></span>`}
+          <button class="icon-btn" style="width:30px;height:30px;border:1px solid ${BORDER}" data-action="move-period-type" data-idx="${i}" data-dir="up" ${i === 0 ? "disabled" : ""}>${iconChevronUp(12, INK)}</button>
+          <button class="icon-btn" style="width:30px;height:30px;border:1px solid ${BORDER}" data-action="move-period-type" data-idx="${i}" data-dir="down" ${i === PERIOD_TYPES.length - 1 ? "disabled" : ""}>${iconChevronDown(12, INK)}</button>
+          ${locked ? `<span style="width:30px;"></span>` : `<button class="icon-btn" style="width:30px;height:30px;background:${DANGER_BG}" data-action="remove-period-type" data-idx="${i}">${iconTrash(13, DANGER)}</button>`}
+        </div>`; }).join("")}
+      </div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;">
+        <input type="text" class="input" id="site-pt-new" placeholder="خيار جديد، مثال: تقرير ملتقى" style="flex:1;min-width:180px;" />
+        ${pillBtn("إضافة", { icon: iconPlus(14, "#fff"), action: "add-period-type" })}
+        ${pillBtn("استعادة الافتراضي", { variant: "ghost", icon: iconX(14, INK), action: "restore-period-types" })}
+      </div>
+    </div>
+
+    <div class="card" style="max-width:560px;margin-bottom:16px;">
       <div class="subhead" style="margin-top:0;">ألوان الأيقونات</div>
       ${[["iconColor", "لون كل أيقونات الموقع (القوائم، الأزرار، البطاقات)", current.primary], ["fieldIconColor", "لون أيقونات إدارة حقول الأقسام (تتجاوز اللون العام)", theme.iconColor || current.primary]].map(([k, lb, def]) => `<div style="margin-bottom:14px;">${fieldLabel(lb)}
         <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;"><input type="color" id="site-x-${k}" value="${esc(theme[k] || def)}" style="width:46px;height:36px;border:1px solid ${BORDER};border-radius:8px;cursor:pointer;padding:2px;" />
@@ -4851,7 +4889,7 @@ function renderUnitReportsHub() {
     <div class="card" style="margin-bottom:16px;">
       <div style="display:flex;gap:8px;flex-wrap:wrap;">
         <input id="unit-reports-search" class="input" style="flex:2;min-width:180px;" placeholder="ابحثي باسم التقرير..." />
-        <select class="input" style="flex:1;min-width:120px;" data-action="filter-unit-reports-type"><option value="">الفترة: الكل</option>${PERIOD_TYPES.map((p) => `<option value="${esc(p)}" ${typeFilter === p ? "selected" : ""}>${esc(p)}</option>`).join("")}</select>
+        <select class="input" style="flex:1;min-width:120px;" data-action="filter-unit-reports-type"><option value="">الفترة: الكل</option>${periodOptionsFor(list).map((p) => `<option value="${esc(p)}" ${typeFilter === p ? "selected" : ""}>${esc(p)}</option>`).join("")}</select>
         <select class="input" style="flex:1;min-width:110px;" data-action="filter-unit-reports-year"><option value="">السنة: الكل</option>${yearOptions.map((y) => `<option value="${esc(y)}" ${yearFilter === y ? "selected" : ""}>${esc(y)}</option>`).join("")}</select>
       </div>
     </div>
@@ -6596,7 +6634,7 @@ function renderUnitAllReportsPage() {
     <div class="card" style="margin-bottom:16px;">
       <div style="display:flex;gap:8px;flex-wrap:wrap;">
         <select class="input" style="flex:1;min-width:110px;" data-action="filter-unit-all-reports-year"><option value="">السنة: الكل</option>${yearOptions.map((y) => `<option value="${esc(y)}" ${yearFilter === y ? "selected" : ""}>${esc(y)}</option>`).join("")}</select>
-        <select class="input" style="flex:1;min-width:130px;" data-action="filter-unit-all-reports-period"><option value="">الفترة: الكل</option>${PERIOD_TYPES.map((p) => `<option value="${esc(p)}" ${periodFilter === p ? "selected" : ""}>${esc(p)}</option>`).join("")}</select>
+        <select class="input" style="flex:1;min-width:130px;" data-action="filter-unit-all-reports-period"><option value="">الفترة: الكل</option>${periodOptionsFor(list).map((p) => `<option value="${esc(p)}" ${periodFilter === p ? "selected" : ""}>${esc(p)}</option>`).join("")}</select>
         <select class="input" style="flex:1;min-width:150px;" data-action="filter-unit-all-reports-status"><option value="">الحالة: الكل</option>${UNIT_ALL_REPORTS_STATUS_OPTIONS.map((s) => `<option value="${esc(s.id)}" ${statusFilter === s.id ? "selected" : ""}>${esc(s.label)}</option>`).join("")}</select>
       </div>
     </div>
@@ -7950,6 +7988,16 @@ function attachFormListeners() {
       if (m[2] === "size") { const lb = document.getElementById(el.id + "-label"); if (lb) lb.textContent = el.value + "px"; }
       return;
     }
+    if (el.id && /^site-pt-\d+$/.test(el.id)) {
+      const i = Number(el.id.slice(8));
+      const list = PERIOD_TYPES.slice();
+      if (PERIOD_TYPES_LOCKED.includes(list[i])) return;
+      list[i] = el.value;
+      S.siteSettings = S.siteSettings || dataStore.getSiteSettings();
+      S.siteSettings = { ...S.siteSettings, theme: { ...(S.siteSettings.theme || {}), periodTypes: list } };
+      S.ui.siteSettingsSaved = false;
+      return;
+    }
     if (el.id === "field-draft-iconcolor" || el.id === "field-draft-iconbg") {
       S.ui.fieldEditDraft = S.ui.fieldEditDraft || {};
       S.ui.fieldEditDraft[el.id === "field-draft-iconcolor" ? "iconColor" : "iconBg"] = el.value;
@@ -8290,6 +8338,26 @@ function attachClickListener() {
         applySiteColors(S.siteSettings);
         dataStore.saveSiteSettings(S.siteSettings);
         S.ui.siteSettingsSaved = true;
+        render();
+        break;
+      }
+      case "add-period-type": case "remove-period-type": case "move-period-type": case "restore-period-types": {
+        S.siteSettings = S.siteSettings || dataStore.getSiteSettings();
+        // نلتقط أي تسمية معدّلة لم تُحفظ بعد، من الحقول الظاهرة
+        let list = PERIOD_TYPES.map((pt, i) => { const inp_ = document.getElementById("site-pt-" + i); return inp_ && !inp_.disabled ? inp_.value : pt; });
+        if (action === "add-period-type") {
+          const nv = ((document.getElementById("site-pt-new") || {}).value || "").trim();
+          if (!nv || list.map((x) => x.trim()).includes(nv)) { if (nv) S.ui.periodTypeDupMsg = true; break; }
+          list.push(nv);
+        } else if (action === "remove-period-type") {
+          const idx = Number(ds.idx); if (PERIOD_TYPES_LOCKED.includes(list[idx])) break; list.splice(idx, 1);
+        } else if (action === "move-period-type") {
+          const idx = Number(ds.idx), to = ds.dir === "up" ? idx - 1 : idx + 1;
+          if (to < 0 || to >= list.length) break; [list[idx], list[to]] = [list[to], list[idx]];
+        } else list = PERIOD_TYPES_DEFAULT.slice();
+        S.siteSettings = { ...S.siteSettings, theme: { ...(S.siteSettings.theme || {}), periodTypes: list } };
+        applySiteColors(S.siteSettings);
+        S.ui.siteSettingsSaved = false;
         render();
         break;
       }
@@ -10032,6 +10100,7 @@ function applySiteColors(settings) {
     root.style.setProperty(cssName + "-size", (Number(th[f.k + "Size"]) || f.def) + "px");
   });
   ICON_OVERRIDE = th.iconColor || "";
+  applyPeriodTypes(th.periodTypes);
   const veil = Math.max(0, Math.min(90, Number(th.sidebarBgVeil) || 0)) / 100;
   root.style.setProperty("--sidebar-bg-image", th.sidebarBgImage ? `linear-gradient(rgba(255,255,255,${veil}),rgba(255,255,255,${veil})), url("${String(th.sidebarBgImage).replace(/"/g, "")}")` : "none");
   const font = settings.fontFamily || DEFAULT_BRANDING.fontFamily;
