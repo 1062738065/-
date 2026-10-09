@@ -3850,7 +3850,11 @@ function adminUnitSwitcherHtml() {
   const list = (S.units || []).filter((u) => u.role === "unit" || u.role === "center");
   if (!list.length) return "";
   const current = S.currentUnitId;
-  const mode = S.currentUnitEntryMode === "head" ? "head" : "admin";
+  const curUnit = (S.units || []).find((u) => u.id === current);
+  const hasHead = !curUnit || unitHasHead(curUnit);
+  const hasExtra = unitHasExtraReview(curUnit);
+  // المنظور المعروض يتبع إعداد الوحدة: الإدارية دائمًا، رئيسة الوحدة/المراجعة الإضافية فقط إن أُضيفت للوحدة.
+  const mode = S.currentUnitEntryMode === "extra" && hasExtra ? "extra" : S.currentUnitEntryMode === "head" && hasHead ? "head" : "admin";
   return `
   <div class="card" style="margin-bottom:14px;display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
     <span style="font-size:11.5px;font-weight:700;color:${SUBTLE};white-space:nowrap;">عرض وضبط أي وحدة:</span>
@@ -3859,7 +3863,8 @@ function adminUnitSwitcherHtml() {
     </select>
     <div style="display:flex;gap:6px;">
       ${pillBtn("الإدارية", { variant: mode === "admin" ? "primary" : "ghost", action: "admin-set-unit-entry-mode", data: { mode: "admin" } })}
-      ${pillBtn("رئيسة الوحدة", { variant: mode === "head" ? "primary" : "ghost", action: "admin-set-unit-entry-mode", data: { mode: "head" } })}
+      ${hasHead ? pillBtn("رئيسة الوحدة", { variant: mode === "head" ? "primary" : "ghost", action: "admin-set-unit-entry-mode", data: { mode: "head" } }) : ""}
+      ${hasExtra ? pillBtn(curUnit.extraReviewerTitle.trim(), { variant: mode === "extra" ? "primary" : "ghost", action: "admin-set-unit-entry-mode", data: { mode: "extra" } }) : ""}
     </div>
   </div>`;
 }
@@ -4921,7 +4926,7 @@ function renderUnitReportsHub() {
       // زر الشريط الجانبي نفسه غير ظاهر له لأن صفحة "إنشاء تقرير" تحديدًا لم
       // تُمنح له ضمن قائمة الصفحات — فتظل الصفحة تَعِد بالزر "من الشريط
       // الجانبي" بينما هو غير موجود أصلًا.
-      right: platformActionAllowed("open-or-create-report") ? pillBtn("إنشاء تقرير", { icon: iconPencil(14, "#fff"), action: "open-or-create-report" }) : "" })}
+      right: platformActionAllowed("open-or-create-report") && !computeVisibleSidebarPages().some((p) => p.id === "unit-report") ? pillBtn("إنشاء تقرير", { icon: iconPencil(14, "#fff"), action: "open-or-create-report" }) : "" })}
     ${scopedUnitSwitcherHtml()}
 
     <div class="hero-banner">
@@ -8720,7 +8725,7 @@ function attachClickListener() {
         // "رئيسة الوحدة" (صلاحية اعتماد/إعادة فعلية على pending_head_review).
         // هذا المفتاح نفسه (S.currentUnitEntryMode) يُستخدم أصلًا لحسابات الوحدة
         // الحقيقية؛ لا يمس أي سلوك لها لأنه لا يُستدعى إلا من صفحات معاينة مديرة النظام.
-        if (S.isAdmin) { S.currentUnitEntryMode = ds.mode === "head" ? "head" : "admin"; render(); }
+        if (S.isAdmin) { S.currentUnitEntryMode = ds.mode === "head" ? "head" : ds.mode === "extra" ? "extra" : "admin"; render(); }
         break;
       }
       /* ===== مخطط الهيكل التنظيمي (تخطيط حر — راجع renderOrgChartPage) ===== */
