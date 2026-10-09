@@ -657,17 +657,18 @@ function reportSupabaseWriteError(table, msg) {
     bar.textContent = "تعذّر حفظ التغيير بقاعدة البيانات (جدول " + table + "): " + msg + " — لم يُحذف شيء. (اضغطي لإغلاق)";
   } catch (e) { /* تجاهل */ }
 }
-async function supabaseReplaceTable(table, rows) {
+async function supabaseReplaceTable(table, rows, keyCol) {
+  keyCol = keyCol || "id";
   if (!sheetsConfigured()) return;
   if (!rows.length) {
-    const del = await supabaseRequest(`${table}?id=neq.__none__`, { method: "DELETE", prefer: "return=minimal" });
+    const del = await supabaseRequest(`${table}?${keyCol}=neq.__none__`, { method: "DELETE", prefer: "return=minimal" });
     if (!del.ok) reportSupabaseWriteError(table, del.error);
     return;
   }
-  const up = await supabaseRequest(`${table}?on_conflict=id`, { method: "POST", prefer: "resolution=merge-duplicates,return=minimal", body: JSON.stringify(rows) });
+  const up = await supabaseRequest(`${table}?on_conflict=${keyCol}`, { method: "POST", prefer: "resolution=merge-duplicates,return=minimal", body: JSON.stringify(rows) });
   if (!up.ok) { reportSupabaseWriteError(table, up.error); return; }
-  const ids = rows.map((r) => '"' + String(r.id).replace(/"/g, "") + '"').join(",");
-  const del = await supabaseRequest(`${table}?id=not.in.(${encodeURIComponent(ids)})`, { method: "DELETE", prefer: "return=minimal" });
+  const ids = rows.map((r) => '"' + String(r[keyCol]).replace(/"/g, "") + '"').join(",");
+  const del = await supabaseRequest(`${table}?${keyCol}=not.in.(${encodeURIComponent(ids)})`, { method: "DELETE", prefer: "return=minimal" });
   if (!del.ok) reportSupabaseWriteError(table, del.error);
 }
 
@@ -679,9 +680,9 @@ async function supabaseReplaceTable(table, rows) {
 // الجدول قبل ما تقرأ منه، عشان ما ترجع بنسخة قديمة وتطبّقها فوق تعديل المستخدم
 // الأحدث (وهذا بالضبط سبب مشكلة "رجع الترتيب تحت" اللي لاحظتها).
 const supabaseWriteQueues = {};
-function queueSupabaseReplaceTable(table, rows) {
+function queueSupabaseReplaceTable(table, rows, keyCol) {
   const prev = supabaseWriteQueues[table] || Promise.resolve();
-  const next = prev.catch(() => {}).then(() => supabaseReplaceTable(table, rows));
+  const next = prev.catch(() => {}).then(() => supabaseReplaceTable(table, rows, keyCol));
   supabaseWriteQueues[table] = next;
   return next;
 }
@@ -1195,7 +1196,7 @@ const dataStore = {
   getSectionFieldSchemas() { const v = lsGet(SECTION_FIELD_SCHEMAS_KEY); return v ? JSON.parse(v) : {}; },
   saveSectionFieldSchemas(map) {
     lsSet(SECTION_FIELD_SCHEMAS_KEY, JSON.stringify(map));
-    if (sheetsConfigured()) queueSupabaseReplaceTable("section_field_schemas", Object.keys(map).map((id) => fieldSchemaToRow(id, map[id]))).catch(() => {});
+    if (sheetsConfigured()) queueSupabaseReplaceTable("section_field_schemas", Object.keys(map).map((id) => fieldSchemaToRow(id, map[id])), "section_id").catch(() => {});
   },
   cacheSectionFieldSchemasLocally(map) { lsSet(SECTION_FIELD_SCHEMAS_KEY, JSON.stringify(map)); },
   // Each unit now holds a LIST of report entries (one per period/submission),
