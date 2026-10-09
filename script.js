@@ -1733,8 +1733,8 @@ const SIDEBAR_PAGES = [
   { id: "executive-summary", label: "الملخص التنفيذي", group: "الإدارة العليا", icon: "document" },
   { id: "executive-final-report", label: "التقرير الإداري النهائي", group: "الإدارة العليا", icon: "layers" },
   { id: "office-dashboard", label: "لوحة المعلومات", group: "مكتب الإشراف", icon: "home" },
-  { id: "office-archive", label: "الأرشفة", group: "مكتب الإشراف", icon: "layers" },
-  { id: "office-summary", label: "ملخص الوحدات", group: "مكتب الإشراف", icon: "document" },
+  { id: "office-archive", label: "الأرشفة", group: "standalone", icon: "layers" },
+  { id: "office-summary", label: "ملخص الوحدات", group: "standalone", icon: "document" },
   { id: "office-curation", label: "اعتماد أبرز النتائج والتوصيات", group: "مكتب الإشراف", icon: "target" },
   { id: "unit-dashboard", label: "لوحة المعلومات", group: "unit-home", scope: "unit", icon: "home" },
   { id: "unit-reports", label: "تقارير", group: "unit-home", scope: "unit", icon: "document" },
@@ -1749,7 +1749,7 @@ const SIDEBAR_PAGES = [
 // مجموعة واحدة قابلة للطي ("unit-home")، فأصبحت الآن أربعة روابط رئيسية
 // مستقلة بالشريط الجانبي — بلا طي وبلا اشتراط مسبق بوحدة/قسم محدّد، تمامًا
 // بنفس أسلوب "جميع التقارير" — حسب طلب نجود الصريح.
-const SIDEBAR_GROUPS = ["الرئيسية", "إدارة التقارير", "__standalone__all-reports", "__standalone__units-manage", "الإدارة العليا", "مكتب الإشراف", "الهيكل التنظيمي", "__standalone__unit-dashboard", "__standalone__unit-reports", "__standalone__unit-report", "__standalone__unit-settings", "__standalone__unit-notifications", "__standalone__unit-all-reports"];
+const SIDEBAR_GROUPS = ["الرئيسية", "إدارة التقارير", "__standalone__all-reports", "__standalone__units-manage", "__standalone__office-archive", "__standalone__office-summary", "الإدارة العليا", "مكتب الإشراف", "الهيكل التنظيمي", "__standalone__unit-dashboard", "__standalone__unit-reports", "__standalone__unit-report", "__standalone__unit-settings", "__standalone__unit-notifications", "__standalone__unit-all-reports"];
 const SIDEBAR_GROUP_LABELS = { "unit-home": "الرئيسية" };
 
 // كتالوج "إجراءات" مسار اعتماد التقرير — يُستخدم لصلاحيات الأزرار لكل مسمى
@@ -1853,9 +1853,7 @@ function computeVisibleSidebarPagesRaw() {
     // طلب نجود الصريح: تكون رئيسية بالشريط الجانبي زي "جميع التقارير"، بلا أي
     // اشتراط مسبق بوحدة/قسم محدّد (ensureUnitContextForNav يتكفّل بضبط الوحدة
     // تلقائيًا عند الدخول المباشر — راجع case "nav-to").
-    // طلب نجود: قسم "مكتب الإشراف" (الأرشفة/ملخص الوحدات) يُحذف من شريط مديرة النظام —
-    // الصفحتان تبقيان متاحتين لأي حساب تمنحينه إياهما من الصلاحيات.
-    return SIDEBAR_PAGES.filter((p) => p.group !== "unit-extra" && p.group !== "مكتب الإشراف");
+    return SIDEBAR_PAGES.filter((p) => p.group !== "unit-extra");
   } else if (S.isDepartmentUser) {
     // "لوحة المعلومات" أضيفت هنا لتصير الصفحة الافتراضية الجديدة (بدل "قسمي")
     // — "قسمي" تبقى متاحة بجانبها مؤقتًا (بدون حذف) حسب تعليمات نجود الصريحة،
