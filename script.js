@@ -1802,7 +1802,7 @@ function sidebarNavIcon(key, size, color) {
 
 // "لوحة المعلومات" صفحة واحدة تتكيّف تلقائيًا مع نطاق الحساب (وحدة/قسم/مكتب/إدارة
 // عليا/مديرة النظام). المعرّفات القديمة تُعتبر نفس الصفحة: تُدمج بـ"dashboard".
-const MERGED_PAGE_MAP = { "unit-dashboard": "dashboard", "office-dashboard": "dashboard", "executive-dashboard": "dashboard", "office-curation": "department-curation", "unit-overview": "dashboard", "department-overview": "dashboard" };
+const MERGED_PAGE_MAP = { "unit-dashboard": "dashboard", "office-dashboard": "dashboard", "executive-dashboard": "dashboard", "office-curation": "department-curation", "unit-overview": "dashboard", "department-overview": "dashboard", "admin-reports": "browse-structure" };
 const MERGED_DASHBOARD_IDS = Object.keys(MERGED_PAGE_MAP);
 // "اعتماد أبرز النتائج والتوصيات" كذلك صفحة واحدة: القسم يشوف نتائج قسمه، والمكتب
 // نتائج وحداته، ومديرة النظام تبدّل بين قسم/مكتب من أعلى الصفحة.
@@ -1853,7 +1853,7 @@ function computeVisibleSidebarPagesRaw() {
     // اشتراط مسبق بوحدة/قسم محدّد (ensureUnitContextForNav يتكفّل بضبط الوحدة
     // تلقائيًا عند الدخول المباشر — راجع case "nav-to").
     // "تصفّح الهيكل" يحل محل الصفحات الأربع (مكاتب الإشراف/الأقسام/الوحدات/المراكز) بالشريط — الصفحات نفسها باقية.
-    return SIDEBAR_PAGES.filter((p) => p.group !== "unit-extra" && !["offices-manage", "departments-list", "units-list", "centers-list"].includes(p.id));
+    return SIDEBAR_PAGES.filter((p) => p.group !== "unit-extra" && !["offices-manage", "departments-list", "units-list", "centers-list", "admin-reports"].includes(p.id));
   } else if (S.isDepartmentUser) {
     // "لوحة المعلومات" أضيفت هنا لتصير الصفحة الافتراضية الجديدة (بدل "قسمي")
     // — "قسمي" تبقى متاحة بجانبها مؤقتًا (بدون حذف) حسب تعليمات نجود الصريحة،
@@ -8047,7 +8047,7 @@ function attachClickListener() {
         }
         break;
       }
-      case "nav-back-admin": S.view = "admin-reports"; render(); break;
+      case "nav-back-admin": S.view = "browse-structure"; render(); break;
       case "save-site-settings": {
         const settings = S.siteSettings || dataStore.getSiteSettings();
         dataStore.saveSiteSettings(settings);
