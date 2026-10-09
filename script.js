@@ -2099,6 +2099,13 @@ function badgeHtml(label, color, bg) {
 // شاشة اختيار صفة الدخول لموظفة الوحدة (وليست مركزًا) — نفس اسم الوحدة ونفس كلمة
 // المرور بالضبط؛ الاختيار هنا يحدد فقط أي واجهة تُفتح (الإدارية أو رئيسة الوحدة)
 // لنفس الحساب، بدون إنشاء أي حساب أو كلمة مرور جديدة وبدون أي بيانات تجريبية.
+// أشخاص (platform_users) يشاركون نفس اسم الدخول والرقم السري للوحدة — يظهرون في
+// شاشة "كيف تريدين الدخول؟" ويدخل كل واحد بصلاحياته الخاصة.
+function unitSharedPlatformUsers(unit) {
+  if (!unit || !unit.password) return [];
+  const list = (S.platformUsers && S.platformUsers.length) ? S.platformUsers : (dataStore.getPlatformUsers() || []);
+  return list.filter((pu) => pu.status !== "disabled" && pu.password === unit.password && pu.loginId && (pu.loginId === unit.name || (unit.email && pu.loginId === unit.email)));
+}
 function renderUnitRoleSelect() {
   const unit = (S.units || []).find((u) => u.id === S.pendingUnitLoginId);
   const hasHead = unitHasHead(unit);
@@ -2136,6 +2143,14 @@ function renderUnitRoleSelect() {
               <div style="font-size:11px;color:${SUBTLE};margin-top:2px;">الدخول إلى واجهة المراجعة الإضافية الخاصة بالوحدة</div>
             </div>
           </button>` : ""}
+          ${(S.pendingPlatformUserMatches || []).map((pu) => `
+          <button type="button" class="card" data-action="choose-platform-user" data-id="${esc(pu.id)}" style="display:flex;align-items:center;gap:12px;text-align:right;cursor:pointer;border:1px solid ${BORDER};background:#fff;width:100%;">
+            <div style="width:42px;height:42px;border-radius:12px;background:${DANGER_BG};display:flex;align-items:center;justify-content:center;flex-shrink:0;">${iconUser(19, ROSE)}</div>
+            <div>
+              <div style="font-size:14px;font-weight:800;">${esc(pu.jobTitle)}</div>
+              <div style="font-size:11px;color:${SUBTLE};margin-top:2px;">الدخول بصفة ${esc(pu.jobTitle)}</div>
+            </div>
+          </button>`).join("")}
         </div>
       </div>
       <button type="button" data-action="logout" style="display:block;margin:16px auto 0;background:none;border:none;color:${SUBTLE};font-size:11.5px;cursor:pointer;text-decoration:underline;">ليست أنتِ؟ تسجيل الخروج</button>
@@ -2557,7 +2572,7 @@ function doLogin(user) {
     applyScopedAccountPermissions(S.offices.find((o) => o.id === S.currentOfficeId));
     S.ui.departmentsPageSelectedId = null;
     S.view = "office-dashboard";
-  } else if (user.role === "center" || (!unitHasHead(S.units.find((u) => u.id === user.unitId)) && !unitHasExtraReview(S.units.find((u) => u.id === user.unitId)))) {
+  } else if (!unitSharedPlatformUsers(S.units.find((u) => u.id === user.unitId)).length && (user.role === "center" || (!unitHasHead(S.units.find((u) => u.id === user.unitId)) && !unitHasExtraReview(S.units.find((u) => u.id === user.unitId))))) {
     // مركز، أو وحدة مُهيّأة صراحة بدون أي مستوى مراجعة داخلي (لا رئيسة ولا
     // مستوى إضافي) — تدخل مباشرة بدون شاشة اختيار صفة، بالضبط كسلوك المركز.
     const unitId = user.unitId;
@@ -2572,6 +2587,7 @@ function doLogin(user) {
     // (إن وُجدت)، أو مستوى المراجعة الإضافي (إن وُجد) — قبل الدخول لصفحات
     // الوحدة نفسها. نفس الحساب ونفس كلمة المرور بالضبط، بدون أي حساب أو
     // صلاحية جديدة؛ الاختيار مجرد واجهة عرض تُحدَّد بعد الدخول.
+    S.pendingPlatformUserMatches = unitSharedPlatformUsers(S.units.find((u) => u.id === user.unitId));
     S.pendingUnitLoginId = user.unitId;
     S.currentUnitEntryMode = null;
     S.view = "unit-role-select";
