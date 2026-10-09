@@ -3142,8 +3142,11 @@ function renderDepartmentsPage() {
    تقرأ الهيكل الحي (S.offices/S.departments/S.units) كل مرة تُرسم فيها — بلا أي
    نسخة خاصة، فأي تعديل بالهيكل يظهر فورًا. بدون أي كتابة على البيانات. */
 const BS_COLORS = [
-  { bg: "#f7e4e9", tab: "#efd0d8" }, { bg: "#faefd9", tab: "#f3e0bb" }, { bg: "#e6eef9", tab: "#d2e0f3" },
-  { bg: "#e3f2ea", tab: "#cde6d9" }, { bg: "#efe7f8", tab: "#e0d3f0" }, { bg: "#fce9df", tab: "#f6d5c3" },
+  { bg: "linear-gradient(135deg,#fcf0f3,#f5dbe2)", tab: "#f1d0d9" },
+  { bg: "linear-gradient(135deg,#faeaf0,#edcdd9)", tab: "#e6c1cf" },
+  { bg: "linear-gradient(135deg,#f7e8ef,#e2c3d3)", tab: "#d9b6c9" },
+  { bg: "linear-gradient(135deg,#fcf2e5,#f4dfc1)", tab: "#eed3ab" },
+  { bg: "linear-gradient(135deg,#f5edf0,#e4d0d9)", tab: "#dac3cf" },
 ];
 const BS_PENDING = ["under_review", "custom_pending", "pending_head_review", "pending_extra_review"];
 function bsData() {
