@@ -1749,8 +1749,12 @@ function render() {
   } else {
     html = renderLogin();
   }
+  // نحافظ على مكان تمرير الشريط الجانبي: إعادة الرسم كانت ترجعه لأول القائمة بعد كل ضغطة.
+  const sbOld = appEl.querySelector(".sidebar");
+  const sbTop = sbOld ? sbOld.scrollTop : 0;
   appEl.innerHTML = html;
   afterRender();
+  if (sbTop) { const sbNew = appEl.querySelector(".sidebar"); if (sbNew) sbNew.scrollTop = sbTop; }
 }
 
 /* App shell: persistent sidebar wrapper used by every logged-in page ---------- */
