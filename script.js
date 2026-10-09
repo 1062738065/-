@@ -2677,6 +2677,20 @@ function doLogout() {
 
 /* =============================== Dashboard (admin) =========================== */
 /* =============================== Inline SVG charts (no libraries needed) ===== */
+// قائمة تقدّم بأشرطة أفقية: كل وحدة بسطر واحد (اسمها كاملًا + شريط + نسبة) — الشريط
+// الرمادي (المسار) يظهر حتى لو النسبة صفر، فلا تبدو القائمة فارغة، وتُرتَّب من
+// الأعلى إنجازًا للأقل.
+function progressListHtml(items) {
+  const rows = items.slice().sort((a, b) => b.value - a.value).map((it) => {
+    const v = Math.max(0, Math.min(100, Number(it.value) || 0));
+    return `<div style="display:flex;align-items:center;gap:12px;">
+      <div style="flex:0 0 38%;min-width:110px;font-size:12.5px;font-weight:700;color:${INK};line-height:1.4;">${esc(it.label)}</div>
+      <div style="flex:1;height:12px;border-radius:999px;background:${GRAY_BG};overflow:hidden;"><div style="width:${v}%;height:100%;border-radius:999px;background:linear-gradient(90deg,${mixHex(ROSE, "#ffffff", 0.35)},${ROSE});"></div></div>
+      <div style="flex:0 0 44px;text-align:left;font-size:12px;font-weight:800;color:${v ? ROSE : SUBTLE};">${v}٪</div>
+    </div>`;
+  }).join("");
+  return `<div style="display:flex;flex-direction:column;gap:12px;max-height:420px;overflow-y:auto;padding:2px 2px 2px 6px;">${rows}</div>`;
+}
 function svgBarChart(items, opts) {
   // items: [{label, value}], value in 0..100 (percent)
   opts = opts || {};
@@ -2818,7 +2832,7 @@ function renderDashboard() {
   // العليا إن وصلت هنا) — نفس السلوك الكامل غير المُقيَّد تمامًا كما كان،
   // باستثناء "وحدات" التقارير الذاتية (self_report) حتى يبقى "عدد الوحدات"
   // صحيحًا ولا تُحتسب هذي التقارير كوحدات فعلية.
-  return renderDashboardBody(S.units.filter((u) => u.status === "active" && u.role !== "self_report"), {});
+  return renderDashboardBody(S.units.filter((u) => u.status === "active" && u.role !== "self_report" && u.role !== "admin" && u.role !== "executive"), {});
 }
 
 // جسم "لوحة المعلومات" الكامل (البانر + بطاقات الإحصاءات + الرسوم البيانية +
@@ -2846,7 +2860,7 @@ function renderDashboardBody(activeUnits, opts) {
   const unitBarData = activeUnits.map((u) => ({ label: u.name, value: computeProgress(latestReportForUnit(u.id)).percent, color: ROSE }));
   const barsHtml = unitBarData.length === 0
     ? `<div style="font-size:12.5px;color:${SUBTLE}">لا توجد وحدات بعد.</div>`
-    : svgBarChart(unitBarData, { height: 200 });
+    : progressListHtml(unitBarData);
 
   // Reports-wide counts (for the weekly stat and the "إجمالي التقارير" donut)
   const nowTs = Date.now(), weekMs = 7 * 24 * 60 * 60 * 1000;
@@ -4070,7 +4084,7 @@ function scopedAccessUnitsAndDepts() {
   if (S.isDepartmentUser && S.currentDepartmentId) units = S.units.filter((u) => u.departmentId === S.currentDepartmentId);
   else if (!S.isAdmin && !S.isExecutive && !S.isOfficeUser && S.currentUnitId) units = S.units.filter((u) => u.id === S.currentUnitId);
   else units = S.units;
-  units = units.filter((u) => u.status === "active" && u.role !== "self_report");
+  units = units.filter((u) => u.status === "active" && u.role !== "self_report" && u.role !== "admin" && u.role !== "executive");
   const depts = S.departments.filter((d) => d.status === "active" && units.some((u) => u.departmentId === d.id));
   return { units, depts };
 }
@@ -4277,7 +4291,7 @@ function hijriMonthLabel(ts) {
 // شي) ومن لوحة معلومات مكتب الإشراف (وحدات/أقسام مكتبه فقط) بنفس الدالة تمامًا.
 function renderExecutiveDashboard(scopeUnits, scopeDepartments, opts) {
   opts = opts || {};
-  const units = scopeUnits || S.units.filter((u) => u.status === "active");
+  const units = scopeUnits || S.units.filter((u) => u.status === "active" && u.role !== "admin" && u.role !== "executive" && u.role !== "self_report");
   const activeDepartments = scopeDepartments || S.departments.filter((d) => d.status === "active");
   const flat = scopeUnits ? collectReportsFlatForUnits(units) : collectAllReportsFlat();
   const total = flat.length;
@@ -4331,8 +4345,8 @@ function renderExecutiveDashboard(scopeUnits, scopeDepartments, opts) {
       <div class="card"><div class="prs-title" style="font-size:13.5px;font-weight:800;margin-bottom:12px;">توزيع حالات التقارير</div>${total ? statusPie : emptyHint("لا توجد تقارير بعد.")}</div>
     </div>
     <div class="card" style="margin-bottom:18px;">
-      <div class="prs-title" style="font-size:14px;font-weight:800;margin-bottom:12px;">ملخص أداء الوحدات</div>
-      ${unitPerf.length ? svgBarChart(unitPerf, { height: 200 }) : emptyHint("لا توجد وحدات نشطة بعد.")}
+      <div class="prs-title" style="font-size:14px;font-weight:800;margin-bottom:12px;">نسبة الإنجاز حسب الوحدة</div>
+      ${unitPerf.length ? progressListHtml(unitPerf) : emptyHint("لا توجد وحدات نشطة بعد.")}
     </div>
     <div class="card">
       <div class="prs-title" style="font-size:14px;font-weight:800;margin-bottom:12px;">مقارنة عدد التقارير حسب الفترة</div>
