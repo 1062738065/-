@@ -7610,6 +7610,7 @@ function attachFormListeners() {
       S.ui.siteSettingsSaved = false;
       return;
     }
+    if (el.id && /^(new|edit)-pu-(jobtitle|loginid|password)$/.test(el.id)) { capturePlatformUserFormFields(el.id.indexOf("new-") === 0 ? "new-pu" : "edit-pu"); return; }
     if (el.id === "login-password") { S.ui.loginPasswordVal = el.value; return; }
     if (el.id === "head-return-notes") { S.ui.headReturnNotesVal = el.value; return; }
     if (el.dataset && el.dataset.field && el.tagName !== "SELECT") {
@@ -9057,8 +9058,8 @@ function attachClickListener() {
       }
       case "add-platform-user": {
         const form = readPlatformUserFormFromDom("new-pu", S.ui.newPuLoginType, S.ui.newPuAllowedPages, S.ui.newPuAllowedActions);
-        if (!form.jobTitle || !form.loginId || !form.password) { S.ui.puFormError = "الرجاء تعبئة المسمى الوظيفي ومعرّف الدخول وكلمة المرور."; render(); break; }
-        if (["department", "office", "unit"].includes(form.scopeKind) && !form.scopeId) { S.ui.puFormError = "الرجاء اختيار الجهة المرتبطة بهذا النطاق."; render(); break; }
+        if (!form.jobTitle || !form.loginId || !form.password) { capturePlatformUserFormFields("new-pu"); S.ui.puFormError = "الناقص: " + [!form.jobTitle ? "المسمى الوظيفي" : "", !form.loginId ? "معرّف الدخول" : "", !form.password ? "كلمة المرور" : ""].filter(Boolean).join("، ") + "."; render(); break; }
+        if (["department", "office", "unit"].includes(form.scopeKind) && !form.scopeId) { capturePlatformUserFormFields("new-pu"); S.ui.puFormError = "الرجاء اختيار الجهة المرتبطة بهذا النطاق."; render(); break; }
         const list = [...(S.platformUsers || []), {
           id: uid("pu"), jobTitle: form.jobTitle, loginType: form.loginType, loginId: form.loginId, password: form.password,
           allowedPages: form.allowedPages, allowedActions: form.allowedActions, scopeKind: form.scopeKind, scopeId: form.scopeId,
@@ -9085,8 +9086,8 @@ function attachClickListener() {
       case "save-platform-user-edit": {
         const editForm = S.ui.editPuForm || {};
         const form = readPlatformUserFormFromDom("edit-pu", editForm.loginType, editForm.allowedPages, editForm.allowedActions);
-        if (!form.jobTitle || !form.loginId || !form.password) { S.ui.puFormError = "الرجاء تعبئة المسمى الوظيفي ومعرّف الدخول وكلمة المرور."; render(); break; }
-        if (["department", "office", "unit"].includes(form.scopeKind) && !form.scopeId) { S.ui.puFormError = "الرجاء اختيار الجهة المرتبطة بهذا النطاق."; render(); break; }
+        if (!form.jobTitle || !form.loginId || !form.password) { capturePlatformUserFormFields("edit-pu"); S.ui.puFormError = "الناقص: " + [!form.jobTitle ? "المسمى الوظيفي" : "", !form.loginId ? "معرّف الدخول" : "", !form.password ? "كلمة المرور" : ""].filter(Boolean).join("، ") + "."; render(); break; }
+        if (["department", "office", "unit"].includes(form.scopeKind) && !form.scopeId) { capturePlatformUserFormFields("edit-pu"); S.ui.puFormError = "الرجاء اختيار الجهة المرتبطة بهذا النطاق."; render(); break; }
         S.platformUsers = (S.platformUsers || []).map((x) => x.id === ds.id ? {
           ...x, jobTitle: form.jobTitle, loginType: form.loginType, loginId: form.loginId, password: form.password,
           scopeKind: form.scopeKind, scopeId: form.scopeId, templateId: form.templateId || "", allowedPages: form.allowedPages, allowedActions: form.allowedActions,
