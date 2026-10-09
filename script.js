@@ -6190,7 +6190,7 @@ function fieldEditFormHtml(draft, isNew) {
       ${fieldWrap("نوع الحقل", true, `<select class="input" data-action="set-field-draft" data-key="type" data-rerender="1">${SCHEMA_FIELD_TYPES_SELECTABLE.map((t) => `<option value="${t}" ${t === type ? "selected" : ""}>${esc(SCHEMA_FIELD_TYPE_LABELS[t])}</option>`).join("")}</select>`)}
       ${showOptions ? fieldWrap("الخيارات (كل خيار بسطر)", true, `<textarea class="input" id="field-draft-options" style="min-height:90px">${esc(optionsText)}</textarea>`) : ""}
       ${type === "expandableSelect" ? fieldWrap('نص خيار "إضافة قيمة جديدة"', false, `<input class="input" id="field-draft-other-label" value="${esc(draft.otherLabel || "أخرى")}" placeholder="أخرى" />`) : ""}
-      ${fieldWrap("أيقونة الحقل (اختاري واحدة أو اكتبي أي إيموجي)", false, `<div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px;">${FIELD_ICON_CHOICES.map((ic) => `<button type="button" data-action="set-field-draft-icon" data-icon="${ic}" style="width:38px;height:38px;border-radius:11px;font-size:19px;cursor:pointer;border:2px solid ${(draft.icon || FIELD_TYPE_DEFAULT_ICON[type]) === ic ? ROSE : BORDER};background:#fff;">${ic}</button>`).join("")}</div><input class="input" id="field-draft-icon" value="${esc(draft.icon || "")}" placeholder="${esc(FIELD_TYPE_DEFAULT_ICON[type] || "📄")}  (فارغ = أيقونة النوع)" style="max-width:260px;" />`)}
+      ${fieldWrap("أيقونة الحقل", false, `<div style="display:flex;flex-wrap:wrap;gap:8px;">${FIELD_ICON_CHOICES.map((k, n) => { const sel = (draft.icon || FIELD_TYPE_DEFAULT_ICON[type]) === k; return `<button type="button" data-action="set-field-draft-icon" data-icon="${k}" title="${k}" style="padding:3px;border-radius:14px;cursor:pointer;background:#fff;border:2px solid ${sel ? ROSE : "transparent"};">${fieldIconTileHtml(k, 38, n)}</button>`; }).join("")}</div>`)}
       ${fieldWrap("نص توضيحي داخل الحقل (اختياري)", false, `<input class="input" id="field-draft-placeholder" value="${esc(draft.placeholder || "")}" placeholder="مثال: اكتبي هنا..." />`)}
       <button type="button" class="pill-btn ${draft.required ? "pill-primary" : "pill-ghost"}" data-action="toggle-field-draft-required" style="align-self:flex-start;">${draft.required ? "✓ حقل إلزامي" : "حقل اختياري — اضغطي لجعله إلزاميًا"}</button>
       <div style="display:flex;gap:8px;margin-top:4px;">
@@ -6201,16 +6201,53 @@ function fieldEditFormHtml(draft, isNew) {
   </div>`;
 }
 
-const FIELD_TYPE_DEFAULT_ICON = { text: "✏️", textarea: "📝", number: "🔢", date: "📅", select: "📋", radio: "🔘", checklist: "☑️", expandableSelect: "➕", computed: "🧮" };
-const FIELD_ICON_CHOICES = ["✏️", "📝", "🔢", "📅", "📋", "🔘", "☑️", "➕", "🧮", "⭐", "🎯", "📊", "📈", "💡", "🏆", "👥", "🏢", "📍", "📎", "🔔", "✅", "⚠️", "💬", "🌟"];
-function fieldIconOf(field) { return field.icon || FIELD_TYPE_DEFAULT_ICON[field.type] || "📄"; }
+const FIELD_SVG = {
+  text: `<path d="M4 7V5h16v2"/><path d="M12 5v14"/><path d="M9 19h6"/>`,
+  textarea: `<line x1="4" y1="6" x2="20" y2="6"/><line x1="4" y1="11" x2="20" y2="11"/><line x1="4" y1="16" x2="14" y2="16"/>`,
+  number: `<line x1="5" y1="9" x2="19" y2="9"/><line x1="5" y1="15" x2="19" y2="15"/><line x1="10" y1="4" x2="8" y2="20"/><line x1="16" y1="4" x2="14" y2="20"/>`,
+  date: `<rect x="3" y="5" width="18" height="16" rx="3"/><line x1="3" y1="10" x2="21" y2="10"/><line x1="8" y1="3" x2="8" y2="7"/><line x1="16" y1="3" x2="16" y2="7"/>`,
+  select: `<rect x="3" y="5" width="18" height="14" rx="3"/><polyline points="9 11 12 14 15 11"/>`,
+  radio: `<circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="3.5"/>`,
+  checklist: `<polyline points="4 6 6 8 9 4"/><polyline points="4 13 6 15 9 11"/><line x1="13" y1="6" x2="20" y2="6"/><line x1="13" y1="13" x2="20" y2="13"/><line x1="4" y1="19" x2="20" y2="19"/>`,
+  expandableSelect: `<rect x="3" y="3" width="18" height="18" rx="4"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/>`,
+  computed: `<rect x="5" y="3" width="14" height="18" rx="3"/><line x1="8.5" y1="8" x2="15.5" y2="8"/><line x1="9" y1="13" x2="9" y2="13"/><line x1="12" y1="13" x2="12" y2="13"/><line x1="15" y1="13" x2="15" y2="13"/><line x1="9" y1="17" x2="9" y2="17"/><line x1="12" y1="17" x2="12" y2="17"/><line x1="15" y1="17" x2="15" y2="17"/>`,
+  star: `<polygon points="12 3 14.8 9 21 9.8 16.5 14.2 17.6 20.5 12 17.4 6.4 20.5 7.5 14.2 3 9.8 9.2 9"/>`,
+  target: `<circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/><circle cx="12" cy="12" r="1.2"/>`,
+  chart: `<line x1="6" y1="20" x2="6" y2="12"/><line x1="12" y1="20" x2="12" y2="5"/><line x1="18" y1="20" x2="18" y2="9"/>`,
+  trend: `<polyline points="3 17 9 11 13 15 21 6"/><polyline points="15 6 21 6 21 12"/>`,
+  bulb: `<path d="M9 18h6"/><path d="M10 21h4"/><path d="M12 3a6 6 0 0 0-3.5 10.9c.6.5 1 1.2 1 2.1h5c0-.9.4-1.6 1-2.1A6 6 0 0 0 12 3z"/>`,
+  trophy: `<path d="M8 4h8v6a4 4 0 0 1-8 0V4z"/><path d="M8 6H4v2a4 4 0 0 0 4 4"/><path d="M16 6h4v2a4 4 0 0 1-4 4"/><line x1="12" y1="14" x2="12" y2="18"/><line x1="8" y1="20" x2="16" y2="20"/>`,
+  users: `<circle cx="9" cy="8" r="3.5"/><path d="M2.5 20v-1a5 5 0 0 1 5-5h3a5 5 0 0 1 5 5v1"/><path d="M16 4.5a3.5 3.5 0 0 1 0 7"/><path d="M19 14.5a5 5 0 0 1 2.5 4.5v1"/>`,
+  building: `<rect x="5" y="3" width="14" height="18" rx="2"/><line x1="9" y1="8" x2="9.01" y2="8"/><line x1="15" y1="8" x2="15.01" y2="8"/><line x1="9" y1="12" x2="9.01" y2="12"/><line x1="15" y1="12" x2="15.01" y2="12"/><path d="M10 21v-4h4v4"/>`,
+  pin: `<path d="M12 21s7-6.2 7-11.5A7 7 0 0 0 5 9.5C5 14.8 12 21 12 21z"/><circle cx="12" cy="9.5" r="2.5"/>`,
+  clip: `<path d="M20 11.5l-8 8a5 5 0 0 1-7-7l8.5-8.5a3.3 3.3 0 0 1 4.7 4.7L9.5 17.3a1.7 1.7 0 0 1-2.4-2.4L15 7"/>`,
+  bell: `<path d="M18 9a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.7 21a2 2 0 0 1-3.4 0"/>`,
+  check: `<circle cx="12" cy="12" r="9"/><polyline points="8 12.5 11 15.5 16 9"/>`,
+  alert: `<path d="M12 3L2.5 20h19L12 3z"/><line x1="12" y1="10" x2="12" y2="14"/><line x1="12" y1="17" x2="12.01" y2="17"/>`,
+  chat: `<path d="M21 12a8 8 0 0 1-11.6 7.1L4 20.5l1.4-4.6A8 8 0 1 1 21 12z"/>`,
+  flag: `<path d="M5 21V4"/><path d="M5 4h12l-2 4 2 4H5"/>`,
+  heart: `<path d="M20.8 4.6a5.5 5.5 0 0 0-7.8 0L12 5.6l-1-1a5.5 5.5 0 0 0-7.8 7.8l1 1L12 21.2l7.8-7.8 1-1a5.5 5.5 0 0 0 0-7.8z"/>`,
+  book: `<path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/>`,
+};
+const FIELD_TYPE_DEFAULT_ICON = { text: "text", textarea: "textarea", number: "number", date: "date", select: "select", radio: "radio", checklist: "checklist", expandableSelect: "expandableSelect", computed: "computed" };
+const FIELD_ICON_CHOICES = Object.keys(FIELD_SVG).filter((k) => !["computed"].includes(k));
+function fieldIconKeyOf(field) { return field.icon || FIELD_TYPE_DEFAULT_ICON[field.type] || "text"; }
+// بلاطة أيقونة ملوّنة بألوان الموقع (تتبع ألوان بطاقات تصفّح الهيكل المختارة من إعدادات الموقع)
+function fieldIconTileHtml(key, size, colorIdx) {
+  const PAL = bsPalette();
+  const idx = typeof colorIdx === "number" ? colorIdx : Math.max(0, Object.keys(FIELD_SVG).indexOf(key));
+  const c = PAL[idx % PAL.length];
+  const svg = FIELD_SVG[key];
+  const inner = svg ? svgIcon(svg, Math.round(size * 0.5), ROSE) : `<span style="font-size:${Math.round(size * 0.5)}px;line-height:1;">${esc(key)}</span>`;
+  return `<span style="width:${size}px;height:${size}px;border-radius:${Math.round(size * 0.32)}px;background:${c.bg};display:inline-flex;align-items:center;justify-content:center;flex-shrink:0;box-shadow:0 4px 10px rgba(80,40,60,0.10);">${inner}</span>`;
+}
 function fieldSchemaRowHtml(field, index, total, sectionId) {
   const typeLabel = SCHEMA_FIELD_TYPE_LABELS[field.type] || field.type;
   const isComputed = field.type === "computed";
   const btn = "width:30px;height:30px;border:1px solid " + BORDER;
   return `<div class="card prs-card" style="display:flex;align-items:center;justify-content:space-between;gap:10px;padding:14px 16px;border-radius:18px;${isComputed ? "opacity:.85;" : ""}">
     <div style="display:flex;align-items:center;gap:12px;min-width:0;">
-      <span style="position:relative;width:46px;height:46px;border-radius:14px;background:linear-gradient(135deg,${DANGER_BG},${GRAY_BG});display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:22px;line-height:1;">${esc(fieldIconOf(field))}<span style="position:absolute;top:-6px;right:-6px;min-width:18px;height:18px;border-radius:9px;background:${ROSE};color:#fff;font-size:10px;font-weight:800;display:flex;align-items:center;justify-content:center;padding:0 4px;">${index + 1}</span></span>
+      ${fieldIconTileHtml(fieldIconKeyOf(field), 48)}
       <div style="min-width:0;">
         <div style="font-size:13.5px;font-weight:800;">${esc(field.label)}${field.required ? ` <span style="color:${ROSE};">*</span>` : ""}</div>
         <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:5px;">
@@ -6249,19 +6286,16 @@ function renderFieldSchemasManage() {
   <div class="page-wrap"><div class="page-inner">
     ${topBarHtml({ title: "إدارة حقول الأقسام", subtitle: "أضف أو عدّل أي من حقول الأقسام التالية، مع إمكانية تحديد الترتيب.", icon: iconPencil(18, ROSE), backAction: "nav-back-admin" })}
 
-    <div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:16px;">
-      ${[["الحقول", fields.length, "📋"], ["إلزامية", fields.filter((f) => f.required).length, "⭐"], ["محسوبة", fields.filter((f) => f.type === "computed").length, "🧮"]].map(([l, v, ic]) => `<div style="flex:1;min-width:110px;background:linear-gradient(135deg,${GRAY_BG},#fff);border-radius:16px;padding:12px 16px;display:flex;align-items:center;gap:10px;box-shadow:var(--card-shadow);"><span style="font-size:22px;">${ic}</span><div><div style="font-size:20px;font-weight:900;color:${INK};line-height:1.1;">${v}</div><div style="font-size:11px;color:${SUBTLE};font-weight:700;">${l}</div></div></div>`).join("")}
-    </div>
-
-    <div class="card" style="padding:10px 12px;margin-bottom:20px;border-radius:18px;">
-      <div style="display:flex;gap:8px;flex-wrap:wrap;">
-        ${sections.map((s) => `<button type="button" class="pill-btn ${s.id === activeSectionId ? "pill-primary" : "pill-ghost"}" style="${s.id === activeSectionId ? "" : "border:1px solid " + BORDER + ";"}flex:1;justify-content:center;min-width:110px;gap:8px;" data-action="select-field-schema-section" data-section="${esc(s.id)}">${esc(s.label)}<span style="font-size:10.5px;font-weight:800;background:${s.id === activeSectionId ? "rgba(255,255,255,.25)" : GRAY_BG};padding:1px 8px;border-radius:999px;">${((SECTION_FIELD_SCHEMAS[s.id] || {}).fields || []).length}</span></button>`).join("")}
-      </div>
+    <div style="display:flex;gap:14px;overflow-x:auto;padding:16px 8px 22px;margin-bottom:6px;">
+      ${editingId === "__new__" ? "" : `<button type="button" data-action="start-add-field" data-section="${esc(activeSectionId)}" style="flex-shrink:0;width:110px;min-height:150px;border-radius:22px;border:2px dashed ${BORDER};background:transparent;cursor:pointer;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;color:${SUBTLE};font-size:11.5px;font-weight:700;">${iconPlus(22, SUBTLE)}إضافة حقل</button>`}
+      ${sections.map((sec, n) => { const PAL = bsPalette(); const c = PAL[n % PAL.length]; const on = sec.id === activeSectionId; return `<button type="button" data-action="select-field-schema-section" data-section="${esc(sec.id)}" style="flex-shrink:0;width:170px;min-height:150px;border-radius:22px;border:none;cursor:pointer;text-align:right;padding:16px;display:flex;flex-direction:column;justify-content:space-between;background:${c.bg};box-shadow:${on ? "0 14px 26px rgba(80,40,60,0.20)" : "0 6px 14px rgba(80,40,60,0.08)"};outline:${on ? "3px solid " + ROSE : "none"};outline-offset:2px;transform:${on ? "translateY(-4px)" : "none"};transition:transform .15s ease, box-shadow .15s ease;font-family:inherit;">
+        ${fieldIconTileHtml(["text", "target", "chart", "users", "bulb", "trophy"][n % 6], 42, n)}
+        <span style="font-size:14.5px;font-weight:800;color:${INK};line-height:1.4;">${esc(sec.label)}</span></button>`; }).join("")}
     </div>
 
     ${editingId === "__new__" ? fieldEditFormHtml(draft, true) : ""}
 
-    <div style="font-size:15px;font-weight:800;margin-bottom:12px;display:flex;align-items:center;gap:8px;">${iconLayers(18, ROSE)} حقول (${esc((sections.find((s) => s.id === activeSectionId) || {}).label || activeSectionId)}) (${fields.length})</div>
+    <div style="font-size:15px;font-weight:800;margin-bottom:12px;display:flex;align-items:center;gap:8px;">${iconLayers(18, ROSE)} حقول (${esc((sections.find((s) => s.id === activeSectionId) || {}).label || activeSectionId)})</div>
     <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:12px;margin-bottom:16px;">
       ${fields.map((f, i) => editingId === f.id ? fieldEditFormHtml(draft, false) : fieldSchemaRowHtml(f, i, fields.length, activeSectionId)).join("") || `<div class="card" style="color:${SUBTLE};font-size:12.5px;">لا توجد حقول بعد.</div>`}
     </div>
@@ -9663,9 +9697,7 @@ function attachClickListener() {
         const isNew = S.ui.editingFieldId === "__new__";
         const fieldId = isNew ? uid("fld") : S.ui.editingFieldId;
         const newField = { id: fieldId, type, label, required: !!draft.required, placeholder };
-        const iconEl = document.getElementById("field-draft-icon");
-        const iconVal = (iconEl ? iconEl.value : (draft.icon || "")).trim();
-        if (iconVal) newField.icon = Array.from(iconVal).slice(0, 4).join("");
+        if (draft.icon && FIELD_SVG[draft.icon]) newField.icon = draft.icon;
         if (type === "select" || type === "radio" || type === "checklist") newField.options = optionsList;
         if (type === "expandableSelect") {
           newField.baseOptions = optionsList;
