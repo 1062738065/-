@@ -3769,7 +3769,24 @@ function renderOfficeDashboard() {
   return renderExecutiveDashboard(units, depts, { subtitle: `نظرة إشرافية شاملة على وحدات ${office.name}`, extraTop: adminScopeSwitcherHtml("office") });
 }
 
+// وحدات/أقسام النطاق الفعلي للحساب الحالي (نفس منطق "لوحة المعلومات") — تُستخدم
+// لصفحتي "الأرشفة" و"ملخص الوحدات" كي تظهرا لأي حساب تمنحينه إياهما بنفس نطاقه.
+// مديرة النظام وحساب مكتب الإشراف يبقيان على سلوكهما الأصلي (بدون تغيير).
+function scopedAccessUnitsAndDepts() {
+  let units;
+  if (S.isDepartmentUser && S.currentDepartmentId) units = S.units.filter((u) => u.departmentId === S.currentDepartmentId);
+  else if (!S.isAdmin && !S.isExecutive && !S.isOfficeUser && S.currentUnitId) units = S.units.filter((u) => u.id === S.currentUnitId);
+  else units = S.units;
+  units = units.filter((u) => u.status === "active" && u.role !== "self_report");
+  const depts = S.departments.filter((d) => d.status === "active" && units.some((u) => u.departmentId === d.id));
+  return { units, depts };
+}
+function usesOfficeScope() { return S.isAdmin || S.isOfficeUser; }
 function renderOfficeSummary() {
+  if (!usesOfficeScope()) {
+    const sc = scopedAccessUnitsAndDepts();
+    return renderExecutiveSummary(sc.units, sc.depts, { title: "ملخص الوحدات", showAiSummary: false });
+  }
   const office = currentOffice();
   if (!office) return officeNotFoundPageHtml();
   const units = officeUnits(office.id);
@@ -3807,9 +3824,9 @@ function officeArchiveTree(units) {
   return tree;
 }
 function renderOfficeArchive() {
-  const office = currentOffice();
-  if (!office) return officeNotFoundPageHtml();
-  const units = officeUnits(office.id);
+  const office = usesOfficeScope() ? currentOffice() : { id: "", name: "نطاق حسابك" };
+  if (usesOfficeScope() && !currentOffice()) return officeNotFoundPageHtml();
+  const units = usesOfficeScope() ? officeUnits(office.id) : scopedAccessUnitsAndDepts().units;
   const tree = officeArchiveTree(units);
   const years = Object.keys(tree).sort((a, b) => b.localeCompare(a, "ar"));
   const selectedYear = S.ui.officeArchiveYear && tree[S.ui.officeArchiveYear] ? S.ui.officeArchiveYear : null;
@@ -3850,7 +3867,7 @@ function renderOfficeArchive() {
   <div class="page-wrap"><div class="page-inner">
     ${topBarHtml({ title: "أرشيف التقارير", subtitle: `منظَّم تلقائيًا حسب السنة الهجرية ونوع الفترة — ${office.name}`,
       right: pillBtn("خروج", { variant: "danger", icon: iconLogout(15, DANGER), action: "logout" }) })}
-    ${adminScopeSwitcherHtml("office")}
+    ${usesOfficeScope() ? adminScopeSwitcherHtml("office") : ""}
     <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-bottom:16px;">${crumbs.join("")}</div>
     ${body}
   </div></div>`;
