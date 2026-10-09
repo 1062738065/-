@@ -1605,6 +1605,8 @@ function render() {
     html = shellWrap(renderUnitsOverview());
   } else if (S.view === "site-settings") {
     html = shellWrap(renderSiteSettings());
+  } else if (S.view === "browse-structure") {
+    html = shellWrap(renderBrowseStructure());
   } else if (S.view === "departments-list") {
     html = shellWrap(renderDepartmentsPage());
   } else if (S.view === "units-list") {
@@ -1721,6 +1723,7 @@ const SIDEBAR_PAGES = [
   // (بدون حسابات تسجيل دخول أو ربط بمسار اعتماد التقارير) — الصفحات الأربع
   // الأصلية تبقى كما هي تمامًا، هذي إضافة فقط (راجع renderOrgChartPage).
   { id: "org-chart", label: "مخطط الهيكل التنظيمي", group: "الهيكل التنظيمي", icon: "layers" },
+  { id: "browse-structure", label: "تصفّح الهيكل", group: "standalone", icon: "layers" },
   { id: "department-overview", label: "قسمي", group: "الرئيسية", icon: "building" },
   // صفحة مستقلة قائمة بذاتها (نفس نمط "office-curation" للمكتب) — بدل ما تكون
   // قسمًا مدمجًا داخل صفحة أخرى، حسب طلب نجود الصريح.
@@ -1749,7 +1752,7 @@ const SIDEBAR_PAGES = [
 // مجموعة واحدة قابلة للطي ("unit-home")، فأصبحت الآن أربعة روابط رئيسية
 // مستقلة بالشريط الجانبي — بلا طي وبلا اشتراط مسبق بوحدة/قسم محدّد، تمامًا
 // بنفس أسلوب "جميع التقارير" — حسب طلب نجود الصريح.
-const SIDEBAR_GROUPS = ["الرئيسية", "إدارة التقارير", "__standalone__all-reports", "__standalone__units-manage", "__standalone__office-archive", "__standalone__office-summary", "الإدارة العليا", "مكتب الإشراف", "الهيكل التنظيمي", "__standalone__unit-dashboard", "__standalone__unit-reports", "__standalone__unit-report", "__standalone__unit-settings", "__standalone__unit-notifications", "__standalone__unit-all-reports"];
+const SIDEBAR_GROUPS = ["الرئيسية", "إدارة التقارير", "__standalone__all-reports", "__standalone__units-manage", "__standalone__browse-structure", "__standalone__office-archive", "__standalone__office-summary", "الإدارة العليا", "مكتب الإشراف", "الهيكل التنظيمي", "__standalone__unit-dashboard", "__standalone__unit-reports", "__standalone__unit-report", "__standalone__unit-settings", "__standalone__unit-notifications", "__standalone__unit-all-reports"];
 const SIDEBAR_GROUP_LABELS = { "unit-home": "الرئيسية" };
 
 // كتالوج "إجراءات" مسار اعتماد التقرير — يُستخدم لصلاحيات الأزرار لكل مسمى
@@ -1853,7 +1856,8 @@ function computeVisibleSidebarPagesRaw() {
     // طلب نجود الصريح: تكون رئيسية بالشريط الجانبي زي "جميع التقارير"، بلا أي
     // اشتراط مسبق بوحدة/قسم محدّد (ensureUnitContextForNav يتكفّل بضبط الوحدة
     // تلقائيًا عند الدخول المباشر — راجع case "nav-to").
-    return SIDEBAR_PAGES.filter((p) => p.group !== "unit-extra");
+    // "تصفّح الهيكل" يحل محل الصفحات الأربع (مكاتب الإشراف/الأقسام/الوحدات/المراكز) بالشريط — الصفحات نفسها باقية.
+    return SIDEBAR_PAGES.filter((p) => p.group !== "unit-extra" && !["offices-manage", "departments-list", "units-list", "centers-list"].includes(p.id));
   } else if (S.isDepartmentUser) {
     // "لوحة المعلومات" أضيفت هنا لتصير الصفحة الافتراضية الجديدة (بدل "قسمي")
     // — "قسمي" تبقى متاحة بجانبها مؤقتًا (بدون حذف) حسب تعليمات نجود الصريحة،
@@ -3132,6 +3136,151 @@ function renderDepartmentsPage() {
 
 // صفحة اختيار مبسّطة لمديرة النظام — تفتح نفس واجهة "قسمي" أو "تقاريري" الحقيقية
 // حسب النوع، بدون أي صفحة مكررة، وبصلاحية اطلاع فقط.
+
+/* ===================== تصفّح الهيكل (browse-structure) =====================
+   صفحة اطلاع بشكل مجلدات: المكتب ← (مكاتب فرعية + أقسام) ← وحدات ← تقارير الوحدة.
+   تقرأ الهيكل الحي (S.offices/S.departments/S.units) كل مرة تُرسم فيها — بلا أي
+   نسخة خاصة، فأي تعديل بالهيكل يظهر فورًا. بدون أي كتابة على البيانات. */
+const BS_COLORS = [
+  { bg: "#f7e4e9", tab: "#efd0d8" }, { bg: "#faefd9", tab: "#f3e0bb" }, { bg: "#e6eef9", tab: "#d2e0f3" },
+  { bg: "#e3f2ea", tab: "#cde6d9" }, { bg: "#efe7f8", tab: "#e0d3f0" }, { bg: "#fce9df", tab: "#f6d5c3" },
+];
+const BS_PENDING = ["under_review", "custom_pending", "pending_head_review", "pending_extra_review"];
+function bsData() {
+  const allOffices = S.offices || [];
+  const noSelf = (u) => u.role !== "self_report" && u.role !== "admin" && u.role !== "executive" && u.status === "active";
+  let offices, depts, units, execs = [];
+  if (S.isAdmin || S.isExecutive || (!S.isDepartmentUser && !S.isOfficeUser && !S.currentUnitId)) {
+    offices = allOffices.filter((o) => o.status !== "disabled");
+    execs = S.units.filter((u) => u.role === "executive" && u.status === "active");
+    depts = S.departments.filter((d) => d.status === "active");
+    units = S.units.filter(noSelf);
+  } else if (S.isOfficeUser && S.currentOfficeId) {
+    const ids = officeScopeIds(S.currentOfficeId);
+    offices = allOffices.filter((o) => ids.includes(o.id));
+    depts = S.departments.filter((d) => d.status === "active" && ids.includes(d.officeId));
+    units = officeUnits(S.currentOfficeId).filter(noSelf);
+  } else {
+    const sc = scopedAccessUnitsAndDepts();
+    offices = []; depts = sc.depts; units = sc.units.filter(noSelf);
+  }
+  return { offices, depts, units, execs };
+}
+function bsOfficeScope(D, officeId) {
+  const ids = officeScopeIds(officeId);
+  const depts = D.depts.filter((d) => ids.includes(d.officeId));
+  const dIds = depts.map((d) => d.id);
+  const units = D.units.filter((u) => dIds.includes(u.departmentId) || ids.includes(u.officeId));
+  return { depts, units };
+}
+function bsNodeScope(D, node) {
+  if (!node) return { depts: D.depts, units: D.units };
+  if (node.k === "exec") {
+    const offs = D.offices.filter((o) => o.parentOfficeId === node.id);
+    const depts = [], units = [];
+    offs.forEach((o) => { const sc = bsOfficeScope(D, o.id); sc.depts.forEach((d) => { if (!depts.includes(d)) depts.push(d); }); sc.units.forEach((u) => { if (!units.includes(u)) units.push(u); }); });
+    return { depts, units };
+  }
+  if (node.k === "office") return bsOfficeScope(D, node.id);
+  if (node.k === "alldepts") return node.id ? bsOfficeScope(D, node.id) : { depts: D.depts, units: D.units };
+  if (node.k === "dept") return { depts: D.depts.filter((d) => d.id === node.id), units: D.units.filter((u) => u.departmentId === node.id) };
+  if (node.k === "unit") return { depts: [], units: D.units.filter((u) => u.id === node.id) };
+  return { depts: D.depts, units: D.units };
+}
+function bsCounts(sc) {
+  let reports = 0, pending = 0;
+  sc.units.forEach((u) => { const rs = ensureUnitReportsLoaded(u.id); reports += rs.length; pending += rs.filter((r) => BS_PENDING.includes(r.status)).length; });
+  return { depts: sc.depts.length, units: sc.units.length, reports, pending };
+}
+function bsFolderHtml(o) {
+  const c = BS_COLORS[(o.i || 0) % BS_COLORS.length];
+  const data = Object.entries(o.data || {}).map(([k, v]) => `data-${k}="${esc(v)}"`).join(" ");
+  const chips = (o.chips || []).map((t) => `<span style="font-size:10.5px;font-weight:700;color:${INK};background:rgba(255,255,255,0.7);padding:3px 9px;border-radius:999px;">${esc(t)}</span>`).join("");
+  return `<button type="button" class="bs-folder" data-search="${esc(o.title)}" data-action="${o.action}" ${data} style="position:relative;display:block;text-align:right;border:none;background:none;padding:16px 0 0;cursor:pointer;font-family:inherit;width:100%;">
+    ${o.dashed ? "" : `<span style="position:absolute;top:2px;right:20px;width:86px;height:20px;border-radius:12px 12px 0 0;background:${c.tab};"></span>`}
+    <span style="display:flex;flex-direction:column;gap:6px;min-height:118px;border-radius:20px;padding:16px 16px 14px;${o.dashed ? `border:2px dashed ${BORDER};background:transparent;` : `background:${c.bg};box-shadow:0 8px 20px rgba(80,40,60,0.07);`}">
+      <span style="font-size:15px;font-weight:800;color:${INK};line-height:1.4;">${esc(o.title)}</span>
+      ${o.sub ? `<span style="font-size:11px;color:${SUBTLE};">${esc(o.sub)}</span>` : ""}
+      <span style="display:flex;gap:6px;flex-wrap:wrap;margin-top:auto;">${chips}</span>
+    </span>
+  </button>`;
+}
+function bsStatTile(label, value, i) {
+  const c = BS_COLORS[i % BS_COLORS.length];
+  return `<div style="background:${c.bg};border-radius:16px;padding:12px 16px;min-width:110px;flex:1;"><div style="font-size:22px;font-weight:900;color:${INK};">${value}</div><div style="font-size:11px;color:${SUBTLE};font-weight:700;">${esc(label)}</div></div>`;
+}
+function renderBrowseStructure() {
+  const D = bsData();
+  const officeIds = new Set(D.offices.map((o) => o.id)), execIds = new Set(D.execs.map((e) => e.id));
+  // تنقية المسار من أي عنصر انحذف من الهيكل
+  const exists = (n) => n.k === "exec" ? execIds.has(n.id) : n.k === "office" ? officeIds.has(n.id) : n.k === "dept" ? D.depts.some((d) => d.id === n.id) : n.k === "unit" ? D.units.some((u) => u.id === n.id) : n.k === "alldepts" ? (!n.id || officeIds.has(n.id)) : false;
+  let path = (S.ui.bsPath || []).slice(); const valid = [];
+  for (const n of path) { if (!exists(n)) break; valid.push(n); }
+  S.ui.bsPath = path = valid;
+  const node = path.length ? path[path.length - 1] : null;
+  const nameOf = (n) => n.k === "exec" ? (D.execs.find((e) => e.id === n.id) || {}).name : n.k === "office" ? (D.offices.find((o) => o.id === n.id) || {}).name : n.k === "dept" ? (D.depts.find((d) => d.id === n.id) || {}).name : n.k === "unit" ? (D.units.find((u) => u.id === n.id) || {}).name : (n.id ? "كل أقسام " + ((D.offices.find((o) => o.id === n.id) || {}).name || "") : "كل الأقسام");
+
+  const crumbs = [`<button type="button" class="pill-btn ${path.length ? "pill-ghost" : "pill-primary"}" data-action="bs-up" data-index="-1">${iconLayers(13, path.length ? ROSE : "#fff")} الهيكل</button>`]
+    .concat(path.map((n, i) => `<span style="color:${SUBTLE};">‹</span><button type="button" class="pill-btn ${i === path.length - 1 ? "pill-primary" : "pill-ghost"}" data-action="bs-up" data-index="${i}">${esc(nameOf(n))}</button>`)).join("");
+
+  const deptFolder = (d, i) => { const sc = bsNodeScope(D, { k: "dept", id: d.id }); const c = bsCounts(sc); return bsFolderHtml({ i, title: d.name, sub: (D.offices.find((o) => o.id === d.officeId) || {}).name || "", chips: [c.units + " وحدة/مركز", c.reports + " تقرير"], action: "bs-open", data: { kind: "dept", id: d.id } }); };
+  const unitFolder = (u, i) => { const rs = ensureUnitReportsLoaded(u.id); const pend = rs.filter((r) => BS_PENDING.includes(r.status)).length; return bsFolderHtml({ i, title: u.name, sub: u.role === "center" ? "مركز" : "وحدة", chips: [rs.length + " تقرير"].concat(pend ? [pend + " بانتظار المراجعة"] : []), action: "bs-open", data: { kind: "unit", id: u.id } }); };
+  const officeFolder = (o, i) => { const sc = bsOfficeScope(D, o.id); const c = bsCounts(sc); const subs = D.offices.filter((x) => x.parentOfficeId === o.id).length; return bsFolderHtml({ i, title: o.name, sub: subs ? subs + " مكتب فرعي" : "مكتب إشراف", chips: [c.depts + " قسم", c.units + " وحدة", c.reports + " تقرير"], action: "bs-open", data: { kind: "office", id: o.id } }); };
+  const allDeptsCard = (officeId, n) => bsFolderHtml({ i: 5, dashed: true, title: officeId ? "كل الأقسام" : "كل الأقسام", sub: "عرض كل الأقسام التابعة دفعة واحدة", chips: [n + " قسم"], action: "bs-open", data: { kind: "alldepts", id: officeId || "" } });
+
+  let body = "", title = "تصفّح الهيكل", subtitle = "اختاري جهة للنزول لما تحتها";
+  const sc = bsNodeScope(D, node); const cnt = bsCounts(sc);
+  let folders = [];
+  if (!node) {
+    const rootOffices = D.offices.filter((o) => !o.parentOfficeId || (!officeIds.has(o.parentOfficeId) && !execIds.has(o.parentOfficeId)));
+    D.execs.forEach((e) => { const s2 = bsNodeScope(D, { k: "exec", id: e.id }); const c2 = bsCounts(s2); folders.push((i) => bsFolderHtml({ i, title: e.name, sub: "إدارة عليا", chips: [c2.units + " وحدة", c2.reports + " تقرير"], action: "bs-open", data: { kind: "exec", id: e.id } })); });
+    rootOffices.forEach((o) => folders.push((i) => officeFolder(o, i)));
+    if (!D.offices.length) D.depts.forEach((d) => folders.push((i) => deptFolder(d, i)));
+    else if (D.depts.length) folders.push(() => allDeptsCard("", D.depts.length));
+    if (!D.offices.length) D.units.filter((u) => !D.depts.some((d) => d.id === u.departmentId)).forEach((u) => folders.push((i) => unitFolder(u, i)));
+  } else if (node.k === "exec") {
+    title = nameOf(node); subtitle = "المكاتب التابعة للإدارة العليا";
+    D.offices.filter((o) => o.parentOfficeId === node.id).forEach((o) => folders.push((i) => officeFolder(o, i)));
+  } else if (node.k === "office") {
+    title = nameOf(node); subtitle = "المكاتب الفرعية والأقسام";
+    D.offices.filter((o) => o.parentOfficeId === node.id).forEach((o) => folders.push((i) => officeFolder(o, i)));
+    D.depts.filter((d) => d.officeId === node.id).forEach((d) => folders.push((i) => deptFolder(d, i)));
+    if (sc.depts.length) folders.push(() => allDeptsCard(node.id, sc.depts.length));
+  } else if (node.k === "alldepts") {
+    title = nameOf(node); subtitle = "كل الأقسام بما فيها التابعة للمكاتب الفرعية";
+    sc.depts.forEach((d) => folders.push((i) => deptFolder(d, i)));
+    if (!node.id) D.units.filter((u) => !D.depts.some((d) => d.id === u.departmentId)).forEach((u) => folders.push((i) => unitFolder(u, i)));
+  } else if (node.k === "dept") {
+    title = nameOf(node); subtitle = "الوحدات والمراكز التابعة للقسم";
+    sc.units.forEach((u) => folders.push((i) => unitFolder(u, i)));
+  }
+  if (node && node.k === "unit") {
+    const unit = D.units.find((u) => u.id === node.id);
+    title = unit.name; subtitle = unit.role === "center" ? "مركز — قائمة التقارير" : "وحدة — قائمة التقارير";
+    const rows = ensureUnitReportsLoaded(unit.id).slice().sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0)).map((r) => {
+      const meta = reportStatusMeta(r.status);
+      const dateStr = r.createdAt ? new Date(r.createdAt).toLocaleDateString("ar-SA-u-ca-islamic", { year: "numeric", month: "long", day: "numeric" }) : "";
+      return [esc(r.label || "تقرير"), badgeHtml(meta.label, meta.color, meta.bg), esc(dateStr),
+        `<button class="pill-btn pill-ghost" style="padding:5px 10px;" data-action="view-report-pdf" data-unit-id="${esc(unit.id)}" data-report-id="${esc(r.id)}">${iconDocument(13, ROSE)} عرض PDF</button>`];
+    });
+    body = `${S.isAdmin ? `<div style="margin-bottom:12px;">${pillBtn("فتح واجهة الوحدة", { variant: "ghost", icon: iconBuilding(ROSE, 14), action: "bs-open-unit-ui", data: { id: unit.id } })}</div>` : ""}
+      ${rows.length ? reportTable(["التقرير", "الحالة", "تاريخ الإنشاء", ""], rows) : `<div class="card" style="text-align:center;color:${SUBTLE};padding:36px;">لا توجد تقارير لهذي الوحدة بعد.</div>`}`;
+  } else {
+    body = folders.length === 0
+      ? `<div class="card" style="text-align:center;color:${SUBTLE};padding:36px;border-style:dashed;">لا يوجد شيء هنا بعد.</div>`
+      : `<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:14px;" id="bs-grid">${folders.map((f, i) => f(i)).join("")}</div>`;
+  }
+  const tiles = (node && node.k === "unit") ? "" : `<div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:18px;">${bsStatTile("الأقسام", cnt.depts, 0)}${bsStatTile("الوحدات والمراكز", cnt.units, 1)}${bsStatTile("التقارير", cnt.reports, 2)}${bsStatTile("بانتظار المراجعة", cnt.pending, 3)}</div>`;
+  return `
+  <div class="page-wrap"><div class="page-inner">
+    ${topBarHtml({ title, subtitle, icon: iconLayers(18, ROSE), backAction: path.length ? "bs-up" : "", backData: path.length ? { index: path.length - 2 } : undefined })}
+    <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-bottom:16px;">${crumbs}</div>
+    ${tiles}
+    ${(!node || node.k !== "unit") && folders.length > 6 ? `<div style="margin-bottom:14px;"><input class="input" id="bs-search" placeholder="ابحثي بالاسم..." style="width:100%;max-width:320px;" /></div>` : ""}
+    ${body}
+  </div></div>`;
+}
+
 function renderEntityPickerPage(kind) {
   const config = {
     departments: { title: "الأقسام", items: S.departments.filter((d) => d.status === "active"), action: "open-department-preview", sub: (d) => `${S.units.filter((u) => u.departmentId === d.id).length} وحدة/مركز` },
@@ -7576,6 +7725,11 @@ function attachFormListeners() {
       rows.forEach((row) => { row.style.display = !q || (row.dataset.search || "").includes(q) ? "" : "none"; });
       return;
     }
+    if (el.id === "bs-search") {
+      const q = el.value.trim().toLowerCase();
+      document.querySelectorAll("#bs-grid .bs-folder").forEach((c) => { c.style.display = !q || (c.dataset.search || "").toLowerCase().includes(q) ? "" : "none"; });
+      return;
+    }
     if (el.id === "pu-list-search") {
       const q = el.value.trim().toLowerCase();
       document.querySelectorAll("#pu-list-table tbody tr").forEach((row) => { row.style.display = !q || (row.dataset.search || "").includes(q) ? "" : "none"; });
@@ -8150,6 +8304,29 @@ function attachClickListener() {
         ensureUnitReportsLoaded(unitId);
         S.currentUnitId = unitId; S.currentReportId = null; S.view = "unit-reports"; S.openPhaseId = null; S.activeSectionId = null; render();
         if (sheetsConfigured()) refreshReportsFromSheet(unitId).then(() => { if (S.currentUnitId === unitId) render(); });
+        break;
+      }
+      case "bs-open": {
+        const cur = S.ui.bsPath || [];
+        S.ui.bsPath = cur.concat([{ k: ds.kind, id: ds.id || "" }]);
+        render();
+        break;
+      }
+      case "bs-up": {
+        const idx = Number(ds.index);
+        if (idx < 0) S.ui.bsPath = [];
+        else S.ui.bsPath = (S.ui.bsPath || []).slice(0, idx + 1);
+        render();
+        break;
+      }
+      case "bs-open-unit-ui": {
+        const unit = S.units.find((u) => u.id === ds.id);
+        if (!unit) break;
+        S.adminPreviewOrigin = "browse-structure";
+        ensureUnitReportsLoaded(unit.id);
+        S.currentUnitId = unit.id; S.currentReportId = null; S.view = "unit-reports"; S.openPhaseId = null; S.activeSectionId = null;
+        if (S.currentUnitEntryMode !== "admin" && S.currentUnitEntryMode !== "head") S.currentUnitEntryMode = "admin";
+        render();
         break;
       }
       case "open-unit-preview": {
