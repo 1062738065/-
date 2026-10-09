@@ -987,6 +987,7 @@ const DEFAULT_THEME = {
   ink: "#2E2430", subtle: "#9c8b92", border: "#eddde2",
   green: "#2E8B67", gold: "#D89A57", danger: "#D65B57", blue: "#8B4A73",
   sidebarBg: "#faf6f4", sidebarActive: "#DDCCC2", sidebarBgImage: "", sidebarBgVeil: 35,
+  navColor: "", navSize: 12, sbTitleColor: "", sbTitleSize: 15, bannerTitleColor: "", bannerTitleSize: 27, bannerSubColor: "", bannerSubSize: 13,
   taglineOffset: 0, taglineSize: 13, taglineImgH: 70, taglineColor: "",
   bs: ["#f1d0d9", "#e6c1cf", "#d9b6c9", "#eed3ab", "#dac3cf"],
 };
@@ -1001,6 +1002,12 @@ const THEME_COLOR_FIELDS = [
   { key: "gold", label: "الذهبي (قيد المراجعة)" },
   { key: "danger", label: "الأحمر (تنبيه / حذف)" },
   { key: "blue", label: "اللون الثانوي (بنفسجي)" },
+];
+const TEXT_STYLE_FIELDS = [
+  { k: "nav", label: "نصوص قائمة الشريط الجانبي", min: 10, max: 18, def: 12 },
+  { k: "sbTitle", label: "اسم المنصة بالشريط الجانبي", min: 12, max: 28, def: 15 },
+  { k: "bannerTitle", label: "عنوان بانر لوحة المعلومات", min: 18, max: 48, def: 27 },
+  { k: "bannerSub", label: "وصف بانر لوحة المعلومات", min: 10, max: 24, def: 13 },
 ];
 function themeOf(settings) { return { ...DEFAULT_THEME, ...((settings && settings.theme) || {}), bs: Object.assign([], DEFAULT_THEME.bs, (settings && settings.theme && settings.theme.bs) || []) }; }
 function hexToRgb(h) { h = String(h || "").replace("#", ""); if (h.length === 3) h = h.split("").map((c) => c + c).join(""); const n = parseInt(h, 16); return isNaN(n) || h.length !== 6 ? [255, 255, 255] : [(n >> 16) & 255, (n >> 8) & 255, n & 255]; }
@@ -3596,6 +3603,18 @@ function renderSiteSettings() {
       <div style="display:flex;gap:8px;flex-wrap:wrap;">
         ${pillBtn("استعادة الألوان المتقدمة الافتراضية", { variant: "ghost", icon: iconX(14, INK), action: "restore-theme-defaults" })}
       </div>
+    </div>
+
+    <div class="card" style="max-width:560px;margin-bottom:16px;">
+      <div class="subhead" style="margin-top:0;">النصوص: الألوان والأحجام</div>
+      ${TEXT_STYLE_FIELDS.map((f) => `<div style="margin-bottom:16px;">${fieldLabel(f.label)}
+        <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+          <input type="color" id="site-ts-${f.k}-color" value="${esc(theme[f.k + "Color"] || (f.k === "nav" ? theme.ink : f.k === "bannerSub" ? "#000000" : current.primary))}" style="width:46px;height:36px;border:1px solid ${BORDER};border-radius:8px;cursor:pointer;padding:2px;" />
+          <input type="range" id="site-ts-${f.k}-size" min="${f.min}" max="${f.max}" step="1" value="${Number(theme[f.k + "Size"]) || f.def}" style="flex:1;min-width:120px;" />
+          <span id="site-ts-${f.k}-size-label" style="font-size:12px;color:${SUBTLE};font-family:monospace;min-width:44px;">${Number(theme[f.k + "Size"]) || f.def}px</span>
+          ${theme[f.k + "Color"] ? pillBtn("اللون الأصلي", { variant: "ghost", icon: iconX(14, INK), action: "reset-text-color", data: { key: f.k } }) : ""}
+        </div></div>`).join("")}
+      <div class="hint">لون ونص عبارة الشريط الجانبي وحجمها في بطاقة «الشريط الجانبي» أدناه.</div>
     </div>
 
     <div class="card" style="max-width:560px;margin-bottom:16px;">
@@ -7872,6 +7891,15 @@ function attachFormListeners() {
       S.ui.siteSettingsSaved = false;
       return;
     }
+    if (el.id && /^site-ts-(nav|sbTitle|bannerTitle|bannerSub)-(color|size)$/.test(el.id)) {
+      const m = el.id.match(/^site-ts-(\w+)-(color|size)$/);
+      const key = m[1] + (m[2] === "color" ? "Color" : "Size");
+      S.siteSettings = S.siteSettings || dataStore.getSiteSettings();
+      S.siteSettings = { ...S.siteSettings, theme: { ...(S.siteSettings.theme || {}), [key]: m[2] === "size" ? Number(el.value) : el.value } };
+      S.ui.siteSettingsSaved = false; applySiteColors(S.siteSettings);
+      if (m[2] === "size") { const lb = document.getElementById(el.id + "-label"); if (lb) lb.textContent = el.value + "px"; }
+      return;
+    }
     if (el.id === "site-sidebar-bg-veil") {
       S.siteSettings = S.siteSettings || dataStore.getSiteSettings();
       S.siteSettings = { ...S.siteSettings, theme: { ...(S.siteSettings.theme || {}), sidebarBgVeil: Number(el.value) } };
@@ -8207,6 +8235,13 @@ function attachClickListener() {
         applySiteColors(S.siteSettings);
         dataStore.saveSiteSettings(S.siteSettings);
         S.ui.siteSettingsSaved = true;
+        render();
+        break;
+      }
+      case "reset-text-color": {
+        S.siteSettings = { ...(S.siteSettings || dataStore.getSiteSettings()), theme: { ...((S.siteSettings || {}).theme || {}), [ds.key + "Color"]: "" } };
+        applySiteColors(S.siteSettings);
+        S.ui.siteSettingsSaved = false;
         render();
         break;
       }
@@ -9920,6 +9955,11 @@ function applySiteColors(settings) {
   [["--ink", INK], ["--subtle", SUBTLE], ["--border", BORDER], ["--green", GREEN], ["--green-bg", GREEN_BG], ["--gold", GOLD], ["--gold-bg", GOLD_BG],
    ["--danger", DANGER], ["--danger-bg", DANGER_BG], ["--blue", BLUE], ["--blue-bg", BLUE_BG], ["--sidebar-bg", th.sidebarBg], ["--sidebar-active", th.sidebarActive]]
     .forEach(([k, v]) => root.style.setProperty(k, v));
+  TEXT_STYLE_FIELDS.forEach((f) => {
+    const cssName = { nav: "--nav", sbTitle: "--sb-title", bannerTitle: "--banner-title", bannerSub: "--banner-sub" }[f.k];
+    if (th[f.k + "Color"]) root.style.setProperty(cssName + "-color", th[f.k + "Color"]); else root.style.removeProperty(cssName + "-color");
+    root.style.setProperty(cssName + "-size", (Number(th[f.k + "Size"]) || f.def) + "px");
+  });
   const veil = Math.max(0, Math.min(90, Number(th.sidebarBgVeil) || 0)) / 100;
   root.style.setProperty("--sidebar-bg-image", th.sidebarBgImage ? `linear-gradient(rgba(255,255,255,${veil}),rgba(255,255,255,${veil})), url("${String(th.sidebarBgImage).replace(/"/g, "")}")` : "none");
   const font = settings.fontFamily || DEFAULT_BRANDING.fontFamily;
