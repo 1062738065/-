@@ -4749,7 +4749,7 @@ function reportCardHtml(unit, entry) {
   <div class="card prs-card">
     <div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:10px;">
       <div style="display:flex;align-items:center;gap:8px;">
-        <div style="width:30px;height:30px;border-radius:9px;background:${DANGER_BG};display:flex;align-items:center;justify-content:center;flex-shrink:0;">${reportTypeIconHtml(entry.reportType, 14, ROSE)}</div>
+        <div style="width:30px;height:30px;border-radius:9px;background:${DANGER_BG};display:flex;align-items:center;justify-content:center;flex-shrink:0;">${iconDocument(14, ROSE)}</div>
         <div><div style="font-size:14px;font-weight:800;">${esc(entry.label || "تقرير")}</div><div style="font-size:10.5px;color:${SUBTLE};margin-top:2px;">${esc(dateStr)}</div>${headApprovedDateStr ? `<div style="font-size:10px;color:${SUBTLE};margin-top:2px;">اعتمدته رئيسة الوحدة بتاريخ ${esc(headApprovedDateStr)}</div>` : ""}</div>
       </div>
       ${badgeHtml(meta.label, meta.color, meta.bg)}
@@ -4851,7 +4851,7 @@ function renderUnitReportsHub() {
     <div class="card" style="margin-bottom:16px;">
       <div style="display:flex;gap:8px;flex-wrap:wrap;">
         <input id="unit-reports-search" class="input" style="flex:2;min-width:180px;" placeholder="ابحثي باسم التقرير..." />
-        <select class="input" style="flex:1;min-width:120px;" data-action="filter-unit-reports-type"><option value="">النوع: الكل</option>${PERIOD_TYPES.map((p) => `<option value="${esc(p)}" ${typeFilter === p ? "selected" : ""}>${esc(p)}</option>`).join("")}</select>
+        <select class="input" style="flex:1;min-width:120px;" data-action="filter-unit-reports-type"><option value="">الفترة: الكل</option>${PERIOD_TYPES.map((p) => `<option value="${esc(p)}" ${typeFilter === p ? "selected" : ""}>${esc(p)}</option>`).join("")}</select>
         <select class="input" style="flex:1;min-width:110px;" data-action="filter-unit-reports-year"><option value="">السنة: الكل</option>${yearOptions.map((y) => `<option value="${esc(y)}" ${yearFilter === y ? "selected" : ""}>${esc(y)}</option>`).join("")}</select>
       </div>
     </div>
@@ -6581,13 +6581,11 @@ function renderUnitAllReportsPage() {
   const list = ensureUnitReportsLoaded(unit.id);
   const yearFilter = S.ui.unitAllReportsYearFilter || "";
   const periodFilter = S.ui.unitAllReportsPeriodFilter || "";
-  const typeFilter = S.ui.unitAllReportsTypeFilter || "";
   const statusFilter = S.ui.unitAllReportsStatusFilter || "";
 
   let filtered = list.slice();
   if (yearFilter) filtered = filtered.filter((r) => (r.sections?.basic?.data?.hijriYear || "") === yearFilter);
   if (periodFilter) filtered = filtered.filter((r) => (r.sections?.basic?.data?.periodType || "") === periodFilter);
-  if (typeFilter) filtered = filtered.filter((r) => (r.reportType || "general") === typeFilter);
   if (statusFilter) filtered = filtered.filter((r) => r.status === statusFilter);
   const sorted = filtered.sort((a, b) => b.createdAt - a.createdAt);
   const yearOptions = [...new Set(list.map((r) => r.sections?.basic?.data?.hijriYear).filter(Boolean))];
@@ -6599,7 +6597,6 @@ function renderUnitAllReportsPage() {
       <div style="display:flex;gap:8px;flex-wrap:wrap;">
         <select class="input" style="flex:1;min-width:110px;" data-action="filter-unit-all-reports-year"><option value="">السنة: الكل</option>${yearOptions.map((y) => `<option value="${esc(y)}" ${yearFilter === y ? "selected" : ""}>${esc(y)}</option>`).join("")}</select>
         <select class="input" style="flex:1;min-width:130px;" data-action="filter-unit-all-reports-period"><option value="">الفترة: الكل</option>${PERIOD_TYPES.map((p) => `<option value="${esc(p)}" ${periodFilter === p ? "selected" : ""}>${esc(p)}</option>`).join("")}</select>
-        <select class="input" style="flex:1;min-width:130px;" data-action="filter-unit-all-reports-type"><option value="">نوع التقرير: الكل</option>${REPORT_TYPES.map((t) => `<option value="${esc(t.id)}" ${typeFilter === t.id ? "selected" : ""}>${esc(t.label)}</option>`).join("")}</select>
         <select class="input" style="flex:1;min-width:150px;" data-action="filter-unit-all-reports-status"><option value="">الحالة: الكل</option>${UNIT_ALL_REPORTS_STATUS_OPTIONS.map((s) => `<option value="${esc(s.id)}" ${statusFilter === s.id ? "selected" : ""}>${esc(s.label)}</option>`).join("")}</select>
       </div>
     </div>
