@@ -8,7 +8,7 @@
 /* =============================== Design tokens (JS mirror of CSS vars) ===== */
 /* Brand palette — keep in sync with the CSS custom properties in style.css */
 let ROSE = "#6b2337", ROSE_DARK = "#521a2a";
-const INK = "#2E2430", SUBTLE = "#9c8b92",
+let INK = "#2E2430", SUBTLE = "#9c8b92",
       BORDER = "#eddde2", GREEN = "#2E8B67", GREEN_BG = "#e7f5ee", GOLD = "#D89A57",
       GOLD_BG = "#fbf0e1", GRAY_BG = "#f3edef", BLUE = "#8B4A73", BLUE_BG = "#f3e9ef",
       DANGER = "#D65B57", DANGER_BG = "#fcebe9";
@@ -891,6 +891,7 @@ function siteSettingsToRow(s) {
     sidebar_tagline: s.sidebarTagline != null ? s.sidebarTagline : DEFAULT_BRANDING.sidebarTagline,
     sidebar_tagline_image_url: s.sidebarTaglineImage || null,
     font_family: s.fontFamily || DEFAULT_BRANDING.fontFamily,
+    theme_json: JSON.stringify(s.theme || {}),
   };
 }
 function rowToSiteSettings(r) {
@@ -906,6 +907,7 @@ function rowToSiteSettings(r) {
     sidebarTagline: r.sidebar_tagline != null ? r.sidebar_tagline : DEFAULT_BRANDING.sidebarTagline,
     sidebarTaglineImage: r.sidebar_tagline_image_url || null,
     fontFamily: r.font_family || DEFAULT_BRANDING.fontFamily,
+    theme: (() => { try { return r.theme_json ? JSON.parse(r.theme_json) : {}; } catch (e) { return {}; } })(),
   };
 }
 // مخطط الهيكل التنظيمي (مسميات وظيفية حرة، للتخطيط فقط — لا علاقة له بحسابات
@@ -979,6 +981,30 @@ const UNITS_KEY = "prs:units", DEPARTMENTS_KEY = "prs:departments", OFFICES_KEY 
       SECTION_FIELD_SCHEMAS_KEY = "prs:section-field-schemas", PLATFORM_USERS_KEY = "prs:platform-users",
       ORG_CHART_KEY = "prs:org-chart", JOB_TITLE_TEMPLATES_KEY = "prs:job-title-templates";
 const DEFAULT_SITE_COLORS = { primary: "#6b2337", background: "#F2ECE8" };
+// ألوان الموقع الإضافية + ضبط عبارة الشريط الجانبي + ألوان بطاقات تصفّح الهيكل —
+// تُحفظ كلها في عمود واحد theme_json بجدول site_settings (نص JSON).
+const DEFAULT_THEME = {
+  ink: "#2E2430", subtle: "#9c8b92", border: "#eddde2",
+  green: "#2E8B67", gold: "#D89A57", danger: "#D65B57", blue: "#8B4A73",
+  sidebarBg: "#ffffff", sidebarActive: "#DDCCC2",
+  taglineOffset: 0, taglineSize: 13, taglineImgH: 70, taglineColor: "",
+  bs: ["#f1d0d9", "#e6c1cf", "#d9b6c9", "#eed3ab", "#dac3cf"],
+};
+const DEFAULT_THEME_BG = { green: "#e7f5ee", gold: "#fbf0e1", danger: "#fcebe9", blue: "#f3e9ef" };
+const THEME_COLOR_FIELDS = [
+  { key: "ink", label: "لون النصوص الأساسية" },
+  { key: "subtle", label: "لون النصوص الفرعية الباهتة" },
+  { key: "border", label: "لون الحدود والخطوط" },
+  { key: "sidebarBg", label: "خلفية الشريط الجانبي" },
+  { key: "sidebarActive", label: "لون الصفحة المحددة بالشريط الجانبي" },
+  { key: "green", label: "الأخضر (مكتمل / نجاح)" },
+  { key: "gold", label: "الذهبي (قيد المراجعة)" },
+  { key: "danger", label: "الأحمر (تنبيه / حذف)" },
+  { key: "blue", label: "اللون الثانوي (بنفسجي)" },
+];
+function themeOf(settings) { return { ...DEFAULT_THEME, ...((settings && settings.theme) || {}), bs: Object.assign([], DEFAULT_THEME.bs, (settings && settings.theme && settings.theme.bs) || []) }; }
+function hexToRgb(h) { h = String(h || "").replace("#", ""); if (h.length === 3) h = h.split("").map((c) => c + c).join(""); const n = parseInt(h, 16); return isNaN(n) || h.length !== 6 ? [255, 255, 255] : [(n >> 16) & 255, (n >> 8) & 255, n & 255]; }
+function mixHex(a, b, t) { const x = hexToRgb(a), y = hexToRgb(b); return "#" + x.map((v, i) => Math.round(v * (1 - t) + y[i] * t).toString(16).padStart(2, "0")).join(""); }
 // إعدادات الهوية القابلة للتخصيص من "إعدادات الموقع": الشعار وحجمه، بانر لوحة
 // المعلومات (صورة + عنوان + وصف)، اسم المنصة بعنوان الشريط الجانبي، وعبارة/صورة
 // الشريط الجانبي قبل زر تسجيل الخروج. null تعني: استخدام الافتراضي المُبرمَج.
@@ -1008,6 +1034,14 @@ const FONT_OPTIONS = [
 ];
 function siteLogoSrc(s) { return (s && s.logo) || ASSOCIATION_LOGO; }
 function siteBannerSrc(s) { return (s && s.bannerImage) || "hero-bg.jpg"; }
+function sidebarTaglineBlockHtml(site) {
+  const th = themeOf(site);
+  return `
+    <div class="sidebar-tagline-block" style="position:relative;top:${Number(th.taglineOffset) || 0}px;">
+      ${site.sidebarTaglineImage ? `<img src="${esc(site.sidebarTaglineImage)}" class="sidebar-tagline-img" alt="" style="max-height:${Number(th.taglineImgH) || 70}px;" />` : ""}
+      ${site.sidebarTagline ? `<div class="sidebar-tagline" style="font-size:${Number(th.taglineSize) || 13}px;${th.taglineColor ? "color:" + esc(th.taglineColor) + ";" : ""}">${esc(site.sidebarTagline)}</div>` : ""}
+    </div>`;
+}
 function currentSiteSettings() { return S.siteSettings || dataStore.getSiteSettings(); }
 const reportKey = (unitId) => `prs:report:${unitId}`;
 const reportsKey = (unitId) => `prs:reports:${unitId}`;
@@ -1965,11 +1999,7 @@ function renderMainSidebar(mobile) {
   const initial = (S.currentUser && S.currentUser.name ? S.currentUser.name.trim()[0] : "؟");
   const roleLabel = S.isAdmin ? "مديرة النظام" : S.isDepartmentUser ? "مديرة قسم" : S.isExecutive ? "الإدارة العليا" : S.isOfficeUser ? "مكتب إشراف" : S.currentUnitEntryMode === "head" ? "رئيسة الوحدة" : S.currentUnitEntryMode === "extra" ? (((S.units.find((u) => u.id === S.currentUnitId) || {}).extraReviewerTitle) || "مراجعة إضافية") : "مسؤولة الوحدة";
   const site = currentSiteSettings();
-  const taglineHtml = S.isAdmin ? "" : `
-    <div class="sidebar-tagline-block">
-      ${site.sidebarTaglineImage ? `<img src="${esc(site.sidebarTaglineImage)}" class="sidebar-tagline-img" alt="" />` : ""}
-      ${site.sidebarTagline ? `<div class="sidebar-tagline">${esc(site.sidebarTagline)}</div>` : ""}
-    </div>`;
+  const taglineHtml = S.isAdmin ? "" : sidebarTaglineBlockHtml(site);
 
   const inner = `
     <div class="sidebar-head">
@@ -3194,8 +3224,13 @@ function bsCounts(sc) {
   sc.units.forEach((u) => { const rs = ensureUnitReportsLoaded(u.id); reports += rs.length; pending += rs.filter((r) => BS_PENDING.includes(r.status)).length; });
   return { depts: sc.depts.length, units: sc.units.length, reports, pending };
 }
+function bsPalette() {
+  const th = themeOf(S.siteSettings || dataStore.getSiteSettings());
+  return BS_COLORS.map((d, i) => th.bs[i] === DEFAULT_THEME.bs[i] ? d : { tab: th.bs[i], bg: `linear-gradient(135deg,${mixHex(th.bs[i], "#ffffff", 0.6)},${mixHex(th.bs[i], "#ffffff", 0.15)})` });
+}
 function bsFolderHtml(o) {
-  const c = BS_COLORS[(o.i || 0) % BS_COLORS.length];
+  const PAL = bsPalette();
+  const c = PAL[(o.i || 0) % PAL.length];
   const data = Object.entries(o.data || {}).map(([k, v]) => `data-${k}="${esc(v)}"`).join(" ");
   const chips = (o.chips || []).map((t) => `<span style="font-size:10.5px;font-weight:700;color:${INK};background:rgba(255,255,255,0.7);padding:3px 9px;border-radius:999px;">${esc(t)}</span>`).join("");
   return `<button type="button" class="bs-folder" data-search="${esc(o.title)}" data-action="${o.action}" ${data} style="position:relative;display:block;text-align:right;border:none;background:none;padding:16px 0 0;cursor:pointer;font-family:inherit;width:100%;">
@@ -3208,7 +3243,8 @@ function bsFolderHtml(o) {
   </button>`;
 }
 function bsStatTile(label, value, i) {
-  const c = BS_COLORS[i % BS_COLORS.length];
+  const PAL = bsPalette();
+  const c = PAL[i % PAL.length];
   return `<div style="background:${c.bg};border-radius:16px;padding:12px 16px;min-width:110px;flex:1;"><div style="font-size:22px;font-weight:900;color:${INK};">${value}</div><div style="font-size:11px;color:${SUBTLE};font-weight:700;">${esc(label)}</div></div>`;
 }
 function renderBrowseStructure() {
@@ -3503,6 +3539,7 @@ function renderOrgChartPage() {
 /* =============================== Site settings (admin) ======================= */
 function renderSiteSettings() {
   const current = S.siteSettings || dataStore.getSiteSettings();
+  const theme = themeOf(current);
   const isColorDefault = current.primary === DEFAULT_SITE_COLORS.primary && current.background === DEFAULT_SITE_COLORS.background;
   const isBrandingDefault = !current.logo && (Number(current.logoSize) || DEFAULT_BRANDING.logoSize) === DEFAULT_BRANDING.logoSize && !current.bannerImage &&
     (current.bannerTitle || DEFAULT_BRANDING.bannerTitle) === DEFAULT_BRANDING.bannerTitle && (current.bannerSub || DEFAULT_BRANDING.bannerSub) === DEFAULT_BRANDING.bannerSub &&
@@ -3543,6 +3580,22 @@ function renderSiteSettings() {
         </div>
       </div>
       <div>${pillBtn("استعادة الألوان الافتراضية", { variant: "ghost", icon: iconX(14, INK), action: "restore-site-settings-defaults", disabled: isColorDefault })}</div>
+    </div>
+
+    <div class="card" style="max-width:560px;margin-bottom:16px;">
+      <div class="subhead" style="margin-top:0;">ألوان متقدمة (كل ألوان الموقع)</div>
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:14px;margin-bottom:16px;">
+        ${THEME_COLOR_FIELDS.map((f) => `<div>${fieldLabel(f.label)}<div style="display:flex;align-items:center;gap:10px;">
+          <input type="color" id="site-x-${f.key}" value="${esc(theme[f.key])}" style="width:46px;height:36px;border:1px solid ${BORDER};border-radius:8px;cursor:pointer;padding:2px;" />
+          <span id="site-x-${f.key}-hex" style="font-size:12px;color:${SUBTLE};font-family:monospace;">${esc(theme[f.key])}</span></div></div>`).join("")}
+      </div>
+      <div class="subhead">ألوان بطاقات تصفّح الهيكل</div>
+      <div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:16px;">
+        ${theme.bs.map((c, i) => `<div style="text-align:center;"><input type="color" id="site-bs-${i}" value="${esc(c)}" style="width:52px;height:40px;border:1px solid ${BORDER};border-radius:8px;cursor:pointer;padding:2px;" /><div style="font-size:10.5px;color:${SUBTLE};margin-top:4px;">اللون ${i + 1}</div></div>`).join("")}
+      </div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;">
+        ${pillBtn("استعادة الألوان المتقدمة الافتراضية", { variant: "ghost", icon: iconX(14, INK), action: "restore-theme-defaults" })}
+      </div>
     </div>
 
     <div class="card" style="max-width:560px;margin-bottom:16px;">
@@ -3599,6 +3652,36 @@ function renderSiteSettings() {
       <div style="margin-bottom:14px;">
         ${fieldLabel("العبارة أسفل الشريط الجانبي (قبل تسجيل الخروج)")}
         ${textInput("site-sidebar-tagline", current.sidebarTagline, DEFAULT_BRANDING.sidebarTagline)}
+      </div>
+      <div style="margin-bottom:14px;">
+        ${fieldLabel("موضع العبارة: رفع / تنزيل")}
+        <div style="display:flex;align-items:center;gap:12px;"><span style="font-size:11px;color:${SUBTLE};">أعلى</span>
+          <input type="range" id="site-tagline-offset" min="-80" max="80" step="2" value="${Number(theme.taglineOffset) || 0}" style="flex:1;" />
+          <span style="font-size:11px;color:${SUBTLE};">أسفل</span>
+          <span id="site-tagline-offset-label" style="font-size:12px;color:${SUBTLE};font-family:monospace;min-width:44px;">${Number(theme.taglineOffset) || 0}px</span></div>
+      </div>
+      <div style="margin-bottom:14px;">
+        ${fieldLabel("حجم خط العبارة")}
+        <div style="display:flex;align-items:center;gap:12px;">
+          <input type="range" id="site-tagline-size" min="10" max="26" step="1" value="${Number(theme.taglineSize) || 13}" style="flex:1;" />
+          <span id="site-tagline-size-label" style="font-size:12px;color:${SUBTLE};font-family:monospace;min-width:44px;">${Number(theme.taglineSize) || 13}px</span></div>
+      </div>
+      <div style="margin-bottom:14px;">
+        ${fieldLabel("ارتفاع صورة العبارة")}
+        <div style="display:flex;align-items:center;gap:12px;">
+          <input type="range" id="site-tagline-imgh" min="30" max="180" step="5" value="${Number(theme.taglineImgH) || 70}" style="flex:1;" />
+          <span id="site-tagline-imgh-label" style="font-size:12px;color:${SUBTLE};font-family:monospace;min-width:44px;">${Number(theme.taglineImgH) || 70}px</span></div>
+      </div>
+      <div style="margin-bottom:16px;">
+        ${fieldLabel("لون العبارة (اتركيه كما هو لاستخدام اللون الأساسي)")}
+        <div style="display:flex;align-items:center;gap:10px;">
+          <input type="color" id="site-tagline-color" value="${esc(theme.taglineColor || current.primary)}" style="width:46px;height:36px;border:1px solid ${BORDER};border-radius:8px;cursor:pointer;padding:2px;" />
+          ${theme.taglineColor ? pillBtn("استخدام اللون الأساسي", { variant: "ghost", icon: iconX(14, INK), action: "reset-tagline-color" }) : ""}
+        </div>
+      </div>
+      <div style="margin-bottom:14px;">
+        ${fieldLabel("معاينة (كما تظهر لباقي الحسابات)")}
+        <div id="site-tagline-preview" style="border:1px dashed ${BORDER};border-radius:12px;padding:18px 10px;background:${theme.sidebarBg};min-height:150px;overflow:hidden;">${sidebarTaglineBlockHtml(current)}</div>
       </div>
       <div>
         ${fieldLabel("صورة اختيارية أسفل الشريط الجانبي (قبل تسجيل الخروج)")}
@@ -6080,6 +6163,7 @@ function fieldEditFormHtml(draft, isNew) {
       ${fieldWrap("نوع الحقل", true, `<select class="input" data-action="set-field-draft" data-key="type" data-rerender="1">${SCHEMA_FIELD_TYPES_SELECTABLE.map((t) => `<option value="${t}" ${t === type ? "selected" : ""}>${esc(SCHEMA_FIELD_TYPE_LABELS[t])}</option>`).join("")}</select>`)}
       ${showOptions ? fieldWrap("الخيارات (كل خيار بسطر)", true, `<textarea class="input" id="field-draft-options" style="min-height:90px">${esc(optionsText)}</textarea>`) : ""}
       ${type === "expandableSelect" ? fieldWrap('نص خيار "إضافة قيمة جديدة"', false, `<input class="input" id="field-draft-other-label" value="${esc(draft.otherLabel || "أخرى")}" placeholder="أخرى" />`) : ""}
+      ${fieldWrap("أيقونة الحقل (اختاري واحدة أو اكتبي أي إيموجي)", false, `<div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px;">${FIELD_ICON_CHOICES.map((ic) => `<button type="button" data-action="set-field-draft-icon" data-icon="${ic}" style="width:38px;height:38px;border-radius:11px;font-size:19px;cursor:pointer;border:2px solid ${(draft.icon || FIELD_TYPE_DEFAULT_ICON[type]) === ic ? ROSE : BORDER};background:#fff;">${ic}</button>`).join("")}</div><input class="input" id="field-draft-icon" value="${esc(draft.icon || "")}" placeholder="${esc(FIELD_TYPE_DEFAULT_ICON[type] || "📄")}  (فارغ = أيقونة النوع)" style="max-width:260px;" />`)}
       ${fieldWrap("نص توضيحي داخل الحقل (اختياري)", false, `<input class="input" id="field-draft-placeholder" value="${esc(draft.placeholder || "")}" placeholder="مثال: اكتبي هنا..." />`)}
       <button type="button" class="pill-btn ${draft.required ? "pill-primary" : "pill-ghost"}" data-action="toggle-field-draft-required" style="align-self:flex-start;">${draft.required ? "✓ حقل إلزامي" : "حقل اختياري — اضغطي لجعله إلزاميًا"}</button>
       <div style="display:flex;gap:8px;margin-top:4px;">
@@ -6090,16 +6174,23 @@ function fieldEditFormHtml(draft, isNew) {
   </div>`;
 }
 
+const FIELD_TYPE_DEFAULT_ICON = { text: "✏️", textarea: "📝", number: "🔢", date: "📅", select: "📋", radio: "🔘", checklist: "☑️", expandableSelect: "➕", computed: "🧮" };
+const FIELD_ICON_CHOICES = ["✏️", "📝", "🔢", "📅", "📋", "🔘", "☑️", "➕", "🧮", "⭐", "🎯", "📊", "📈", "💡", "🏆", "👥", "🏢", "📍", "📎", "🔔", "✅", "⚠️", "💬", "🌟"];
+function fieldIconOf(field) { return field.icon || FIELD_TYPE_DEFAULT_ICON[field.type] || "📄"; }
 function fieldSchemaRowHtml(field, index, total, sectionId) {
   const typeLabel = SCHEMA_FIELD_TYPE_LABELS[field.type] || field.type;
   const isComputed = field.type === "computed";
   const btn = "width:30px;height:30px;border:1px solid " + BORDER;
-  return `<div class="card" style="display:flex;align-items:center;justify-content:space-between;gap:10px;padding:12px 14px;${isComputed ? "opacity:.8;" : ""}">
+  return `<div class="card prs-card" style="display:flex;align-items:center;justify-content:space-between;gap:10px;padding:14px 16px;border-radius:18px;${isComputed ? "opacity:.85;" : ""}">
     <div style="display:flex;align-items:center;gap:12px;min-width:0;">
-      <span style="width:42px;height:42px;border-radius:50%;background:${DANGER_BG};display:flex;align-items:center;justify-content:center;flex-shrink:0;">${iconDocument(18, ROSE)}</span>
+      <span style="position:relative;width:46px;height:46px;border-radius:14px;background:linear-gradient(135deg,${DANGER_BG},${GRAY_BG});display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:22px;line-height:1;">${esc(fieldIconOf(field))}<span style="position:absolute;top:-6px;right:-6px;min-width:18px;height:18px;border-radius:9px;background:${ROSE};color:#fff;font-size:10px;font-weight:800;display:flex;align-items:center;justify-content:center;padding:0 4px;">${index + 1}</span></span>
       <div style="min-width:0;">
         <div style="font-size:13.5px;font-weight:800;">${esc(field.label)}${field.required ? ` <span style="color:${ROSE};">*</span>` : ""}</div>
-        <div style="font-size:10.5px;color:${SUBTLE};margin-top:2px;">${isComputed ? "محسوبة تلقائيًا" : "متاحة لإدخال البيانات"} · ${esc(typeLabel)}</div>
+        <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:5px;">
+          <span style="font-size:10.5px;font-weight:700;color:${INK};background:${GRAY_BG};padding:2px 9px;border-radius:999px;">${esc(typeLabel)}</span>
+          <span style="font-size:10.5px;font-weight:700;color:${isComputed ? BLUE : GREEN};background:${isComputed ? BLUE_BG : GREEN_BG};padding:2px 9px;border-radius:999px;">${isComputed ? "محسوبة تلقائيًا" : "إدخال يدوي"}</span>
+          ${field.required ? `<span style="font-size:10.5px;font-weight:700;color:${DANGER};background:${DANGER_BG};padding:2px 9px;border-radius:999px;">إلزامي</span>` : ""}
+        </div>
       </div>
     </div>
     <div style="display:flex;gap:5px;flex-shrink:0;align-items:center;">
@@ -6131,9 +6222,13 @@ function renderFieldSchemasManage() {
   <div class="page-wrap"><div class="page-inner">
     ${topBarHtml({ title: "إدارة حقول الأقسام", subtitle: "أضف أو عدّل أي من حقول الأقسام التالية، مع إمكانية تحديد الترتيب.", icon: iconPencil(18, ROSE), backAction: "nav-back-admin" })}
 
-    <div class="card" style="padding:10px 12px;margin-bottom:20px;">
+    <div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:16px;">
+      ${[["الحقول", fields.length, "📋"], ["إلزامية", fields.filter((f) => f.required).length, "⭐"], ["محسوبة", fields.filter((f) => f.type === "computed").length, "🧮"]].map(([l, v, ic]) => `<div style="flex:1;min-width:110px;background:linear-gradient(135deg,${GRAY_BG},#fff);border-radius:16px;padding:12px 16px;display:flex;align-items:center;gap:10px;box-shadow:var(--card-shadow);"><span style="font-size:22px;">${ic}</span><div><div style="font-size:20px;font-weight:900;color:${INK};line-height:1.1;">${v}</div><div style="font-size:11px;color:${SUBTLE};font-weight:700;">${l}</div></div></div>`).join("")}
+    </div>
+
+    <div class="card" style="padding:10px 12px;margin-bottom:20px;border-radius:18px;">
       <div style="display:flex;gap:8px;flex-wrap:wrap;">
-        ${sections.map((s) => `<button type="button" class="pill-btn ${s.id === activeSectionId ? "pill-primary" : "pill-ghost"}" style="${s.id === activeSectionId ? "" : "border:1px solid " + BORDER + ";"}flex:1;justify-content:center;min-width:110px;" data-action="select-field-schema-section" data-section="${esc(s.id)}">${esc(s.label)}</button>`).join("")}
+        ${sections.map((s) => `<button type="button" class="pill-btn ${s.id === activeSectionId ? "pill-primary" : "pill-ghost"}" style="${s.id === activeSectionId ? "" : "border:1px solid " + BORDER + ";"}flex:1;justify-content:center;min-width:110px;gap:8px;" data-action="select-field-schema-section" data-section="${esc(s.id)}">${esc(s.label)}<span style="font-size:10.5px;font-weight:800;background:${s.id === activeSectionId ? "rgba(255,255,255,.25)" : GRAY_BG};padding:1px 8px;border-radius:999px;">${((SECTION_FIELD_SCHEMAS[s.id] || {}).fields || []).length}</span></button>`).join("")}
       </div>
     </div>
 
@@ -7754,6 +7849,31 @@ function attachFormListeners() {
       render();
       return;
     }
+    if (el.id && el.id.indexOf("site-x-") === 0 && el.id.slice(-4) !== "-hex") {
+      const key = el.id.slice(7);
+      S.siteSettings = S.siteSettings || dataStore.getSiteSettings();
+      S.siteSettings = { ...S.siteSettings, theme: { ...(S.siteSettings.theme || {}), [key]: el.value } };
+      S.ui.siteSettingsSaved = false; applySiteColors(S.siteSettings);
+      const hx = document.getElementById(el.id + "-hex"); if (hx) hx.textContent = el.value;
+      return;
+    }
+    if (el.id && /^site-bs-[0-4]$/.test(el.id)) {
+      S.siteSettings = S.siteSettings || dataStore.getSiteSettings();
+      const bs = themeOf(S.siteSettings).bs.slice(); bs[Number(el.id.slice(-1))] = el.value;
+      S.siteSettings = { ...S.siteSettings, theme: { ...(S.siteSettings.theme || {}), bs } };
+      S.ui.siteSettingsSaved = false;
+      return;
+    }
+    if (el.id === "site-tagline-offset" || el.id === "site-tagline-size" || el.id === "site-tagline-imgh" || el.id === "site-tagline-color") {
+      const key = { "site-tagline-offset": "taglineOffset", "site-tagline-size": "taglineSize", "site-tagline-imgh": "taglineImgH", "site-tagline-color": "taglineColor" }[el.id];
+      S.siteSettings = S.siteSettings || dataStore.getSiteSettings();
+      const val = el.id === "site-tagline-color" ? el.value : Number(el.value);
+      S.siteSettings = { ...S.siteSettings, theme: { ...(S.siteSettings.theme || {}), [key]: val } };
+      S.ui.siteSettingsSaved = false;
+      const lb = document.getElementById(el.id + "-label"); if (lb) lb.textContent = val + "px";
+      const pv = document.getElementById("site-tagline-preview"); if (pv) pv.innerHTML = sidebarTaglineBlockHtml(S.siteSettings);
+      return;
+    }
     if (el.id === "site-logo-size") {
       S.siteSettings = S.siteSettings || dataStore.getSiteSettings();
       S.siteSettings = { ...S.siteSettings, logoSize: Number(el.value) || DEFAULT_BRANDING.logoSize };
@@ -8060,6 +8180,20 @@ function attachClickListener() {
         applySiteColors(S.siteSettings);
         dataStore.saveSiteSettings(S.siteSettings);
         S.ui.siteSettingsSaved = true;
+        render();
+        break;
+      }
+      case "restore-theme-defaults": {
+        S.siteSettings = { ...(S.siteSettings || dataStore.getSiteSettings()), theme: {} };
+        applySiteColors(S.siteSettings);
+        dataStore.saveSiteSettings(S.siteSettings);
+        S.ui.siteSettingsSaved = true;
+        render();
+        break;
+      }
+      case "reset-tagline-color": {
+        S.siteSettings = { ...(S.siteSettings || dataStore.getSiteSettings()), theme: { ...((S.siteSettings || {}).theme || {}), taglineColor: "" } };
+        S.ui.siteSettingsSaved = false;
         render();
         break;
       }
@@ -9434,6 +9568,17 @@ function attachClickListener() {
         S.ui.fieldEditDraft = { ...field, optionsText: (field.options || field.baseOptions || []).join("\n") };
         render(); break;
       }
+      case "set-field-draft-icon": {
+        S.ui.fieldEditDraft = S.ui.fieldEditDraft || {};
+        const d_ = S.ui.fieldEditDraft;
+        const g_ = (id) => document.getElementById(id);
+        if (g_("field-draft-label")) d_.label = g_("field-draft-label").value;
+        if (g_("field-draft-options")) d_.optionsText = g_("field-draft-options").value;
+        if (g_("field-draft-placeholder")) d_.placeholder = g_("field-draft-placeholder").value;
+        if (g_("field-draft-other-label")) d_.otherLabel = g_("field-draft-other-label").value;
+        d_.icon = ds.icon;
+        render(); break;
+      }
       case "cancel-field-edit": { S.ui.editingFieldId = null; S.ui.fieldEditDraft = null; render(); break; }
       case "toggle-field-draft-required": {
         S.ui.fieldEditDraft = S.ui.fieldEditDraft || {};
@@ -9457,6 +9602,9 @@ function attachClickListener() {
         const isNew = S.ui.editingFieldId === "__new__";
         const fieldId = isNew ? uid("fld") : S.ui.editingFieldId;
         const newField = { id: fieldId, type, label, required: !!draft.required, placeholder };
+        const iconEl = document.getElementById("field-draft-icon");
+        const iconVal = (iconEl ? iconEl.value : (draft.icon || "")).trim();
+        if (iconVal) newField.icon = Array.from(iconVal).slice(0, 4).join("");
         if (type === "select" || type === "radio" || type === "checklist") newField.options = optionsList;
         if (type === "expandableSelect") {
           newField.baseOptions = optionsList;
@@ -9737,6 +9885,15 @@ function applySiteColors(settings) {
   root.style.setProperty("--rose", settings.primary);
   root.style.setProperty("--rose-dark", settings.primary);
   root.style.setProperty("--blush-bg", settings.background);
+  const th = themeOf(settings);
+  INK = th.ink; SUBTLE = th.subtle; BORDER = th.border; GREEN = th.green; GOLD = th.gold; DANGER = th.danger; BLUE = th.blue;
+  GREEN_BG = th.green === DEFAULT_THEME.green ? DEFAULT_THEME_BG.green : mixHex(th.green, "#ffffff", 0.88);
+  GOLD_BG = th.gold === DEFAULT_THEME.gold ? DEFAULT_THEME_BG.gold : mixHex(th.gold, "#ffffff", 0.88);
+  DANGER_BG = th.danger === DEFAULT_THEME.danger ? DEFAULT_THEME_BG.danger : mixHex(th.danger, "#ffffff", 0.88);
+  BLUE_BG = th.blue === DEFAULT_THEME.blue ? DEFAULT_THEME_BG.blue : mixHex(th.blue, "#ffffff", 0.88);
+  [["--ink", INK], ["--subtle", SUBTLE], ["--border", BORDER], ["--green", GREEN], ["--green-bg", GREEN_BG], ["--gold", GOLD], ["--gold-bg", GOLD_BG],
+   ["--danger", DANGER], ["--danger-bg", DANGER_BG], ["--blue", BLUE], ["--blue-bg", BLUE_BG], ["--sidebar-bg", th.sidebarBg], ["--sidebar-active", th.sidebarActive]]
+    .forEach(([k, v]) => root.style.setProperty(k, v));
   const font = settings.fontFamily || DEFAULT_BRANDING.fontFamily;
   root.style.setProperty("--font-main", `'${font}'`);
   root.style.setProperty("--font-heading", `'${font}'`);
