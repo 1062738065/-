@@ -18,7 +18,8 @@
   --danger-bg: #fcebe9;
   --blue: #8B4A73;         /* secondary accent (wine-purple) */
   --blue-bg: #f3e9ef;
-  --sidebar-bg: #ffffff;
+  --sidebar-bg: #faf6f4;
+  --sidebar-bg-image: none;
   --sidebar-active: #DDCCC2;
   --sidebar-text: var(--ink);
   --sidebar-text-subtle: var(--subtle);
@@ -64,7 +65,10 @@ img { max-width: 100%; }
 .sidebar {
   width: 252px;
   flex-shrink: 0;
-  background: #faf6f4;
+  background-color: var(--sidebar-bg);
+  background-image: var(--sidebar-bg-image);
+  background-size: cover;
+  background-position: center;
   box-shadow: var(--card-shadow);
   border-radius: 20px;
   padding: 16px 12px;

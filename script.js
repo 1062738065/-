@@ -986,7 +986,7 @@ const DEFAULT_SITE_COLORS = { primary: "#6b2337", background: "#F2ECE8" };
 const DEFAULT_THEME = {
   ink: "#2E2430", subtle: "#9c8b92", border: "#eddde2",
   green: "#2E8B67", gold: "#D89A57", danger: "#D65B57", blue: "#8B4A73",
-  sidebarBg: "#ffffff", sidebarActive: "#DDCCC2",
+  sidebarBg: "#faf6f4", sidebarActive: "#DDCCC2", sidebarBgImage: "", sidebarBgVeil: 35,
   taglineOffset: 0, taglineSize: 13, taglineImgH: 70, taglineColor: "",
   bs: ["#f1d0d9", "#e6c1cf", "#d9b6c9", "#eed3ab", "#dac3cf"],
 };
@@ -3652,6 +3652,14 @@ function renderSiteSettings() {
       <div style="margin-bottom:14px;">
         ${fieldLabel("العبارة أسفل الشريط الجانبي (قبل تسجيل الخروج)")}
         ${textInput("site-sidebar-tagline", current.sidebarTagline, DEFAULT_BRANDING.sidebarTagline)}
+      </div>
+      <div style="margin-bottom:14px;">
+        ${fieldLabel("خلفية الشريط الجانبي: لون (من «ألوان متقدمة») أو صورة")}
+        ${imgPreviewBlock(theme.sidebarBgImage || "", "خلفية الشريط الجانبي", `width:70px;height:100px;`, "site-sidebar-bg-file", "remove-sidebar-bg-image", !!theme.sidebarBgImage)}
+        <div style="display:flex;align-items:center;gap:12px;margin-top:10px;">
+          <span style="font-size:11.5px;color:${SUBTLE};white-space:nowrap;">تفتيح الصورة (لوضوح النص)</span>
+          <input type="range" id="site-sidebar-bg-veil" min="0" max="90" step="5" value="${Number(theme.sidebarBgVeil) || 0}" style="flex:1;" />
+          <span id="site-sidebar-bg-veil-label" style="font-size:12px;color:${SUBTLE};font-family:monospace;min-width:44px;">${Number(theme.sidebarBgVeil) || 0}%</span></div>
       </div>
       <div style="margin-bottom:14px;">
         ${fieldLabel("موضع العبارة: رفع / تنزيل")}
@@ -7864,6 +7872,13 @@ function attachFormListeners() {
       S.ui.siteSettingsSaved = false;
       return;
     }
+    if (el.id === "site-sidebar-bg-veil") {
+      S.siteSettings = S.siteSettings || dataStore.getSiteSettings();
+      S.siteSettings = { ...S.siteSettings, theme: { ...(S.siteSettings.theme || {}), sidebarBgVeil: Number(el.value) } };
+      S.ui.siteSettingsSaved = false; applySiteColors(S.siteSettings);
+      const lb = document.getElementById("site-sidebar-bg-veil-label"); if (lb) lb.textContent = el.value + "%";
+      return;
+    }
     if (el.id === "site-tagline-offset" || el.id === "site-tagline-size" || el.id === "site-tagline-imgh" || el.id === "site-tagline-color") {
       const key = { "site-tagline-offset": "taglineOffset", "site-tagline-size": "taglineSize", "site-tagline-imgh": "taglineImgH", "site-tagline-color": "taglineColor" }[el.id];
       S.siteSettings = S.siteSettings || dataStore.getSiteSettings();
@@ -7907,7 +7922,7 @@ function attachFormListeners() {
 
   appEl.addEventListener("change", (e) => {
     const el = e.target;
-    if (el.id === "site-logo-file" || el.id === "site-banner-file" || el.id === "site-tagline-image-file") {
+    if (el.id === "site-logo-file" || el.id === "site-banner-file" || el.id === "site-tagline-image-file" || el.id === "site-sidebar-bg-file") {
       const file = el.files && el.files[0];
       if (!file) return;
       if (file.size > 1.5 * 1024 * 1024) {
@@ -7919,6 +7934,10 @@ function attachFormListeners() {
       const reader = new FileReader();
       reader.onload = () => {
         S.siteSettings = S.siteSettings || dataStore.getSiteSettings();
+        if (el.id === "site-sidebar-bg-file") {
+          S.siteSettings = { ...S.siteSettings, theme: { ...(S.siteSettings.theme || {}), sidebarBgImage: reader.result } };
+          applySiteColors(S.siteSettings);
+        } else
         S.siteSettings = { ...S.siteSettings, [fieldMap[el.id]]: reader.result };
         S.ui.siteSettingsSaved = false;
         S.ui.siteSettingsFileError = null;
@@ -8188,6 +8207,13 @@ function attachClickListener() {
         applySiteColors(S.siteSettings);
         dataStore.saveSiteSettings(S.siteSettings);
         S.ui.siteSettingsSaved = true;
+        render();
+        break;
+      }
+      case "remove-sidebar-bg-image": {
+        S.siteSettings = { ...(S.siteSettings || dataStore.getSiteSettings()), theme: { ...((S.siteSettings || {}).theme || {}), sidebarBgImage: "" } };
+        applySiteColors(S.siteSettings);
+        S.ui.siteSettingsSaved = false;
         render();
         break;
       }
@@ -9894,6 +9920,8 @@ function applySiteColors(settings) {
   [["--ink", INK], ["--subtle", SUBTLE], ["--border", BORDER], ["--green", GREEN], ["--green-bg", GREEN_BG], ["--gold", GOLD], ["--gold-bg", GOLD_BG],
    ["--danger", DANGER], ["--danger-bg", DANGER_BG], ["--blue", BLUE], ["--blue-bg", BLUE_BG], ["--sidebar-bg", th.sidebarBg], ["--sidebar-active", th.sidebarActive]]
     .forEach(([k, v]) => root.style.setProperty(k, v));
+  const veil = Math.max(0, Math.min(90, Number(th.sidebarBgVeil) || 0)) / 100;
+  root.style.setProperty("--sidebar-bg-image", th.sidebarBgImage ? `linear-gradient(rgba(255,255,255,${veil}),rgba(255,255,255,${veil})), url("${String(th.sidebarBgImage).replace(/"/g, "")}")` : "none");
   const font = settings.fontFamily || DEFAULT_BRANDING.fontFamily;
   root.style.setProperty("--font-main", `'${font}'`);
   root.style.setProperty("--font-heading", `'${font}'`);
