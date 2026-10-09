@@ -4765,6 +4765,7 @@ function treeNodeHtml(e, tag, type, moveHtml, childrenHtml, depth, opts) {
       : `<span style="font-size:12px;font-weight:700;">حذف "${esc(e.name)}"؟</span>${pillBtn("حذف", { variant: "danger", action: "tree-delete", data: { type, id: e.id } })}${pillBtn("تراجع", { variant: "ghost", action: "tree-cancel-delete" })}`)
     : `${moveHtml}
       ${opts.noAdd ? "" : `<button class="icon-btn" style="width:28px;height:28px;border:1px solid ${BORDER}" data-action="tree-add-start" data-type="${type}" data-id="${esc(e.id)}" title="إضافة">${iconPlus(13, INK)}</button>`}
+      ${type === "unit" ? `<button class="icon-btn" style="width:28px;height:28px;border:1px solid ${BORDER}" data-action="start-unit-approval-edit" data-id="${esc(e.id)}" title="مسار الاعتماد">${iconLayers(13, INK)}</button>` : ""}
       <button class="icon-btn" style="width:28px;height:28px;border:1px solid ${BORDER}" data-action="tree-edit-start" data-type="${type}" data-id="${esc(e.id)}" title="تعديل">${iconPencil(13, INK)}</button>
       ${opts.noDelete ? "" : `<button class="icon-btn" style="width:28px;height:28px;background:${DANGER_BG}" data-action="tree-confirm-delete" data-type="${type}" data-id="${esc(e.id)}" title="حذف">${iconTrash(13, DANGER)}</button>`}`;
   return `<div style="margin-right:${depth > 0 ? 22 : 0}px;${depth > 0 ? `border-right:2px solid ${BORDER};padding-right:14px;` : ""}">
@@ -4776,7 +4777,7 @@ function treeNodeHtml(e, tag, type, moveHtml, childrenHtml, depth, opts) {
       </div>
       <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;">${actions}</div>
     </div>
-    ${treeAddFormHtml(type, e.id)}${treeEditFormHtml(type, e.id)}
+    ${treeAddFormHtml(type, e.id)}${treeEditFormHtml(type, e.id)}${type === "unit" && S.ui.editingUnitApprovalId === e.id ? `<div style="margin:6px 0;">${unitRowHtml(e)}</div>` : ""}
     ${collapsed ? "" : childrenHtml}
   </div>`;
 }
