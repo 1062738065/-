@@ -2027,7 +2027,7 @@ function renderMainSidebar(mobile) {
         <div class="sidebar-role-badge">${esc(roleLabel)}</div>
       </div>
     </div>
-    <div style="display:flex;flex-direction:column;gap:14px;">${groupsHtml}</div>
+    <div style="display:flex;flex-direction:column;gap:6px;">${groupsHtml}</div>
     <div class="sidebar-spacer"></div>
     <div class="sidebar-sep"></div>
     ${taglineHtml}
