@@ -2104,7 +2104,8 @@ function badgeHtml(label, color, bg) {
 function unitSharedPlatformUsers(unit) {
   if (!unit || !unit.password) return [];
   const list = (S.platformUsers && S.platformUsers.length) ? S.platformUsers : (dataStore.getPlatformUsers() || []);
-  return list.filter((pu) => pu.status !== "disabled" && pu.password === unit.password && pu.loginId && (pu.loginId === unit.name || (unit.email && pu.loginId === unit.email)));
+  const norm = (x) => String(x || "").replace(/\s+/g, " ").trim();
+  return list.filter((pu) => pu.status !== "disabled" && norm(pu.password) === norm(unit.password) && pu.loginId && (norm(pu.loginId) === norm(unit.name) || (unit.email && norm(pu.loginId) === norm(unit.email))));
 }
 function renderUnitRoleSelect() {
   const unit = (S.units || []).find((u) => u.id === S.pendingUnitLoginId);
