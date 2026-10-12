@@ -815,16 +815,55 @@ function parseReportTabsCfg(v) {
   const notify = Array.isArray(v.notify) ? v.notify : [];
   return tabs.length || notify.length ? { tabs, notify } : null;
 }
+/* ===================== أزرار صفحة التقارير من القاعدة (جدول report_tabs) =====================
+   كل زر: id, label, statuses (حالات التقارير التي يعرضها), adminStatuses (حالات إضافية تظهر
+   فقط بصفة «الإدارية»), special ("all" كل غير المؤرشف / "archived" المؤرشف), mode ("" للجميع،
+   "head"/"extra" يظهر فقط بصفة رئيسة الوحدة/المراجعة الإضافية), enabled.
+   لو الجدول فاضي تُستخدم القائمة المدمجة أدناه كما هي (نفس الأزرار السابقة بالضبط). */
+const REPORT_TABS_KEY = "prs:report-tabs";
+const REPORT_STATUS_OPTIONS = [
+  ["draft", "مسودة"], ["returned", "بحاجة إلى تعديل"], ["needs_completion", "بحاجة إلى استكمال"],
+  ["under_review", "بانتظار مراجعة القسم"], ["pending_head_review", "بانتظار رئيسة الوحدة"], ["pending_extra_review", "بانتظار المراجعة الإضافية"],
+  ["head_returned_edit", "أعادته الرئيسة للتعديل"], ["head_returned_completion", "أعادته الرئيسة للاستكمال"],
+  ["extra_returned_edit", "أعادته المراجعة الإضافية للتعديل"], ["extra_returned_completion", "أعادته المراجعة الإضافية للاستكمال"],
+  ["custom_pending", "قيد المراجعة في المسار"], ["completed", "مكتمل"], ["approved", "معتمد"],
+];
+const REPORT_TABS_DEFAULT = [
+  { id: "all", label: "الكل", special: "all", mode: "", statuses: [], adminStatuses: [], enabled: true },
+  { id: "pending_head_review", label: "الواردة للمراجعة", special: "", mode: "head", statuses: ["pending_head_review"], adminStatuses: [], enabled: true },
+  { id: "pending_extra_review", label: "الواردة للمراجعة", special: "", mode: "extra", statuses: ["pending_extra_review"], adminStatuses: [], enabled: true },
+  { id: "draft", label: "مسوداتي", special: "", mode: "", statuses: ["draft"], adminStatuses: [], enabled: true },
+  { id: "returned", label: "بحاجة إلى تعديل", special: "", mode: "", statuses: ["returned", "head_returned_edit", "extra_returned_edit"], adminStatuses: [], enabled: true },
+  { id: "needs_completion", label: "بحاجة إلى استكمال", special: "", mode: "", statuses: ["needs_completion", "head_returned_completion", "extra_returned_completion"], adminStatuses: [], enabled: true },
+  { id: "under_review", label: "التقارير المرسلة", special: "", mode: "", statuses: ["under_review"], adminStatuses: ["pending_head_review", "pending_extra_review"], enabled: true },
+  { id: "custom_pending", label: "قيد المراجعة", special: "", mode: "", statuses: ["custom_pending"], adminStatuses: [], enabled: true },
+  { id: "completed", label: "التقارير الكاملة", special: "", mode: "", statuses: ["completed"], adminStatuses: [], enabled: true },
+  { id: "approved", label: "معتمد", special: "", mode: "", statuses: ["approved"], adminStatuses: [], enabled: true },
+  { id: "archived", label: "أرشيف التقارير", special: "archived", mode: "", statuses: [], adminStatuses: [], enabled: true },
+];
+function reportTabToRow(t, i) { return { id: t.id, label: t.label || "", statuses: t.statuses || [], admin_statuses: t.adminStatuses || [], special: t.special || "", mode: t.mode || "", order_index: i, enabled: t.enabled !== false, created_at: t.createdAt || Date.now() }; }
+function rowToReportTab(r) { return { id: r.id, label: r.label || "", statuses: Array.isArray(r.statuses) ? r.statuses : [], adminStatuses: Array.isArray(r.admin_statuses) ? r.admin_statuses : [], special: r.special || "", mode: r.mode || "", enabled: r.enabled !== false, order: Number(r.order_index) || 0, createdAt: Number(r.created_at) || 0 }; }
+function reportTabsList() {
+  if (!S.reportTabs) S.reportTabs = dataStore.getReportTabs();
+  return S.reportTabs.length ? S.reportTabs : REPORT_TABS_DEFAULT;
+}
+function reportTabDef(id) { return reportTabsList().find((t) => t.id === id) || null; }
+function reportTabModeSuffix(t) { return t.mode === "head" ? " (رئيسة الوحدة)" : t.mode === "extra" ? " (المراجعة الإضافية)" : ""; }
+// يُبقي REPORT_TAB_CATALOG وأزرار الصلاحيات (chip:*) متزامنة مع القائمة الحالية (تعديل في المكان)
+function syncReportTabCatalog() {
+  const list = reportTabsList();
+  REPORT_TAB_CATALOG.splice(0, REPORT_TAB_CATALOG.length, ...list.map((t) => ({ id: t.id, label: t.label + reportTabModeSuffix(t) })));
+  if (typeof BUTTON_CATALOG === "undefined") return;
+  for (let i = BUTTON_CATALOG.length - 1; i >= 0; i--) if (BUTTON_CATALOG[i].id.indexOf("chip:") === 0) BUTTON_CATALOG.splice(i, 1);
+  BUTTON_CATALOG.splice(0, 0, ...list.map((t) => ({ id: "chip:" + t.id, g: "قائمة التقارير", label: "زر «" + t.label + "»" + reportTabModeSuffix(t), sel: '[data-action="set-unit-reports-filter"][data-filter="' + t.id + '"]' })));
+}
 function reportMatchesCatalogTab(r, id) {
-  if (id === "all") return !isReportArchived(r);
-  if (id === "archived") return isReportArchived(r);
+  const t = reportTabDef(id);
+  if (!t) return false;
+  if (t.special === "all") return !isReportArchived(r);
+  if (t.special === "archived") return isReportArchived(r);
   if (isReportArchived(r)) return false;
-  const groups = {
-    returned: ["returned", "head_returned_edit", "extra_returned_edit"],
-    needs_completion: ["needs_completion", "head_returned_completion", "extra_returned_completion"],
-    under_review: ["under_review", "pending_head_review", "pending_extra_review"],
-  };
-  return groups[id] ? groups[id].indexOf(r.status) !== -1 : r.status === id;
+  return (t.statuses || []).indexOf(r.status) !== -1 || (t.adminStatuses || []).indexOf(r.status) !== -1;
 }
 // إعداد الأزرار الفعلي للمستخدمة الحالية: المسمى الوظيفي (مع الفروع) أولًا، ثم
 // سجل الحساب نفسه. مديرة النظام بلا مسمى = كامل دائمًا (null). null = القديم.
@@ -1202,6 +1241,11 @@ const dataStore = {
   saveRoles(list) {
     lsSet(ROLES_KEY, JSON.stringify(list));
     if (sheetsConfigured()) queueSupabaseReplaceTable("roles", list.map(roleToRow)).catch(() => {});
+  },
+  getReportTabs() { const v = lsGet(REPORT_TABS_KEY); return v ? JSON.parse(v) : []; },
+  saveReportTabs(list) {
+    lsSet(REPORT_TABS_KEY, JSON.stringify(list));
+    if (sheetsConfigured()) queueSupabaseReplaceTable("report_tabs", list.map(reportTabToRow)).catch(() => {});
   },
   getApprovalPaths() { const v = lsGet(APPROVAL_PATHS_KEY); return v ? JSON.parse(v) : []; },
   saveApprovalPaths(list) {
@@ -1894,6 +1938,7 @@ function isMobileViewport() { return window.innerWidth < 860; }
 const appEl = document.getElementById("app");
 
 function render() {
+  syncReportTabCatalog();
   let html = "";
   if (S.view === "login" || !S.currentUser) {
     html = renderLogin();
@@ -1980,6 +2025,8 @@ function render() {
     html = shellWrap(renderPlatformPermissionsManage());
   } else if (S.view === "job-title-templates") {
     html = shellWrap(renderJobTitleTemplatesManage());
+  } else if (S.view === "report-tabs-manage") {
+    html = shellWrap(renderReportTabsManage());
   } else if (S.view === "approval-paths-setup") {
     html = shellWrap(S.isAdmin ? renderApprovalPathsSetup() : `<div class="page-wrap"><div class="page-inner narrow"><div class="card" style="text-align:center;padding:30px;">هذه الصفحة لمديرة النظام فقط.</div></div></div>`);
   } else if (S.view === "roles-manage") {
@@ -2025,6 +2072,7 @@ const SIDEBAR_PAGES = [
   { id: "indicators-manage", label: "إدارة مؤشرات الأداء", group: "إدارة التقارير", icon: "gauge" },
   { id: "goals-manage", label: "إدارة الأهداف والمستهدفات", group: "إدارة التقارير", icon: "target" },
   { id: "sections-manage", label: "إدارة أقسام التقرير", group: "إدارة التقارير", icon: "layers" },
+  { id: "report-tabs-manage", label: "إدارة أزرار التقارير", group: "إدارة التقارير", icon: "layers" },
   { id: "field-schemas-manage", label: "إدارة حقول الأقسام", group: "إدارة التقارير", icon: "layers" },
   { id: "units-manage", label: "المستخدمون", group: "standalone", icon: "building" },
   { id: "offices-manage", label: "مكاتب الإشراف", group: "الهيكل التنظيمي", icon: "layers" },
@@ -2707,6 +2755,7 @@ async function handleLoginSubmit() {
       if (result.user && (result.user.role === "department" || result.user.role === "office")) {
         try { await refreshRolesPersonsFromSheet(); } catch (e) { /* نكمل بالنسخة المحلية */ }
       }
+      try { await refreshReportTabsFromSheet(); } catch (e) { /* نكمل بالنسخة المحلية */ }
       if (result.user && result.user.role !== "admin" && result.user.unitId) {
         // نحتاج الأشخاص (platform_users) والقوالب قبل شاشة "كيف تريدين الدخول؟"
         try { await refreshPlatformUsersFromSheet(); await refreshJobTitleTemplatesFromSheet(); await refreshRolesPersonsFromSheet(); } catch (e) { /* نكمل بالنسخة المحلية */ }
@@ -5345,44 +5394,30 @@ function renderUnitReportsHub() {
   // تبويبات "بحاجة إلى تعديل/استكمال" و"التقارير المرسلة" تجمع حالتها القديمة (المسار
   // الخارجي) مع نظيرتها الجديدة من مسار الإدارية/رئيسة الوحدة/المراجعة الإضافية
   // الداخلي، حتى تظهر تحت نفس التبويب المألوف بدون إضافة عناصر واجهة مكررة.
-  const TAB_STATUS_GROUPS = {
-    returned: ["returned", "head_returned_edit", "extra_returned_edit"],
-    needs_completion: ["needs_completion", "head_returned_completion", "extra_returned_completion"],
-    under_review: isAdminMode ? ["under_review", "pending_head_review", "pending_extra_review"] : ["under_review"],
-  };
+  // الأزرار وحالاتها صارت من القاعدة (report_tabs) — تُدار من «إدارة أزرار التقارير».
   const reportMatchesTab = (r, id) => {
-    const group = TAB_STATUS_GROUPS[id];
-    return group ? group.indexOf(r.status) !== -1 : r.status === id;
+    const t = reportTabDef(id);
+    if (!t) return false;
+    return (t.statuses || []).indexOf(r.status) !== -1 || (isAdminMode && (t.adminStatuses || []).indexOf(r.status) !== -1);
   };
+  const tabSpecial = (id) => { const t = reportTabDef(id); return t ? t.special : ""; };
 
-  const tabs = [
-    { id: "all", label: "الكل" },
-    ...(isHeadMode ? [{ id: "pending_head_review", label: "الواردة للمراجعة" }] : []),
-    ...(isExtraMode ? [{ id: "pending_extra_review", label: "الواردة للمراجعة" }] : []),
-    { id: "draft", label: "مسوداتي" },
-    { id: "returned", label: "بحاجة إلى تعديل" },
-    { id: "needs_completion", label: "بحاجة إلى استكمال" },
-    { id: "under_review", label: "التقارير المرسلة" },
-    { id: "custom_pending", label: "قيد المراجعة" },
-    { id: "completed", label: "التقارير الكاملة" },
-    { id: "approved", label: "معتمد" },
-    { id: "archived", label: "أرشيف التقارير" },
-  ];
+  const tabs = reportTabsList().filter((t) => t.enabled !== false && (!t.mode || (t.mode === "head" && isHeadMode) || (t.mode === "extra" && isExtraMode))).map((t) => ({ id: t.id, label: t.label }));
   // أزرار محددة من مديرة النظام لهذا الحساب/المسمى (إن وُجدت) تحل محل الأزرار الافتراضية.
   const tabsCfg = effectiveReportTabsConfig();
   if (tabsCfg && tabsCfg.tabs.length) {
-    const chosen = REPORT_TAB_CATALOG.filter((t) => tabsCfg.tabs.includes(t.id)).map((t) => (t.id === "pending_head_review" || t.id === "pending_extra_review") ? { ...t, label: "الواردة للمراجعة" } : t);
+    const chosen = reportTabsList().filter((t) => t.enabled !== false && tabsCfg.tabs.includes(t.id)).map((t) => ({ id: t.id, label: t.label }));
     tabs.length = 0; chosen.forEach((t) => tabs.push(t));
   }
   if (!tabs.some((t) => t.id === filter)) filter = tabs.length ? tabs[0].id : "all";
   const countFor = (id) => {
-    if (id === "all") return list.filter((r) => !isReportArchived(r)).length;
-    if (id === "archived") return list.filter((r) => isReportArchived(r)).length;
+    if (tabSpecial(id) === "all") return list.filter((r) => !isReportArchived(r)).length;
+    if (tabSpecial(id) === "archived") return list.filter((r) => isReportArchived(r)).length;
     return list.filter((r) => reportMatchesTab(r, id) && !isReportArchived(r)).length;
   };
 
-  let filtered = filter === "all" ? list.filter((r) => !isReportArchived(r))
-    : filter === "archived" ? list.filter((r) => isReportArchived(r))
+  let filtered = tabSpecial(filter) === "all" ? list.filter((r) => !isReportArchived(r))
+    : tabSpecial(filter) === "archived" ? list.filter((r) => isReportArchived(r))
     : list.filter((r) => reportMatchesTab(r, filter) && !isReportArchived(r));
   if (typeFilter) filtered = filtered.filter((r) => (r.sections?.basic?.data?.periodType || "") === typeFilter);
   if (yearFilter) filtered = filtered.filter((r) => (r.sections?.basic?.data?.hijriYear || "") === yearFilter);
@@ -6400,6 +6435,12 @@ function addPermLog(targetKind, targetId, targetName, summary) {
   lsSet(PERM_LOG_KEY, JSON.stringify(S.permLog));
   if (sheetsConfigured()) supabaseRequest("permission_log", { method: "POST", prefer: "return=minimal", body: JSON.stringify(permLogToRow(e)) }).catch(() => {});
 }
+async function refreshReportTabsFromSheet() {
+  if (!sheetsConfigured()) return;
+  await pendingSupabaseWrite("report_tabs");
+  const res = await supabaseRequest("report_tabs?select=*");
+  if (res.ok && Array.isArray(res.data)) { S.reportTabs = res.data.map(rowToReportTab).sort((a, b) => a.order - b.order); lsSet(REPORT_TABS_KEY, JSON.stringify(S.reportTabs)); syncReportTabCatalog(); }
+}
 async function refreshApprovalPathsFromSheet() {
   if (!sheetsConfigured()) return;
   await pendingSupabaseWrite("approval_paths");
@@ -7074,6 +7115,68 @@ function sectionDefRowHtml(def, index, total) {
     </div>
   </div>`;
 }
+// ---- إدارة أزرار صفحة التقارير (تُحفظ بجدول report_tabs) ----
+function rtMaterialize() { return reportTabsList().map((t) => ({ ...t, statuses: [...(t.statuses || [])], adminStatuses: [...(t.adminStatuses || [])] })); }
+function rtSave(list) {
+  S.reportTabs = list;
+  dataStore.saveReportTabs(list);
+  syncReportTabCatalog();
+}
+function rtStatusLabel(id) { const o = REPORT_STATUS_OPTIONS.find((x) => x[0] === id); return o ? o[1] : id; }
+function rtCapture() {
+  const d = S.ui.rtEdit && S.ui.rtEdit.draft; if (!d) return;
+  const el = document.getElementById("rt-label"); if (el) d.label = el.value;
+  const en = document.getElementById("rt-enabled"); if (en) d.enabled = !!en.checked;
+}
+function rtEditorHtml() {
+  const ed = S.ui.rtEdit; if (!ed) return "";
+  const d = ed.draft;
+  return `
+  <div class="card" style="margin-bottom:18px;border:1.5px solid ${ROSE};">
+    <div style="font-size:12.5px;font-weight:800;color:${ROSE};margin-bottom:12px;">${ed.id ? "تعديل الزر" : "زر جديد"}</div>
+    <div style="font-size:12px;font-weight:800;margin-bottom:6px;">اسم الزر</div>
+    <input class="input" id="rt-label" value="${esc(d.label)}" placeholder="مثال: قيد المراجعة" style="margin-bottom:12px;" />
+    ${d.special ? `<div class="hint" style="margin-bottom:12px;">${d.special === "all" ? "هذا الزر يعرض كل التقارير غير المؤرشفة" : "هذا الزر يعرض التقارير المؤرشفة"} — تقدرين تغيّرين اسمه فقط.</div>` : `
+    <div style="font-size:12px;font-weight:800;margin-bottom:6px;">يعرض التقارير التي حالتها</div>
+    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:4px;margin-bottom:12px;">
+      ${REPORT_STATUS_OPTIONS.map(([id, lb]) => permCheckboxRowHtml("rt-toggle-status", id, lb, (d.statuses || []).includes(id))).join("")}
+    </div>`}
+    <label style="display:flex;align-items:center;gap:8px;font-size:12px;margin-bottom:12px;cursor:pointer;"><input type="checkbox" id="rt-enabled" ${d.enabled !== false ? "checked" : ""} /> الزر ظاهر في صفحة التقارير</label>
+    ${S.ui.rtError ? `<div class="error-box" style="margin-bottom:10px;">${esc(S.ui.rtError)}</div>` : ""}
+    <div style="display:flex;gap:8px;">${pillBtn("حفظ", { icon: iconCheckCircle(14, "#fff"), action: "rt-save" })}${pillBtn("إلغاء", { variant: "ghost", action: "rt-cancel" })}</div>
+  </div>`;
+}
+function renderReportTabsManage() {
+  const list = reportTabsList();
+  const fromDb = (S.reportTabs || []).length > 0;
+  return `
+  <div class="page-wrap"><div class="page-inner narrow">
+    ${topBarHtml({ title: "إدارة أزرار التقارير", subtitle: "الأزرار اللي تظهر في صفحة التقارير: أضيفي، عدّلي، رتّبي، أو احذفي", backAction: "nav-back-admin" })}
+    <div class="card" style="background:${BLUE_BG};border:1px solid #cfe0f5;margin-bottom:18px;"><div style="font-size:11.5px;color:#3a5a85;line-height:1.8;">
+      كل زر يعرض التقارير حسب حالتها. ${fromDb ? "الأزرار محفوظة في قاعدة البيانات." : "الأزرار الآن هي القائمة الافتراضية؛ أول تعديل أو إضافة تحفظها في قاعدة البيانات."}
+      الزر الجديد يظهر تلقائيًا في صلاحيات الأدوار والأشخاص (مع خيار «ينبّه»). «تعطيل» يخفيه عن الجميع بدون حذف.
+    </div></div>
+    ${S.ui.rtMsg ? `<div class="hint" style="margin-bottom:12px;">${esc(S.ui.rtMsg)}</div>` : ""}
+    ${rtEditorHtml()}
+    ${S.ui.rtEdit ? "" : `<div style="margin-bottom:14px;">${pillBtn("زر جديد", { icon: iconPlus(15, "#fff"), action: "rt-new" })}</div>`}
+    <div style="display:flex;flex-direction:column;gap:8px;">
+      ${list.map((t, i) => `
+      <div class="card" style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;${t.enabled === false ? "opacity:0.55;" : ""}">
+        <div style="flex:1;min-width:180px;">
+          <div style="font-size:13px;font-weight:800;">${esc(t.label)}${reportTabModeSuffix(t) ? ` <span style="font-size:10.5px;color:${SUBTLE};font-weight:600;">${esc(reportTabModeSuffix(t))}</span>` : ""}${t.enabled === false ? ` <span style="font-size:10.5px;color:${DANGER};">(معطّل)</span>` : ""}</div>
+          <div style="font-size:10.5px;color:${SUBTLE};margin-top:3px;line-height:1.7;">${t.special === "all" ? "كل التقارير غير المؤرشفة" : t.special === "archived" ? "التقارير المؤرشفة" : (t.statuses || []).map(rtStatusLabel).join("، ") || "لا حالات"}${(t.adminStatuses || []).length ? " + (للإدارية): " + t.adminStatuses.map(rtStatusLabel).join("، ") : ""}</div>
+        </div>
+        <button class="icon-btn" style="border:1px solid ${BORDER}" data-action="rt-move" data-idx="${i}" data-dir="up" ${i === 0 ? "disabled" : ""}><span style="display:inline-flex;transform:rotate(180deg);">${iconChevronDown(12, INK)}</span></button>
+        <button class="icon-btn" style="border:1px solid ${BORDER}" data-action="rt-move" data-idx="${i}" data-dir="down" ${i === list.length - 1 ? "disabled" : ""}>${iconChevronDown(12, INK)}</button>
+        ${pillBtn("تعديل", { variant: "ghost", action: "rt-edit", data: { id: t.id } })}
+        ${pillBtn(t.enabled === false ? "تفعيل" : "تعطيل", { variant: "ghost", action: "rt-toggle-enabled", data: { id: t.id } })}
+        ${S.ui.rtDeleteId === t.id
+          ? `${pillBtn("تأكيد الحذف", { variant: "ghost", action: "rt-delete", data: { id: t.id } })}${pillBtn("لا", { variant: "ghost", action: "rt-delete-cancel" })}`
+          : pillBtn("حذف", { variant: "ghost", icon: iconX(13, DANGER), action: "rt-delete-ask", data: { id: t.id } })}
+      </div>`).join("")}
+    </div>
+  </div></div>`;
+}
 function renderSectionsManage() {
   const defs = sortedSectionDefs();
   return `
@@ -7461,7 +7564,7 @@ function unitPendingHeadReviewReports(unitId, statusFilter) {
 
 function renderConfiguredNotifications(unit, cfg) {
   const list = ensureUnitReportsLoaded(unit.id);
-  const rows = cfg.notify.map((id) => ({ tab: REPORT_TAB_CATALOG.find((t) => t.id === id), n: list.filter((r) => reportMatchesCatalogTab(r, id)).length })).filter((x) => x.tab && x.n > 0);
+  const rows = cfg.notify.map((id) => ({ tab: reportTabDef(id), n: list.filter((r) => reportMatchesCatalogTab(r, id)).length })).filter((x) => x.tab && x.n > 0);
   return `
   <div class="page-wrap"><div class="page-inner narrow">
     ${topBarHtml({ title: "التنبيهات", subtitle: "حسب الأزرار المحددة لحسابك", backAction: "nav-to", backData: { view: "unit-dashboard" } })}
@@ -9262,6 +9365,10 @@ function attachClickListener() {
           S.ui.apEdit = null;
           if (sheetsConfigured()) Promise.all([refreshRolesPersonsFromSheet(), refreshApprovalPathsFromSheet()]).then(() => { if (S.view === "approval-paths-setup") render(); });
         }
+        if (navView === "report-tabs-manage") {
+          S.reportTabs = dataStore.getReportTabs(); S.ui.rtEdit = null; S.ui.rtMsg = ""; S.ui.rtDeleteId = null;
+          if (sheetsConfigured()) refreshReportTabsFromSheet().then(() => { if (S.view === "report-tabs-manage") render(); });
+        }
         if (navView === "units-manage") { S.roles = dataStore.getRoles(); S.persons = dataStore.getPersons(); }
         if (navView === "roles-manage") {
           S.roles = dataStore.getRoles(); S.persons = dataStore.getPersons();
@@ -10028,6 +10135,29 @@ function attachClickListener() {
         render();
         break;
       }
+      case "rt-new": S.ui.rtEdit = { id: null, draft: { label: "", statuses: [], adminStatuses: [], special: "", mode: "", enabled: true } }; S.ui.rtError = ""; S.ui.rtMsg = ""; render(); break;
+      case "rt-edit": { const t = reportTabsList().find((x) => x.id === ds.id); if (!t) break; S.ui.rtEdit = { id: t.id, draft: { ...t, statuses: [...(t.statuses || [])], adminStatuses: [...(t.adminStatuses || [])] } }; S.ui.rtError = ""; S.ui.rtMsg = ""; render(); break; }
+      case "rt-cancel": S.ui.rtEdit = null; S.ui.rtError = ""; render(); break;
+      case "rt-toggle-status": { rtCapture(); const d = S.ui.rtEdit && S.ui.rtEdit.draft; if (!d) break; const i = d.statuses.indexOf(ds.id); if (i >= 0) d.statuses.splice(i, 1); else d.statuses.push(ds.id); render(); break; }
+      case "rt-save": {
+        rtCapture();
+        const ed = S.ui.rtEdit; if (!ed) break;
+        const d = ed.draft;
+        if (!String(d.label || "").trim()) { S.ui.rtError = "اكتبي اسم الزر"; render(); break; }
+        if (!d.special && !(d.statuses || []).length) { S.ui.rtError = "اختاري حالة واحدة على الأقل يعرضها الزر"; render(); break; }
+        const list = rtMaterialize();
+        const clean = { ...d, label: d.label.trim() };
+        if (ed.id) { const i = list.findIndex((x) => x.id === ed.id); if (i >= 0) list[i] = { ...list[i], ...clean }; }
+        else list.push({ ...clean, id: "tab_" + uid("t").replace(/[^a-zA-Z0-9_]/g, ""), createdAt: Date.now() });
+        rtSave(list);
+        addPermLog("report-tab", ed.id || "new", clean.label, ed.id ? "تعديل زر في صفحة التقارير" : "إضافة زر في صفحة التقارير");
+        S.ui.rtEdit = null; S.ui.rtError = ""; S.ui.rtMsg = "تم الحفظ"; render(); break;
+      }
+      case "rt-move": { const list = rtMaterialize(); const i = Number(ds.idx), j = ds.dir === "up" ? i - 1 : i + 1; if (j < 0 || j >= list.length) break; [list[i], list[j]] = [list[j], list[i]]; rtSave(list); S.ui.rtMsg = ""; render(); break; }
+      case "rt-toggle-enabled": { const list = rtMaterialize(); const t = list.find((x) => x.id === ds.id); if (!t) break; t.enabled = t.enabled === false; rtSave(list); addPermLog("report-tab", t.id, t.label, t.enabled ? "تفعيل زر" : "تعطيل زر"); S.ui.rtMsg = ""; render(); break; }
+      case "rt-delete-ask": S.ui.rtDeleteId = ds.id; render(); break;
+      case "rt-delete-cancel": S.ui.rtDeleteId = null; render(); break;
+      case "rt-delete": { const list = rtMaterialize(); const t = list.find((x) => x.id === ds.id); rtSave(list.filter((x) => x.id !== ds.id)); if (t) addPermLog("report-tab", t.id, t.label, "حذف زر من صفحة التقارير"); S.ui.rtDeleteId = null; S.ui.rtMsg = list.length <= 1 ? "حذفتِ كل الأزرار، فرجعت القائمة الافتراضية" : "تم الحذف"; render(); break; }
       case "start-custom-send": { S.ui.showCustomSendPicker = true; render(); break; }
       case "cancel-custom-send": { S.ui.showCustomSendPicker = false; render(); break; }
       case "confirm-custom-send": {
