@@ -1869,10 +1869,57 @@ const ACTION_CATALOG = [
   { id: "toggle-section-completed", label: "تحديد القسم كمكتمل (أو الرجوع لمسودة)" },
   { id: "open-or-create-report", label: "إنشاء تقرير جديد" },
 ];
+// ---- التحكم بالأزرار (المرحلة 2ب): قائمة الأزرار القابلة للمنح/المنع، بحسب اختيار مديرة النظام ----
+// الصلاحية = قائمة معرّفات أزرار مسموحة (roles.permissions.buttons / persons.perms_override.buttons).
+// فاضية = كل الأزرار تظهر كما هي. غير الفاضية = يظهر فقط ما فيها من الأزرار المذكورة هنا.
+const BUTTON_CATALOG = [
+  { id: "chip:all", g: "قائمة التقارير", label: "زر «الكل»", sel: '[data-action="set-unit-reports-filter"][data-filter="all"]' },
+  { id: "chip:draft", g: "قائمة التقارير", label: "زر «مسوداتي»", sel: '[data-action="set-unit-reports-filter"][data-filter="draft"]' },
+  { id: "chip:returned", g: "قائمة التقارير", label: "زر «بحاجة إلى تعديل»", sel: '[data-action="set-unit-reports-filter"][data-filter="returned"]' },
+  { id: "chip:needs_completion", g: "قائمة التقارير", label: "زر «بحاجة إلى استكمال»", sel: '[data-action="set-unit-reports-filter"][data-filter="needs_completion"]' },
+  { id: "chip:under_review", g: "قائمة التقارير", label: "زر «التقارير المرسلة»", sel: '[data-action="set-unit-reports-filter"][data-filter="under_review"]' },
+  { id: "chip:completed", g: "قائمة التقارير", label: "زر «التقارير الكاملة»", sel: '[data-action="set-unit-reports-filter"][data-filter="completed"]' },
+  { id: "chip:approved", g: "قائمة التقارير", label: "زر «معتمد»", sel: '[data-action="set-unit-reports-filter"][data-filter="approved"]' },
+  { id: "chip:archived", g: "قائمة التقارير", label: "زر «أرشيف التقارير»", sel: '[data-action="set-unit-reports-filter"][data-filter="archived"]' },
+  { id: "open-or-create-report", g: "بطاقة التقرير", label: "إنشاء تقرير جديد", sel: '[data-action="open-or-create-report"]' },
+  { id: "card-preview", g: "بطاقة التقرير", label: "معاينة التقرير", sel: '[data-btn="card-preview"]' },
+  { id: "card-view", g: "بطاقة التقرير", label: "عرض التقرير", sel: '[data-btn="card-view"]' },
+  { id: "card-download", g: "بطاقة التقرير", label: "تنزيل PDF / طباعة", sel: '[data-btn="card-download"],[data-action="print-page"]' },
+  { id: "card-reedit", g: "بطاقة التقرير", label: "إعادة التعديل", sel: '[data-btn="card-reedit"]' },
+  { id: "delete-report", g: "بطاقة التقرير", label: "حذف تقرير (مسودة)", sel: '[data-action="confirm-delete-report"],[data-action="delete-report"]' },
+  { id: "toggle-report-notes", g: "بطاقة التقرير", label: "عرض ملاحظات التقرير", sel: '[data-action="toggle-report-notes"]' },
+  { id: "section-save-draft", g: "داخل التقرير", label: "حفظ القسم كمسودة", sel: '[data-action="section-save-draft"]' },
+  { id: "toggle-section-completed", g: "داخل التقرير", label: "تحديد القسم كمكتمل", sel: '[data-action="toggle-section-completed"]' },
+  { id: "submit-report-to-head", g: "إرسال التقرير", label: "إرسال للمراجعة الداخلية (كإدارية)", sel: '[data-action="submit-report-to-head"]' },
+  { id: "start-send-report", g: "إرسال التقرير", label: "إرسال مباشرة للقسم", sel: '[data-action="start-send-report"],[data-action="confirm-send-report"]' },
+  { id: "request-report-completion", g: "إرسال التقرير", label: "طلب استكمال التقرير", sel: '[data-action="request-report-completion"]' },
+  { id: "mark-report-completed", g: "إرسال التقرير", label: "تحديد التقرير كمكتمل", sel: '[data-action="mark-report-completed"]' },
+  { id: "custom-path-send", g: "إرسال التقرير", label: "إرسال في المسار الحر", sel: '[data-action="custom-path-send"],[data-action="start-custom-send"],[data-action="confirm-custom-send"]' },
+  { id: "start-head-return", g: "المراجعة والاعتماد", label: "إعادة التقرير للتعديل (رئيسة / مراجعة إضافية)", sel: '[data-action="start-head-return"],[data-action="confirm-head-return"]' },
+  { id: "submit-department-review-decision", g: "المراجعة والاعتماد", label: "قرار مراجعة القسم (اعتماد / إعادة)", sel: '[data-action="submit-department-review-decision"]' },
+  { id: "approve-report", g: "المراجعة والاعتماد", label: "اعتماد التقرير (القسم)", sel: '[data-action="approve-report"]' },
+  { id: "return-report-for-revision", g: "المراجعة والاعتماد", label: "إعادة التقرير للمراجعة", sel: '[data-action="return-report-for-revision"]' },
+  { id: "custom-path-return", g: "المراجعة والاعتماد", label: "إعادة التقرير في المسار الحر", sel: '[data-action="custom-path-return"]' },
+];
+function buttonAllowed(id) {
+  return !S.platformUserAllowedButtons || S.platformUserAllowedButtons.includes(id);
+}
+function buttonBlockedEl(el) {
+  if (!S.platformUserAllowedButtons) return false;
+  return BUTTON_CATALOG.some((b) => !buttonAllowed(b.id) && el.matches(b.sel));
+}
+function applyButtonPermissions() {
+  if (!S.platformUserAllowedButtons) return;
+  BUTTON_CATALOG.forEach((b) => {
+    if (buttonAllowed(b.id)) return;
+    document.querySelectorAll(b.sel).forEach((el) => el.style.setProperty("display", "none", "important"));
+  });
+}
 // true = مسموح بهذا الإجراء. null/undefined بـ S.platformUserAllowedActions يعني
 // حساب بلا قيود إجراءات إضافية (كل الحسابات العادية، وحسابات platform_users
 // اللي ما حُدّد لها إجراءات صراحة) — يعمل بكل شي مسموح له أصلًا بالأدوار.
 function platformActionAllowed(actionId) {
+  if (S.platformUserAllowedButtons && BUTTON_CATALOG.some((b) => b.id === actionId) && !buttonAllowed(actionId)) return false;
   if (!S.platformUserAllowedActions) return true;
   return S.platformUserAllowedActions.includes(actionId);
 }
@@ -2269,6 +2316,7 @@ function applyPersonPerms(p) {
   const eff = personEffectivePerms(p);
   if (eff.pages.length) S.platformUserAllowedPages = normalizeDashboardPages(eff.pages);
   if (eff.actions.length) S.platformUserAllowedActions = [...eff.actions];
+  S.platformUserAllowedButtons = eff.buttons && eff.buttons.length ? [...eff.buttons] : null;
 }
 function enterEntityAsPerson(p) {
   const pe = S.pendingEntityLogin;
@@ -2292,9 +2340,7 @@ function enterUnitAsPerson(p) {
   S.currentPersonId = p.id;
   S.currentPersonName = p.name;
   // صلاحيات الشخص (الدور + الاستثناء): لو محددة تحل محل صلاحيات حساب الجهة، وإلا يبقى الإرث كما هو
-  const eff = personEffectivePerms(p);
-  if (eff.pages.length) S.platformUserAllowedPages = normalizeDashboardPages(eff.pages);
-  if (eff.actions.length) S.platformUserAllowedActions = [...eff.actions];
+  applyPersonPerms(p);
   S.reports[unitId] = dataStore.getReports(unitId);
   S.currentUnitId = unitId;
   S.currentReportId = null;
@@ -2830,7 +2876,7 @@ function doLogin(user) {
 }
 
 function doLogout() {
-  S.currentUser = null; S.currentUnitId = null; S.currentDepartmentId = null; S.currentOfficeId = null; S.isAdmin = false; S.isDepartmentUser = false; S.isExecutive = false; S.isOfficeUser = false; S.cameFromAllReports = false; S.adminPreviewOrigin = null; S.pendingUnitLoginId = null; S.pendingEntityLogin = null; S.currentUnitEntryMode = null; S.platformUserAllowedPages = null; S.platformUserAllowedActions = null; S.currentPlatformUserTemplateId = ""; S.currentPlatformUserJobTitle = null; S.pendingPlatformUserMatches = null; S.view = "login"; S.ui = {};
+  S.currentUser = null; S.currentUnitId = null; S.currentDepartmentId = null; S.currentOfficeId = null; S.isAdmin = false; S.isDepartmentUser = false; S.isExecutive = false; S.isOfficeUser = false; S.cameFromAllReports = false; S.adminPreviewOrigin = null; S.pendingUnitLoginId = null; S.pendingEntityLogin = null; S.currentUnitEntryMode = null; S.platformUserAllowedPages = null; S.platformUserAllowedActions = null; S.platformUserAllowedButtons = null; S.currentPlatformUserTemplateId = ""; S.currentPlatformUserJobTitle = null; S.pendingPlatformUserMatches = null; S.view = "login"; S.ui = {};
   render();
 }
 
@@ -5001,19 +5047,19 @@ function reportCardHtml(unit, entry) {
   } else if (entry.status === "draft") {
     actionsHtml = `<div style="display:flex;gap:6px;">
       ${platformActionAllowed("delete-report") ? `<button class="icon-btn" style="border:1px solid ${BORDER}" data-action="confirm-delete-report" data-id="${entry.id}" title="حذف التقرير">${iconTrash(14, DANGER)}</button>` : ""}
-      ${pillBtn("معاينة", { variant: "ghost", icon: iconEye(14, INK), action: "open-report", data: { unitId: unit.id, reportId: entry.id } })}
+      ${pillBtn("معاينة", { variant: "ghost", icon: iconEye(14, INK), action: "open-report", data: { unitId: unit.id, reportId: entry.id, btn: "card-preview" } })}
       ${pillBtn("تعديل", { icon: iconPencil(14, "#fff"), action: "open-report", data: { unitId: unit.id, reportId: entry.id } })}
     </div>`;
   } else if (entry.status === "under_review") {
     actionsHtml = `<div style="display:flex;gap:6px;">
-      ${pillBtn("معاينة", { variant: "ghost", icon: iconEye(14, INK), action: "open-report", data: { unitId: unit.id, reportId: entry.id } })}
+      ${pillBtn("معاينة", { variant: "ghost", icon: iconEye(14, INK), action: "open-report", data: { unitId: unit.id, reportId: entry.id, btn: "card-preview" } })}
       ${pillBtn("عرض التفاصيل", { variant: "ghost", icon: iconChevronLeft(14, ROSE), action: "open-report", data: { unitId: unit.id, reportId: entry.id } })}
     </div>`;
   } else if (entry.status === "returned" || entry.status === "needs_completion") {
     actionsHtml = `<div style="display:flex;flex-direction:column;gap:6px;">
       ${showManagerNotesToUnit ? `<button class="pill-btn pill-ghost" data-action="toggle-report-notes" data-id="${entry.id}" style="width:100%;">${iconEye(14, INK)} ${showNotes ? "إخفاء الملاحظات" : "عرض الملاحظات"}</button>` : ""}
       ${showManagerNotesToUnit && showNotes ? `<div class="hint" style="text-align:right;">${esc(managerNotes)}</div>` : ""}
-      ${pillBtn(entry.status === "returned" ? "إعادة التعديل" : "استكمال التقرير", { icon: iconPencil(14, "#fff"), action: "open-report", data: { unitId: unit.id, reportId: entry.id } })}
+      ${pillBtn(entry.status === "returned" ? "إعادة التعديل" : "استكمال التقرير", { icon: iconPencil(14, "#fff"), action: "open-report", data: { unitId: unit.id, reportId: entry.id, btn: "card-reedit" } })}
     </div>`;
   } else if (entry.status === "pending_head_review" || entry.status === "pending_extra_review") {
     const reviewerMode = entry.status === "pending_extra_review" ? "extra" : "head";
@@ -5022,7 +5068,7 @@ function reportCardHtml(unit, entry) {
       ${pillBtn("فتح التقرير", { icon: iconChevronLeft(14, "#fff"), action: "open-report", data: { unitId: unit.id, reportId: entry.id } })}
     </div>`
       : `<div style="display:flex;gap:6px;">
-      ${pillBtn("عرض", { variant: "ghost", icon: iconEye(14, INK), action: "view-report-pdf", data: { unitId: unit.id, reportId: entry.id } })}
+      ${pillBtn("عرض", { variant: "ghost", icon: iconEye(14, INK), action: "view-report-pdf", data: { unitId: unit.id, reportId: entry.id, btn: "card-view" } })}
     </div>`;
   } else if (entry.status === "head_returned_edit" || entry.status === "head_returned_completion" || entry.status === "extra_returned_edit" || entry.status === "extra_returned_completion") {
     const headNotes = entry.internalReviewNotes || "";
@@ -5033,13 +5079,13 @@ function reportCardHtml(unit, entry) {
       ${returnedDateStr ? `<div style="font-size:10px;color:${SUBTLE};">تاريخ الإعادة: ${esc(returnedDateStr)}</div>` : ""}
       ${headNotes ? `<button class="pill-btn pill-ghost" data-action="toggle-report-notes" data-id="${entry.id}" style="width:100%;">${iconEye(14, INK)} ${showNotes ? "إخفاء الملاحظات" : notesLabel}</button>` : ""}
       ${showNotes ? `<div class="hint" style="text-align:right;">${esc(headNotes)}</div>` : ""}
-      ${pillBtn(isEdit ? "تعديل التقرير" : "استكمال التقرير", { icon: iconPencil(14, "#fff"), action: "open-report", data: { unitId: unit.id, reportId: entry.id } })}
+      ${pillBtn(isEdit ? "تعديل التقرير" : "استكمال التقرير", { icon: iconPencil(14, "#fff"), action: "open-report", data: { unitId: unit.id, reportId: entry.id, btn: "card-reedit" } })}
     </div>`;
   } else {
     // مكتمل أو معتمد
     actionsHtml = `<div style="display:flex;gap:6px;flex-wrap:wrap;">
-      ${pillBtn("عرض", { variant: "ghost", icon: iconChevronLeft(14, ROSE), action: "view-report-pdf", data: { unitId: unit.id, reportId: entry.id } })}
-      ${pillBtn("تنزيل PDF", { variant: "ghost", icon: iconDownload(14, INK), action: "view-report-pdf", data: { unitId: unit.id, reportId: entry.id } })}
+      ${pillBtn("عرض", { variant: "ghost", icon: iconChevronLeft(14, ROSE), action: "view-report-pdf", data: { unitId: unit.id, reportId: entry.id, btn: "card-view" } })}
+      ${pillBtn("تنزيل PDF", { variant: "ghost", icon: iconDownload(14, INK), action: "view-report-pdf", data: { unitId: unit.id, reportId: entry.id, btn: "card-download" } })}
     </div>`;
   }
 
@@ -5828,6 +5874,7 @@ function permDropdownTargetArray(key) {
   if (key === "toggle-account-perm-action") { S.ui.editAccountPermForm = S.ui.editAccountPermForm || { allowedPages: [], allowedActions: [] }; return S.ui.editAccountPermForm.allowedActions || (S.ui.editAccountPermForm.allowedActions = []); }
   if (key === "toggle-role-perm-page") { const f = rolePermFormState(); return f.pages; }
   if (key === "toggle-role-perm-action") { const f = rolePermFormState(); return f.actions; }
+  if (key === "toggle-role-perm-button") { const f = rolePermFormState(); return f.buttons; }
   if (key === "toggle-new-template-page") { captureJobTitleTemplateFormFields("new-template"); return S.ui.newTemplateAllowedPages || (S.ui.newTemplateAllowedPages = []); }
   if (key === "toggle-edit-template-page") { captureJobTitleTemplateFormFields("edit-template"); S.ui.editTemplateForm = S.ui.editTemplateForm || {}; return S.ui.editTemplateForm.allowedPages || (S.ui.editTemplateForm.allowedPages = []); }
   if (key === "toggle-new-template-action") { captureJobTitleTemplateFormFields("new-template"); return S.ui.newTemplateAllowedActions || (S.ui.newTemplateAllowedActions = []); }
@@ -6074,8 +6121,17 @@ const PERM_ACTION_GROUPS = [
   { name: "مراجعة", ids: ["start-head-return"] },
   { name: "اعتماد", ids: ["approve-report-by-head", "submit-department-review-decision"] },
 ];
+function permButtonsChecklistHtml(selected, action) {
+  selected = selected || [];
+  const groups = [];
+  BUTTON_CATALOG.forEach((b) => { let g = groups.find((x) => x.name === b.g); if (!g) { g = { name: b.g, items: [] }; groups.push(g); } g.items.push(b); });
+  return permDropdownChecklistHtml({
+    action, selected, total: BUTTON_CATALOG.length, emptyLabel: "الأزرار",
+    renderList: () => groups.map((g) => `<div style="margin-bottom:8px;"><div style="font-size:10.5px;font-weight:800;color:${ROSE};margin-bottom:4px;">${esc(g.name)}</div>${g.items.map((b) => permCheckboxRowHtml(action, b.id, b.label, selected.includes(b.id))).join("")}</div>`).join(""),
+  });
+}
 function rolePermFormState() {
-  return S.ui.rolePermForm || (S.ui.rolePermForm = { pages: [], actions: [] });
+  return S.ui.rolePermForm || (S.ui.rolePermForm = { pages: [], actions: [], buttons: [] });
 }
 function permActionsGroupedChecklistHtml(selected, action) {
   selected = selected || [];
@@ -6091,7 +6147,7 @@ function permActionsGroupedChecklistHtml(selected, action) {
 }
 function rolePermsOf(role) {
   const p = (role && role.permissions) || {};
-  return { pages: Array.isArray(p.pages) ? p.pages : [], actions: Array.isArray(p.actions) ? p.actions : [] };
+  return { pages: Array.isArray(p.pages) ? p.pages : [], actions: Array.isArray(p.actions) ? p.actions : [], buttons: Array.isArray(p.buttons) ? p.buttons : [] };
 }
 function personEffectivePerms(person) {
   const role = rolesList().find((r) => r.id === person.roleId);
@@ -6100,6 +6156,7 @@ function personEffectivePerms(person) {
   return {
     pages: Array.isArray(o.pages) ? o.pages : base.pages,
     actions: Array.isArray(o.actions) ? o.actions : base.actions,
+    buttons: Array.isArray(o.buttons) ? o.buttons : base.buttons,
   };
 }
 function permLogToRow(e) { return { id: e.id, at: e.at, by_name: e.by || "", target_kind: e.targetKind || "", target_id: e.targetId || "", target_name: e.targetName || "", summary: e.summary || "" }; }
@@ -6115,7 +6172,7 @@ async function refreshPermLogFromSheet() {
   const res = await supabaseRequest("permission_log?select=*&order=at.desc&limit=100");
   if (res.ok && Array.isArray(res.data)) { S.permLog = res.data.map(rowToPermLog); lsSet(PERM_LOG_KEY, JSON.stringify(S.permLog)); }
 }
-function permSummaryText(p) { return `${(p.pages || []).length} صفحة، ${(p.actions || []).length} إجراء`; }
+function permSummaryText(p) { return `${(p.pages || []).length} صفحة، ${(p.buttons || p.actions || []).length} زر`; }
 function rolePermsEditorHtml(role) {
   const f = rolePermFormState();
   return `<div class="card" style="background:${GRAY_BG};margin:0 0 10px;">
@@ -6123,8 +6180,8 @@ function rolePermsEditorHtml(role) {
     <div class="hint" style="margin-bottom:8px;">الصفحات = صلاحية العرض. اتركي الخيارات فاضية ليرث الدور صلاحيات حساب الجهة كما هي.</div>
     <div style="font-size:11.5px;font-weight:800;color:${ROSE};margin-bottom:4px;">الصفحات (عرض)</div>
     ${platformUserPagesChecklistHtml(f.pages, "toggle-role-perm-page")}
-    <div style="font-size:11.5px;font-weight:800;color:${ROSE};margin:10px 0 4px;">الإجراءات (إنشاء / تعديل / حذف / إرسال / مراجعة / اعتماد)</div>
-    ${permActionsGroupedChecklistHtml(f.actions, "toggle-role-perm-action")}
+    <div style="font-size:11.5px;font-weight:800;color:${ROSE};margin:10px 0 4px;">أزرار الصفحات (التقارير والإرسال والمراجعة والاعتماد)</div>
+    ${permButtonsChecklistHtml(f.buttons, "toggle-role-perm-button")}
     <div style="display:flex;gap:6px;margin-top:10px;">${pillBtn("حفظ الصلاحيات", { action: "role-perm-save", data: { id: role.id } })}${pillBtn("إلغاء", { variant: "ghost", action: "role-perm-cancel" })}</div>
   </div>`;
 }
@@ -6136,8 +6193,8 @@ function personPermsEditorHtml(person) {
     <div class="hint" style="margin-bottom:8px;">يُطبَّق بدل صلاحيات الدور (${esc(role ? role.name : "")}) لهذا الشخص فقط. «إلغاء الاستثناء» يعيده لصلاحيات دوره.</div>
     <div style="font-size:11.5px;font-weight:800;color:${ROSE};margin-bottom:4px;">الصفحات (عرض)</div>
     ${platformUserPagesChecklistHtml(f.pages, "toggle-role-perm-page")}
-    <div style="font-size:11.5px;font-weight:800;color:${ROSE};margin:10px 0 4px;">الإجراءات</div>
-    ${permActionsGroupedChecklistHtml(f.actions, "toggle-role-perm-action")}
+    <div style="font-size:11.5px;font-weight:800;color:${ROSE};margin:10px 0 4px;">أزرار الصفحات</div>
+    ${permButtonsChecklistHtml(f.buttons, "toggle-role-perm-button")}
     <div style="display:flex;gap:6px;margin-top:10px;flex-wrap:wrap;">${pillBtn("حفظ الاستثناء", { action: "person-perm-save", data: { id: person.id } })}${pillBtn("إلغاء الاستثناء (العودة للدور)", { variant: "soft", action: "person-perm-clear", data: { id: person.id } })}${pillBtn("إغلاق", { variant: "ghost", action: "role-perm-cancel" })}</div>
   </div>`;
 }
@@ -6157,7 +6214,7 @@ function rolesBulkCardHtml() {
     <div style="margin-bottom:8px;">${pillBtn("تعبئة بالصفحات الافتراضية السابقة (وحدة)", { variant: "soft", action: "roles-bulk-preset" })}</div>
     ${platformUserPagesChecklistHtml(f.pages, "toggle-role-perm-page")}
     <div style="margin:10px 0 4px;"></div>
-    ${permActionsGroupedChecklistHtml(f.actions, "toggle-role-perm-action")}
+    ${permButtonsChecklistHtml(f.buttons, "toggle-role-perm-button")}
     <div style="display:flex;gap:6px;margin-top:12px;flex-wrap:wrap;align-items:center;">
       ${b.confirm ? `<span style="font-size:12px;font-weight:700;color:${DANGER};">متأكدة؟ سيُستبدل ${rolesList().length} دور.</span>${pillBtn("نعم، طبّقي", { action: "roles-bulk-apply" })}` : pillBtn("تطبيق على الكل", { action: "roles-bulk-confirm" })}
       ${pillBtn("إلغاء", { variant: "ghost", action: "roles-bulk-cancel" })}
@@ -6193,7 +6250,7 @@ function renderRolesManage() {
     </div>` : (ui.roleError ? `<div style="color:${DANGER};font-size:11.5px;font-weight:700;margin-bottom:8px;">${esc(ui.roleError)}</div>` : "");
   const roleRows = roles.map((r) => (ui.rolePermEditId === r.id ? rolePermsEditorHtml(r) : "") + `<div class="card" style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:8px;">
       <div><div style="font-size:13.5px;font-weight:800;">${esc(r.name)}</div>
-      <div style="font-size:11px;color:${SUBTLE};margin-top:2px;">${esc(ROLE_MODE_LABELS[r.mode] || "")}${r.pin ? " • برمز" : " • بدون رمز"}${r.description ? " • " + esc(r.description) : ""} • ${persons.filter((p) => p.roleId === r.id).length} شخص • الصلاحيات: ${rolePermsOf(r).pages.length || rolePermsOf(r).actions.length ? esc(permSummaryText(rolePermsOf(r))) : "ترث صلاحيات الجهة"}</div></div>
+      <div style="font-size:11px;color:${SUBTLE};margin-top:2px;">${esc(ROLE_MODE_LABELS[r.mode] || "")}${r.pin ? " • برمز" : " • بدون رمز"}${r.description ? " • " + esc(r.description) : ""} • ${persons.filter((p) => p.roleId === r.id).length} شخص • الصلاحيات: ${rolePermsOf(r).pages.length || rolePermsOf(r).actions.length || rolePermsOf(r).buttons.length ? esc(permSummaryText(rolePermsOf(r))) : "ترث صلاحيات الجهة"}</div></div>
       <div style="display:flex;gap:6px;align-items:center;">${ui.roleConfirmDeleteId === r.id
         ? `${pillBtn("تأكيد الحذف", { variant: "danger", action: "role-delete", data: { id: r.id } })}${pillBtn("تراجع", { variant: "ghost", action: "role-delete-cancel" })}`
         : `<button class="icon-btn" style="width:30px;height:30px;border:1px solid ${BORDER}" data-action="role-perm-edit" data-id="${esc(r.id)}" title="الصلاحيات">${iconKey(13, INK)}</button>
@@ -8754,6 +8811,7 @@ function attachClickListener() {
     if (!btn) return;
     const action = btn.dataset.action;
     const ds = btn.dataset;
+    if (buttonBlockedEl(btn)) return;
     if (adminReportsReadOnly() && ADMIN_READONLY_BLOCKED.includes(action)) { alert("حساب مديرة النظام للاطلاع فقط — لا يمكن تعديل التقارير أو اعتمادها من هنا."); return; }
 
     try {
@@ -9061,18 +9119,19 @@ function attachClickListener() {
         break;
       }
       case "toggle-role-perm-page": { const a = rolePermFormState().pages; const i = a.indexOf(ds.id); if (i >= 0) a.splice(i, 1); else a.push(ds.id); render(); break; }
+      case "toggle-role-perm-button": { const a = rolePermFormState().buttons; const i = a.indexOf(ds.id); if (i >= 0) a.splice(i, 1); else a.push(ds.id); render(); break; }
       case "toggle-role-perm-action": { const a = rolePermFormState().actions; const i = a.indexOf(ds.id); if (i >= 0) a.splice(i, 1); else a.push(ds.id); render(); break; }
       case "role-perm-edit": {
         const r = rolesList().find((x) => x.id === ds.id); if (!r) break;
         const p = rolePermsOf(r);
-        S.ui.rolePermForm = { pages: [...p.pages], actions: [...p.actions] };
+        S.ui.rolePermForm = { pages: [...p.pages], actions: [], buttons: [...(p.buttons.length ? p.buttons : p.actions.filter((a) => BUTTON_CATALOG.some((b) => b.id === a)))] };
         S.ui.rolePermEditId = r.id; S.ui.personPermEditId = null; S.ui.rolesBulk = null; render(); break;
       }
       case "role-perm-cancel": S.ui.rolePermEditId = null; S.ui.personPermEditId = null; S.ui.rolePermForm = null; render(); break;
       case "role-perm-save": {
         const f = rolePermFormState();
         const r = rolesList().find((x) => x.id === ds.id); if (!r) break;
-        S.roles = rolesList().map((x) => x.id === r.id ? { ...x, permissions: { pages: [...f.pages], actions: [...f.actions] } } : x);
+        S.roles = rolesList().map((x) => x.id === r.id ? { ...x, permissions: { pages: [...f.pages], actions: [], buttons: [...f.buttons] } } : x);
         dataStore.saveRoles(S.roles);
         addPermLog("role", r.id, r.name, `تعديل صلاحيات الدور: ${permSummaryText(f)}`);
         S.ui.rolePermEditId = null; S.ui.rolePermForm = null; render(); break;
@@ -9080,13 +9139,13 @@ function attachClickListener() {
       case "person-perm-edit": {
         const p = personsList().find((x) => x.id === ds.id); if (!p) break;
         const e = personEffectivePerms(p);
-        S.ui.rolePermForm = { pages: [...e.pages], actions: [...e.actions] };
+        S.ui.rolePermForm = { pages: [...e.pages], actions: [], buttons: [...(e.buttons.length ? e.buttons : e.actions.filter((a) => BUTTON_CATALOG.some((b) => b.id === a)))] };
         S.ui.personPermEditId = p.id; S.ui.rolePermEditId = null; S.ui.rolesBulk = null; render(); break;
       }
       case "person-perm-save": {
         const f = rolePermFormState();
         const p = personsList().find((x) => x.id === ds.id); if (!p) break;
-        S.persons = personsList().map((x) => x.id === p.id ? { ...x, permsOverride: { pages: [...f.pages], actions: [...f.actions] } } : x);
+        S.persons = personsList().map((x) => x.id === p.id ? { ...x, permsOverride: { pages: [...f.pages], actions: [], buttons: [...f.buttons] } } : x);
         dataStore.savePersons(S.persons);
         addPermLog("person", p.id, p.name, `استثناء خاص: ${permSummaryText(f)}`);
         S.ui.personPermEditId = null; S.ui.rolePermForm = null; render(); break;
@@ -9098,13 +9157,13 @@ function attachClickListener() {
         addPermLog("person", p.id, p.name, "إلغاء الاستثناء (عاد لصلاحيات الدور)");
         S.ui.personPermEditId = null; S.ui.rolePermForm = null; render(); break;
       }
-      case "roles-bulk-start": S.ui.rolesBulk = { confirm: false }; S.ui.rolePermForm = { pages: [], actions: [] }; S.ui.rolePermEditId = null; S.ui.personPermEditId = null; render(); break;
+      case "roles-bulk-start": S.ui.rolesBulk = { confirm: false }; S.ui.rolePermForm = { pages: [], actions: [], buttons: [] }; S.ui.rolePermEditId = null; S.ui.personPermEditId = null; render(); break;
       case "roles-bulk-preset": rolePermFormState().pages = [...BULK_PERM_PRESETS.unit]; render(); break;
       case "roles-bulk-confirm": if (S.ui.rolesBulk) S.ui.rolesBulk.confirm = true; render(); break;
       case "roles-bulk-cancel": S.ui.rolesBulk = null; S.ui.rolePermForm = null; render(); break;
       case "roles-bulk-apply": {
         const f = rolePermFormState();
-        S.roles = rolesList().map((x) => ({ ...x, permissions: { pages: [...f.pages], actions: [...f.actions] } }));
+        S.roles = rolesList().map((x) => ({ ...x, permissions: { pages: [...f.pages], actions: [], buttons: [...f.buttons] } }));
         dataStore.saveRoles(S.roles);
         addPermLog("role", "*", "كل الأدوار", `تطبيق على الكل (${S.roles.length}): ${permSummaryText(f)}`);
         S.ui.rolesBulk = null; S.ui.rolePermForm = null; render(); break;
@@ -10126,7 +10185,7 @@ function attachClickListener() {
         else if (ds.key === "toggle-edit-template-page" || ds.key === "toggle-edit-template-action") captureJobTitleTemplateFormFields("edit-template");
         const arr = permDropdownTargetArray(ds.key);
         const isPage = ds.key.indexOf("page") !== -1;
-        const allIds = isPage ? SIDEBAR_PAGES.filter((p) => p.group !== "unit-home" && MERGED_DASHBOARD_IDS.indexOf(p.id) === -1).map((p) => p.id) : ACTION_CATALOG.map((a) => a.id);
+        const allIds = ds.key.indexOf("button") !== -1 ? BUTTON_CATALOG.map((b) => b.id) : isPage ? SIDEBAR_PAGES.filter((p) => p.group !== "unit-home" && MERGED_DASHBOARD_IDS.indexOf(p.id) === -1).map((p) => p.id) : ACTION_CATALOG.map((a) => a.id);
         if (ds.mode === "all") {
           allIds.forEach((id) => { if (arr.indexOf(id) < 0) arr.push(id); });
         } else {
@@ -10762,6 +10821,7 @@ function applySiteColors(settings) {
   root.style.setProperty("--font-heading", `'${font}'`);
 }
 function afterRender() {
+  applyButtonPermissions();
   const loginUserEl = document.getElementById("login-username");
   if (loginUserEl) loginUserEl.focus();
 }
