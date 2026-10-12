@@ -1637,9 +1637,9 @@ function apInboxCardHtml(item) {
       ${pillBtn("عرض التقرير", { variant: "ghost", action: "view-report-pdf", data: { unitId: unit.id, reportId: report.id } })}
       ${stage.canEdit ? pillBtn("فتح للتعديل", { variant: "ghost", action: "ap-open-edit", data: { unitId: unit.id, reportId: report.id } }) : ""}
     </div>
-    <textarea id="cp-notes-${esc(key)}" class="input" style="width:100%;min-height:56px;margin-bottom:10px;" placeholder="ملاحظات عامة (${stage.noteRequired ? "إلزامية عند الاعتماد" : "اختياري"}${stage.canReturn ? "، وتلزم عند الإعادة إن لم تكتبي ملاحظة على قسم" : ""})..."></textarea>
+    <textarea id="cp-notes-${esc(key)}" class="input" style="width:100%;min-height:56px;margin-bottom:10px;" placeholder="ملاحظات عامة (${stage.noteRequired ? "إلزامية عند الاعتماد" : "اختياري"}${stage.canReturn ? "، وتلزم عند الإعادة إن لم تكتبي ملاحظة على قسم" : ""})...">${esc(apDraftGet(key, "__gen"))}</textarea>
     ${stage.canReturn ? `<details style="margin-bottom:10px;"><summary style="font-size:12px;font-weight:700;color:${ROSE};cursor:pointer;">ملاحظات على أقسام محددة (تظهر داخل القسم نفسه عند الإعادة)</summary>
-      <div style="display:flex;flex-direction:column;gap:6px;margin-top:8px;">${SECTIONS.map((sc) => `<textarea id="cp-sec-${esc(key)}-${esc(sc.id)}" class="input" style="width:100%;min-height:40px;" placeholder="ملاحظة على: ${esc(sc.label)}"></textarea>`).join("")}</div></details>
+      <div style="display:flex;flex-direction:column;gap:6px;margin-top:8px;">${SECTIONS.map((sc) => `<textarea id="cp-sec-${esc(key)}-${esc(sc.id)}" class="input" style="width:100%;min-height:40px;" placeholder="ملاحظة على: ${esc(sc.label)}">${esc(apDraftGet(key, sc.id))}</textarea>`).join("")}</div></details>
     <select class="input" id="cp-rtype-${esc(key)}" style="width:100%;margin-bottom:10px;"><option value="returned">عند الإعادة: بحاجة إلى تعديل</option><option value="needs_completion">عند الإعادة: بحاجة إلى استكمال</option></select>` : ""}
     <div style="display:flex;gap:8px;flex-wrap:wrap;">
       ${pillBtn(advLabel, { icon: iconCheckCircle(14, "#fff"), action: "ap-advance", data: { unitId: unit.id, reportId: report.id } })}
@@ -8950,7 +8950,7 @@ function reportApprovalHtml(num, report) {
    التوصيات والتحسين ← الإغلاق والاعتماد ← الأدلة والمرفقات.
    كل قسم من الأقسام الـ15 الأصلية يظهر مرة واحدة بالضبط ضمن هذا الترتيب،
    بدون حذف أو تكرار أي معلومة. */
-function fullReportOrPreviewBody(unit, report) {
+function fullReportOrPreviewBody(unit, report, afterPage) {
   const dept = S.departments.find((x) => x.id === unit.departmentId);
   const pages = [
     `${reportSummaryHtml(report)}`,
@@ -8973,7 +8973,43 @@ function fullReportOrPreviewBody(unit, report) {
         <div class="rpt-spine"></div>
         ${content}
         <div class="rpt-page-number">(${arabicDigits(i + 2)})</div>
-      </section>`).join("")}`;
+      </section>${afterPage ? afterPage(i) : ""}`).join("")}`;
+}
+
+// ===== مراجعة داخل صفحات التقرير: المراجِعة (صاحبة المرحلة) تكتب ملاحظة تحت كل صفحة أثناء القراءة =====
+const FULL_REPORT_PAGE_SECTIONS = [[], ["basic", "goals", "kpi"], ["programs", "tools"], ["analysis", "strengths"], ["initiatives", "impact"], ["challenges", "improvement", "recommendations"], [], ["nextplan", "evidence", "review"]];
+function apReviewItemFor(unitId, reportId) {
+  try { return apPendingForMe().find((it) => it.unit.id === unitId && it.report.id === reportId) || null; } catch (e) { return null; }
+}
+function apDraftGet(key, k) { const d = S.ui.apDraft && S.ui.apDraft[key]; return (d && d[k]) || ""; }
+function apDraftSet(key, k, v) { S.ui.apDraft = S.ui.apDraft || {}; (S.ui.apDraft[key] = S.ui.apDraft[key] || {})[k] = v; }
+function apReviewAfterPageHtml(item) {
+  const key = item.unit.id + ":" + item.report.id;
+  return (i) => {
+    const ids = (FULL_REPORT_PAGE_SECTIONS[i] || []).filter((id) => SECTIONS.some((sc) => sc.id === id));
+    if (!ids.length) return "";
+    return `<div class="no-print" style="margin:-6px 0 18px;padding:12px 14px;border:1.5px dashed ${ROSE};border-radius:14px;background:#fff;">
+      <div style="font-size:11.5px;font-weight:800;color:${ROSE};margin-bottom:8px;">ملاحظاتك على هذه الصفحة (تظهر داخل القسم نفسه عند الإعادة)</div>
+      <div style="display:flex;flex-direction:column;gap:6px;">${ids.map((id) => { const sc = SECTIONS.find((x) => x.id === id); return `<textarea id="cp-sec-${esc(key)}-${esc(id)}" class="input" style="width:100%;min-height:44px;" placeholder="ملاحظة على: ${esc(sc.label)}">${esc(apDraftGet(key, id))}</textarea>`; }).join("")}</div>
+    </div>`;
+  };
+}
+function apReviewPanelHtml(item) {
+  const { unit, report, stage, path } = item;
+  const key = unit.id + ":" + report.id;
+  const idx = path.findIndex((x) => x.key === stage.key);
+  const next = path[idx + 1];
+  const advLabel = stage.canApprove ? (next ? "اعتماد وإرسال إلى " + next.name : "اعتماد نهائي") : (next ? "إرسال إلى " + next.name : "إنهاء المرحلة");
+  return `<div class="card no-print" style="margin-top:16px;border:1.5px solid ${ROSE};">
+    <div style="font-size:13.5px;font-weight:800;margin-bottom:4px;">قرارك على التقرير — مرحلتك: ${esc(stage.name)}</div>
+    <div class="hint" style="margin-bottom:10px;">ملاحظاتك على الصفحات مكتوبة تحت كل صفحة أعلاه، وتُرسل كلها مع قرارك.</div>
+    <textarea id="cp-notes-${esc(key)}" class="input" style="width:100%;min-height:56px;margin-bottom:10px;" placeholder="ملاحظات عامة (${stage.noteRequired ? "إلزامية عند الاعتماد" : "اختياري"}${stage.canReturn ? "، وتلزم عند الإعادة إن لم تكتبي ملاحظة على قسم" : ""})...">${esc(apDraftGet(key, "__gen"))}</textarea>
+    ${stage.canReturn ? `<select class="input" id="cp-rtype-${esc(key)}" style="width:100%;margin-bottom:10px;"><option value="returned">عند الإعادة: بحاجة إلى تعديل</option><option value="needs_completion">عند الإعادة: بحاجة إلى استكمال</option></select>` : ""}
+    <div style="display:flex;gap:8px;flex-wrap:wrap;">
+      ${pillBtn(advLabel, { icon: iconCheckCircle(14, "#fff"), action: "ap-advance", data: { unitId: unit.id, reportId: report.id } })}
+      ${stage.canReturn ? pillBtn("إعادة للتعديل", { variant: "ghost", icon: iconX(14, INK), action: "ap-return", data: { unitId: unit.id, reportId: report.id } }) : ""}
+    </div>
+  </div>`;
 }
 
 function renderFullReport() {
@@ -8982,12 +9018,14 @@ function renderFullReport() {
   if (!report) return `<div class="page-wrap">تعذر إيجاد هذا التقرير.</div>`;
   const progress = computeProgress(report);
   const readOnlyVisit = !!S.cameFromAllReports;
+  const rvItem = apReviewItemFor(unit.id, report.id);
   return `
   <div class="page-wrap"><div class="page-inner report">
     ${topBarHtml({ title: "عرض التقرير كاملاً", subtitle: `${unit.name} — ${esc(report.label)} — ${progress.completed} من ${progress.total} أقسام مكتملة`,
-      backAction: readOnlyVisit ? "nav-to" : "nav-to-unit-report", backData: readOnlyVisit ? { view: "all-reports" } : undefined,
+      backAction: rvItem ? "nav-to" : (readOnlyVisit ? "nav-to" : "nav-to-unit-report"), backData: rvItem ? { view: "custom-path-inbox" } : (readOnlyVisit ? { view: "all-reports" } : undefined),
       right: pillBtn("معاينة الطباعة", { variant: "ghost", icon: iconPrinter(15, INK), action: "nav-to", data: { view: "report-preview" } }) })}
-    <div class="rpt-wrap">${fullReportOrPreviewBody(unit, report)}</div>
+    <div class="rpt-wrap">${fullReportOrPreviewBody(unit, report, rvItem ? apReviewAfterPageHtml(rvItem) : null)}</div>
+    ${rvItem ? apReviewPanelHtml(rvItem) : ""}
     ${readOnlyVisit ? "" : `<div class="hint" style="margin-top:12px;">للتعديل على أي قسم، ارجعي إلى "مسودة التقرير" واختاري القسم من قائمة المراحل.</div>`}
   </div></div>`;
 }
@@ -9029,6 +9067,12 @@ function liveUpdateComputed(el) {
 function attachFormListeners() {
   appEl.addEventListener("input", (e) => {
     const el = e.target;
+    if (el.id && (el.id.indexOf("cp-sec-") === 0 || el.id.indexOf("cp-notes-") === 0)) {
+      // حفظ مسودة ملاحظات المراجِعة محليًا (تبقى عند التنقل بين الوارد وعرض التقرير)
+      const m = el.id.indexOf("cp-sec-") === 0 ? el.id.slice(7) : el.id.slice(9);
+      if (el.id.indexOf("cp-sec-") === 0) { const sc = SECTIONS.find((x) => m.endsWith("-" + x.id)); if (sc) apDraftSet(m.slice(0, m.length - sc.id.length - 1), sc.id, el.value); }
+      else apDraftSet(m, "__gen", el.value);
+    }
     if (el.id === "dashboard-search") {
       const q = el.value.trim().toLowerCase();
       const rows = document.querySelectorAll("#recent-reports-table tbody tr");
@@ -10198,6 +10242,8 @@ function attachClickListener() {
         const typeEl = document.getElementById("cp-rtype-" + key);
         const err = apAdvanceOrReturn(ds.unitId, ds.reportId, isReturn, notes, { sectionNotes: secNotes, type: typeEl ? typeEl.value : "returned" });
         if (err) { alert(err); break; }
+        if (S.ui.apDraft) delete S.ui.apDraft[key];
+        if (S.view === "full-report") S.view = "custom-path-inbox";
         render();
         break;
       }
