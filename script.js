@@ -804,7 +804,7 @@ const REPORT_TAB_CATALOG = [
   { id: "returned", label: "بحاجة إلى تعديل" },
   { id: "needs_completion", label: "بحاجة إلى استكمال" },
   { id: "under_review", label: "التقارير المرسلة" },
-  { id: "custom_pending", label: "قيد المراجعة (المسار الحر)" },
+  { id: "custom_pending", label: "قيد المراجعة" },
   { id: "completed", label: "التقارير الكاملة" },
   { id: "approved", label: "معتمد" },
   { id: "archived", label: "أرشيف التقارير" },
@@ -1345,7 +1345,7 @@ function reportStatusMeta(status) {
   if (status === "under_review") return { label: "بانتظار المراجعة", color: GOLD, bg: GOLD_BG };
   if (status === "needs_completion") return { label: "بحاجة إلى استكمال", color: "#c9863a", bg: "#faf0e3" };
   if (status === "returned") return { label: "بحاجة إلى تعديل", color: DANGER, bg: DANGER_BG };
-  if (status === "custom_pending") return { label: "قيد المراجعة (المسار الحر)", color: GOLD, bg: GOLD_BG };
+  if (status === "custom_pending") return { label: "قيد المراجعة", color: GOLD, bg: GOLD_BG };
   if (status === "pending_head_review") return { label: "بانتظار مراجعة رئيسة الوحدة", color: GOLD, bg: GOLD_BG };
   if (status === "head_returned_edit") return { label: "معاد للتعديل", color: DANGER, bg: DANGER_BG };
   if (status === "head_returned_completion") return { label: "معاد للاستكمال", color: "#c9863a", bg: "#faf0e3" };
@@ -2089,6 +2089,7 @@ const BUTTON_CATALOG = [
   { id: "chip:returned", g: "قائمة التقارير", label: "زر «بحاجة إلى تعديل»", sel: '[data-action="set-unit-reports-filter"][data-filter="returned"]' },
   { id: "chip:needs_completion", g: "قائمة التقارير", label: "زر «بحاجة إلى استكمال»", sel: '[data-action="set-unit-reports-filter"][data-filter="needs_completion"]' },
   { id: "chip:under_review", g: "قائمة التقارير", label: "زر «التقارير المرسلة»", sel: '[data-action="set-unit-reports-filter"][data-filter="under_review"]' },
+  { id: "chip:custom_pending", g: "قائمة التقارير", label: "زر «قيد المراجعة»", sel: '[data-action="set-unit-reports-filter"][data-filter="custom_pending"]' },
   { id: "chip:completed", g: "قائمة التقارير", label: "زر «التقارير الكاملة»", sel: '[data-action="set-unit-reports-filter"][data-filter="completed"]' },
   { id: "chip:approved", g: "قائمة التقارير", label: "زر «معتمد»", sel: '[data-action="set-unit-reports-filter"][data-filter="approved"]' },
   { id: "chip:archived", g: "قائمة التقارير", label: "زر «أرشيف التقارير»", sel: '[data-action="set-unit-reports-filter"][data-filter="archived"]' },
@@ -5362,6 +5363,7 @@ function renderUnitReportsHub() {
     { id: "returned", label: "بحاجة إلى تعديل" },
     { id: "needs_completion", label: "بحاجة إلى استكمال" },
     { id: "under_review", label: "التقارير المرسلة" },
+    { id: "custom_pending", label: "قيد المراجعة" },
     { id: "completed", label: "التقارير الكاملة" },
     { id: "approved", label: "معتمد" },
     { id: "archived", label: "أرشيف التقارير" },
@@ -5371,8 +5373,6 @@ function renderUnitReportsHub() {
   if (tabsCfg && tabsCfg.tabs.length) {
     const chosen = REPORT_TAB_CATALOG.filter((t) => tabsCfg.tabs.includes(t.id)).map((t) => (t.id === "pending_head_review" || t.id === "pending_extra_review") ? { ...t, label: "الواردة للمراجعة" } : t);
     tabs.length = 0; chosen.forEach((t) => tabs.push(t));
-  } else if (unitHasCustomPath(unit) || list.some((r) => r.status === "custom_pending")) {
-    tabs.splice(tabs.length - 1, 0, { id: "custom_pending", label: "قيد المراجعة (المسار الحر)" });
   }
   if (!tabs.some((t) => t.id === filter)) filter = tabs.length ? tabs[0].id : "all";
   const countFor = (id) => {
