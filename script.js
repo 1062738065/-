@@ -1366,7 +1366,7 @@ function pushReportMetaToSheet(unitId, entry) {
 // وتتصفحها، لكن بدون تعديل أو إرسال أو اعتماد أو إعادة أو حذف. حسابات "المسمى
 // الوظيفي" والأقسام والوحدات الحقيقية لا تتأثر إطلاقًا.
 function adminReportsReadOnly() { return !!(S.isAdmin && !S.currentPlatformUserJobTitle && !S.__adminAllowWrite); }
-const ADMIN_READONLY_BLOCKED = ["open-or-create-report", "approve-report-by-head", "confirm-head-return", "submit-report-to-head", "confirm-send-report", "mark-report-completed", "request-report-completion", "approve-report", "return-report-for-revision", "submit-department-review-decision", "delete-report", "confirm-delete-report", "custom-path-send", "custom-path-return", "confirm-custom-send", "start-custom-send", "ap-send", "ap-advance", "ap-return", "ap-open-edit"];
+const ADMIN_READONLY_BLOCKED = ["open-or-create-report", "approve-report-by-head", "confirm-head-return", "submit-report-to-head", "confirm-send-report", "mark-report-completed", "request-report-completion", "approve-report", "return-report-for-revision", "submit-department-review-decision", "delete-report", "confirm-delete-report", "custom-path-send", "custom-path-return", "confirm-custom-send", "start-custom-send", "ap-send", "ap-send-confirm", "ap-advance", "ap-return", "ap-open-edit"];
 function saveReportEntry(unitId, updatedEntry) {
   if (adminReportsReadOnly()) return;
   const list = ensureUnitReportsLoaded(unitId).map((r) => (r.id === updatedEntry.id ? updatedEntry : r));
@@ -1489,21 +1489,21 @@ function apOwnerCandidatesForUnit(unit) {
 function currentPersonObj() { return S.currentPersonId ? (personsList().find((x) => x.id === S.currentPersonId) || null) : null; }
 function currentAuthorRoleId() { const p = currentPersonObj(); return p ? (p.roleId || "") : ""; }
 // أنسب مسار مفعّل لهذا التقرير: الأكثر تحديدًا (فترة محددة / دور محدد) يفوز
-function matchApprovalPath(unit, report) {
+function matchApprovalPath(unit, report) { return matchingApprovalPaths(unit, report)[0] || null; }
+function matchingApprovalPaths(unit, report) {
   const owners = apOwnerCandidatesForUnit(unit);
-  if (!owners.length) return null;
+  if (!owners.length) return [];
   const period = (report && report.shared && report.shared.periodType) || (report && report.sections && report.sections.basic && report.sections.basic.data && report.sections.basic.data.periodType) || "";
   const role = currentAuthorRoleId();
-  let best = null, bestScore = -1;
+  const out = [];
   approvalPathsList().forEach((p) => {
     if (p.status !== "active" || !(p.stages || []).length) return;
     if (!owners.some((o) => o.kind === p.ownerKind && o.id === p.ownerId)) return;
     if (p.periodType && p.periodType !== period) return;
     if (p.authorRoleId && p.authorRoleId !== role) return;
-    const score = (p.periodType ? 1 : 0) + (p.authorRoleId ? 1 : 0);
-    if (score > bestScore) { best = p; bestScore = score; }
+    out.push({ p, score: (p.periodType ? 1 : 0) + (p.authorRoleId ? 1 : 0) });
   });
-  return best;
+  return out.sort((a, b) => b.score - a.score).map((x) => x.p);
 }
 // هل الجلسة الحالية هي صاحبة هذه المرحلة؟ (مديرة النظام للاطلاع فقط فلا تُعدّ صاحبة مرحلة)
 function userHoldsApStage(stage) {
@@ -1544,10 +1544,11 @@ function canViewReportViaApPath(unitId) {
 }
 function apLogEntry(kind, from, to, text) { return { at: Date.now(), kind, from, to, text, by: S.currentPersonName || (S.currentUser && S.currentUser.name) || "" }; }
 // يرسل التقرير من كاتبته لأول مرحلة فعلية بمسار مطابق؛ يرجع false لو ما فيه مسار
-function apSendReport(unitId, entry) {
+function apSendReport(unitId, entry, pathId, notes) {
   const unit = S.units.find((u) => u.id === unitId);
-  const path = matchApprovalPath(unit, entry);
+  const path = matchingApprovalPaths(unit, entry).find((x) => x.id === pathId);
   if (!path) return false;
+  const noteTxt = notes ? " — " + notes : "";
   const stages = apStageList(path);
   let i = 0;
   while (i < stages.length && userHoldsApStage(stages[i]) && apStageIsPassThrough(stages[i])) i++;
@@ -1558,10 +1559,10 @@ function apSendReport(unitId, entry) {
   if (i >= stages.length) {
     const last = stages[stages.length - 1];
     const status = last.canApprove ? "approved" : "completed";
-    log.push(apLogEntry("final", "unit", "final", "أُرسل وانتهى المسار (" + path.name + ")"));
+    log.push(apLogEntry("final", "unit", "final", "أُرسل وانتهى المسار (" + path.name + ")" + noteTxt));
     saveReportEntry(unitId, { ...entry, status, customStageId: null, customLog: log, internalSentAt: Date.now(), updatedAt: Date.now() });
   } else {
-    log.push(apLogEntry("send", "unit", stages[i].key, "أُرسل إلى " + stages[i].name + " (" + path.name + ")"));
+    log.push(apLogEntry("send", "unit", stages[i].key, "أُرسل إلى " + stages[i].name + " (" + path.name + ")" + noteTxt));
     saveReportEntry(unitId, { ...entry, status: "custom_pending", customStageId: stages[i].key, customLog: log, internalSentAt: Date.now(), updatedAt: Date.now() });
   }
   return true;
@@ -1599,6 +1600,23 @@ function apAdvanceOrReturn(unitId, reportId, isReturn, notes, opts) {
     saveReportEntry(unitId, { ...entry, status: "custom_pending", customStageId: next.key, customLog: log, updatedAt: Date.now() });
   }
   return "";
+}
+function apSendPickerHtml(unit, report) {
+  const paths = matchingApprovalPaths(unit, report);
+  const picked = S.ui.apSendPathId || (paths.length === 1 ? paths[0].id : "");
+  return `
+  <div class="card" style="margin-top:16px;border:1.5px solid ${ROSE};">
+    <div style="font-size:13px;font-weight:800;margin-bottom:10px;">إرسال التقرير — إلى من؟</div>
+    <select class="input" id="ap-send-path" style="width:100%;margin-bottom:10px;">
+      <option value="">اختاري الجهة...</option>
+      ${paths.map((p) => `<option value="${esc(p.id)}" ${picked === p.id ? "selected" : ""}>${esc(p.name || apOwnerName(p.ownerKind, p.ownerId))} — ${esc(apStageList(p).map((st) => st.name).join(" ← "))}</option>`).join("")}
+    </select>
+    <textarea id="ap-send-notes" class="input" style="width:100%;min-height:56px;margin-bottom:10px;" placeholder="ملاحظات (اختياري)..."></textarea>
+    <div style="display:flex;gap:8px;">
+      ${pillBtn("تأكيد الإرسال", { icon: iconCheckCircle(14, "#fff"), action: "ap-send-confirm" })}
+      ${pillBtn("إلغاء", { variant: "ghost", action: "ap-send-cancel" })}
+    </div>
+  </div>`;
 }
 function apInboxCardHtml(item) {
   const { unit, report, stage, path } = item;
@@ -2154,15 +2172,26 @@ const BUTTON_CATALOG = [
   { id: "start-send-report", g: "إرسال التقرير", label: "إرسال مباشرة للقسم", sel: '[data-action="start-send-report"],[data-action="confirm-send-report"]' },
   { id: "request-report-completion", g: "إرسال التقرير", label: "طلب استكمال التقرير", sel: '[data-action="request-report-completion"]' },
   { id: "mark-report-completed", g: "إرسال التقرير", label: "تحديد التقرير كمكتمل", sel: '[data-action="mark-report-completed"]' },
-  { id: "custom-path-send", g: "إرسال التقرير", label: "إرسال في المسار الحر", sel: '[data-action="custom-path-send"],[data-action="start-custom-send"],[data-action="confirm-custom-send"],[data-action="ap-send"],[data-action="ap-advance"]' },
+  { id: "custom-path-send", g: "إرسال التقرير", label: "إرسال في المسار الحر", sel: '[data-action="custom-path-send"],[data-action="start-custom-send"],[data-action="confirm-custom-send"]' },
+  { id: "send-report", g: "إرسال التقرير", label: "إرسال التقرير (من مسارات الاعتماد)", sel: '[data-action="ap-send"],[data-action="ap-send-confirm"]' },
+  { id: "ap-advance", g: "المراجعة والاعتماد", label: "اعتماد / إرسال للمرحلة التالية (مسار الاعتماد)", sel: '[data-action="ap-advance"]' },
+  { id: "ap-return", g: "المراجعة والاعتماد", label: "إعادة التقرير للتعديل (مسار الاعتماد)", sel: '[data-action="ap-return"]' },
   { id: "start-head-return", g: "المراجعة والاعتماد", label: "إعادة التقرير للتعديل (رئيسة / مراجعة إضافية)", sel: '[data-action="start-head-return"],[data-action="confirm-head-return"]' },
   { id: "submit-department-review-decision", g: "المراجعة والاعتماد", label: "قرار مراجعة القسم (اعتماد / إعادة)", sel: '[data-action="submit-department-review-decision"]' },
   { id: "approve-report", g: "المراجعة والاعتماد", label: "اعتماد التقرير (القسم)", sel: '[data-action="approve-report"]' },
   { id: "return-report-for-revision", g: "المراجعة والاعتماد", label: "إعادة التقرير للمراجعة", sel: '[data-action="return-report-for-revision"]' },
   { id: "custom-path-return", g: "المراجعة والاعتماد", label: "إعادة التقرير في المسار الحر", sel: '[data-action="custom-path-return"]' },
 ];
+// أزرار المسار الجديد ترث صلاحية الأزرار القديمة المقابلة لها: من كانت مختارة عندها لا يختفي عنها شيء.
+const BUTTON_ALIASES = {
+  "send-report": ["custom-path-send", "submit-report-to-head", "start-send-report"],
+  "ap-advance": ["custom-path-send"],
+  "ap-return": ["custom-path-return", "start-head-return"],
+};
 function buttonAllowed(id) {
-  return !S.platformUserAllowedButtons || S.platformUserAllowedButtons.includes(id);
+  if (!S.platformUserAllowedButtons) return true;
+  if (S.platformUserAllowedButtons.includes(id)) return true;
+  return (BUTTON_ALIASES[id] || []).some((a) => S.platformUserAllowedButtons.includes(a));
 }
 function buttonBlockedEl(el) {
   if (!S.platformUserAllowedButtons) return false;
@@ -7884,6 +7913,7 @@ function sectionEditorHtml(unit, report) {
     ${S.sectionSaveError ? `<div class="error-box" style="margin-top:16px;">${esc(S.sectionSaveError)}</div>` : ""}
     ${S.ui.showSendPicker ? sendReportPickerHtml(unit) : ""}
     ${S.ui.showCustomSendPicker ? customPathSendHtml(unit, report) : ""}
+    ${S.ui.showApSendPicker ? apSendPickerHtml(unit, report) : ""}
     <div class="section-editor-nav">
       ${pillBtn("السابق", { variant: "ghost", action: "section-prev", disabled: sectionIndex <= 0 })}
       <div style="flex:1;">${platformActionAllowed("section-save-draft") ? pillBtn(S.sectionSaveStatus || "حفظ كمسودة", { variant: "soft", icon: iconSave(15, GREEN), action: "section-save-draft" }) : ""}</div>
@@ -9766,8 +9796,8 @@ function attachClickListener() {
       case "ap-toggle": {
         const list = approvalPathsList(); const a = list.find((x) => x.id === ds.id); if (!a) break;
         if (a.status !== "active") {
-          const clash = list.find((x) => x.id !== a.id && x.status === "active" && x.ownerKind === a.ownerKind && x.ownerId === a.ownerId && (x.periodType || "") === (a.periodType || "") && (x.authorRoleId || "") === (a.authorRoleId || ""));
-          if (clash) { S.ui.apMsg = { id: a.id, msg: "يوجد مسار مفعّل لنفس الجهة والفترة وصاحب التقرير — أوقفيه أولًا" }; render(); break; }
+          const clash = list.find((x) => x.id !== a.id && x.status === "active" && x.ownerKind === a.ownerKind && x.ownerId === a.ownerId && (x.periodType || "") === (a.periodType || "") && (x.authorRoleId || "") === (a.authorRoleId || "") && String(x.name || "").trim() === String(a.name || "").trim());
+          if (clash) { S.ui.apMsg = { id: a.id, msg: "يوجد مسار مفعّل بنفس الاسم لنفس الجهة والفترة — غيّري الاسم حتى يظهر مختلفًا في قائمة الإرسال" }; render(); break; }
         }
         S.ui.apMsg = null;
         S.approvalPaths = list.map((x) => x.id === a.id ? { ...x, status: x.status === "active" ? "draft" : "active", activatedAt: x.status === "active" ? null : Date.now() } : x);
@@ -10105,10 +10135,17 @@ function attachClickListener() {
         render();
         break;
       }
-      case "ap-send": {
+      case "ap-send": { S.ui.showApSendPicker = true; S.ui.apSendPathId = ""; render(); break; }
+      case "ap-send-cancel": { S.ui.showApSendPicker = false; render(); break; }
+      case "ap-send-confirm": {
         const entry = getCurrentReportEntry();
         if (!entry) break;
-        if (!apSendReport(S.currentUnitId, entry)) break;
+        const sel = document.getElementById("ap-send-path");
+        const pathId = sel ? sel.value : "";
+        if (!pathId) { alert("اختاري الجهة اللي يُرسل لها التقرير."); break; }
+        const notes = ((document.getElementById("ap-send-notes") || {}).value || "").trim();
+        if (!apSendReport(S.currentUnitId, entry, pathId, notes)) break;
+        S.ui.showApSendPicker = false;
         render();
         break;
       }
