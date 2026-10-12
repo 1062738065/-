@@ -1014,7 +1014,7 @@ const UNITS_KEY = "prs:units", DEPARTMENTS_KEY = "prs:departments", OFFICES_KEY 
       INDICATOR_DEFINITIONS_KEY = "prs:indicator-definitions", GOALS_DEFINITIONS_KEY = "prs:goals-definitions",
       SITE_SETTINGS_KEY = "prs:site-settings", REPORT_SECTIONS_KEY = "prs:report-sections",
       SECTION_FIELD_SCHEMAS_KEY = "prs:section-field-schemas", PLATFORM_USERS_KEY = "prs:platform-users",
-      ORG_CHART_KEY = "prs:org-chart", JOB_TITLE_TEMPLATES_KEY = "prs:job-title-templates", ROLES_KEY = "prs:roles", PERSONS_KEY = "prs:persons", PERM_LOG_KEY = "prs:perm-log";
+      ORG_CHART_KEY = "prs:org-chart", JOB_TITLE_TEMPLATES_KEY = "prs:job-title-templates", ROLES_KEY = "prs:roles", PERSONS_KEY = "prs:persons", PERM_LOG_KEY = "prs:perm-log", APPROVAL_PATHS_KEY = "prs:approval-paths";
 const DEFAULT_SITE_COLORS = { primary: "#6b2337", background: "#F2ECE8" };
 // ألوان الموقع الإضافية + ضبط عبارة الشريط الجانبي + ألوان بطاقات تصفّح الهيكل —
 // تُحفظ كلها في عمود واحد theme_json بجدول site_settings (نص JSON).
@@ -1201,6 +1201,11 @@ const dataStore = {
   saveRoles(list) {
     lsSet(ROLES_KEY, JSON.stringify(list));
     if (sheetsConfigured()) queueSupabaseReplaceTable("roles", list.map(roleToRow)).catch(() => {});
+  },
+  getApprovalPaths() { const v = lsGet(APPROVAL_PATHS_KEY); return v ? JSON.parse(v) : []; },
+  saveApprovalPaths(list) {
+    lsSet(APPROVAL_PATHS_KEY, JSON.stringify(list));
+    if (sheetsConfigured()) queueSupabaseReplaceTable("approval_paths", list.map(approvalPathToRow)).catch(() => {});
   },
   getPermLog() { const v = lsGet(PERM_LOG_KEY); return v ? JSON.parse(v) : []; },
   getPersons() { const v = lsGet(PERSONS_KEY); return v ? JSON.parse(v) : []; },
@@ -1772,6 +1777,8 @@ function render() {
     html = shellWrap(renderPlatformPermissionsManage());
   } else if (S.view === "job-title-templates") {
     html = shellWrap(renderJobTitleTemplatesManage());
+  } else if (S.view === "approval-paths-setup") {
+    html = shellWrap(S.isAdmin ? renderApprovalPathsSetup() : `<div class="page-wrap"><div class="page-inner narrow"><div class="card" style="text-align:center;padding:30px;">هذه الصفحة لمديرة النظام فقط.</div></div></div>`);
   } else if (S.view === "roles-manage") {
     html = shellWrap(renderRolesManage());
   } else {
@@ -1806,6 +1813,7 @@ const SIDEBAR_PAGES = [
   { id: "admin-reports", label: "الأقسام والوحدات", group: "الرئيسية", icon: "building" },
   { id: "custom-path-inbox", label: "تقارير المسار الحر", group: "الرئيسية", icon: "document" },
   { id: "site-settings", label: "إعدادات الموقع", group: "الرئيسية", icon: "gauge" },
+  { id: "approval-paths-setup", label: "إعداد مسارات الاعتماد", group: "standalone", icon: "layers" },
   // "حسابات إضافية" و"صلاحيات الحسابات" و"المسميات الوظيفية (القوالب)" صارت
   // تبويبات داخل صفحة "المستخدمون" نفسها (accountsHubTabBarHtml) بدل روابط
   // منفصلة بالقائمة الجانبية — طلب نجود الصريح بدمجها. الصفحات الثلاث نفسها
@@ -1851,7 +1859,7 @@ const SIDEBAR_PAGES = [
 // مجموعة واحدة قابلة للطي ("unit-home")، فأصبحت الآن أربعة روابط رئيسية
 // مستقلة بالشريط الجانبي — بلا طي وبلا اشتراط مسبق بوحدة/قسم محدّد، تمامًا
 // بنفس أسلوب "جميع التقارير" — حسب طلب نجود الصريح.
-const SIDEBAR_GROUPS = ["الرئيسية", "إدارة التقارير", "__standalone__all-reports", "__standalone__units-manage", "__standalone__browse-structure", "__standalone__office-archive", "__standalone__office-summary", "__standalone__executive-summary", "__standalone__executive-final-report", "الإدارة العليا", "مكتب الإشراف", "الهيكل التنظيمي", "__standalone__unit-dashboard", "__standalone__unit-reports", "__standalone__unit-report", "__standalone__unit-settings", "__standalone__unit-notifications", "__standalone__unit-all-reports"];
+const SIDEBAR_GROUPS = ["الرئيسية", "إدارة التقارير", "__standalone__all-reports", "__standalone__units-manage", "__standalone__approval-paths-setup", "__standalone__browse-structure", "__standalone__office-archive", "__standalone__office-summary", "__standalone__executive-summary", "__standalone__executive-final-report", "الإدارة العليا", "مكتب الإشراف", "الهيكل التنظيمي", "__standalone__unit-dashboard", "__standalone__unit-reports", "__standalone__unit-report", "__standalone__unit-settings", "__standalone__unit-notifications", "__standalone__unit-all-reports"];
 const SIDEBAR_GROUP_LABELS = { "unit-home": "الرئيسية" };
 
 // كتالوج "إجراءات" مسار اعتماد التقرير — يُستخدم لصلاحيات الأزرار لكل مسمى
@@ -1987,7 +1995,7 @@ function computeVisibleSidebarPagesRaw() {
     // "جميع التقارير") — فتختفي بقية الصفحات الممنوحة فعليًا من الشريط الجانبي
     // بالكامل. الدخول إليها بنفسه يتكفّل الآن بضبط الوحدة المناسبة تلقائيًا
     // (راجع ensureUnitContextForNav) بدل الاعتماد على وجودها مسبقًا.
-    return SIDEBAR_PAGES.filter((p) => S.platformUserAllowedPages.includes(p.id) || (p.id === "custom-path-inbox" && userInAnyCustomPath()));
+    return SIDEBAR_PAGES.filter((p) => p.id !== "approval-paths-setup" && (S.platformUserAllowedPages.includes(p.id) || (p.id === "custom-path-inbox" && userInAnyCustomPath())));
   }
   // قرار نجود: أي حساب (غير مديرة النظام والإدارة العليا) ما حُددت له صفحات = ما يظهر له شيء.
   if (!S.isAdmin && !S.isExecutive) return [];
@@ -5820,7 +5828,7 @@ function platformUserPagesChecklistHtml(selected, action) {
   const groups = [];
   const sensitivePages = [];
   SIDEBAR_PAGES.forEach((p) => {
-    if (MERGED_DASHBOARD_IDS.indexOf(p.id) !== -1) return;
+    if (MERGED_DASHBOARD_IDS.indexOf(p.id) !== -1 || p.id === "approval-paths-setup") return;
     // صفحات "unit-home" (لوحة معلومات الوحدة/تقارير/إنشاء تقرير/الإعدادات)
     // الآن قابلة للمنح لأي مسمى وظيفي — تحتاج فقط نطاق بيانات محدّد (قسم/مكتب
     // إشراف/وحدة) ليعرف النظام لأي وحدة/قسم ينشئ التقرير (انظر ملاحظة أسفل
@@ -6159,6 +6167,12 @@ function personEffectivePerms(person) {
     buttons: Array.isArray(o.buttons) ? o.buttons : base.buttons,
   };
 }
+function approvalPathToRow(a) {
+  return { id: a.id, name: a.name || "", owner_kind: a.ownerKind || "", owner_id: a.ownerId || "", period_type: a.periodType || "", author_role_id: a.authorRoleId || "", stages: a.stages || [], status: a.status || "draft", created_at: a.createdAt || Date.now(), activated_at: a.activatedAt || null };
+}
+function rowToApprovalPath(r) {
+  return { id: r.id, name: r.name || "", ownerKind: r.owner_kind || "", ownerId: r.owner_id || "", periodType: r.period_type || "", authorRoleId: r.author_role_id || "", stages: Array.isArray(r.stages) ? r.stages : [], status: r.status || "draft", createdAt: Number(r.created_at) || 0, activatedAt: r.activated_at ? Number(r.activated_at) : null };
+}
 function permLogToRow(e) { return { id: e.id, at: e.at, by_name: e.by || "", target_kind: e.targetKind || "", target_id: e.targetId || "", target_name: e.targetName || "", summary: e.summary || "" }; }
 function rowToPermLog(r) { return { id: r.id, at: Number(r.at) || 0, by: r.by_name || "", targetKind: r.target_kind || "", targetId: r.target_id || "", targetName: r.target_name || "", summary: r.summary || "" }; }
 function addPermLog(targetKind, targetId, targetName, summary) {
@@ -6166,6 +6180,12 @@ function addPermLog(targetKind, targetId, targetName, summary) {
   S.permLog = [e, ...(S.permLog || dataStore.getPermLog())].slice(0, 200);
   lsSet(PERM_LOG_KEY, JSON.stringify(S.permLog));
   if (sheetsConfigured()) supabaseRequest("permission_log", { method: "POST", prefer: "return=minimal", body: JSON.stringify(permLogToRow(e)) }).catch(() => {});
+}
+async function refreshApprovalPathsFromSheet() {
+  if (!sheetsConfigured()) return;
+  await pendingSupabaseWrite("approval_paths");
+  const res = await supabaseRequest("approval_paths?select=*");
+  if (res.ok && Array.isArray(res.data)) { S.approvalPaths = res.data.map(rowToApprovalPath); lsSet(APPROVAL_PATHS_KEY, JSON.stringify(S.approvalPaths)); }
 }
 async function refreshPermLogFromSheet() {
   if (!sheetsConfigured()) return;
@@ -6227,6 +6247,134 @@ function permLogCardHtml() {
     <div style="font-size:15px;font-weight:800;margin-bottom:8px;">سجل التغييرات</div>
     ${log.length ? log.map((e) => `<div style="font-size:11.5px;padding:6px 0;border-top:1px solid ${BORDER};"><b>${esc(e.targetName)}</b> — ${esc(e.summary)}<div style="color:${SUBTLE};font-size:10.5px;margin-top:2px;">${esc(e.by || "")} • ${esc(new Date(e.at).toLocaleString("ar-SA"))}</div></div>`).join("") : `<div style="font-size:12px;color:${SUBTLE};">لا توجد تغييرات مسجّلة بعد.</div>`}
   </div>`;
+}
+// ---- المرحلة 3: صفحة «إعداد مسارات الاعتماد» (لمديرة النظام فقط) ----
+// المسارات هنا إعدادات فقط: لا تؤثر على دورة التقرير الحالية ولا تعمل إلا بعد «تفعيل»
+// صريح منها، ولا يوجد أي مسار افتراضي. المسارات القديمة (units.approval_path) تبقى كما هي.
+function approvalPathsList() { return S.approvalPaths || (S.approvalPaths = dataStore.getApprovalPaths()); }
+function apOwnerOptions() {
+  const offices = (S.offices || []).map((o) => ["office", o]);
+  const depts = (S.departments || []).map((d) => ["dept", d]);
+  const real = (S.units || []).filter((u) => u.role !== "admin" && u.role !== "executive" && u.role !== "self_report");
+  return [
+    ["مكاتب الإشراف", offices],
+    ["الأقسام", depts],
+    ["الوحدات", real.filter((u) => u.role !== "center").map((u) => ["unit", u])],
+    ["المراكز", real.filter((u) => u.role === "center").map((u) => ["unit", u])],
+  ].filter((g) => g[1].length);
+}
+function apOwnerName(kind, id) {
+  const list = kind === "office" ? (S.offices || []) : kind === "dept" ? (S.departments || []) : (S.units || []);
+  const e = list.find((x) => x.id === id);
+  return e ? e.name : "(جهة محذوفة)";
+}
+function apApproverOptions(cur) {
+  const roles = rolesList(), persons = personsList();
+  const opt = (v, label) => `<option value="${esc(v)}" ${cur === v ? "selected" : ""}>${esc(label)}</option>`;
+  return `<option value="">— من يقوم بالمرحلة —</option>
+    ${roles.length ? `<optgroup label="أدوار">${roles.map((r) => opt("role:" + r.id, r.name)).join("")}</optgroup>` : ""}
+    ${persons.length ? `<optgroup label="أشخاص">${persons.map((p) => opt("person:" + p.id, p.name + " — " + apOwnerName(p.ownerKind === "department" ? "dept" : p.ownerKind, p.ownerId))).join("")}</optgroup>` : ""}
+    <optgroup label="حسابات الجهات">${[...(S.departments || []).map((d) => opt("dept:" + d.id, d.name + " (قسم)")), ...(S.offices || []).map((o) => opt("office:" + o.id, o.name + " (مكتب)"))].join("")}</optgroup>`;
+}
+function apApproverLabel(v) {
+  if (!v) return "—";
+  const [k, id] = v.split(":");
+  if (k === "role") { const r = rolesList().find((x) => x.id === id); return r ? "دور: " + r.name : "(دور محذوف)"; }
+  if (k === "person") { const p = personsList().find((x) => x.id === id); return p ? p.name : "(شخص محذوف)"; }
+  return apOwnerName(k, id);
+}
+function apCaptureForm() {
+  const d = S.ui.apEdit && S.ui.apEdit.draft; if (!d) return;
+  const g = (id) => { const el = document.getElementById(id); return el ? el.value : null; };
+  const c = (id) => { const el = document.getElementById(id); return el ? !!el.checked : null; };
+  if (g("ap-name") !== null) d.name = g("ap-name");
+  if (g("ap-owner") !== null) { const v = g("ap-owner"); const [k, ...rest] = v.split(":"); d.ownerKind = v ? k : ""; d.ownerId = rest.join(":"); }
+  if (g("ap-period") !== null) d.periodType = g("ap-period");
+  if (g("ap-author") !== null) d.authorRoleId = g("ap-author");
+  d.stages = (d.stages || []).map((st, i) => ({
+    ...st,
+    name: g("ap-s-name-" + i) !== null ? g("ap-s-name-" + i) : st.name,
+    approver: g("ap-s-appr-" + i) !== null ? g("ap-s-appr-" + i) : st.approver,
+    canApprove: c("ap-s-ap-" + i) !== null ? c("ap-s-ap-" + i) : st.canApprove,
+    canReturn: c("ap-s-rt-" + i) !== null ? c("ap-s-rt-" + i) : st.canReturn,
+    canEdit: c("ap-s-ed-" + i) !== null ? c("ap-s-ed-" + i) : st.canEdit,
+  }));
+}
+function apEditorHtml() {
+  const ed = S.ui.apEdit; const d = ed.draft;
+  const ownerVal = d.ownerKind ? d.ownerKind + ":" + d.ownerId : "";
+  const roles = rolesList();
+  const stagesHtml = (d.stages || []).map((st, i) => `
+    <div class="card" style="background:${GRAY_BG};margin-bottom:8px;padding:10px 12px;">
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:8px;">
+        <div style="font-size:12px;font-weight:800;color:${ROSE};">المرحلة ${i + 1}</div>
+        <div style="display:flex;gap:5px;">
+          <button class="icon-btn" style="width:28px;height:28px;border:1px solid ${BORDER}" data-action="ap-stage-move" data-idx="${i}" data-dir="up" title="تحريك لأعلى">${iconChevronDown ? `<span style="display:inline-flex;transform:rotate(180deg);">${iconChevronDown(13, INK)}</span>` : "▲"}</button>
+          <button class="icon-btn" style="width:28px;height:28px;border:1px solid ${BORDER}" data-action="ap-stage-move" data-idx="${i}" data-dir="down" title="تحريك لأسفل">${iconChevronDown ? iconChevronDown(13, INK) : "▼"}</button>
+          <button class="icon-btn" style="width:28px;height:28px;background:${DANGER_BG}" data-action="ap-stage-remove" data-idx="${i}" title="حذف المرحلة">${iconTrash(13, DANGER)}</button>
+        </div>
+      </div>
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:8px;">
+        <input class="input" id="ap-s-name-${i}" placeholder="اسم المرحلة (مثال: مراجعة)" value="${esc(st.name || "")}" />
+        <select class="input" id="ap-s-appr-${i}">${apApproverOptions(st.approver || "")}</select>
+      </div>
+      <div style="display:flex;gap:14px;flex-wrap:wrap;margin-top:8px;font-size:12px;">
+        <label style="display:flex;gap:6px;align-items:center;cursor:pointer;"><input type="checkbox" id="ap-s-ap-${i}" ${st.canApprove ? "checked" : ""} /> يعتمد</label>
+        <label style="display:flex;gap:6px;align-items:center;cursor:pointer;"><input type="checkbox" id="ap-s-rt-${i}" ${st.canReturn ? "checked" : ""} /> يعيد للتعديل</label>
+        <label style="display:flex;gap:6px;align-items:center;cursor:pointer;"><input type="checkbox" id="ap-s-ed-${i}" ${st.canEdit ? "checked" : ""} /> يعدّل التقرير</label>
+      </div>
+    </div>`).join("");
+  return `<div class="card" style="margin-bottom:14px;border:1.5px solid ${ROSE};">
+    <div style="font-size:14px;font-weight:800;margin-bottom:10px;">${ed.id ? "تعديل المسار" : "مسار جديد"} <span style="font-size:11px;color:${SUBTLE};font-weight:600;">(يُحفظ كمسودة ولا يعمل قبل التفعيل)</span></div>
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:8px;margin-bottom:10px;">
+      <input class="input" id="ap-name" placeholder="اسم المسار (اختياري)" value="${esc(d.name || "")}" />
+      <select class="input" id="ap-owner"><option value="">— الجهة —</option>${apOwnerOptions().map((g) => `<optgroup label="${esc(g[0])}">${g[1].map(([k, e]) => `<option value="${esc(k + ":" + e.id)}" ${ownerVal === k + ":" + e.id ? "selected" : ""}>${esc(e.name)}</option>`).join("")}</optgroup>`).join("")}</select>
+      <select class="input" id="ap-period"><option value="">كل الفترات</option>${PERIOD_TYPES.map((pt) => `<option value="${esc(pt)}" ${d.periodType === pt ? "selected" : ""}>${esc(pt)}</option>`).join("")}</select>
+      <select class="input" id="ap-author"><option value="">أي صاحب تقرير</option>${roles.map((r) => `<option value="${esc(r.id)}" ${d.authorRoleId === r.id ? "selected" : ""}>تقرير ${esc(r.name)}</option>`).join("")}</select>
+    </div>
+    <div style="display:flex;gap:6px;align-items:center;margin-bottom:12px;flex-wrap:wrap;">
+      <input class="input" id="ap-new-period" placeholder="فترة جديدة غير موجودة بالقائمة" style="flex:1;min-width:180px;" />
+      ${pillBtn("إضافة فترة", { variant: "soft", action: "ap-add-period" })}
+    </div>
+    <div style="font-size:12.5px;font-weight:800;margin-bottom:6px;">المراحل (بالترتيب)</div>
+    ${stagesHtml || `<div style="font-size:12px;color:${SUBTLE};margin-bottom:8px;">لا توجد مراحل بعد. أضيفي المرحلة الأولى.</div>`}
+    ${pillBtn("إضافة مرحلة", { variant: "ghost", icon: iconPlus(14, INK), action: "ap-stage-add" })}
+    ${ed.error ? `<div style="color:${DANGER};font-size:11.5px;font-weight:700;margin-top:8px;">${esc(ed.error)}</div>` : ""}
+    <div style="display:flex;gap:6px;margin-top:12px;">${pillBtn("حفظ كمسودة", { action: "ap-save" })}${pillBtn("إلغاء", { variant: "ghost", action: "ap-cancel" })}</div>
+  </div>`;
+}
+function renderApprovalPathsSetup() {
+  const list = approvalPathsList();
+  const ed = S.ui.apEdit;
+  const rows = list.map((a) => {
+    const active = a.status === "active";
+    const confirming = S.ui.apConfirmDeleteId === a.id;
+    const roleName = a.authorRoleId ? ((rolesList().find((r) => r.id === a.authorRoleId) || {}).name || "(دور محذوف)") : "";
+    return `<div class="card" style="margin-bottom:8px;">
+      <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:10px;flex-wrap:wrap;">
+        <div style="min-width:0;">
+          <div style="font-size:13.5px;font-weight:800;">${esc(a.name || apOwnerName(a.ownerKind, a.ownerId))} ${badgeHtml(active ? "مفعّل" : "مسودة", active ? GREEN : SUBTLE, active ? GREEN_BG : GRAY_BG)}</div>
+          <div style="font-size:11px;color:${SUBTLE};margin-top:3px;">${esc(apOwnerName(a.ownerKind, a.ownerId))} • ${esc(a.periodType || "كل الفترات")} • ${roleName ? "تقرير " + esc(roleName) : "أي صاحب تقرير"} • ${(a.stages || []).length} مرحلة</div>
+          <div style="font-size:11.5px;margin-top:6px;">${(a.stages || []).map((st, i) => `<span style="display:inline-block;background:${GRAY_BG};border-radius:8px;padding:2px 8px;margin:2px 0 2px 4px;">${i + 1}. ${esc(st.name || "مرحلة")} ← ${esc(apApproverLabel(st.approver))}</span>`).join("")}</div>
+        </div>
+        <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;">${confirming
+          ? `${pillBtn("تأكيد الحذف", { variant: "danger", action: "ap-delete", data: { id: a.id } })}${pillBtn("تراجع", { variant: "ghost", action: "ap-delete-cancel" })}`
+          : `${pillBtn(active ? "إيقاف" : "تفعيل", { variant: active ? "ghost" : "primary", action: "ap-toggle", data: { id: a.id } })}
+             <button class="icon-btn" style="width:30px;height:30px;border:1px solid ${BORDER}" data-action="ap-edit" data-id="${esc(a.id)}" title="تعديل">${iconPencil(13, INK)}</button>
+             <button class="icon-btn" style="width:30px;height:30px;background:${DANGER_BG}" data-action="ap-delete-ask" data-id="${esc(a.id)}" title="حذف">${iconTrash(13, DANGER)}</button>`}</div>
+      </div>
+      ${S.ui.apMsg && S.ui.apMsg.id === a.id ? `<div style="color:${DANGER};font-size:11.5px;font-weight:700;margin-top:8px;">${esc(S.ui.apMsg.msg)}</div>` : ""}
+    </div>`;
+  }).join("");
+  return `
+  <div class="page-wrap"><div class="page-inner narrow">
+    ${topBarHtml({ title: "إعداد مسارات الاعتماد", subtitle: "لمديرة النظام فقط — لا يوجد مسار افتراضي، ولا يعمل أي مسار قبل تفعيله", icon: iconLayers(18, ROSE), backAction: "nav-back-admin" })}
+    <div class="card" style="background:${BLUE_BG};border:1px solid #cfe0f5;margin-bottom:14px;">
+      <div style="font-size:12px;color:#3a5a85;">لكل جهة ولكل نوع تقرير (من قائمة الفترات) تضيفين المراحل بالترتيب وتحددين من يقوم بكل مرحلة. المسار الجديد يُحفظ مسودة، ولا يُطبَّق على التقارير إلا بعد ضغط «تفعيل». المسارات الحالية في «الهيكل والأشخاص» تبقى كما هي.</div>
+    </div>
+    ${ed ? apEditorHtml() : `<div style="margin-bottom:12px;">${pillBtn("مسار جديد", { icon: iconPlus(15, "#fff"), action: "ap-new" })}</div>`}
+    ${rows || (ed ? "" : `<div class="card" style="text-align:center;color:${SUBTLE};padding:30px 20px;border-style:dashed;">لا توجد مسارات بعد.</div>`)}
+  </div></div>`;
 }
 const ROLE_MODE_LABELS = { admin: "إدارية (واجهة الوحدة)", head: "رئيسة الوحدة", extra: "المراجعة الإضافية" };
 function renderRolesManage() {
@@ -8848,6 +8996,11 @@ function attachClickListener() {
         if (navView === "custom-path-inbox" && sheetsConfigured()) {
           Promise.all((S.units || []).filter((u) => unitHasCustomPath(u)).map((u) => refreshReportsFromSheet(u.id))).then(() => { if (S.currentUser && S.view === "custom-path-inbox") render(); });
         }
+        if (navView === "approval-paths-setup") {
+          S.roles = dataStore.getRoles(); S.persons = dataStore.getPersons(); S.approvalPaths = dataStore.getApprovalPaths();
+          S.ui.apEdit = null;
+          if (sheetsConfigured()) Promise.all([refreshRolesPersonsFromSheet(), refreshApprovalPathsFromSheet()]).then(() => { if (S.view === "approval-paths-setup") render(); });
+        }
         if (navView === "units-manage") { S.roles = dataStore.getRoles(); S.persons = dataStore.getPersons(); }
         if (navView === "roles-manage") {
           S.roles = dataStore.getRoles(); S.persons = dataStore.getPersons();
@@ -9192,6 +9345,74 @@ function attachClickListener() {
         S.persons = personsList().map((p) => p.id === ds.id ? { ...p, name, roleId, pin } : p);
         dataStore.savePersons(S.persons);
         S.ui.personEditId = null; render(); break;
+      }
+      case "ap-new": S.ui.apEdit = { id: null, error: "", draft: { name: "", ownerKind: "", ownerId: "", periodType: "", authorRoleId: "", stages: [] } }; S.ui.apMsg = null; render(); break;
+      case "ap-edit": {
+        const a = approvalPathsList().find((x) => x.id === ds.id); if (!a) break;
+        S.ui.apEdit = { id: a.id, error: "", draft: JSON.parse(JSON.stringify(a)) }; S.ui.apMsg = null; render(); break;
+      }
+      case "ap-cancel": S.ui.apEdit = null; render(); break;
+      case "ap-stage-add": apCaptureForm(); S.ui.apEdit.draft.stages.push({ id: uid("stg"), name: "", approver: "", canApprove: true, canReturn: true, canEdit: false }); render(); break;
+      case "ap-stage-remove": apCaptureForm(); S.ui.apEdit.draft.stages.splice(Number(ds.idx), 1); render(); break;
+      case "ap-stage-move": {
+        apCaptureForm();
+        const st = S.ui.apEdit.draft.stages, i = Number(ds.idx), to = ds.dir === "up" ? i - 1 : i + 1;
+        if (to >= 0 && to < st.length) { [st[i], st[to]] = [st[to], st[i]]; }
+        render(); break;
+      }
+      case "ap-add-period": {
+        apCaptureForm();
+        const el = document.getElementById("ap-new-period"); const nv = el ? String(el.value || "").trim() : "";
+        if (!nv || PERIOD_TYPES.includes(nv)) { render(); break; }
+        S.siteSettings = S.siteSettings || dataStore.getSiteSettings();
+        const list = [...PERIOD_TYPES, nv];
+        S.siteSettings = { ...S.siteSettings, theme: { ...(S.siteSettings.theme || {}), periodTypes: list } };
+        applySiteColors(S.siteSettings);
+        dataStore.saveSiteSettings(S.siteSettings);
+        if (S.ui.apEdit) S.ui.apEdit.draft.periodType = nv;
+        render(); break;
+      }
+      case "ap-save": {
+        apCaptureForm();
+        const ed = S.ui.apEdit; const d = ed.draft;
+        if (!d.ownerKind || !d.ownerId) { ed.error = "اختاري الجهة"; render(); break; }
+        if (!d.stages.length) { ed.error = "أضيفي مرحلة واحدة على الأقل"; render(); break; }
+        if (d.stages.some((st) => !String(st.name || "").trim() || !st.approver)) { ed.error = "كل مرحلة تحتاج اسمًا وجهة تقوم بها"; render(); break; }
+        const list = approvalPathsList();
+        const clean = { ...d, name: String(d.name || "").trim(), stages: d.stages.map((st) => ({ ...st, name: String(st.name).trim() })) };
+        if (ed.id) {
+          const old = list.find((x) => x.id === ed.id);
+          const keepActive = old && old.status === "active";
+          S.approvalPaths = list.map((x) => x.id === ed.id ? { ...x, ...clean, status: keepActive ? "draft" : x.status, activatedAt: keepActive ? null : x.activatedAt } : x);
+          addPermLog("approval-path", ed.id, clean.name || apOwnerName(clean.ownerKind, clean.ownerId), keepActive ? "تعديل مسار مفعّل (عاد مسودة ويحتاج تفعيلًا جديدًا)" : "تعديل مسار اعتماد");
+        } else {
+          const id = uid("apath");
+          S.approvalPaths = [...list, { ...clean, id, status: "draft", createdAt: Date.now(), activatedAt: null }];
+          addPermLog("approval-path", id, clean.name || apOwnerName(clean.ownerKind, clean.ownerId), `إنشاء مسار اعتماد (مسودة) — ${clean.stages.length} مرحلة`);
+        }
+        dataStore.saveApprovalPaths(S.approvalPaths);
+        S.ui.apEdit = null; render(); break;
+      }
+      case "ap-toggle": {
+        const list = approvalPathsList(); const a = list.find((x) => x.id === ds.id); if (!a) break;
+        if (a.status !== "active") {
+          const clash = list.find((x) => x.id !== a.id && x.status === "active" && x.ownerKind === a.ownerKind && x.ownerId === a.ownerId && (x.periodType || "") === (a.periodType || "") && (x.authorRoleId || "") === (a.authorRoleId || ""));
+          if (clash) { S.ui.apMsg = { id: a.id, msg: "يوجد مسار مفعّل لنفس الجهة والفترة وصاحب التقرير — أوقفيه أولًا" }; render(); break; }
+        }
+        S.ui.apMsg = null;
+        S.approvalPaths = list.map((x) => x.id === a.id ? { ...x, status: x.status === "active" ? "draft" : "active", activatedAt: x.status === "active" ? null : Date.now() } : x);
+        dataStore.saveApprovalPaths(S.approvalPaths);
+        addPermLog("approval-path", a.id, a.name || apOwnerName(a.ownerKind, a.ownerId), a.status === "active" ? "إيقاف المسار" : "تفعيل المسار");
+        render(); break;
+      }
+      case "ap-delete-ask": S.ui.apConfirmDeleteId = ds.id; render(); break;
+      case "ap-delete-cancel": S.ui.apConfirmDeleteId = null; render(); break;
+      case "ap-delete": {
+        const a = approvalPathsList().find((x) => x.id === ds.id);
+        S.approvalPaths = approvalPathsList().filter((x) => x.id !== ds.id);
+        dataStore.saveApprovalPaths(S.approvalPaths);
+        if (a) addPermLog("approval-path", a.id, a.name || apOwnerName(a.ownerKind, a.ownerId), "حذف مسار اعتماد");
+        S.ui.apConfirmDeleteId = null; render(); break;
       }
       case "choose-entity-account": if (S.pendingEntityLogin) enterEntityAsPerson(null); break;
       case "choose-person": {
