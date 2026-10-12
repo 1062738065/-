@@ -763,6 +763,21 @@ function platformUserToRow(u) {
     template_id: u.templateId || "",
   };
 }
+// ---- المرحلة 1: الأدوار المركزية (roles) وسجلات الأشخاص (persons) ----
+// الأشخاص سجلات تحت جهة (وحدة/مركز) بدون حساب دخول مستقل؛ الدخول يبقى بحساب الجهة
+// ثم يُختار الشخص، وبرمز (PIN) اختياري تحدده مديرة النظام لكل دور أو شخص.
+function roleToRow(r) {
+  return { id: r.id, name: r.name || "", description: r.description || "", mode: r.mode || "admin", pin: r.pin || "", permissions: r.permissions || {}, status: r.status || "active", created_at: r.createdAt || Date.now() };
+}
+function rowToRole(r) {
+  return { id: r.id, name: r.name || "", description: r.description || "", mode: r.mode || "admin", pin: r.pin || "", permissions: (r.permissions && typeof r.permissions === "object") ? r.permissions : {}, status: r.status || "active", createdAt: Number(r.created_at) || 0 };
+}
+function personToRow(p) {
+  return { id: p.id, name: p.name || "", owner_kind: p.ownerKind || "unit", owner_id: p.ownerId || "", role_id: p.roleId || "", pin: p.pin || "", perms_override: p.permsOverride || {}, status: p.status || "active", created_at: p.createdAt || Date.now() };
+}
+function rowToPerson(r) {
+  return { id: r.id, name: r.name || "", ownerKind: r.owner_kind || "unit", ownerId: r.owner_id || "", roleId: r.role_id || "", pin: r.pin || "", permsOverride: (r.perms_override && typeof r.perms_override === "object") ? r.perms_override : {}, status: r.status || "active", createdAt: Number(r.created_at) || 0 };
+}
 // "قوالب المسميات الوظيفية" (job_title_templates) — كل قالب = مجموعة صفحات
 // وإجراءات واحدة، قابلة للربط بأي عدد من "حسابات إضافية" عبر platformUserId.
 // تعديل القالب ينعكس فورًا على كل حساب مربوط به (بدل تكرار الصلاحيات بكل حساب).
@@ -999,7 +1014,7 @@ const UNITS_KEY = "prs:units", DEPARTMENTS_KEY = "prs:departments", OFFICES_KEY 
       INDICATOR_DEFINITIONS_KEY = "prs:indicator-definitions", GOALS_DEFINITIONS_KEY = "prs:goals-definitions",
       SITE_SETTINGS_KEY = "prs:site-settings", REPORT_SECTIONS_KEY = "prs:report-sections",
       SECTION_FIELD_SCHEMAS_KEY = "prs:section-field-schemas", PLATFORM_USERS_KEY = "prs:platform-users",
-      ORG_CHART_KEY = "prs:org-chart", JOB_TITLE_TEMPLATES_KEY = "prs:job-title-templates";
+      ORG_CHART_KEY = "prs:org-chart", JOB_TITLE_TEMPLATES_KEY = "prs:job-title-templates", ROLES_KEY = "prs:roles", PERSONS_KEY = "prs:persons";
 const DEFAULT_SITE_COLORS = { primary: "#6b2337", background: "#F2ECE8" };
 // ألوان الموقع الإضافية + ضبط عبارة الشريط الجانبي + ألوان بطاقات تصفّح الهيكل —
 // تُحفظ كلها في عمود واحد theme_json بجدول site_settings (نص JSON).
@@ -1182,6 +1197,16 @@ const dataStore = {
   cacheIndicatorDefinitionsLocally(d) { lsSet(INDICATOR_DEFINITIONS_KEY, JSON.stringify(d)); },
   cacheUnitsLocally(u) { lsSet(UNITS_KEY, JSON.stringify(u)); },
   cacheDepartmentsLocally(d) { lsSet(DEPARTMENTS_KEY, JSON.stringify(d)); },
+  getRoles() { const v = lsGet(ROLES_KEY); return v ? JSON.parse(v) : []; },
+  saveRoles(list) {
+    lsSet(ROLES_KEY, JSON.stringify(list));
+    if (sheetsConfigured()) queueSupabaseReplaceTable("roles", list.map(roleToRow)).catch(() => {});
+  },
+  getPersons() { const v = lsGet(PERSONS_KEY); return v ? JSON.parse(v) : []; },
+  savePersons(list) {
+    lsSet(PERSONS_KEY, JSON.stringify(list));
+    if (sheetsConfigured()) queueSupabaseReplaceTable("persons", list.map(personToRow)).catch(() => {});
+  },
   getPlatformUsers() { const v = lsGet(PLATFORM_USERS_KEY); return v ? JSON.parse(v) : []; },
   savePlatformUsers(list) {
     lsSet(PLATFORM_USERS_KEY, JSON.stringify(list));
@@ -1746,6 +1771,8 @@ function render() {
     html = shellWrap(renderPlatformPermissionsManage());
   } else if (S.view === "job-title-templates") {
     html = shellWrap(renderJobTitleTemplatesManage());
+  } else if (S.view === "roles-manage") {
+    html = shellWrap(renderRolesManage());
   } else {
     html = renderLogin();
   }
@@ -2180,6 +2207,32 @@ function unitSharedPlatformUsers(unit) {
   const norm = (x) => String(x || "").replace(/\s+/g, " ").trim();
   return list.filter((pu) => pu.status !== "disabled" && norm(pu.password) === norm(unit.password) && pu.loginId && (norm(pu.loginId) === norm(unit.name) || (unit.email && norm(pu.loginId) === norm(unit.email))));
 }
+function rolesList() { return S.roles || (S.roles = dataStore.getRoles()); }
+function personsList() { return S.persons || (S.persons = dataStore.getPersons()); }
+function unitActivePersons(unitId) {
+  if (!unitId) return [];
+  const roles = rolesList();
+  return personsList().filter((p) => p.status !== "disabled" && p.ownerKind === "unit" && p.ownerId === unitId && roles.some((r) => r.id === p.roleId && r.status !== "disabled"));
+}
+function personEffectivePin(p) {
+  const r = rolesList().find((x) => x.id === p.roleId);
+  return String(p.pin || (r && r.pin) || "").trim();
+}
+function enterUnitAsPerson(p) {
+  const role = rolesList().find((r) => r.id === p.roleId);
+  const unitId = S.pendingUnitLoginId;
+  S.currentUnitEntryMode = role && (role.mode === "head" || role.mode === "extra") ? role.mode : "admin";
+  S.currentPersonId = p.id;
+  S.currentPersonName = p.name;
+  S.reports[unitId] = dataStore.getReports(unitId);
+  S.currentUnitId = unitId;
+  S.currentReportId = null;
+  S.pendingUnitLoginId = null;
+  S.ui.pinPersonId = null; S.ui.pinError = "";
+  S.view = "unit-dashboard";
+  render();
+  if (sheetsConfigured()) { refreshReportsFromSheet(unitId).then(() => { if (S.currentUser) render(); }); }
+}
 function renderUnitRoleSelect() {
   const unit = (S.units || []).find((u) => u.id === S.pendingUnitLoginId);
   const hasHead = unitHasHead(unit);
@@ -2217,6 +2270,25 @@ function renderUnitRoleSelect() {
               <div style="font-size:11px;color:${SUBTLE};margin-top:2px;">الدخول إلى واجهة المراجعة الإضافية الخاصة بالوحدة</div>
             </div>
           </button>` : ""}
+          ${unitActivePersons(S.pendingUnitLoginId).map((p) => {
+            const role = rolesList().find((r) => r.id === p.roleId);
+            const asking = S.ui.pinPersonId === p.id;
+            return `
+          <div class="card" style="border:1px solid ${asking ? ROSE : BORDER};background:#fff;width:100%;">
+            <button type="button" data-action="choose-person" data-id="${esc(p.id)}" style="display:flex;align-items:center;gap:12px;text-align:right;cursor:pointer;background:none;border:none;width:100%;padding:0;font-family:inherit;">
+              <div style="width:42px;height:42px;border-radius:12px;background:${DANGER_BG};display:flex;align-items:center;justify-content:center;flex-shrink:0;">${iconUser(19, ROSE)}</div>
+              <div>
+                <div style="font-size:14px;font-weight:800;">${esc(p.name)}</div>
+                <div style="font-size:11px;color:${SUBTLE};margin-top:2px;">${esc(role ? role.name : "")}${personEffectivePin(p) ? " • برمز" : ""}</div>
+              </div>
+            </button>
+            ${asking ? `<div style="display:flex;gap:6px;margin-top:10px;align-items:center;">
+              <input class="input" id="person-pin-input" type="password" inputmode="numeric" autocomplete="off" placeholder="الرمز (PIN)" style="flex:1;" />
+              ${pillBtn("دخول", { action: "confirm-person-pin", data: { id: p.id } })}
+              ${pillBtn("إلغاء", { variant: "ghost", action: "cancel-person-pin" })}
+            </div>${S.ui.pinError ? `<div style="color:${DANGER};font-size:11.5px;font-weight:700;margin-top:6px;">${esc(S.ui.pinError)}</div>` : ""}` : ""}
+          </div>`;
+          }).join("")}
           ${(S.pendingPlatformUserMatches || []).map((pu) => `
           <button type="button" class="card" data-action="choose-platform-user" data-id="${esc(pu.id)}" style="display:flex;align-items:center;gap:12px;text-align:right;cursor:pointer;border:1px solid ${BORDER};background:#fff;width:100%;">
             <div style="width:42px;height:42px;border-radius:12px;background:${DANGER_BG};display:flex;align-items:center;justify-content:center;flex-shrink:0;">${iconUser(19, ROSE)}</div>
@@ -2308,7 +2380,7 @@ async function handleLoginSubmit() {
       await refreshUnitsAndDepartmentsFromSheet();
       if (result.user && result.user.role !== "admin" && result.user.unitId) {
         // نحتاج الأشخاص (platform_users) والقوالب قبل شاشة "كيف تريدين الدخول؟"
-        try { await refreshPlatformUsersFromSheet(); await refreshJobTitleTemplatesFromSheet(); } catch (e) { /* نكمل بالنسخة المحلية */ }
+        try { await refreshPlatformUsersFromSheet(); await refreshJobTitleTemplatesFromSheet(); await refreshRolesPersonsFromSheet(); } catch (e) { /* نكمل بالنسخة المحلية */ }
       }
       S.ui.loginBusy = false;
       S.ui.loginError = "";
@@ -2392,6 +2464,13 @@ async function refreshPlatformUsersFromSheet() {
     S.platformUsers = res.data.map(rowToPlatformUser);
     dataStore.cachePlatformUsersLocally(S.platformUsers);
   }
+}
+async function refreshRolesPersonsFromSheet() {
+  if (!sheetsConfigured()) return;
+  await Promise.all([pendingSupabaseWrite("roles"), pendingSupabaseWrite("persons")]);
+  const [r1, r2] = await Promise.all([supabaseRequest("roles?select=*"), supabaseRequest("persons?select=*")]);
+  if (r1.ok && Array.isArray(r1.data)) { S.roles = r1.data.map(rowToRole); lsSet(ROLES_KEY, JSON.stringify(S.roles)); }
+  if (r2.ok && Array.isArray(r2.data)) { S.persons = r2.data.map(rowToPerson); lsSet(PERSONS_KEY, JSON.stringify(S.persons)); }
 }
 async function refreshJobTitleTemplatesFromSheet() {
   if (!sheetsConfigured()) return;
@@ -2654,7 +2733,7 @@ function doLogin(user) {
     applyScopedAccountPermissions(S.offices.find((o) => o.id === S.currentOfficeId));
     S.ui.departmentsPageSelectedId = null;
     S.view = "office-dashboard";
-  } else if (!unitSharedPlatformUsers(S.units.find((u) => u.id === user.unitId)).length && (user.role === "center" || (!unitHasHead(S.units.find((u) => u.id === user.unitId)) && !unitHasExtraReview(S.units.find((u) => u.id === user.unitId))))) {
+  } else if (!unitSharedPlatformUsers(S.units.find((u) => u.id === user.unitId)).length && !unitActivePersons(user.unitId).length && (user.role === "center" || (!unitHasHead(S.units.find((u) => u.id === user.unitId)) && !unitHasExtraReview(S.units.find((u) => u.id === user.unitId))))) {
     // مركز، أو وحدة مُهيّأة صراحة بدون أي مستوى مراجعة داخلي (لا رئيسة ولا
     // مستوى إضافي) — تدخل مباشرة بدون شاشة اختيار صفة، بالضبط كسلوك المركز.
     const unitId = user.unitId;
@@ -5577,7 +5656,7 @@ function permDropdownChecklistHtml({ action, selected, total, emptyLabel, render
 // "مسمى وظيفي" عادي (زي سكرتارية) يعطيه قدرة أعلى بكثير من المقصود — فتُعرض
 // بقسم منفصل محذّر بصريًا بدل ما تكون مختلطة بصفحات المحتوى العادية.
 const SENSITIVE_PAGE_IDS = [
-  "site-settings", "platform-users-manage", "platform-permissions-manage", "job-title-templates",
+  "site-settings", "platform-users-manage", "platform-permissions-manage", "job-title-templates", "roles-manage",
   "admin-reports", "indicators-manage", "goals-manage", "sections-manage",
   "field-schemas-manage", "offices-manage", "departments-list", "units-list",
   "centers-list", "org-chart",
@@ -5848,6 +5927,7 @@ const ACCOUNTS_HUB_TABS = [
   { view: "units-manage", label: "الهيكل التنظيمي", icon: "layers" },
   { view: "platform-users-manage", label: "الأشخاص", icon: "user" },
   { view: "platform-permissions-manage", label: "الصلاحيات", icon: "key", also: ["job-title-templates"] },
+  { view: "roles-manage", label: "الأدوار والأشخاص (سجلات)", icon: "user" },
   { view: "org-chart", label: "المخطط الحر", icon: "gauge" },
 ];
 const USERS_HUB_SUBTITLE = "إدارة المستخدمين وصلاحياتهم في النظام مع إمكانية إضافة وحذف وتعديل بياناتهم";
@@ -5873,6 +5953,75 @@ function accountsHubTabBarHtml(activeView) {
   </div>`;
 }
 
+const ROLE_MODE_LABELS = { admin: "إدارية (واجهة الوحدة)", head: "رئيسة الوحدة", extra: "المراجعة الإضافية" };
+function renderRolesManage() {
+  const ui = S.ui;
+  const roles = rolesList(), persons = personsList();
+  const editRole = ui.roleEditId ? roles.find((r) => r.id === ui.roleEditId) : null;
+  const editPerson = ui.personEditId ? persons.find((p) => p.id === ui.personEditId) : null;
+  const units = S.units || [];
+  const unitName = (id) => { const u = units.find((x) => x.id === id); return u ? u.name : "(جهة محذوفة)"; };
+  const roleForm = (ui.roleShowAdd || editRole) ? `<div class="card" style="background:${GRAY_BG};margin-bottom:12px;">
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:8px;">
+        <input class="input" id="role-name" placeholder="اسم الدور (مثال: رئيسة الوحدة)" value="${esc(editRole ? editRole.name : "")}" />
+        <select class="input" id="role-mode">${Object.keys(ROLE_MODE_LABELS).map((k) => `<option value="${k}" ${editRole && editRole.mode === k ? "selected" : ""}>${esc(ROLE_MODE_LABELS[k])}</option>`).join("")}</select>
+        <input class="input" id="role-pin" inputmode="numeric" placeholder="رمز PIN (اختياري)" value="${esc(editRole ? editRole.pin : "")}" />
+        <input class="input" id="role-desc" placeholder="وصف (اختياري)" value="${esc(editRole ? editRole.description : "")}" />
+      </div>
+      ${ui.roleError ? `<div style="color:${DANGER};font-size:11.5px;font-weight:700;margin-top:8px;">${esc(ui.roleError)}</div>` : ""}
+      <div style="display:flex;gap:6px;margin-top:10px;">${pillBtn(editRole ? "حفظ" : "إضافة", { action: "role-save" })}${pillBtn("إلغاء", { variant: "ghost", action: "role-cancel" })}</div>
+    </div>` : (ui.roleError ? `<div style="color:${DANGER};font-size:11.5px;font-weight:700;margin-bottom:8px;">${esc(ui.roleError)}</div>` : "");
+  const roleRows = roles.map((r) => `<div class="card" style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:8px;">
+      <div><div style="font-size:13.5px;font-weight:800;">${esc(r.name)}</div>
+      <div style="font-size:11px;color:${SUBTLE};margin-top:2px;">${esc(ROLE_MODE_LABELS[r.mode] || "")}${r.pin ? " • برمز" : " • بدون رمز"}${r.description ? " • " + esc(r.description) : ""} • ${persons.filter((p) => p.roleId === r.id).length} شخص</div></div>
+      <div style="display:flex;gap:6px;align-items:center;">${ui.roleConfirmDeleteId === r.id
+        ? `${pillBtn("تأكيد الحذف", { variant: "danger", action: "role-delete", data: { id: r.id } })}${pillBtn("تراجع", { variant: "ghost", action: "role-delete-cancel" })}`
+        : `<button class="icon-btn" style="width:30px;height:30px;border:1px solid ${BORDER}" data-action="role-edit" data-id="${esc(r.id)}" title="تعديل">${iconPencil(13, INK)}</button>
+           <button class="icon-btn" style="width:30px;height:30px;background:${DANGER_BG}" data-action="role-delete-ask" data-id="${esc(r.id)}" title="حذف">${iconTrash(13, DANGER)}</button>`}</div>
+    </div>`).join("") || `<div style="font-size:12px;color:${SUBTLE};padding:8px 2px;">لا توجد أدوار بعد.</div>`;
+  const personForm = (ui.personShowAdd || editPerson) ? `<div class="card" style="background:${GRAY_BG};margin-bottom:12px;">
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:8px;">
+        <input class="input" id="person-name" placeholder="اسم الشخص" value="${esc(editPerson ? editPerson.name : "")}" />
+        <select class="input" id="person-owner"><option value="">— الجهة (وحدة/مركز) —</option>${units.map((u) => `<option value="${esc(u.id)}" ${editPerson && editPerson.ownerId === u.id ? "selected" : ""}>${esc(u.name)}</option>`).join("")}</select>
+        <select class="input" id="person-role"><option value="">— الدور —</option>${roles.map((r) => `<option value="${esc(r.id)}" ${editPerson && editPerson.roleId === r.id ? "selected" : ""}>${esc(r.name)}</option>`).join("")}</select>
+        <input class="input" id="person-pin" inputmode="numeric" placeholder="رمز خاص بالشخص (اختياري)" value="${esc(editPerson ? editPerson.pin : "")}" />
+      </div>
+      ${ui.personError ? `<div style="color:${DANGER};font-size:11.5px;font-weight:700;margin-top:8px;">${esc(ui.personError)}</div>` : ""}
+      <div style="display:flex;gap:6px;margin-top:10px;">${pillBtn(editPerson ? "حفظ" : "إضافة", { action: "person-save" })}${pillBtn("إلغاء", { variant: "ghost", action: "person-cancel" })}</div>
+    </div>` : "";
+  const personRows = persons.map((p) => {
+    const r = roles.find((x) => x.id === p.roleId);
+    const on = p.status !== "disabled";
+    return `<div class="card" style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:8px;opacity:${on ? 1 : 0.6};">
+      <div><div style="font-size:13.5px;font-weight:800;">${esc(p.name)}</div>
+      <div style="font-size:11px;color:${SUBTLE};margin-top:2px;">${esc(unitName(p.ownerId))} • ${esc(r ? r.name : "(بلا دور)")}${personEffectivePin(p) ? " • برمز" : " • بدون رمز"}${on ? "" : " • معطّل"}</div></div>
+      <div style="display:flex;gap:6px;align-items:center;">${ui.personConfirmDeleteId === p.id
+        ? `${pillBtn("تأكيد الحذف", { variant: "danger", action: "person-delete", data: { id: p.id } })}${pillBtn("تراجع", { variant: "ghost", action: "person-delete-cancel" })}`
+        : `<button class="icon-btn" style="width:30px;height:30px;border:1px solid ${BORDER}" data-action="person-edit" data-id="${esc(p.id)}" title="تعديل">${iconPencil(13, INK)}</button>
+           <button class="icon-btn" style="width:30px;height:30px;background:${on ? DANGER_BG : GREEN_BG}" data-action="person-toggle" data-id="${esc(p.id)}" title="${on ? "تعطيل" : "تفعيل"}">${iconPower(13, on ? DANGER : GREEN)}</button>
+           <button class="icon-btn" style="width:30px;height:30px;background:${DANGER_BG}" data-action="person-delete-ask" data-id="${esc(p.id)}" title="حذف">${iconTrash(13, DANGER)}</button>`}</div>
+    </div>`;
+  }).join("") || `<div style="font-size:12px;color:${SUBTLE};padding:8px 2px;">لا يوجد أشخاص بعد.</div>`;
+  return `
+  <div class="page-wrap"><div class="page-inner narrow">
+    ${topBarHtml({ title: "المستخدمون", subtitle: USERS_HUB_SUBTITLE, icon: iconUser(18, ROSE), backAction: "nav-back-admin" })}
+    ${accountsHubTabBarHtml("roles-manage")}
+    <div class="card" style="margin-bottom:18px;">
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:6px;">
+        <div style="font-size:15px;font-weight:800;">الأدوار</div>${pillBtn("إضافة دور", { icon: iconPlus(15, "#fff"), action: "role-show-add" })}
+      </div>
+      <div style="font-size:11px;color:${SUBTLE};margin-bottom:12px;">الدور يحدد واجهة الدخول، والرمز (PIN) اختياري تحددينه أنتِ لكل دور أو لكل شخص (رمز الشخص يغلب رمز الدور).</div>
+      ${roleForm}${roleRows}
+    </div>
+    <div class="card">
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:6px;">
+        <div style="font-size:15px;font-weight:800;">الأشخاص <span style="font-size:11px;color:${SUBTLE};font-weight:600;">(${persons.length})</span></div>${pillBtn("إضافة شخص", { icon: iconPlus(15, "#fff"), action: "person-show-add" })}
+      </div>
+      <div style="font-size:11px;color:${SUBTLE};margin-bottom:12px;">سجلات بدون حسابات دخول: يدخل الشخص بحساب جهته ثم يختار اسمه. تظهر في شاشة «كيف تريدين الدخول؟» للجهة (وحدة أو مركز).</div>
+      ${personForm}${personRows}
+    </div>
+  </div></div>`;
+}
 function renderJobTitleTemplatesManage() {
   const ui = S.ui;
   const list = S.jobTitleTemplates || [];
@@ -8421,6 +8570,10 @@ function attachClickListener() {
         if (navView === "custom-path-inbox" && sheetsConfigured()) {
           Promise.all((S.units || []).filter((u) => unitHasCustomPath(u)).map((u) => refreshReportsFromSheet(u.id))).then(() => { if (S.currentUser && S.view === "custom-path-inbox") render(); });
         }
+        if (navView === "roles-manage") {
+          S.roles = dataStore.getRoles(); S.persons = dataStore.getPersons();
+          if (sheetsConfigured()) refreshRolesPersonsFromSheet().then(() => { if (S.view === "roles-manage") render(); });
+        }
         if (navView === "platform-users-manage" || navView === "platform-permissions-manage" || navView === "job-title-templates") {
           S.platformUsers = dataStore.getPlatformUsers();
           S.jobTitleTemplates = dataStore.getJobTitleTemplates();
@@ -8685,6 +8838,79 @@ function attachClickListener() {
         render();
         if (sheetsConfigured()) { refreshReportsFromSheet(unitId).then(() => { if (S.currentUser) render(); }); }
         break;
+      }
+      case "choose-person": {
+        const p = personsList().find((x) => x.id === ds.id);
+        if (!p) break;
+        if (personEffectivePin(p)) { S.ui.pinPersonId = p.id; S.ui.pinError = ""; render(); break; }
+        enterUnitAsPerson(p);
+        break;
+      }
+      case "confirm-person-pin": {
+        const p = personsList().find((x) => x.id === ds.id);
+        const el = document.getElementById("person-pin-input");
+        if (!p) break;
+        if (String(el ? el.value : "").trim() !== personEffectivePin(p)) { S.ui.pinError = "الرمز غير صحيح"; render(); break; }
+        enterUnitAsPerson(p);
+        break;
+      }
+      case "cancel-person-pin": S.ui.pinPersonId = null; S.ui.pinError = ""; render(); break;
+      case "role-save": {
+        const g = (id) => { const el = document.getElementById(id); return el ? String(el.value || "").trim() : ""; };
+        const name = g("role-name");
+        if (!name) { S.ui.roleError = "اكتبي اسم الدور"; render(); break; }
+        const list = rolesList();
+        const dup = list.find((r) => r.name === name && r.id !== S.ui.roleEditId);
+        if (dup) { S.ui.roleError = "يوجد دور بنفس الاسم"; render(); break; }
+        const mode = ["admin", "head", "extra"].includes(g("role-mode")) ? g("role-mode") : "admin";
+        const pin = g("role-pin");
+        if (S.ui.roleEditId) {
+          S.roles = list.map((r) => r.id === S.ui.roleEditId ? { ...r, name, mode, pin, description: g("role-desc") } : r);
+        } else {
+          S.roles = [...list, { id: uid("role"), name, mode, pin, description: g("role-desc"), permissions: {}, status: "active", createdAt: Date.now() }];
+        }
+        dataStore.saveRoles(S.roles);
+        S.ui.roleEditId = null; S.ui.roleError = ""; S.ui.roleShowAdd = false;
+        render(); break;
+      }
+      case "role-show-add": S.ui.roleShowAdd = true; S.ui.roleEditId = null; S.ui.roleError = ""; render(); break;
+      case "role-edit": S.ui.roleEditId = ds.id; S.ui.roleShowAdd = true; S.ui.roleError = ""; render(); break;
+      case "role-cancel": S.ui.roleEditId = null; S.ui.roleShowAdd = false; S.ui.roleError = ""; render(); break;
+      case "role-delete-ask": S.ui.roleConfirmDeleteId = ds.id; render(); break;
+      case "role-delete-cancel": S.ui.roleConfirmDeleteId = null; render(); break;
+      case "role-delete": {
+        if (personsList().some((p) => p.roleId === ds.id)) { S.ui.roleError = "لا يمكن حذف دور مرتبط بأشخاص — غيّري دورهم أولًا"; S.ui.roleConfirmDeleteId = null; render(); break; }
+        S.roles = rolesList().filter((r) => r.id !== ds.id);
+        dataStore.saveRoles(S.roles);
+        S.ui.roleConfirmDeleteId = null; render(); break;
+      }
+      case "person-save": {
+        const g = (id) => { const el = document.getElementById(id); return el ? String(el.value || "").trim() : ""; };
+        const name = g("person-name"), ownerId = g("person-owner"), roleId = g("person-role"), pin = g("person-pin");
+        if (!name || !ownerId || !roleId) { S.ui.personError = "الاسم والجهة والدور مطلوبة"; render(); break; }
+        const list = personsList();
+        if (S.ui.personEditId) {
+          S.persons = list.map((p) => p.id === S.ui.personEditId ? { ...p, name, ownerId, roleId, pin } : p);
+        } else {
+          S.persons = [...list, { id: uid("person"), name, ownerKind: "unit", ownerId, roleId, pin, permsOverride: {}, status: "active", createdAt: Date.now() }];
+        }
+        dataStore.savePersons(S.persons);
+        S.ui.personEditId = null; S.ui.personError = ""; S.ui.personShowAdd = false;
+        render(); break;
+      }
+      case "person-show-add": S.ui.personShowAdd = true; S.ui.personEditId = null; S.ui.personError = ""; render(); break;
+      case "person-edit": S.ui.personEditId = ds.id; S.ui.personShowAdd = true; S.ui.personError = ""; render(); break;
+      case "person-cancel": S.ui.personEditId = null; S.ui.personShowAdd = false; S.ui.personError = ""; render(); break;
+      case "person-toggle": {
+        S.persons = personsList().map((p) => p.id === ds.id ? { ...p, status: p.status === "disabled" ? "active" : "disabled" } : p);
+        dataStore.savePersons(S.persons); render(); break;
+      }
+      case "person-delete-ask": S.ui.personConfirmDeleteId = ds.id; render(); break;
+      case "person-delete-cancel": S.ui.personConfirmDeleteId = null; render(); break;
+      case "person-delete": {
+        S.persons = personsList().filter((p) => p.id !== ds.id);
+        dataStore.savePersons(S.persons);
+        S.ui.personConfirmDeleteId = null; render(); break;
       }
       case "choose-platform-user": {
         const chosen = (S.pendingPlatformUserMatches || []).find((pu) => pu.id === ds.id);
