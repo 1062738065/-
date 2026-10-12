@@ -1366,7 +1366,7 @@ function pushReportMetaToSheet(unitId, entry) {
 // وتتصفحها، لكن بدون تعديل أو إرسال أو اعتماد أو إعادة أو حذف. حسابات "المسمى
 // الوظيفي" والأقسام والوحدات الحقيقية لا تتأثر إطلاقًا.
 function adminReportsReadOnly() { return !!(S.isAdmin && !S.currentPlatformUserJobTitle && !S.__adminAllowWrite); }
-const ADMIN_READONLY_BLOCKED = ["open-or-create-report", "approve-report-by-head", "confirm-head-return", "submit-report-to-head", "confirm-send-report", "mark-report-completed", "request-report-completion", "approve-report", "return-report-for-revision", "submit-department-review-decision", "delete-report", "confirm-delete-report", "custom-path-send", "custom-path-return", "confirm-custom-send", "start-custom-send", "ap-send", "ap-send-confirm", "ap-advance", "ap-return", "ap-open-edit"];
+const ADMIN_READONLY_BLOCKED = ["open-or-create-report", "create-new-report", "approve-report-by-head", "confirm-head-return", "submit-report-to-head", "confirm-send-report", "mark-report-completed", "request-report-completion", "approve-report", "return-report-for-revision", "submit-department-review-decision", "delete-report", "confirm-delete-report", "custom-path-send", "custom-path-return", "confirm-custom-send", "start-custom-send", "ap-send", "ap-send-confirm", "ap-advance", "ap-return", "ap-open-edit"];
 function saveReportEntry(unitId, updatedEntry) {
   if (adminReportsReadOnly()) return;
   const list = ensureUnitReportsLoaded(unitId).map((r) => (r.id === updatedEntry.id ? updatedEntry : r));
@@ -1591,6 +1591,7 @@ function apAdvanceOrReturn(unitId, reportId, isReturn, notes, opts) {
     saveReportEntry(unitId, { ...entry, sections, status: type, customStageId: null, customLog: log, internalReviewNotes: fullNotes, internalReturnedAt: Date.now(), updatedAt: Date.now() });
     return "";
   }
+  if (cur.noteRequired && !notes) return "هذه المرحلة تلزم كتابة ملاحظة قبل الاعتماد.";
   const next = stages[idx + 1];
   if (!next) {
     log.push(apLogEntry("final", cur.key, "final", (cur.canApprove ? "اعتُمد نهائيًا من " : "أنهته ") + cur.name + (notes ? " — " + notes : "")));
@@ -1636,7 +1637,7 @@ function apInboxCardHtml(item) {
       ${pillBtn("عرض التقرير", { variant: "ghost", action: "view-report-pdf", data: { unitId: unit.id, reportId: report.id } })}
       ${stage.canEdit ? pillBtn("فتح للتعديل", { variant: "ghost", action: "ap-open-edit", data: { unitId: unit.id, reportId: report.id } }) : ""}
     </div>
-    <textarea id="cp-notes-${esc(key)}" class="input" style="width:100%;min-height:56px;margin-bottom:10px;" placeholder="ملاحظات عامة (اختياري${stage.canReturn ? "، وتلزم عند الإعادة إن لم تكتبي ملاحظة على قسم" : ""})..."></textarea>
+    <textarea id="cp-notes-${esc(key)}" class="input" style="width:100%;min-height:56px;margin-bottom:10px;" placeholder="ملاحظات عامة (${stage.noteRequired ? "إلزامية عند الاعتماد" : "اختياري"}${stage.canReturn ? "، وتلزم عند الإعادة إن لم تكتبي ملاحظة على قسم" : ""})..."></textarea>
     ${stage.canReturn ? `<details style="margin-bottom:10px;"><summary style="font-size:12px;font-weight:700;color:${ROSE};cursor:pointer;">ملاحظات على أقسام محددة (تظهر داخل القسم نفسه عند الإعادة)</summary>
       <div style="display:flex;flex-direction:column;gap:6px;margin-top:8px;">${SECTIONS.map((sc) => `<textarea id="cp-sec-${esc(key)}-${esc(sc.id)}" class="input" style="width:100%;min-height:40px;" placeholder="ملاحظة على: ${esc(sc.label)}"></textarea>`).join("")}</div></details>
     <select class="input" id="cp-rtype-${esc(key)}" style="width:100%;margin-bottom:10px;"><option value="returned">عند الإعادة: بحاجة إلى تعديل</option><option value="needs_completion">عند الإعادة: بحاجة إلى استكمال</option></select>` : ""}
@@ -2159,7 +2160,8 @@ const BUTTON_CATALOG = [
   { id: "chip:completed", g: "قائمة التقارير", label: "زر «التقارير الكاملة»", sel: '[data-action="set-unit-reports-filter"][data-filter="completed"]' },
   { id: "chip:approved", g: "قائمة التقارير", label: "زر «معتمد»", sel: '[data-action="set-unit-reports-filter"][data-filter="approved"]' },
   { id: "chip:archived", g: "قائمة التقارير", label: "زر «أرشيف التقارير»", sel: '[data-action="set-unit-reports-filter"][data-filter="archived"]' },
-  { id: "open-or-create-report", g: "بطاقة التقرير", label: "إنشاء تقرير جديد", sel: '[data-action="open-or-create-report"]' },
+  { id: "open-or-create-report", g: "بطاقة التقرير", label: "إنشاء تقرير (يكمل آخر مفتوح أو ينشئ جديدًا)", sel: '[data-action="open-or-create-report"]' },
+  { id: "create-new-report", g: "بطاقة التقرير", label: "تقرير جديد (إضافي حتى مع وجود مسودة)", sel: '[data-action="create-new-report"]' },
   { id: "card-preview", g: "بطاقة التقرير", label: "معاينة التقرير", sel: '[data-btn="card-preview"]' },
   { id: "card-view", g: "بطاقة التقرير", label: "عرض التقرير", sel: '[data-btn="card-view"]' },
   { id: "card-download", g: "بطاقة التقرير", label: "تنزيل PDF / طباعة", sel: '[data-btn="card-download"],[data-action="print-page"]' },
@@ -2185,6 +2187,7 @@ const BUTTON_CATALOG = [
 // أزرار المسار الجديد ترث صلاحية الأزرار القديمة المقابلة لها: من كانت مختارة عندها لا يختفي عنها شيء.
 const BUTTON_ALIASES = {
   "send-report": ["custom-path-send", "submit-report-to-head", "start-send-report"],
+  "create-new-report": ["open-or-create-report"],
   "ap-advance": ["custom-path-send"],
   "ap-return": ["custom-path-return", "start-head-return"],
 };
@@ -2210,7 +2213,8 @@ function applyButtonPermissions() {
 function platformActionAllowed(actionId) {
   if (S.platformUserAllowedButtons && BUTTON_CATALOG.some((b) => b.id === actionId) && !buttonAllowed(actionId)) return false;
   if (!S.platformUserAllowedActions) return true;
-  return S.platformUserAllowedActions.includes(actionId);
+  // «تقرير جديد» يرث صلاحية «إنشاء تقرير» القديمة
+  return S.platformUserAllowedActions.includes(actionId === "create-new-report" ? "open-or-create-report" : actionId);
 }
 // يرجع قالب المسمى الوظيفي المطابق (أو null). نقرأ من S.jobTitleTemplates لو
 // معبّاة، وإلا من التخزين مباشرة — لازم يعمل حتى أثناء تسجيل الدخول نفسه قبل
@@ -3090,6 +3094,7 @@ function applyScopedAccountPermissions(entity) {
 }
 
 function doLogin(user) {
+  S.currentPersonId = null; S.currentPersonName = "";
   S.currentUser = user;
   S.cameFromAllReports = false;
   S.adminPreviewOrigin = null;
@@ -3180,7 +3185,7 @@ function doLogin(user) {
 }
 
 function doLogout() {
-  S.currentUser = null; S.currentUnitId = null; S.currentDepartmentId = null; S.currentOfficeId = null; S.isAdmin = false; S.isDepartmentUser = false; S.isExecutive = false; S.isOfficeUser = false; S.cameFromAllReports = false; S.adminPreviewOrigin = null; S.pendingUnitLoginId = null; S.pendingEntityLogin = null; S.currentUnitEntryMode = null; S.platformUserAllowedPages = null; S.platformUserAllowedActions = null; S.platformUserAllowedButtons = null; S.personNotifyTabs = null; S.currentPlatformUserTemplateId = ""; S.currentPlatformUserJobTitle = null; S.pendingPlatformUserMatches = null; S.view = "login"; S.ui = {};
+  S.currentUser = null; S.currentPersonId = null; S.currentPersonName = ""; S.currentUnitId = null; S.currentDepartmentId = null; S.currentOfficeId = null; S.isAdmin = false; S.isDepartmentUser = false; S.isExecutive = false; S.isOfficeUser = false; S.cameFromAllReports = false; S.adminPreviewOrigin = null; S.pendingUnitLoginId = null; S.pendingEntityLogin = null; S.currentUnitEntryMode = null; S.platformUserAllowedPages = null; S.platformUserAllowedActions = null; S.platformUserAllowedButtons = null; S.personNotifyTabs = null; S.currentPlatformUserTemplateId = ""; S.currentPlatformUserJobTitle = null; S.pendingPlatformUserMatches = null; S.view = "login"; S.ui = {};
   render();
 }
 
@@ -5466,7 +5471,8 @@ function renderUnitReportsHub() {
       // زر الشريط الجانبي نفسه غير ظاهر له لأن صفحة "إنشاء تقرير" تحديدًا لم
       // تُمنح له ضمن قائمة الصفحات — فتظل الصفحة تَعِد بالزر "من الشريط
       // الجانبي" بينما هو غير موجود أصلًا.
-      right: platformActionAllowed("open-or-create-report") && !adminReportsReadOnly() && !computeVisibleSidebarPages().some((p) => p.id === "unit-report") ? pillBtn("إنشاء تقرير", { icon: iconPencil(14, "#fff"), action: "open-or-create-report" }) : "" })}
+      right: (platformActionAllowed("open-or-create-report") && !adminReportsReadOnly() && !computeVisibleSidebarPages().some((p) => p.id === "unit-report") ? pillBtn("إنشاء تقرير", { icon: iconPencil(14, "#fff"), action: "open-or-create-report" }) : "")
+        + (platformActionAllowed("create-new-report") && !adminReportsReadOnly() ? pillBtn("تقرير جديد", { variant: "ghost", icon: iconPlus(14, INK), action: "create-new-report" }) : "") })}
     ${scopedUnitSwitcherHtml()}
 
     <div class="hero-banner">
@@ -6587,6 +6593,7 @@ function apCaptureForm() {
     canApprove: c("ap-s-ap-" + i) !== null ? c("ap-s-ap-" + i) : st.canApprove,
     canReturn: c("ap-s-rt-" + i) !== null ? c("ap-s-rt-" + i) : st.canReturn,
     canEdit: c("ap-s-ed-" + i) !== null ? c("ap-s-ed-" + i) : st.canEdit,
+    noteRequired: c("ap-s-nr-" + i) !== null ? c("ap-s-nr-" + i) : !!st.noteRequired,
   }));
 }
 function apEditorHtml() {
@@ -6611,6 +6618,7 @@ function apEditorHtml() {
         <label style="display:flex;gap:6px;align-items:center;cursor:pointer;"><input type="checkbox" id="ap-s-ap-${i}" ${st.canApprove ? "checked" : ""} /> يعتمد</label>
         <label style="display:flex;gap:6px;align-items:center;cursor:pointer;"><input type="checkbox" id="ap-s-rt-${i}" ${st.canReturn ? "checked" : ""} /> يعيد للتعديل</label>
         <label style="display:flex;gap:6px;align-items:center;cursor:pointer;"><input type="checkbox" id="ap-s-ed-${i}" ${st.canEdit ? "checked" : ""} /> يعدّل التقرير</label>
+        <label style="display:flex;gap:6px;align-items:center;cursor:pointer;"><input type="checkbox" id="ap-s-nr-${i}" ${st.noteRequired ? "checked" : ""} /> ملاحظة إلزامية عند الاعتماد</label>
       </div>
     </div>`).join("");
   return `<div class="card" style="margin-bottom:14px;border:1.5px solid ${ROSE};">
@@ -7608,7 +7616,14 @@ function renderConfiguredNotifications(unit, cfg) {
 }
 function renderUnitNotifications() {
   const unit = S.units.find((u) => u.id === S.currentUnitId);
-  if (!unit) return `<div class="page-wrap">تعذر إيجاد الوحدة.</div>`;
+  if (!unit) {
+    // حساب قسم/مكتب (أو أي جلسة بلا وحدة محددة): نعرض ما ينتظر مرحلتها بمسارات الاعتماد بدل رسالة خطأ.
+    const apHtml = apNotifCardsHtml();
+    return `<div class="page-wrap"><div class="page-inner narrow">
+      ${topBarHtml({ title: "التنبيهات", subtitle: "التقارير بانتظارك", backAction: "nav-to", backData: { view: "dashboard" } })}
+      ${apHtml || `<div class="card" style="text-align:center;color:${SUBTLE};padding:36px;">لا توجد تنبيهات حاليًا.</div>`}
+    </div></div>`;
+  }
   const cfgN = effectiveReportTabsConfig();
   if (cfgN && cfgN.notify.length) return renderConfiguredNotifications(unit, cfgN);
   const isReviewer = S.currentUnitEntryMode === "head" || S.currentUnitEntryMode === "extra";
@@ -9752,7 +9767,7 @@ function attachClickListener() {
         S.ui.apEdit = { id: a.id, error: "", draft: JSON.parse(JSON.stringify(a)) }; S.ui.apMsg = null; render(); break;
       }
       case "ap-cancel": S.ui.apEdit = null; render(); break;
-      case "ap-stage-add": apCaptureForm(); S.ui.apEdit.draft.stages.push({ id: uid("stg"), name: "", approver: "", canApprove: true, canReturn: true, canEdit: false }); render(); break;
+      case "ap-stage-add": apCaptureForm(); S.ui.apEdit.draft.stages.push({ id: uid("stg"), name: "", approver: "", canApprove: true, canReturn: true, canEdit: false, noteRequired: false }); render(); break;
       case "ap-stage-remove": apCaptureForm(); S.ui.apEdit.draft.stages.splice(Number(ds.idx), 1); render(); break;
       case "ap-stage-move": {
         apCaptureForm();
@@ -10132,6 +10147,15 @@ function attachClickListener() {
         // التنبيه يتطلب ظهور الزر: لو فعّلنا "ينبّه" نفعّل "يظهر" تلقائيًا
         if (ds.mode === "notify" && i < 0) { const t = holder.reportTabs || (holder.reportTabs = []); if (!t.includes(ds.id)) t.push(ds.id); }
         if (ds.scope === "template") captureJobTitleTemplateFormFields(S.ui.editingTemplateId == null ? "new-template" : "edit-template");
+        render();
+        break;
+      }
+      case "create-new-report": {
+        if (!platformActionAllowed("create-new-report")) break;
+        if (!S.currentUnitId) break;
+        const entry = createNewReportEntry(S.currentUnitId);
+        if (!entry) break;
+        S.currentReportId = entry.id; S.view = "unit-report"; S.openPhaseId = null; S.activeSectionId = null;
         render();
         break;
       }
