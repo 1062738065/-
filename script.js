@@ -7628,7 +7628,9 @@ function renderUnitNotifications() {
   if (cfgN && cfgN.notify.length) return renderConfiguredNotifications(unit, cfgN);
   const isReviewer = S.currentUnitEntryMode === "head" || S.currentUnitEntryMode === "extra";
   const statusFilter = S.currentUnitEntryMode === "extra" ? "pending_extra_review" : "pending_head_review";
-  const items = (isReviewer ? unitPendingHeadReviewReports(unit.id, statusFilter) : unitHeadReturnedReports(unit.id))
+  // الكاتبة: المعادة من مسار الاعتماد (returned / needs_completion) تُعدّ وتُعرض بنفس العدّاد — كانت تُعدّ ولا تُعرض.
+  const apReturnedForWriter = isReviewer ? [] : ensureUnitReportsLoaded(unit.id).filter((r) => r.status === "returned" || r.status === "needs_completion");
+  const items = (isReviewer ? unitPendingHeadReviewReports(unit.id, statusFilter) : unitHeadReturnedReports(unit.id).concat(apReturnedForWriter))
     .slice()
     .sort((a, b) => (isReviewer ? (b.internalSentAt || 0) - (a.internalSentAt || 0) : (b.internalReturnedAt || 0) - (a.internalReturnedAt || 0)));
   return `
@@ -7638,7 +7640,7 @@ function renderUnitNotifications() {
       `<div style="display:flex;flex-direction:column;gap:10px;">${items.map((r) => {
         const dateVal = isReviewer ? r.internalSentAt : r.internalReturnedAt;
         const dateStr = dateVal ? new Date(dateVal).toLocaleDateString("ar-SA-u-ca-islamic", { year: "numeric", month: "long", day: "numeric" }) : "";
-        const verb = isReviewer ? "بانتظار المراجعة" : (r.status === "head_returned_edit" || r.status === "extra_returned_edit" ? "معاد للتعديل" : "معاد للاستكمال");
+        const verb = isReviewer ? "بانتظار المراجعة" : (r.status === "head_returned_edit" || r.status === "extra_returned_edit" || r.status === "returned" ? "معاد للتعديل" : "معاد للاستكمال");
         return `
         <button class="card" data-action="${isReviewer ? 'goto-incoming-review-tab' : 'open-report'}" data-unit-id="${esc(unit.id)}" data-report-id="${esc(r.id)}" style="display:flex;align-items:center;gap:12px;width:100%;text-align:right;cursor:pointer;border:1px solid ${BORDER};background:#fff;">
           <div style="width:38px;height:38px;border-radius:11px;background:${DANGER_BG};display:flex;align-items:center;justify-content:center;flex-shrink:0;">${iconBell(17, ROSE)}</div>
