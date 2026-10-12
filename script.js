@@ -5960,6 +5960,8 @@ function renderRolesManage() {
   const editRole = ui.roleEditId ? roles.find((r) => r.id === ui.roleEditId) : null;
   const editPerson = ui.personEditId ? persons.find((p) => p.id === ui.personEditId) : null;
   const units = S.units || [];
+  // نفس قائمة الهيكل: وحدات ومراكز حقيقية فقط (بدون مديرة النظام/الإدارة العليا/تقارير ذاتية)
+  const realUnits = units.filter((u) => u.role !== "admin" && u.role !== "executive" && u.role !== "self_report");
   const unitName = (id) => { const u = units.find((x) => x.id === id); return u ? u.name : "(جهة محذوفة)"; };
   const roleForm = (ui.roleShowAdd || editRole) ? `<div class="card" style="background:${GRAY_BG};margin-bottom:12px;">
       <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:8px;">
@@ -5982,7 +5984,7 @@ function renderRolesManage() {
   const personForm = (ui.personShowAdd || editPerson) ? `<div class="card" style="background:${GRAY_BG};margin-bottom:12px;">
       <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:8px;">
         <input class="input" id="person-name" placeholder="اسم الشخص" value="${esc(editPerson ? editPerson.name : "")}" />
-        <select class="input" id="person-owner"><option value="">— الجهة (وحدة/مركز) —</option>${units.map((u) => `<option value="${esc(u.id)}" ${editPerson && editPerson.ownerId === u.id ? "selected" : ""}>${esc(u.name)}</option>`).join("")}</select>
+        <select class="input" id="person-owner"><option value="">— الجهة (وحدة/مركز) —</option>${[["وحدات", realUnits.filter((u) => u.role !== "center")], ["مراكز", realUnits.filter((u) => u.role === "center")]].filter((g) => g[1].length).map((g) => `<optgroup label="${g[0]}">${g[1].map((u) => `<option value="${esc(u.id)}" ${editPerson && editPerson.ownerId === u.id ? "selected" : ""}>${esc(u.name)}</option>`).join("")}</optgroup>`).join("")}</select>
         <select class="input" id="person-role"><option value="">— الدور —</option>${roles.map((r) => `<option value="${esc(r.id)}" ${editPerson && editPerson.roleId === r.id ? "selected" : ""}>${esc(r.name)}</option>`).join("")}</select>
         <input class="input" id="person-pin" inputmode="numeric" placeholder="رمز خاص بالشخص (اختياري)" value="${esc(editPerson ? editPerson.pin : "")}" />
       </div>
