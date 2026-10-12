@@ -7810,6 +7810,17 @@ function openSection(sectionId) {
   render();
 }
 function closeSection() { S.activeSectionId = null; S.sectionDraft = null; render(); }
+// عند فتح تقرير معاد (للتعديل/الاستكمال): افتح مباشرة أول قسم عليه ملاحظة مراجِعة، بدل الوقوف على صفحة التقرير العامة.
+function jumpToFirstNotedSection(entry) {
+  try {
+    if (!entry || !REVIEW_NOTE_STATUSES.includes(entry.status)) return;
+    const sec = SECTIONS.find((sc) => entry.sections && entry.sections[sc.id] && entry.sections[sc.id].reviewNote);
+    if (!sec) return;
+    const ph = PHASES.find((p) => (p.sectionIds || []).includes(sec.id));
+    if (ph) S.openPhaseId = ph.id;
+    loadSectionIntoDraft(sec.id);
+  } catch (e) { /* لا تعطّل الفتح العادي */ }
+}
 
 function validateGoalsData(data) {
   const goals = data.goals || [];
@@ -10116,6 +10127,7 @@ function attachClickListener() {
         const inProgress = [...list].reverse().find((r) => openStatuses.includes(r.status));
         const entry = inProgress || createNewReportEntry(S.currentUnitId);
         S.currentReportId = entry.id; S.view = "unit-report"; S.openPhaseId = null; S.activeSectionId = null;
+        jumpToFirstNotedSection(entry);
         render();
         break;
       }
@@ -10123,6 +10135,7 @@ function attachClickListener() {
         if (!isUnitInUserScope(ds.unitId)) break;
         S.currentUnitId = ds.unitId; S.currentReportId = ds.reportId; S.view = adminReportsReadOnly() ? "full-report" : "unit-report"; S.openPhaseId = null; S.activeSectionId = null;
         S.cameFromAllReports = adminReportsReadOnly();
+        if (S.view === "unit-report") jumpToFirstNotedSection(getReportEntry(ds.unitId, ds.reportId));
         render();
         break;
       }
