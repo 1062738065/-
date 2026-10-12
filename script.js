@@ -1652,63 +1652,14 @@ function apOrCustomStageName(unit, report) {
   if (ref) { const p = apPathById(ref.pathId); const st = p && (p.stages || []).find((x) => x.id === ref.stageId); return st ? st.name : "مرحلة"; }
   return customStageName(unitCustomPath(unit).find((st) => st.id === (report && report.customStageId)));
 }
-function customPathSendHtml(unit, report) {
-  const path = unitCustomPath(unit);
-  const picked = S.ui.customSendTarget || "";
-  return `
-  <div class="card" style="margin-top:16px;border:1.5px solid ${ROSE};">
-    <div style="font-size:13px;font-weight:800;margin-bottom:10px;">إرسال التقرير — لأي مرحلة؟</div>
-    <select class="input" id="custom-send-target" style="width:100%;margin-bottom:10px;">
-      <option value="">اختاري المرحلة...</option>
-      ${path.map((st) => `<option value="${esc(st.id)}" ${picked === st.id ? "selected" : ""}>${esc(customStageName(st))}</option>`).join("")}
-    </select>
-    <textarea id="custom-send-notes" class="input" style="width:100%;min-height:56px;margin-bottom:10px;" placeholder="ملاحظات (اختياري)..."></textarea>
-    <div style="display:flex;gap:8px;">
-      ${pillBtn("تأكيد الإرسال", { icon: iconCheckCircle(14, "#fff"), action: "confirm-custom-send" })}
-      ${pillBtn("إلغاء", { variant: "ghost", action: "cancel-custom-send" })}
-    </div>
-  </div>`;
-}
 function renderCustomPathInbox() {
-  const items = [...customPathPendingForMe(), ...apPendingForMe()];
+  const items = apPendingForMe();
   return `
   <div class="page-wrap"><div class="page-inner narrow">
     ${topBarHtml({ title: "التقارير الواردة لي", subtitle: "تقارير وصلت لمرحلتك — اطّلعي عليها ثم اعتمديها وأرسليها أو أعيديها للتعديل" })}
     ${items.length === 0 ? `<div class="card" style="text-align:center;color:${SUBTLE};padding:36px;border-style:dashed;">لا توجد تقارير بانتظارك حاليًا.</div>` : `
     <div style="display:flex;flex-direction:column;gap:12px;">
-      ${items.map((item) => {
-        if (item.ap) return apInboxCardHtml(item);
-        const { unit, report, stage, path } = item;
-        const key = unit.id + ":" + report.id;
-        const others = path.filter((st) => st.id !== stage.id);
-        const log = (report.customLog || []).slice(-3);
-        return `
-        <div class="card">
-          <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;margin-bottom:6px;">
-            <div style="font-size:13.5px;font-weight:800;">${esc(unit.name)} — ${esc(report.label)}</div>
-            ${badgeHtml("مرحلتك: " + customStageName(stage), GOLD, GOLD_BG)}
-          </div>
-          ${log.length ? `<div style="font-size:11px;color:${SUBTLE};margin-bottom:8px;line-height:1.8;">${log.map((l) => esc(l.text || "")).join("<br>")}</div>` : ""}
-          <div style="margin-bottom:10px;">${pillBtn("عرض التقرير", { variant: "ghost", action: "view-report-pdf", data: { unitId: unit.id, reportId: report.id } })}</div>
-          <textarea id="cp-notes-${esc(key)}" class="input" style="width:100%;min-height:56px;margin-bottom:10px;" placeholder="ملاحظات (اختياري، وتلزم عند الإعادة)..."></textarea>
-          <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px;">
-            <select class="input" id="cp-send-${esc(key)}" style="flex:1;min-width:200px;">
-              <option value="">إرسال إلى...</option>
-              ${others.map((st) => `<option value="${esc(st.id)}">${esc(customStageName(st))}</option>`).join("")}
-              <option value="__final">اعتماد نهائي (انتهاء المسار)</option>
-            </select>
-            ${pillBtn("إرسال", { icon: iconCheckCircle(14, "#fff"), action: "custom-path-send", data: { unitId: unit.id, reportId: report.id } })}
-          </div>
-          <div style="display:flex;gap:8px;flex-wrap:wrap;">
-            <select class="input" id="cp-return-${esc(key)}" style="flex:1;min-width:200px;">
-              <option value="">إعادة إلى...</option>
-              <option value="__unit">الوحدة (للتعديل)</option>
-              ${others.map((st) => `<option value="${esc(st.id)}">${esc(customStageName(st))}</option>`).join("")}
-            </select>
-            ${pillBtn("إعادة", { variant: "ghost", icon: iconX(14, INK), action: "custom-path-return", data: { unitId: unit.id, reportId: report.id } })}
-          </div>
-        </div>`;
-      }).join("")}
+      ${items.map((item) => apInboxCardHtml(item)).join("")}
     </div>`}
   </div></div>`;
 }
@@ -2038,12 +1989,6 @@ function render() {
     html = renderUnitRoleSelect();
   } else if (S.view === "platform-user-role-select") {
     html = renderPlatformUserRoleSelect();
-  } else if (S.view === "platform-users-manage") {
-    html = shellWrap(renderPlatformUsersManage());
-  } else if (S.view === "platform-permissions-manage") {
-    html = shellWrap(renderPlatformPermissionsManage());
-  } else if (S.view === "job-title-templates") {
-    html = shellWrap(renderJobTitleTemplatesManage());
   } else if (S.view === "report-tabs-manage") {
     html = shellWrap(renderReportTabsManage());
   } else if (S.view === "approval-paths-setup") {
@@ -2174,7 +2119,6 @@ const BUTTON_CATALOG = [
   { id: "start-send-report", g: "إرسال التقرير", label: "إرسال مباشرة للقسم", sel: '[data-action="start-send-report"],[data-action="confirm-send-report"]' },
   { id: "request-report-completion", g: "إرسال التقرير", label: "طلب استكمال التقرير", sel: '[data-action="request-report-completion"]' },
   { id: "mark-report-completed", g: "إرسال التقرير", label: "تحديد التقرير كمكتمل", sel: '[data-action="mark-report-completed"]' },
-  { id: "custom-path-send", g: "إرسال التقرير", label: "إرسال في المسار الحر", sel: '[data-action="custom-path-send"],[data-action="start-custom-send"],[data-action="confirm-custom-send"]' },
   { id: "send-report", g: "إرسال التقرير", label: "إرسال التقرير (من مسارات الاعتماد)", sel: '[data-action="ap-send"],[data-action="ap-send-confirm"]' },
   { id: "ap-advance", g: "المراجعة والاعتماد", label: "اعتماد / إرسال للمرحلة التالية (مسار الاعتماد)", sel: '[data-action="ap-advance"]' },
   { id: "ap-return", g: "المراجعة والاعتماد", label: "إعادة التقرير للتعديل (مسار الاعتماد)", sel: '[data-action="ap-return"]' },
@@ -2182,7 +2126,6 @@ const BUTTON_CATALOG = [
   { id: "submit-department-review-decision", g: "المراجعة والاعتماد", label: "قرار مراجعة القسم (اعتماد / إعادة)", sel: '[data-action="submit-department-review-decision"]' },
   { id: "approve-report", g: "المراجعة والاعتماد", label: "اعتماد التقرير (القسم)", sel: '[data-action="approve-report"]' },
   { id: "return-report-for-revision", g: "المراجعة والاعتماد", label: "إعادة التقرير للمراجعة", sel: '[data-action="return-report-for-revision"]' },
-  { id: "custom-path-return", g: "المراجعة والاعتماد", label: "إعادة التقرير في المسار الحر", sel: '[data-action="custom-path-return"]' },
 ];
 // أزرار المسار الجديد ترث صلاحية الأزرار القديمة المقابلة لها: من كانت مختارة عندها لا يختفي عنها شيء.
 const BUTTON_ALIASES = {
@@ -5980,33 +5923,6 @@ function unitRowHtml(u) {
     </div>`;
   }
   if (editingApproval) {
-    const pathMode = S.ui.editUnitPathMode || ((u.approvalPath && u.approvalPath.length) ? "custom" : "legacy");
-    if (pathMode === "custom") {
-      const stages = S.ui.editUnitPathStages || [];
-      const templates = (S.jobTitleTemplates && S.jobTitleTemplates.length) ? S.jobTitleTemplates : dataStore.getJobTitleTemplates();
-      return `<div class="card">
-        <div style="font-size:12.5px;font-weight:800;color:${ROSE};margin-bottom:6px;">مسار اعتماد "${esc(u.name)}" — مسار حرّ مخصص</div>
-        <div class="hint" style="margin-bottom:10px;">رتّبي المراحل بأي عدد وأي ترتيب تحبينه. كل مرحلة = مسمى وظيفي من "المسميات الوظيفية (القوالب)" — أي حساب مربوط بهذا المسمى يقدر يعتمد/يعيد بهذي المرحلة. أول مرحلة تستلم التقرير بعد إنشائه من الوحدة، وآخر مرحلة = الاعتماد النهائي.</div>
-        <div style="display:flex;gap:8px;margin-bottom:10px;">
-          <button type="button" class="radio-pill" data-action="toggle-unit-path-mode" data-value="legacy">رجوع للمسار الثابت (وحدة→رئيسة→قسم)</button>
-        </div>
-        <div style="display:flex;flex-direction:column;gap:8px;margin-bottom:10px;">
-          ${stages.length ? stages.map((s, i) => `
-            <div style="display:flex;align-items:center;gap:6px;background:${GRAY_BG};border-radius:10px;padding:8px 10px;">
-              <span style="font-size:11px;font-weight:800;color:${SUBTLE};min-width:18px;">${i + 1}</span>
-              <select class="input" style="flex:1;" data-action="set-unit-path-stage-template" data-index="${i}">
-                <option value="">— اختاري مسمى وظيفي —</option>
-                ${templates.map((t) => `<option value="${esc(t.id)}" ${s.templateId === t.id ? "selected" : ""}>${esc(t.name)}</option>`).join("")}
-              </select>
-              <button type="button" class="icon-btn" style="width:28px;height:28px;transform:rotate(180deg);" data-action="move-unit-path-stage" data-index="${i}" data-dir="up" ${i === 0 ? "disabled" : ""} title="تحريك لأعلى">${iconChevronDown(13, i === 0 ? "#cfc3c8" : INK)}</button>
-              <button type="button" class="icon-btn" style="width:28px;height:28px;" data-action="move-unit-path-stage" data-index="${i}" data-dir="down" ${i === stages.length - 1 ? "disabled" : ""} title="تحريك لأسفل">${iconChevronDown(13, i === stages.length - 1 ? "#cfc3c8" : INK)}</button>
-              <button type="button" class="icon-btn" style="width:28px;height:28px;" data-action="remove-unit-path-stage" data-index="${i}" title="حذف المرحلة">${iconTrash(13, DANGER)}</button>
-            </div>`).join("") : `<div class="hint">ما فيه أي مرحلة بعد — أضيفي مرحلة للبدء.</div>`}
-        </div>
-        ${pillBtn("+ إضافة مرحلة", { variant: "ghost", action: "add-unit-path-stage" })}
-        <div style="display:flex;gap:6px;margin-top:12px;">${pillBtn("حفظ المسار", { action: "save-unit-approval-edit", data: { id: u.id } })}${pillBtn("إلغاء", { variant: "ghost", action: "cancel-unit-approval-edit" })}</div>
-      </div>`;
-    }
     const hasHeadVal = S.ui.editUnitHasHead !== undefined ? S.ui.editUnitHasHead : unitHasHead(u);
     const extraVal = S.ui.editUnitExtraReviewerTitle !== undefined ? S.ui.editUnitExtraReviewerTitle : (u.extraReviewerTitle || "");
     return `<div class="card">
@@ -6023,9 +5939,6 @@ function unitRowHtml(u) {
         <input class="input" id="edit-unit-extra-reviewer" placeholder="مثال: مديرة تعليمية" value="${esc(extraVal)}" />
       </div>
       <div class="hint" style="margin-bottom:10px;">ترتيب المسار: الإدارية ← ${hasHeadVal ? "رئيسة الوحدة ← " : ""}${extraVal ? esc(extraVal) + " ← " : ""}القسم.</div>
-      <div style="display:flex;gap:8px;margin-bottom:10px;">
-        <button type="button" class="radio-pill" data-action="toggle-unit-path-mode" data-value="custom">تصميم مسار حرّ مخصص بدل هذا ↗</button>
-      </div>
       <div style="display:flex;gap:6px;">${pillBtn("حفظ", { action: "save-unit-approval-edit", data: { id: u.id } })}${pillBtn("إلغاء", { variant: "ghost", action: "cancel-unit-approval-edit" })}</div>
     </div>`;
   }
@@ -6103,7 +6016,7 @@ function permDropdownChecklistHtml({ action, selected, total, emptyLabel, render
 // "مسمى وظيفي" عادي (زي سكرتارية) يعطيه قدرة أعلى بكثير من المقصود — فتُعرض
 // بقسم منفصل محذّر بصريًا بدل ما تكون مختلطة بصفحات المحتوى العادية.
 const SENSITIVE_PAGE_IDS = [
-  "site-settings", "platform-users-manage", "platform-permissions-manage", "job-title-templates", "roles-manage",
+  "site-settings", "roles-manage",
   "admin-reports", "indicators-manage", "goals-manage", "sections-manage",
   "field-schemas-manage", "offices-manage", "departments-list", "units-list",
   "centers-list", "org-chart",
@@ -6375,8 +6288,6 @@ function jobTitleTemplateRowHtml(t) {
 // (ماذا يرى كل حساب، ومعها القوالب الجاهزة كتبويب فرعي).
 const ACCOUNTS_HUB_TABS = [
   { view: "units-manage", label: "الهيكل والأشخاص", icon: "layers" },
-  { view: "platform-users-manage", label: "الأشخاص", icon: "user" },
-  { view: "platform-permissions-manage", label: "الصلاحيات", icon: "key", also: ["job-title-templates"] },
   { view: "roles-manage", label: "الأدوار", icon: "key" },
   { view: "org-chart", label: "المخطط الحر", icon: "gauge" },
 ];
@@ -6384,12 +6295,6 @@ const USERS_HUB_SUBTITLE = "إدارة المستخدمين وصلاحياتهم
 function usersHubIcon(name, active) {
   const c = active ? ROSE : SUBTLE;
   return name === "layers" ? iconLayers(16, c) : name === "user" ? iconUser(16, c) : name === "key" ? iconKey(16, c) : iconTarget(16, c);
-}
-function permissionsSubTabsHtml(active) {
-  return `<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:14px;">
-    ${pillBtn("صلاحيات الحسابات", { variant: active === "platform-permissions-manage" ? "primary" : "ghost", action: "nav-to", data: { view: "platform-permissions-manage" } })}
-    ${pillBtn("المسميات الوظيفية (قوالب جاهزة)", { variant: active === "job-title-templates" ? "primary" : "ghost", action: "nav-to", data: { view: "job-title-templates" } })}
-  </div>`;
 }
 function accountsHubTabBarHtml(activeView) {
   return `<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:10px;margin-bottom:16px;">
@@ -6744,85 +6649,6 @@ function renderRolesManage() {
     ${permLogCardHtml()}
   </div></div>`;
 }
-function renderJobTitleTemplatesManage() {
-  const ui = S.ui;
-  const list = S.jobTitleTemplates || [];
-  const newForm = { name: ui.newTemplateName || "", allowedPages: ui.newTemplateAllowedPages || [], allowedActions: ui.newTemplateAllowedActions || [] };
-  return `
-  <div class="page-wrap"><div class="page-inner narrow">
-    ${topBarHtml({ title: "المستخدمون", subtitle: USERS_HUB_SUBTITLE, icon: iconUser(18, ROSE), backAction: "nav-back-admin" })}
-    ${accountsHubTabBarHtml("job-title-templates")}
-    ${permissionsSubTabsHtml("job-title-templates")}
-
-    ${ui.editingTemplateId ? "" : `<div class="card" style="margin-bottom:18px;">
-      <div style="font-size:12.5px;font-weight:800;color:${ROSE};margin-bottom:12px;">إضافة</div>
-      ${jobTitleTemplateFormFieldsHtml("new-template", { name: ui.newTemplateName || "", parentId: ui.newTemplateParentId || "", allowedPages: ui.newTemplateAllowedPages || [], allowedActions: ui.newTemplateAllowedActions || [], reportTabs: ui.newTemplateReportTabs || [], reportNotify: ui.newTemplateReportNotify || [] })}
-      ${ui.templateFormError ? `<div style="color:${DANGER};font-size:11.5px;font-weight:700;margin-bottom:8px;">${esc(ui.templateFormError)}</div>` : ""}
-      ${pillBtn("إضافة", { icon: iconPlus(15, "#fff"), action: "add-job-title-template" })}
-    </div>`}
-
-    <div style="font-size:12.5px;font-weight:800;color:${ROSE};margin-bottom:10px;">المسميات الوظيفية الحالية (${list.length})</div>
-    ${list.length === 0 ? `<div class="card" style="text-align:center;color:${SUBTLE};padding:36px 20px;border-style:dashed;">لا توجد مسميات وظيفية بعد — أضيفي أول مسمى من الأعلى. تلقائيًا.</div>` :
-      `<div style="display:flex;flex-direction:column;gap:8px;">${list.map((t) => jobTitleTemplateRowHtml(t)).join("")}</div>`}
-  </div></div>`;
-}
-
-function renderPlatformUsersManage() {
-  const ui = S.ui;
-  const list = S.platformUsers || [];
-  const newForm = {
-    jobTitle: ui.newPuJobTitle || "", loginType: ui.newPuLoginType || "job_title", loginId: ui.newPuLoginId || "",
-    password: ui.newPuPassword || "", scopeKind: ui.newPuScopeKind || "none", scopeId: ui.newPuScopeId || "",
-    templateId: ui.newPuTemplateId || "", allowedPages: ui.newPuAllowedPages || [], allowedActions: ui.newPuAllowedActions || [],
-  };
-  const showAdd = !!ui.puShowAdd || !!ui.puFormError;
-  const rowsHtml = list.map((pu) => {
-    const isActive = pu.status !== "disabled";
-    const t = pu.templateId ? (S.jobTitleTemplates || []).find((x) => x.id === pu.templateId) : null;
-    const searchText = [pu.jobTitle, pu.loginId, platformUserScopeLabel(pu), t ? t.name : ""].filter(Boolean).join(" ").toLowerCase();
-    if (ui.editingPuId === pu.id || ui.confirmRemovePuId === pu.id) {
-      return `<tr data-search="${esc(searchText)}"><td colspan="6" style="padding:10px;">${platformUserRowHtml(pu, list)}</td></tr>`;
-    }
-    return `<tr data-search="${esc(searchText)}" style="opacity:${isActive ? 1 : 0.6}">
-      <td style="font-weight:700;"><span style="display:inline-flex;align-items:center;gap:8px;">${iconUser(15, ROSE)} ${esc(pu.jobTitle)}</span></td>
-      <td style="color:${SUBTLE};direction:ltr;text-align:right;">${esc(pu.loginId)}</td>
-      <td>${esc(platformUserScopeLabel(pu))}</td>
-      <td>${t ? esc(t.name) : "—"}</td>
-      <td>${badgeHtml(isActive ? "مفعّل" : "معطّل", isActive ? GREEN : DANGER, isActive ? GREEN_BG : DANGER_BG)}</td>
-      <td><span style="display:inline-flex;gap:6px;">
-        <button class="icon-btn" style="width:30px;height:30px;border:1px solid ${BORDER}" data-action="start-platform-user-edit" data-id="${esc(pu.id)}" title="تعديل">${iconPencil(13, INK)}</button>
-        <button class="icon-btn" style="width:30px;height:30px;background:${isActive ? DANGER_BG : GREEN_BG}" data-action="toggle-platform-user" data-id="${esc(pu.id)}" title="${isActive ? "تعطيل" : "تفعيل"}">${iconPower(13, isActive ? DANGER : GREEN)}</button>
-        <button class="icon-btn" style="width:30px;height:30px;background:${DANGER_BG}" data-action="confirm-remove-platform-user" data-id="${esc(pu.id)}" title="حذف">${iconTrash(13, DANGER)}</button>
-      </span></td>
-    </tr>`;
-  }).join("");
-  return `
-  <div class="page-wrap"><div class="page-inner">
-    ${topBarHtml({ title: "المستخدمون", subtitle: USERS_HUB_SUBTITLE, icon: iconUser(18, ROSE), backAction: "nav-back-admin" })}
-    ${accountsHubTabBarHtml("platform-users-manage")}
-
-    <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-bottom:12px;">
-      <div style="font-size:15px;font-weight:800;display:flex;align-items:center;gap:8px;">${iconUser(18, ROSE)} قائمة المستخدمين <span style="font-size:11px;color:${SUBTLE};font-weight:600;">(${list.length})</span></div>
-      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
-        <input class="input" id="pu-list-search" placeholder="ابحثي عن مستخدم..." style="width:220px;" />
-        ${pillBtn("إضافة مستخدم", { icon: iconPlus(15, "#fff"), action: "toggle-pu-add" })}
-      </div>
-    </div>
-
-    ${showAdd ? `<div class="card" style="margin-bottom:16px;">
-      <div style="font-size:12.5px;font-weight:800;color:${ROSE};margin-bottom:12px;">إضافة مسمّى وظيفي جديد</div>
-      ${platformUserFormFieldsHtml("new-pu", newForm)}
-      ${ui.puFormError ? `<div style="color:${DANGER};font-size:11.5px;font-weight:700;margin-bottom:8px;">${esc(ui.puFormError)}</div>` : ""}
-      ${pillBtn("إضافة الحساب", { icon: iconPlus(15, "#fff"), action: "add-platform-user" })}
-    </div>` : ""}
-
-    ${list.length === 0 ? `<div class="card" style="text-align:center;color:${SUBTLE};padding:36px 20px;border-style:dashed;">لا يوجد مستخدمون بعد — اضغطي "إضافة مستخدم".</div>` :
-      `<div class="card" style="padding:6px 10px;"><div class="table-wrap"><table class="prs-table" id="pu-list-table"><thead><tr style="background:${GRAY_BG}">
-        <th>الاسم</th><th>البريد الإلكتروني</th><th>الجهة</th><th>القالب الوظيفي</th><th>الحالة</th><th>الإجراءات</th>
-      </tr></thead><tbody>${rowsHtml}</tbody></table></div></div>`}
-  </div></div>`;
-}
-
 function platformUserRowHtml(pu, allList) {
   const isActive = pu.status !== "disabled";
   const editing = S.ui.editingPuId === pu.id;
@@ -6968,31 +6794,6 @@ function bulkPermCardHtml() {
     </div>
   </div>`;
 }
-function renderPlatformPermissionsManage() {
-  const list = collectPermissionAccounts();
-  return `
-  <div class="page-wrap"><div class="page-inner narrow">
-    ${topBarHtml({ title: "المستخدمون", subtitle: USERS_HUB_SUBTITLE, icon: iconUser(18, ROSE), backAction: "nav-back-admin" })}
-    ${accountsHubTabBarHtml("platform-permissions-manage")}
-    ${permissionsSubTabsHtml("platform-permissions-manage")}
-    ${bulkPermCardHtml()}
-
-    ${list.length === 0 ? `<div class="card" style="text-align:center;color:${SUBTLE};padding:36px 20px;border-style:dashed;">لا توجد حسابات بعد.</div>` : `
-    <div class="card" style="margin-bottom:14px;padding:10px 14px;">
-      <input class="input" id="pu-perm-search" placeholder="اكتبي اسم الحساب أو المسمى الوظيفي أو معرّف الدخول للبحث... (مثال: إدارية)" style="width:100%;" />
-    </div>
-    <div id="pu-perm-list" style="display:flex;flex-direction:column;gap:8px;">
-      ${list.map((rec) => {
-        const loginId = rec.kind === "platform_user" ? rec.entity.loginId : "";
-        const searchText = [rec.label, rec.typeLabel, loginId].filter(Boolean).join(" ").toLowerCase();
-        return `<div data-search="${esc(searchText)}">${unifiedAccountPermRowHtml(rec)}</div>`;
-      }).join("")}
-    </div>
-    <div id="pu-perm-empty-hint" style="display:none;text-align:center;color:${SUBTLE};padding:20px;font-size:12px;">لا يوجد حساب مطابق للبحث.</div>
-    `}
-  </div></div>`;
-}
-
 /* =============================== Indicators management ======================= */
 function indicatorDefFieldsHtml(stateKey, values) {
   values = values || {};
@@ -7940,7 +7741,6 @@ function sectionEditorHtml(unit, report) {
     ${fieldsHtml}
     ${S.sectionSaveError ? `<div class="error-box" style="margin-top:16px;">${esc(S.sectionSaveError)}</div>` : ""}
     ${S.ui.showSendPicker ? sendReportPickerHtml(unit) : ""}
-    ${S.ui.showCustomSendPicker ? customPathSendHtml(unit, report) : ""}
     ${S.ui.showApSendPicker ? apSendPickerHtml(unit, report) : ""}
     <div class="section-editor-nav">
       ${pillBtn("السابق", { variant: "ghost", action: "section-prev", disabled: sectionIndex <= 0 })}
@@ -9361,12 +9161,6 @@ function attachFormListeners() {
       render();
       return;
     }
-    if (el.dataset && el.dataset.action === "set-unit-path-stage-template") {
-      const idx = Number(el.dataset.index);
-      S.ui.editUnitPathStages = (S.ui.editUnitPathStages || []).map((s, i) => i === idx ? { ...s, templateId: el.value } : s);
-      render();
-      return;
-    }
     if (el.dataset && el.dataset.action === "hub-nav-select") {
       const b = document.createElement("button"); b.dataset.action = "nav-to"; b.dataset.view = el.value;
       b.style.display = "none"; appEl.appendChild(b); b.click(); if (b.parentNode) b.parentNode.removeChild(b);
@@ -10280,55 +10074,6 @@ function attachClickListener() {
       case "rt-delete-ask": S.ui.rtDeleteId = ds.id; render(); break;
       case "rt-delete-cancel": S.ui.rtDeleteId = null; render(); break;
       case "rt-delete": { const list = rtMaterialize(); const t = list.find((x) => x.id === ds.id); rtSave(list.filter((x) => x.id !== ds.id)); if (t) addPermLog("report-tab", t.id, t.label, "حذف زر من صفحة التقارير"); S.ui.rtDeleteId = null; S.ui.rtMsg = list.length <= 1 ? "حذفتِ كل الأزرار، فرجعت القائمة الافتراضية" : "تم الحذف"; render(); break; }
-      case "start-custom-send": { S.ui.showCustomSendPicker = true; render(); break; }
-      case "cancel-custom-send": { S.ui.showCustomSendPicker = false; render(); break; }
-      case "confirm-custom-send": {
-        const entry = getCurrentReportEntry();
-        const unit = S.units.find((u) => u.id === S.currentUnitId);
-        if (!entry || !unitHasCustomPath(unit)) break;
-        const sel = document.getElementById("custom-send-target");
-        const target = unitCustomPath(unit).find((st) => st.id === (sel ? sel.value : ""));
-        if (!target) break;
-        const notes = ((document.getElementById("custom-send-notes") || {}).value || "").trim();
-        const log = [...(entry.customLog || []), { at: Date.now(), kind: "send", from: "unit", to: target.id, text: "أُرسل من الوحدة إلى " + customStageName(target) + (notes ? " — " + notes : "") }];
-        saveReportEntry(S.currentUnitId, { ...entry, status: "custom_pending", customStageId: target.id, customLog: log, internalSentAt: Date.now(), updatedAt: Date.now() });
-        S.ui.showCustomSendPicker = false;
-        render();
-        break;
-      }
-      case "custom-path-send":
-      case "custom-path-return": {
-        const isReturn = ds.action === "custom-path-return";
-        const unit = S.units.find((u) => u.id === ds.unitId);
-        const entry = unit ? getReportEntry(ds.unitId, ds.reportId) : null;
-        if (!entry || entry.status !== "custom_pending") break;
-        const path = unitCustomPath(unit);
-        const cur = path.find((st) => st.id === entry.customStageId);
-        if (!cur || !userHoldsCustomStage(cur)) break;
-        const key = ds.unitId + ":" + ds.reportId;
-        const sel = document.getElementById((isReturn ? "cp-return-" : "cp-send-") + key);
-        const target = sel ? sel.value : "";
-        if (!target) break;
-        const notes = ((document.getElementById("cp-notes-" + key) || {}).value || "").trim();
-        if (isReturn && !notes) { alert("الرجاء كتابة ملاحظات قبل إعادة التقرير."); break; }
-        const verb = isReturn ? "أُعيد" : "أُرسل";
-        let next;
-        if (target === "__final") {
-          next = { ...entry, status: "approved", customStageId: null, updatedAt: Date.now() };
-          next.customLog = [...(entry.customLog || []), { at: Date.now(), kind: "final", from: cur.id, to: "final", text: "اعتُمد نهائيًا من " + customStageName(cur) + (notes ? " — " + notes : "") }];
-        } else if (target === "__unit") {
-          next = { ...entry, status: "returned", customStageId: null, internalReviewNotes: notes, internalReturnedAt: Date.now(), updatedAt: Date.now() };
-          next.customLog = [...(entry.customLog || []), { at: Date.now(), kind: "return", from: cur.id, to: "unit", text: "أعادته " + customStageName(cur) + " للوحدة — " + notes }];
-        } else {
-          const tgt = path.find((st) => st.id === target);
-          if (!tgt) break;
-          next = { ...entry, status: "custom_pending", customStageId: tgt.id, updatedAt: Date.now() };
-          next.customLog = [...(entry.customLog || []), { at: Date.now(), kind: isReturn ? "return" : "send", from: cur.id, to: tgt.id, text: verb + " من " + customStageName(cur) + " إلى " + customStageName(tgt) + (notes ? " — " + notes : "") }];
-        }
-        saveReportEntry(ds.unitId, next);
-        render();
-        break;
-      }
       case "start-send-report": {
         if (!platformActionAllowed("start-send-report")) break;
         S.ui.showSendPicker = true;
@@ -10720,49 +10465,11 @@ function attachClickListener() {
         render();
         break;
       }
-      case "toggle-unit-path-mode": {
-        S.ui.editUnitPathMode = ds.value;
-        if (ds.value === "custom" && !(S.ui.editUnitPathStages && S.ui.editUnitPathStages.length)) {
-          S.ui.editUnitPathStages = [{ id: uid("stage"), templateId: "" }];
-        }
-        render();
-        break;
-      }
-      case "add-unit-path-stage": {
-        S.ui.editUnitPathStages = [...(S.ui.editUnitPathStages || []), { id: uid("stage"), templateId: "" }];
-        render();
-        break;
-      }
-      case "remove-unit-path-stage": {
-        const idx = Number(ds.index);
-        S.ui.editUnitPathStages = (S.ui.editUnitPathStages || []).filter((_, i) => i !== idx);
-        render();
-        break;
-      }
-      case "move-unit-path-stage": {
-        const idx = Number(ds.index);
-        const dir = ds.dir === "up" ? -1 : 1;
-        const list = [...(S.ui.editUnitPathStages || [])];
-        const swapWith = idx + dir;
-        if (swapWith < 0 || swapWith >= list.length) break;
-        [list[idx], list[swapWith]] = [list[swapWith], list[idx]];
-        S.ui.editUnitPathStages = list;
-        render();
-        break;
-      }
       case "save-unit-approval-edit": {
-        const pathMode = S.ui.editUnitPathMode || "legacy";
-        if (pathMode === "custom") {
-          // مسار حرّ: نحفظ فقط المراحل اللي اخترنا لها مسمى وظيفي فعليًا —
-          // مرحلة بلا اختيار تُستبعد بدل ما تُحفظ فارغة بالغلط.
-          const cleanStages = (S.ui.editUnitPathStages || []).filter((s) => s.templateId);
-          S.units = S.units.map((u) => u.id === ds.id ? { ...u, approvalPath: cleanStages } : u);
-        } else {
-          const extraEl = document.getElementById("edit-unit-extra-reviewer");
-          const extraVal = extraEl ? extraEl.value.trim() : (S.ui.editUnitExtraReviewerTitle || "");
-          const hasHeadVal = !!S.ui.editUnitHasHead;
-          S.units = S.units.map((u) => u.id === ds.id ? { ...u, hasHead: hasHeadVal, extraReviewerTitle: extraVal, approvalPath: [] } : u);
-        }
+        const extraEl = document.getElementById("edit-unit-extra-reviewer");
+        const extraVal = extraEl ? extraEl.value.trim() : (S.ui.editUnitExtraReviewerTitle || "");
+        const hasHeadVal = !!S.ui.editUnitHasHead;
+        S.units = S.units.map((u) => u.id === ds.id ? { ...u, hasHead: hasHeadVal, extraReviewerTitle: extraVal, approvalPath: [] } : u);
         dataStore.saveUnits(S.units);
         S.ui.editingUnitApprovalId = null; S.ui.editUnitHasHead = undefined; S.ui.editUnitExtraReviewerTitle = undefined;
         S.ui.editUnitPathMode = undefined; S.ui.editUnitPathStages = undefined;
