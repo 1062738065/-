@@ -1672,7 +1672,7 @@ function renderCustomPathInbox() {
   const items = [...customPathPendingForMe(), ...apPendingForMe()];
   return `
   <div class="page-wrap"><div class="page-inner narrow">
-    ${topBarHtml({ title: "تقارير المسار الحر", subtitle: "تقارير وصلت لمرحلتك — اطّلعي عليها ثم أرسليها أو أعيديها للمرحلة اللي تختارينها" })}
+    ${topBarHtml({ title: "التقارير الواردة لي", subtitle: "تقارير وصلت لمرحلتك — اطّلعي عليها ثم اعتمديها وأرسليها أو أعيديها للتعديل" })}
     ${items.length === 0 ? `<div class="card" style="text-align:center;color:${SUBTLE};padding:36px;border-style:dashed;">لا توجد تقارير بانتظارك حاليًا.</div>` : `
     <div style="display:flex;flex-direction:column;gap:12px;">
       ${items.map((item) => {
@@ -2079,7 +2079,7 @@ const HOME_GROUP_ORDER = ["dashboard", "admin-reports"];
 const SIDEBAR_PAGES = [
   { id: "dashboard", label: "لوحة المعلومات", group: "الرئيسية", icon: "home" },
   { id: "admin-reports", label: "الأقسام والوحدات", group: "الرئيسية", icon: "building" },
-  { id: "custom-path-inbox", label: "تقارير المسار الحر", group: "الرئيسية", icon: "document" },
+  { id: "custom-path-inbox", label: "التقارير الواردة لي", group: "الرئيسية", icon: "document" },
   { id: "site-settings", label: "إعدادات الموقع", group: "الرئيسية", icon: "gauge" },
   { id: "approval-paths-setup", label: "إعداد مسارات الاعتماد", group: "standalone", icon: "layers" },
   // "حسابات إضافية" و"صلاحيات الحسابات" و"المسميات الوظيفية (القوالب)" صارت
