@@ -2210,16 +2210,82 @@ function unitSharedPlatformUsers(unit) {
 }
 function rolesList() { return S.roles || (S.roles = dataStore.getRoles()); }
 function personsList() { return S.persons || (S.persons = dataStore.getPersons()); }
-function unitActivePersons(unitId) {
-  if (!unitId) return [];
+function ownerActivePersons(kind, id) {
+  if (!id) return [];
   const roles = rolesList();
-  return personsList().filter((p) => p.status !== "disabled" && p.ownerKind === "unit" && p.ownerId === unitId && roles.some((r) => r.id === p.roleId && r.status !== "disabled"));
+  return personsList().filter((p) => p.status !== "disabled" && (p.ownerKind || "unit") === kind && p.ownerId === id && roles.some((r) => r.id === p.roleId && r.status !== "disabled"));
+}
+function unitActivePersons(unitId) { return ownerActivePersons("unit", unitId); }
+function personCardsHtml(list) {
+  return list.map((p) => {
+    const role = rolesList().find((r) => r.id === p.roleId);
+    const asking = S.ui.pinPersonId === p.id;
+    return `
+          <div class="card" style="border:1px solid ${asking ? ROSE : BORDER};background:#fff;width:100%;">
+            <button type="button" data-action="choose-person" data-id="${esc(p.id)}" style="display:flex;align-items:center;gap:12px;text-align:right;cursor:pointer;background:none;border:none;width:100%;padding:0;font-family:inherit;">
+              <div style="width:42px;height:42px;border-radius:12px;background:${DANGER_BG};display:flex;align-items:center;justify-content:center;flex-shrink:0;">${iconUser(19, ROSE)}</div>
+              <div>
+                <div style="font-size:14px;font-weight:800;">${esc(p.name)}</div>
+                <div style="font-size:11px;color:${SUBTLE};margin-top:2px;">${esc(role ? role.name : "")}${personEffectivePin(p) ? " • برمز" : ""}</div>
+              </div>
+            </button>
+            ${asking ? `<div style="display:flex;gap:6px;margin-top:10px;align-items:center;">
+              <input class="input" id="person-pin-input" type="password" inputmode="numeric" autocomplete="off" placeholder="الرمز (PIN)" style="flex:1;" />
+              ${pillBtn("دخول", { action: "confirm-person-pin", data: { id: p.id } })}
+              ${pillBtn("إلغاء", { variant: "ghost", action: "cancel-person-pin" })}
+            </div>${S.ui.pinError ? `<div style="color:${DANGER};font-size:11.5px;font-weight:700;margin-top:6px;">${esc(S.ui.pinError)}</div>` : ""}` : ""}
+          </div>`;
+  }).join("");
+}
+function entityLoginSelectHtml() {
+  const pe = S.pendingEntityLogin;
+  const ent = pe.kind === "department" ? (S.departments || []).find((d) => d.id === pe.id) : (S.offices || []).find((o) => o.id === pe.id);
+  return `
+  <div class="login-wrap">
+    <div class="login-box" style="max-width:440px;">
+      <div class="login-card">
+        <div style="text-align:center;margin-bottom:22px;">
+          <img class="login-logo" src="${esc(siteLogoSrc(currentSiteSettings()))}" alt="جمعية فرقان" />
+          <div class="prs-title" style="font-size:19px;font-weight:900;color:#000">كيف تريدين الدخول؟</div>
+          ${ent ? `<div style="font-size:11.5px;color:${SUBTLE};margin-top:4px;">${esc(ent.name)}</div>` : ""}
+        </div>
+        <div style="display:flex;flex-direction:column;gap:12px;">
+          <button type="button" class="card" data-action="choose-entity-account" style="display:flex;align-items:center;gap:12px;text-align:right;cursor:pointer;border:1px solid ${BORDER};background:#fff;width:100%;">
+            <div style="width:42px;height:42px;border-radius:12px;background:${DANGER_BG};display:flex;align-items:center;justify-content:center;flex-shrink:0;">${iconUser(19, ROSE)}</div>
+            <div><div style="font-size:14px;font-weight:800;">${pe.kind === "department" ? "مديرة القسم" : "مكتب الإشراف"}</div><div style="font-size:11px;color:${SUBTLE};margin-top:2px;">الدخول بحساب ${pe.kind === "department" ? "القسم" : "المكتب"} مباشرة</div></div>
+          </button>
+          ${personCardsHtml(ownerActivePersons(pe.kind, pe.id))}
+        </div>
+      </div>
+      <button type="button" data-action="logout" style="display:block;margin:16px auto 0;background:none;border:none;color:${SUBTLE};font-size:11.5px;cursor:pointer;text-decoration:underline;">ليست أنتِ؟ تسجيل الخروج</button>
+    </div>
+  </div>`;
 }
 function personEffectivePin(p) {
   const r = rolesList().find((x) => x.id === p.roleId);
   return String(p.pin || (r && r.pin) || "").trim();
 }
+function applyPersonPerms(p) {
+  const eff = personEffectivePerms(p);
+  if (eff.pages.length) S.platformUserAllowedPages = normalizeDashboardPages(eff.pages);
+  if (eff.actions.length) S.platformUserAllowedActions = [...eff.actions];
+}
+function enterEntityAsPerson(p) {
+  const pe = S.pendingEntityLogin;
+  S.currentPersonId = p ? p.id : null;
+  S.currentPersonName = p ? p.name : "";
+  if (p) applyPersonPerms(p);
+  S.view = pe.view;
+  S.pendingEntityLogin = null;
+  S.ui.pinPersonId = null; S.ui.pinError = "";
+  if (S.platformUserAllowedPages && S.platformUserAllowedPages.length && !S.platformUserAllowedPages.includes(S.view)) {
+    const t = SIDEBAR_PAGES.find((x) => S.platformUserAllowedPages.includes(x.id));
+    if (t) S.view = t.id;
+  }
+  render();
+}
 function enterUnitAsPerson(p) {
+  if (S.pendingEntityLogin) return enterEntityAsPerson(p);
   const role = rolesList().find((r) => r.id === p.roleId);
   const unitId = S.pendingUnitLoginId;
   S.currentUnitEntryMode = role && (role.mode === "head" || role.mode === "extra") ? role.mode : "admin";
@@ -2239,6 +2305,7 @@ function enterUnitAsPerson(p) {
   if (sheetsConfigured()) { refreshReportsFromSheet(unitId).then(() => { if (S.currentUser) render(); }); }
 }
 function renderUnitRoleSelect() {
+  if (S.pendingEntityLogin) return entityLoginSelectHtml();
   const unit = (S.units || []).find((u) => u.id === S.pendingUnitLoginId);
   const hasHead = unitHasHead(unit);
   const extraTitle = (unit && unit.extraReviewerTitle) || "";
@@ -2275,25 +2342,7 @@ function renderUnitRoleSelect() {
               <div style="font-size:11px;color:${SUBTLE};margin-top:2px;">الدخول إلى واجهة المراجعة الإضافية الخاصة بالوحدة</div>
             </div>
           </button>` : ""}
-          ${unitActivePersons(S.pendingUnitLoginId).map((p) => {
-            const role = rolesList().find((r) => r.id === p.roleId);
-            const asking = S.ui.pinPersonId === p.id;
-            return `
-          <div class="card" style="border:1px solid ${asking ? ROSE : BORDER};background:#fff;width:100%;">
-            <button type="button" data-action="choose-person" data-id="${esc(p.id)}" style="display:flex;align-items:center;gap:12px;text-align:right;cursor:pointer;background:none;border:none;width:100%;padding:0;font-family:inherit;">
-              <div style="width:42px;height:42px;border-radius:12px;background:${DANGER_BG};display:flex;align-items:center;justify-content:center;flex-shrink:0;">${iconUser(19, ROSE)}</div>
-              <div>
-                <div style="font-size:14px;font-weight:800;">${esc(p.name)}</div>
-                <div style="font-size:11px;color:${SUBTLE};margin-top:2px;">${esc(role ? role.name : "")}${personEffectivePin(p) ? " • برمز" : ""}</div>
-              </div>
-            </button>
-            ${asking ? `<div style="display:flex;gap:6px;margin-top:10px;align-items:center;">
-              <input class="input" id="person-pin-input" type="password" inputmode="numeric" autocomplete="off" placeholder="الرمز (PIN)" style="flex:1;" />
-              ${pillBtn("دخول", { action: "confirm-person-pin", data: { id: p.id } })}
-              ${pillBtn("إلغاء", { variant: "ghost", action: "cancel-person-pin" })}
-            </div>${S.ui.pinError ? `<div style="color:${DANGER};font-size:11.5px;font-weight:700;margin-top:6px;">${esc(S.ui.pinError)}</div>` : ""}` : ""}
-          </div>`;
-          }).join("")}
+          ${personCardsHtml(unitActivePersons(S.pendingUnitLoginId))}
           ${(S.pendingPlatformUserMatches || []).map((pu) => `
           <button type="button" class="card" data-action="choose-platform-user" data-id="${esc(pu.id)}" style="display:flex;align-items:center;gap:12px;text-align:right;cursor:pointer;border:1px solid ${BORDER};background:#fff;width:100%;">
             <div style="width:42px;height:42px;border-radius:12px;background:${DANGER_BG};display:flex;align-items:center;justify-content:center;flex-shrink:0;">${iconUser(19, ROSE)}</div>
@@ -2383,6 +2432,9 @@ async function handleLoginSubmit() {
     const result = await supabaseLogin(username, password);
     if (result.ok) {
       await refreshUnitsAndDepartmentsFromSheet();
+      if (result.user && (result.user.role === "department" || result.user.role === "office")) {
+        try { await refreshRolesPersonsFromSheet(); } catch (e) { /* نكمل بالنسخة المحلية */ }
+      }
       if (result.user && result.user.role !== "admin" && result.user.unitId) {
         // نحتاج الأشخاص (platform_users) والقوالب قبل شاشة "كيف تريدين الدخول؟"
         try { await refreshPlatformUsersFromSheet(); await refreshJobTitleTemplatesFromSheet(); await refreshRolesPersonsFromSheet(); } catch (e) { /* نكمل بالنسخة المحلية */ }
@@ -2758,6 +2810,11 @@ function doLogin(user) {
     S.currentUnitEntryMode = null;
     S.view = "unit-role-select";
   }
+  if (S.isDepartmentUser || S.isOfficeUser) {
+    const pk = S.isDepartmentUser ? "department" : "office";
+    const pid = S.isDepartmentUser ? S.currentDepartmentId : S.currentOfficeId;
+    if (ownerActivePersons(pk, pid).length) { S.pendingEntityLogin = { kind: pk, id: pid, view: S.view }; S.view = "unit-role-select"; }
+  }
   render();
   if (sheetsConfigured()) {
     if (S.isAdmin || S.isExecutive) {
@@ -2773,7 +2830,7 @@ function doLogin(user) {
 }
 
 function doLogout() {
-  S.currentUser = null; S.currentUnitId = null; S.currentDepartmentId = null; S.currentOfficeId = null; S.isAdmin = false; S.isDepartmentUser = false; S.isExecutive = false; S.isOfficeUser = false; S.cameFromAllReports = false; S.adminPreviewOrigin = null; S.pendingUnitLoginId = null; S.currentUnitEntryMode = null; S.platformUserAllowedPages = null; S.platformUserAllowedActions = null; S.currentPlatformUserTemplateId = ""; S.currentPlatformUserJobTitle = null; S.pendingPlatformUserMatches = null; S.view = "login"; S.ui = {};
+  S.currentUser = null; S.currentUnitId = null; S.currentDepartmentId = null; S.currentOfficeId = null; S.isAdmin = false; S.isDepartmentUser = false; S.isExecutive = false; S.isOfficeUser = false; S.cameFromAllReports = false; S.adminPreviewOrigin = null; S.pendingUnitLoginId = null; S.pendingEntityLogin = null; S.currentUnitEntryMode = null; S.platformUserAllowedPages = null; S.platformUserAllowedActions = null; S.currentPlatformUserTemplateId = ""; S.currentPlatformUserJobTitle = null; S.pendingPlatformUserMatches = null; S.view = "login"; S.ui = {};
   render();
 }
 
@@ -5287,6 +5344,48 @@ function treeEditFormHtml(type, id) {
     </div>
   </div>`;
 }
+const STRUCT_OWNER_KIND = { unit: "unit", dept: "department", office: "office" };
+function structPersonsBlockHtml(kind, e, key) {
+  const ui = S.ui;
+  const roles = rolesList();
+  const list = personsList().filter((p) => (p.ownerKind || "unit") === kind && p.ownerId === e.id);
+  const roleOpts = (cur) => `<option value="">— الدور —</option>${roles.map((r) => `<option value="${esc(r.id)}" ${cur === r.id ? "selected" : ""}>${esc(r.name)}</option>`).join("")}`;
+  const rows = list.map((p) => {
+    const r = roles.find((x) => x.id === p.roleId);
+    const on = p.status !== "disabled";
+    const hasOv = p.permsOverride && (Array.isArray(p.permsOverride.pages) || Array.isArray(p.permsOverride.actions));
+    const perm = ui.personPermEditId === p.id ? personPermsEditorHtml(p) : "";
+    if (ui.personEditId === p.id) {
+      return perm + `<div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-bottom:6px;">
+        <input class="input" id="sp-ename-${esc(p.id)}" value="${esc(p.name)}" style="flex:1;min-width:120px;" />
+        <select class="input" id="sp-erole-${esc(p.id)}" style="width:150px;">${roleOpts(p.roleId)}</select>
+        <input class="input" id="sp-epin-${esc(p.id)}" inputmode="numeric" placeholder="رمز (اختياري)" value="${esc(p.pin)}" style="width:120px;" />
+        ${pillBtn("حفظ", { action: "struct-person-save", data: { id: p.id } })}${pillBtn("إلغاء", { variant: "ghost", action: "person-cancel" })}
+      </div>`;
+    }
+    return perm + `<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;padding:6px 0;border-top:1px solid ${BORDER};opacity:${on ? 1 : 0.6};">
+      <div><span style="font-size:12.5px;font-weight:800;">${esc(p.name)}</span> <span style="font-size:11px;color:${SUBTLE};">• ${esc(r ? r.name : "(بلا دور)")}${personEffectivePin(p) ? " • برمز" : ""}${hasOv ? " • استثناء خاص" : ""}${on ? "" : " • معطّل"}</span></div>
+      <div style="display:flex;gap:5px;align-items:center;">${ui.personConfirmDeleteId === p.id
+        ? `${pillBtn("تأكيد الحذف", { variant: "danger", action: "person-delete", data: { id: p.id } })}${pillBtn("تراجع", { variant: "ghost", action: "person-delete-cancel" })}`
+        : `<button class="icon-btn" style="width:28px;height:28px;border:1px solid ${BORDER}" data-action="person-perm-edit" data-id="${esc(p.id)}" title="استثناء الصلاحيات">${iconKey(12, INK)}</button>
+           <button class="icon-btn" style="width:28px;height:28px;border:1px solid ${BORDER}" data-action="person-edit" data-id="${esc(p.id)}" title="تعديل">${iconPencil(12, INK)}</button>
+           <button class="icon-btn" style="width:28px;height:28px;background:${on ? DANGER_BG : GREEN_BG}" data-action="person-toggle" data-id="${esc(p.id)}" title="${on ? "تعطيل" : "تفعيل"}">${iconPower(12, on ? DANGER : GREEN)}</button>
+           <button class="icon-btn" style="width:28px;height:28px;background:${DANGER_BG}" data-action="person-delete-ask" data-id="${esc(p.id)}" title="حذف">${iconTrash(12, DANGER)}</button>`}</div>
+    </div>`;
+  }).join("");
+  const err = ui.structPersonError && ui.structPersonError.key === key ? `<div style="color:${DANGER};font-size:11.5px;font-weight:700;margin-top:6px;">${esc(ui.structPersonError.msg)}</div>` : "";
+  return `<div class="card" style="margin:0 0 8px;background:${GRAY_BG};padding:10px 12px;">
+    <div style="font-size:12px;font-weight:800;color:${ROSE};margin-bottom:6px;">الأشخاص — ${esc(e.name)} (${list.length})</div>
+    ${rows || `<div style="font-size:11.5px;color:${SUBTLE};padding:4px 0;">لا يوجد أشخاص بعد.</div>`}
+    <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-top:8px;">
+      <input class="input" id="sp-name-${esc(key)}" placeholder="اسم الشخص" style="flex:1;min-width:120px;" />
+      <select class="input" id="sp-role-${esc(key)}" style="width:150px;">${roleOpts("")}</select>
+      <input class="input" id="sp-pin-${esc(key)}" inputmode="numeric" placeholder="رمز (اختياري)" style="width:120px;" />
+      ${pillBtn("إضافة", { icon: iconPlus(14, "#fff"), action: "struct-person-add", data: { kind, id: e.id, key } })}
+    </div>${err}
+    ${roles.length ? "" : `<div style="font-size:11px;color:${SUBTLE};margin-top:6px;">أنشئي دورًا أولًا من تبويب «الأدوار».</div>`}
+  </div>`;
+}
 function treeNodeHtml(e, tag, type, moveHtml, childrenHtml, depth, opts) {
   opts = opts || {};
   const key = type + ":" + e.id;
@@ -5299,6 +5398,7 @@ function treeNodeHtml(e, tag, type, moveHtml, childrenHtml, depth, opts) {
       : `<span style="font-size:12px;font-weight:700;">حذف "${esc(e.name)}"؟</span>${pillBtn("حذف", { variant: "danger", action: "tree-delete", data: { type, id: e.id } })}${pillBtn("تراجع", { variant: "ghost", action: "tree-cancel-delete" })}`)
     : `${moveHtml}
       ${opts.noAdd ? "" : `<button class="icon-btn" style="width:28px;height:28px;border:1px solid ${BORDER}" data-action="tree-add-start" data-type="${type}" data-id="${esc(e.id)}" title="إضافة">${iconPlus(13, INK)}</button>`}
+      ${(type === "unit" || type === "dept" || type === "office") ? `<button class="icon-btn" style="width:auto;min-width:28px;height:28px;padding:0 6px;border:1px solid ${BORDER};gap:3px;" data-action="struct-persons-toggle" data-key="${esc(key)}" title="الأشخاص">${iconUser(13, INK)}<span style="font-size:10.5px;font-weight:800;">${personsList().filter((x) => (x.ownerKind || "unit") === STRUCT_OWNER_KIND[type] && x.ownerId === e.id).length}</span></button>` : ""}
       ${type === "unit" ? `<button class="icon-btn" style="width:28px;height:28px;border:1px solid ${BORDER}" data-action="start-unit-approval-edit" data-id="${esc(e.id)}" title="مسار الاعتماد">${iconLayers(13, INK)}</button>` : ""}
       <button class="icon-btn" style="width:28px;height:28px;border:1px solid ${BORDER}" data-action="tree-edit-start" data-type="${type}" data-id="${esc(e.id)}" title="تعديل">${iconPencil(13, INK)}</button>
       ${opts.noDelete ? "" : `<button class="icon-btn" style="width:28px;height:28px;background:${DANGER_BG}" data-action="tree-confirm-delete" data-type="${type}" data-id="${esc(e.id)}" title="حذف">${iconTrash(13, DANGER)}</button>`}`;
@@ -5311,7 +5411,7 @@ function treeNodeHtml(e, tag, type, moveHtml, childrenHtml, depth, opts) {
       </div>
       <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;">${actions}</div>
     </div>
-    ${treeAddFormHtml(type, e.id)}${treeEditFormHtml(type, e.id)}${type === "unit" && S.ui.editingUnitApprovalId === e.id ? `<div style="margin:6px 0;">${unitRowHtml(e)}</div>` : ""}
+    ${treeAddFormHtml(type, e.id)}${treeEditFormHtml(type, e.id)}${(S.ui.structPersonsOpen || {})[key] ? structPersonsBlockHtml(STRUCT_OWNER_KIND[type], e, key) : ""}${type === "unit" && S.ui.editingUnitApprovalId === e.id ? `<div style="margin:6px 0;">${unitRowHtml(e)}</div>` : ""}
     ${collapsed ? "" : childrenHtml}
   </div>`;
 }
@@ -5931,10 +6031,10 @@ function jobTitleTemplateRowHtml(t) {
 // ثلاثة تبويبات واضحة: الهيكل (من يوجد بالنظام) — الأشخاص (حسابات بمسميات) — الصلاحيات
 // (ماذا يرى كل حساب، ومعها القوالب الجاهزة كتبويب فرعي).
 const ACCOUNTS_HUB_TABS = [
-  { view: "units-manage", label: "الهيكل التنظيمي", icon: "layers" },
+  { view: "units-manage", label: "الهيكل والأشخاص", icon: "layers" },
   { view: "platform-users-manage", label: "الأشخاص", icon: "user" },
   { view: "platform-permissions-manage", label: "الصلاحيات", icon: "key", also: ["job-title-templates"] },
-  { view: "roles-manage", label: "الأدوار والأشخاص (سجلات)", icon: "user" },
+  { view: "roles-manage", label: "الأدوار", icon: "key" },
   { view: "org-chart", label: "المخطط الحر", icon: "gauge" },
 ];
 const USERS_HUB_SUBTITLE = "إدارة المستخدمين وصلاحياتهم في النظام مع إمكانية إضافة وحذف وتعديل بياناتهم";
@@ -6136,12 +6236,8 @@ function renderRolesManage() {
       <div style="font-size:11px;color:${SUBTLE};margin-bottom:12px;">الدور يحدد واجهة الدخول، والرمز (PIN) اختياري تحددينه أنتِ لكل دور أو لكل شخص (رمز الشخص يغلب رمز الدور).</div>
       ${roleForm}${roleRows}
     </div>
-    <div class="card">
-      <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:6px;">
-        <div style="font-size:15px;font-weight:800;">الأشخاص <span style="font-size:11px;color:${SUBTLE};font-weight:600;">(${persons.length})</span></div>${pillBtn("إضافة شخص", { icon: iconPlus(15, "#fff"), action: "person-show-add" })}
-      </div>
-      <div style="font-size:11px;color:${SUBTLE};margin-bottom:12px;">سجلات بدون حسابات دخول: يدخل الشخص بحساب جهته ثم يختار اسمه. تظهر في شاشة «كيف تريدين الدخول؟» للجهة (وحدة أو مركز).</div>
-      ${personForm}${personRows}
+    <div class="card" style="background:${BLUE_BG};border:1px solid #cfe0f5;">
+      <div style="font-size:12px;color:#3a5a85;">الأشخاص يُدارون من تبويب «الهيكل والأشخاص»: اضغطي أيقونة 👥 بجانب أي مكتب أو قسم أو وحدة أو مركز. (${personsList().length} شخص مسجّل حاليًا)</div>
     </div>
     ${permLogCardHtml()}
   </div></div>`;
@@ -8694,6 +8790,7 @@ function attachClickListener() {
         if (navView === "custom-path-inbox" && sheetsConfigured()) {
           Promise.all((S.units || []).filter((u) => unitHasCustomPath(u)).map((u) => refreshReportsFromSheet(u.id))).then(() => { if (S.currentUser && S.view === "custom-path-inbox") render(); });
         }
+        if (navView === "units-manage") { S.roles = dataStore.getRoles(); S.persons = dataStore.getPersons(); }
         if (navView === "roles-manage") {
           S.roles = dataStore.getRoles(); S.persons = dataStore.getPersons();
           if (sheetsConfigured()) Promise.all([refreshRolesPersonsFromSheet(), refreshPermLogFromSheet()]).then(() => { if (S.view === "roles-manage") render(); });
@@ -9012,6 +9109,32 @@ function attachClickListener() {
         addPermLog("role", "*", "كل الأدوار", `تطبيق على الكل (${S.roles.length}): ${permSummaryText(f)}`);
         S.ui.rolesBulk = null; S.ui.rolePermForm = null; render(); break;
       }
+      case "struct-persons-toggle": {
+        S.ui.structPersonsOpen = S.ui.structPersonsOpen || {};
+        S.ui.structPersonsOpen[ds.key] = !S.ui.structPersonsOpen[ds.key];
+        if (!S.roles) S.roles = dataStore.getRoles();
+        if (!S.persons) S.persons = dataStore.getPersons();
+        render();
+        if (S.ui.structPersonsOpen[ds.key] && sheetsConfigured()) refreshRolesPersonsFromSheet().then(() => { if (S.view === "units-manage") render(); });
+        break;
+      }
+      case "struct-person-add": {
+        const g = (id) => { const el = document.getElementById(id); return el ? String(el.value || "").trim() : ""; };
+        const name = g("sp-name-" + ds.key), roleId = g("sp-role-" + ds.key), pin = g("sp-pin-" + ds.key);
+        if (!name || !roleId) { S.ui.structPersonError = { key: ds.key, msg: "اكتبي الاسم واختاري الدور" }; render(); break; }
+        S.persons = [...personsList(), { id: uid("person"), name, ownerKind: ds.kind, ownerId: ds.id, roleId, pin, permsOverride: {}, status: "active", createdAt: Date.now() }];
+        dataStore.savePersons(S.persons);
+        S.ui.structPersonError = null; render(); break;
+      }
+      case "struct-person-save": {
+        const g = (id) => { const el = document.getElementById(id); return el ? String(el.value || "").trim() : ""; };
+        const name = g("sp-ename-" + ds.id), roleId = g("sp-erole-" + ds.id), pin = g("sp-epin-" + ds.id);
+        if (!name || !roleId) break;
+        S.persons = personsList().map((p) => p.id === ds.id ? { ...p, name, roleId, pin } : p);
+        dataStore.savePersons(S.persons);
+        S.ui.personEditId = null; render(); break;
+      }
+      case "choose-entity-account": if (S.pendingEntityLogin) enterEntityAsPerson(null); break;
       case "choose-person": {
         const p = personsList().find((x) => x.id === ds.id);
         if (!p) break;
