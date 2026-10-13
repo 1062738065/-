@@ -729,6 +729,8 @@ function unitToRow(u) {
     // extraReviewerTitle)، بدون أي تأثير — إضافة بحتة. يحتاج عمود جديد نصي
     // (jsonb) بجدول units على Supabase: approval_path.
     approval_path: u.approvalPath || [],
+    // دور الحساب الأساسي (الإدارية): يحدد صفحات/أزرار الدخول المباشر بدون شخص. عمود base_role_id (نص).
+    base_role_id: u.baseRoleId || "",
   };
 }
 function rowToUnit(r) {
@@ -745,12 +747,13 @@ function rowToUnit(r) {
     // سيفشل حفظ أي تقرير ذاتي جديد على قاعدة البيانات الحقيقية.
     officeId: r.office_id || "", platformUserId: r.platform_user_id || "",
     approvalPath: r.approval_path || [],
+    baseRoleId: r.base_role_id || "",
   };
 }
-function deptToRow(d) { return { id: d.id, name: d.name, password: d.password || "", status: d.status || "active", created_at: d.createdAt || Date.now(), curation: d.curation || { approvedKeys: [] }, email: d.email || "", office_id: d.officeId || "", allowed_pages: d.allowedPages || [], allowed_actions: d.allowedActions || [], report_tabs: d.reportTabs || null }; }
-function rowToDept(r) { return { id: r.id, name: r.name, password: r.password || "", status: r.status || "active", createdAt: Number(r.created_at) || 0, curation: r.curation || { approvedKeys: [] }, email: r.email || "", officeId: r.office_id || "", allowedPages: r.allowed_pages || [], allowedActions: r.allowed_actions || [], reportTabs: parseReportTabsCfg(r.report_tabs) }; }
-function officeToRow(o) { return { id: o.id, name: o.name, password: o.password || "", email: o.email || "", status: o.status || "active", created_at: o.createdAt || Date.now(), curation: o.curation || { approvedKeys: [] }, allowed_pages: o.allowedPages || [], allowed_actions: o.allowedActions || [], report_tabs: o.reportTabs || null, parent_office_id: o.parentOfficeId || "" }; }
-function rowToOffice(r) { return { id: r.id, name: r.name, password: r.password || "", email: r.email || "", status: r.status || "active", createdAt: Number(r.created_at) || 0, curation: r.curation || { approvedKeys: [] }, allowedPages: r.allowed_pages || [], allowedActions: r.allowed_actions || [], reportTabs: parseReportTabsCfg(r.report_tabs), parentOfficeId: r.parent_office_id || "" }; }
+function deptToRow(d) { return { id: d.id, name: d.name, password: d.password || "", status: d.status || "active", created_at: d.createdAt || Date.now(), curation: d.curation || { approvedKeys: [] }, email: d.email || "", office_id: d.officeId || "", allowed_pages: d.allowedPages || [], allowed_actions: d.allowedActions || [], report_tabs: d.reportTabs || null, base_role_id: d.baseRoleId || "" }; }
+function rowToDept(r) { return { id: r.id, name: r.name, password: r.password || "", status: r.status || "active", createdAt: Number(r.created_at) || 0, curation: r.curation || { approvedKeys: [] }, email: r.email || "", officeId: r.office_id || "", allowedPages: r.allowed_pages || [], allowedActions: r.allowed_actions || [], reportTabs: parseReportTabsCfg(r.report_tabs), baseRoleId: r.base_role_id || "" }; }
+function officeToRow(o) { return { id: o.id, name: o.name, password: o.password || "", email: o.email || "", status: o.status || "active", created_at: o.createdAt || Date.now(), curation: o.curation || { approvedKeys: [] }, allowed_pages: o.allowedPages || [], allowed_actions: o.allowedActions || [], report_tabs: o.reportTabs || null, parent_office_id: o.parentOfficeId || "", base_role_id: o.baseRoleId || "" }; }
+function rowToOffice(r) { return { id: r.id, name: r.name, password: r.password || "", email: r.email || "", status: r.status || "active", createdAt: Number(r.created_at) || 0, curation: r.curation || { approvedKeys: [] }, allowedPages: r.allowed_pages || [], allowedActions: r.allowed_actions || [], reportTabs: parseReportTabsCfg(r.report_tabs), parentOfficeId: r.parent_office_id || "", baseRoleId: r.base_role_id || "" }; }
 // "حسابات إضافية" (platform_users) — طبقة مرنة إضافية فوق نظام الحسابات الحالي
 // (وحدات/أقسام/مكاتب/مديرة نظام)، لمسمّيات وظيفية جديدة كليًا (سكرتارية، مديرة
 // تعليمية...) بصلاحيات صفحات مخصّصة لكل واحدة. لا تلمس أو تعدّل حسابات units/
@@ -3028,6 +3031,8 @@ function doLoginPlatformUser(pu) {
 // صلاحيات بعد (القيمة الافتراضية: مصفوفة فاضية) يبقى بلا أي قيد تمامًا كالسابق.
 function applyScopedAccountPermissions(entity) {
   if (!entity) return;
+  // دور الحساب الأساسي (يُضبط من «الهيكل والأشخاص») له الأولوية على حقول الصفحات القديمة.
+  if (entity.baseRoleId && rolesList().some((r) => r.id === entity.baseRoleId)) { applyPersonPerms({ roleId: entity.baseRoleId, permsOverride: null }); return; }
   if (S.platformUserAllowedPages === null && entity.allowedPages && entity.allowedPages.length) {
     S.platformUserAllowedPages = normalizeDashboardPages(entity.allowedPages);
   }
@@ -5661,6 +5666,13 @@ function structPersonsBlockHtml(kind, e, key) {
   const err = ui.structPersonError && ui.structPersonError.key === key ? `<div style="color:${DANGER};font-size:11.5px;font-weight:700;margin-top:6px;">${esc(ui.structPersonError.msg)}</div>` : "";
   return `<div class="card" style="margin:0 0 8px;background:${GRAY_BG};padding:10px 12px;">
     <div style="font-size:12px;font-weight:800;color:${ROSE};margin-bottom:6px;">الأشخاص — ${esc(e.name)} (${list.length})</div>
+    <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-bottom:8px;padding-bottom:8px;border-bottom:1px solid ${BORDER};">
+      <span style="font-size:11.5px;font-weight:800;">${kind === "unit" ? "دور «الإدارية»" : "دور الحساب الأساسي"}:</span>
+      <select class="input" data-action="set-base-role" data-kind="${esc(kind)}" data-id="${esc(e.id)}" style="width:190px;">
+        <option value="">— الصفحات الافتراضية —</option>${roles.map((r) => `<option value="${esc(r.id)}" ${e.baseRoleId === r.id ? "selected" : ""}>${esc(r.name)}</option>`).join("")}
+      </select>
+      <span style="font-size:10.5px;color:${SUBTLE};">يحدد صفحات وأزرار الدخول المباشر بدون اختيار شخص.</span>
+    </div>
     ${rows || `<div style="font-size:11.5px;color:${SUBTLE};padding:4px 0;">لا يوجد أشخاص بعد.</div>`}
     <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-top:8px;">
       <input class="input" id="sp-name-${esc(key)}" placeholder="اسم الشخص" style="flex:1;min-width:120px;" />
@@ -9158,6 +9170,14 @@ function attachFormListeners() {
       capturePlatformUserFormFields(prefix);
       if (prefix === "new-pu") S.ui.newPuTemplateId = el.value;
       else { S.ui.editPuForm = S.ui.editPuForm || {}; S.ui.editPuForm.templateId = el.value; }
+      render();
+      return;
+    }
+    if (el.dataset && el.dataset.action === "set-base-role") {
+      const rid = el.value || "";
+      if (el.dataset.kind === "department") { S.departments = S.departments.map((d) => d.id === el.dataset.id ? { ...d, baseRoleId: rid } : d); dataStore.saveDepartments(S.departments); }
+      else if (el.dataset.kind === "office") { S.offices = S.offices.map((o) => o.id === el.dataset.id ? { ...o, baseRoleId: rid } : o); dataStore.saveOffices(S.offices); }
+      else { S.units = S.units.map((u) => u.id === el.dataset.id ? { ...u, baseRoleId: rid } : u); dataStore.saveUnits(S.units); }
       render();
       return;
     }
