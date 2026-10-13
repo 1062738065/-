@@ -2234,22 +2234,11 @@ function computeVisibleSidebarPagesRaw() {
     // تلقائيًا عند الدخول المباشر — راجع case "nav-to").
     // "تصفّح الهيكل" يحل محل الصفحات الأربع (مكاتب الإشراف/الأقسام/الوحدات/المراكز) بالشريط — الصفحات نفسها باقية.
     return SIDEBAR_PAGES.filter((p) => p.group !== "unit-extra" && !["departments-list", "admin-reports"].includes(p.id));
-  } else if (S.isDepartmentUser) {
-    // "لوحة المعلومات" أضيفت هنا لتصير الصفحة الافتراضية الجديدة (بدل "قسمي")
-    // — "قسمي" تبقى متاحة بجانبها مؤقتًا (بدون حذف) حسب تعليمات نجود الصريحة،
-    // لحد ما تتأكد إن الصفحة الجديدة تغطي كل شيء وتقرر حذف القديمة بنفسها.
-    // صفحات "unit-home" (إنشاء تقرير/تقارير/الإعدادات) ظاهرة دائمًا الآن أيضًا،
-    // بلا اشتراط كونها داخل وحدة أصلًا — نفس المبدأ أعلاه.
-    return SIDEBAR_PAGES.filter((p) => p.id === "dashboard" || p.id === "department-curation" || p.id === "all-reports" || p.group === "unit-home");
   } else if (S.isExecutive) {
     return SIDEBAR_PAGES.filter((p) => p.group === "الإدارة العليا" || p.id === "executive-summary" || p.id === "executive-final-report" || p.id === "all-reports");
-  } else if (S.isOfficeUser) {
-    return SIDEBAR_PAGES.filter((p) => ["office-dashboard", "office-archive", "all-reports", "office-summary", "office-curation", "departments-list"].includes(p.id));
   }
-  // موظفة الوحدة أو المركز: تشوف "تقاريري" + "جميع التقارير" — بدون
-  // "الأقسام والوحدات" (ذاك رابط إشرافي خاص بمديرة النظام). صفحات unit-home
-  // ظاهرة دائمًا أيضًا (نفس المبدأ أعلاه).
-  return SIDEBAR_PAGES.filter((p) => p.id === "all-reports" || p.group === "unit-home");
+  // لا توجد قوائم صفحات افتراضية ثابتة لأي حساب: الصفحات تأتي من الدور فقط (قرار نجود).
+  return [];
 }
 
 // عدد التنبيهات: محسوب مباشرة من حالة التقارير — بدون أي تخزين إضافي.
@@ -5548,7 +5537,7 @@ function structPersonsBlockHtml(kind, e, key) {
     <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-bottom:8px;padding-bottom:8px;border-bottom:1px solid ${BORDER};">
       <span style="font-size:11.5px;font-weight:800;">${kind === "unit" ? "دور «الإدارية»" : "دور الحساب الأساسي"}:</span>
       <select class="input" data-action="set-base-role" data-kind="${esc(kind)}" data-id="${esc(e.id)}" style="width:190px;">
-        <option value="">— الصفحات الافتراضية —</option>${roles.map((r) => `<option value="${esc(r.id)}" ${e.baseRoleId === r.id ? "selected" : ""}>${esc(r.name)}</option>`).join("")}
+        <option value="">— بلا دور (لا صفحات) —</option>${roles.map((r) => `<option value="${esc(r.id)}" ${e.baseRoleId === r.id ? "selected" : ""}>${esc(r.name)}</option>`).join("")}
       </select>
       <span style="font-size:10.5px;color:${SUBTLE};">يحدد صفحات وأزرار الدخول المباشر بدون اختيار شخص.</span>
     </div>
