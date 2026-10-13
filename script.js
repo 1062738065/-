@@ -1929,10 +1929,6 @@ function render() {
     html = shellWrap(renderBrowseStructure());
   } else if (S.view === "departments-list") {
     html = shellWrap(renderDepartmentsPage());
-  } else if (S.view === "units-list") {
-    html = shellWrap(renderEntityPickerPage("units"));
-  } else if (S.view === "centers-list") {
-    html = shellWrap(renderEntityPickerPage("centers"));
   } else if (S.view === "org-chart") {
     html = shellWrap(renderOrgChartPage());
   } else if (S.view === "department-curation") {
@@ -1978,8 +1974,6 @@ function render() {
     html = shellWrap(renderCustomPathInbox());
   } else if (S.view === "approval-path-tracking") {
     html = shellWrap(renderApprovalPathTracking());
-  } else if (S.view === "offices-manage") {
-    html = shellWrap(renderOfficesManagePage());
   } else if (S.view === "office-dashboard") {
     html = shellWrap(renderOfficeDashboard());
   } else if (S.view === "office-archive") {
@@ -2042,10 +2036,7 @@ const SIDEBAR_PAGES = [
   { id: "report-tabs-manage", label: "إدارة أزرار التقارير", group: "إدارة التقارير", icon: "layers" },
   { id: "field-schemas-manage", label: "إدارة حقول الأقسام", group: "إدارة التقارير", icon: "layers" },
   { id: "units-manage", label: "المستخدمون", group: "standalone", icon: "building" },
-  { id: "offices-manage", label: "مكاتب الإشراف", group: "الهيكل التنظيمي", icon: "layers" },
   { id: "departments-list", label: "الأقسام", group: "الهيكل التنظيمي", icon: "building" },
-  { id: "units-list", label: "الوحدات", group: "الهيكل التنظيمي", icon: "document" },
-  { id: "centers-list", label: "المراكز", group: "الهيكل التنظيمي", icon: "document" },
   // صفحة مستقلة تمامًا عن الأربعة أعلاه: مخطط مسميات وظيفية حرّ للتخطيط فقط
   // (بدون حسابات تسجيل دخول أو ربط بمسار اعتماد التقارير) — الصفحات الأربع
   // الأصلية تبقى كما هي تمامًا، هذي إضافة فقط (راجع renderOrgChartPage).
@@ -2242,7 +2233,7 @@ function computeVisibleSidebarPagesRaw() {
     // اشتراط مسبق بوحدة/قسم محدّد (ensureUnitContextForNav يتكفّل بضبط الوحدة
     // تلقائيًا عند الدخول المباشر — راجع case "nav-to").
     // "تصفّح الهيكل" يحل محل الصفحات الأربع (مكاتب الإشراف/الأقسام/الوحدات/المراكز) بالشريط — الصفحات نفسها باقية.
-    return SIDEBAR_PAGES.filter((p) => p.group !== "unit-extra" && !["offices-manage", "departments-list", "units-list", "centers-list", "admin-reports"].includes(p.id));
+    return SIDEBAR_PAGES.filter((p) => p.group !== "unit-extra" && !["departments-list", "admin-reports"].includes(p.id));
   } else if (S.isDepartmentUser) {
     // "لوحة المعلومات" أضيفت هنا لتصير الصفحة الافتراضية الجديدة (بدل "قسمي")
     // — "قسمي" تبقى متاحة بجانبها مؤقتًا (بدون حذف) حسب تعليمات نجود الصريحة،
@@ -3826,118 +3817,6 @@ function renderBrowseStructure() {
     ${(!node || node.k !== "unit") && folders.length > 6 ? `<div style="margin-bottom:14px;"><input class="input" id="bs-search" placeholder="ابحثي بالاسم..." style="width:100%;max-width:320px;" /></div>` : ""}
     ${body}
   </div></div>`;
-}
-
-function renderEntityPickerPage(kind) {
-  const config = {
-    departments: { title: "الأقسام", items: S.departments.filter((d) => d.status === "active"), action: "open-department-preview", sub: (d) => `${S.units.filter((u) => u.departmentId === d.id).length} وحدة/مركز` },
-    units: { title: "الوحدات", items: S.units.filter((u) => u.role !== "center" && u.role !== "admin" && u.role !== "executive" && u.role !== "self_report" && u.status === "active"), action: "open-unit-preview", sub: (u) => S.departments.find((d) => d.id === u.departmentId)?.name || "بدون قسم" },
-    centers: { title: "المراكز", items: S.units.filter((u) => u.role === "center" && u.status === "active"), action: "open-unit-preview", sub: (u) => S.departments.find((d) => d.id === u.departmentId)?.name || "بدون قسم" },
-  }[kind];
-  return `
-  <div class="page-wrap"><div class="page-inner">
-    ${topBarHtml({ title: config.title, subtitle: `${config.items.length} — اضغطي لعرض واجهتها الحقيقية للاطلاع` })}
-    ${config.items.length === 0 ? `<div class="card" style="text-align:center;color:${SUBTLE};padding:36px;">لا توجد عناصر بعد.</div>` :
-      `<div style="display:flex;flex-direction:column;gap:8px;">${config.items.map((it) => `
-        <button class="card" style="display:flex;align-items:center;justify-content:space-between;width:100%;background:none;border:1px solid ${BORDER};cursor:pointer;text-align:right;" data-action="${config.action}" data-id="${esc(it.id)}">
-          <span style="font-size:13.5px;font-weight:700;">${esc(it.name)}</span>
-          <span style="font-size:11px;color:${SUBTLE};display:flex;align-items:center;gap:6px;">${esc(config.sub(it))} ${iconChevronLeft(14, SUBTLE)}</span>
-        </button>`).join("")}</div>`}
-  </div></div>`;
-}
-
-/* ===================== Offices management page (admin, standalone) =========== */
-// صفحة مستقلة بالشريط الجانبي لمديرة النظام: قائمة كل مكاتب الإشراف، وعند فتح
-// مكتب تظهر الأقسام التابعة له، وعند فتح قسم تظهر الوحدات التابعة له — بنفس
-// العلاقة الموجودة فعليًا (office.id <- department.officeId <- department.id <-
-// unit.departmentId)، بدون أي بيانات أو علاقات جديدة.
-function renderOfficesManagePage() {
-  const selectedOffice = S.ui.officesManageOfficeId ? (S.offices || []).find((o) => o.id === S.ui.officesManageOfficeId) : null;
-
-  if (selectedOffice) {
-    const linkedDepartments = S.departments.filter((d) => officeScopeIds(selectedOffice.id).includes(d.officeId));
-    const selectedDept = S.ui.officesManageDeptId ? linkedDepartments.find((d) => d.id === S.ui.officesManageDeptId) : null;
-
-    if (selectedDept) {
-      const units = S.units.filter((u) => u.departmentId === selectedDept.id);
-      return `
-      <div class="page-wrap"><div class="page-inner">
-        ${topBarHtml({ title: selectedDept.name, subtitle: `تابع لـ ${esc(selectedOffice.name)}`, backAction: "offices-manage-back-to-departments" })}
-        ${units.length === 0 ? `<div class="card" style="text-align:center;color:${SUBTLE};padding:36px;">لا توجد وحدات في هذا القسم بعد.</div>` :
-          `<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:12px;">${units.map((u) => `
-            <div class="card">
-              <div style="display:flex;align-items:center;gap:10px;">
-                <div style="width:34px;height:34px;border-radius:10px;background:${DANGER_BG};display:flex;align-items:center;justify-content:center;flex-shrink:0;">${iconBuilding(ROSE, 16)}</div>
-                <div style="font-size:13.5px;font-weight:700;">${esc(u.name)} ${u.role === "center" ? `<span style="font-size:9.5px;font-weight:700;color:${GOLD};background:${GOLD_BG};padding:1px 6px;border-radius:999px;">مركز</span>` : ""}</div>
-              </div>
-            </div>`).join("")}</div>`}
-      </div></div>`;
-    }
-
-    return `
-    <div class="page-wrap"><div class="page-inner">
-      ${topBarHtml({ title: selectedOffice.name, subtitle: "الأقسام التابعة للمكتب", backAction: "offices-manage-back-to-list" })}
-      ${linkedDepartments.length === 0 ? `<div class="card" style="text-align:center;color:${SUBTLE};padding:36px;">لا توجد أقسام مرتبطة بهذا المكتب بعد.</div>` :
-        `<div style="display:flex;flex-direction:column;gap:8px;">${linkedDepartments.map((d) => `
-          <button class="card" style="display:flex;align-items:center;justify-content:space-between;width:100%;background:none;border:1px solid ${BORDER};cursor:pointer;text-align:right;" data-action="offices-manage-open-department" data-id="${esc(d.id)}">
-            <span style="font-size:13.5px;font-weight:700;">${esc(d.name)}</span>
-            <span style="font-size:11px;color:${SUBTLE};display:flex;align-items:center;gap:6px;">${S.units.filter((u) => u.departmentId === d.id).length} وحدة/مركز ${iconChevronLeft(14, SUBTLE)}</span>
-          </button>`).join("")}</div>`}
-    </div></div>`;
-  }
-
-  return `
-  <div class="page-wrap"><div class="page-inner">
-    ${topBarHtml({ title: "مكاتب الإشراف", subtitle: "كل مكاتب الإشراف بالنظام — اضغطي على أي مكتب لعرض الأقسام والوحدات التابعة له" })}
-    ${(S.offices || []).length === 0 ? `<div class="card" style="text-align:center;color:${SUBTLE};padding:36px;">لا توجد مكاتب إشراف بعد.</div>` :
-      `<div style="display:flex;flex-direction:column;gap:8px;">${(S.offices || []).map((o) => officeManageRowHtml(o)).join("")}</div>`}
-  </div></div>`;
-}
-
-function officeManageRowHtml(o) {
-  const isActive = o.status === "active";
-  const editing = S.ui.editingOfficeId === o.id;
-  const editingPassword = S.ui.editingOfficePasswordId === o.id;
-  const confirming = S.ui.confirmRemoveOfficeId === o.id;
-  const linkedDeptsCount = S.departments.filter((d) => d.officeId === o.id).length;
-  if (confirming) {
-    return `<div class="card" style="display:flex;align-items:center;justify-content:space-between;gap:10px;">
-      <span style="font-size:12px;font-weight:700;">حذف "${esc(o.name)}" نهائيًا؟ الأقسام التابعة له تصبح بدون مكتب إشراف.</span>
-      <div style="display:flex;gap:6px;">${pillBtn("حذف", { variant: "danger", action: "delete-office", data: { id: o.id } })}${pillBtn("تراجع", { variant: "ghost", action: "cancel-remove-office" })}</div>
-    </div>`;
-  }
-  if (editingPassword) {
-    return `<div class="card" style="display:flex;gap:6px;align-items:center;">
-      <span style="font-size:12px;font-weight:700;white-space:nowrap;">${esc(o.name)} —</span>
-      <input class="input" id="edit-office-password" style="flex:1;" placeholder="كلمة المرور الجديدة" value="${esc(S.ui.editOfficePasswordValue || "")}" />
-      <button data-action="save-office-password" data-id="${esc(o.id)}" style="background:${GREEN_BG};border:none;border-radius:8px;padding:0 10px;cursor:pointer;">${iconCheck(16, GREEN)}</button>
-      <button data-action="cancel-office-password" style="background:${DANGER_BG};border:none;border-radius:8px;padding:0 10px;cursor:pointer;">${iconX(16, DANGER)}</button>
-    </div>`;
-  }
-  if (editing) {
-    return `<div class="card" style="display:flex;gap:6px;">
-      <input class="input" id="edit-office-name" style="flex:1;" value="${esc(S.ui.editOfficeValue || "")}" />
-      <button data-action="save-office-edit" data-id="${esc(o.id)}" style="background:${GREEN_BG};border:none;border-radius:8px;padding:0 10px;cursor:pointer;color:${GREEN}">${iconCheck(16, GREEN)}</button>
-      <button data-action="cancel-office-edit" style="background:${DANGER_BG};border:none;border-radius:8px;padding:0 10px;cursor:pointer;">${iconX(16, DANGER)}</button>
-    </div>`;
-  }
-  return `<div class="card" style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;opacity:${isActive ? 1 : 0.6}">
-    <div style="display:flex;align-items:center;gap:10px;">
-      <div style="width:34px;height:34px;border-radius:10px;background:${DANGER_BG};display:flex;align-items:center;justify-content:center;flex-shrink:0;">${iconLayers(16, ROSE)}</div>
-      <div>
-        <div style="font-size:13.5px;font-weight:700;">${esc(o.name)}${!isActive ? ` <span style="font-size:10.5px;color:${SUBTLE};font-weight:600;">(معطّل)</span>` : ""}</div>
-        <div style="font-size:10.5px;color:${SUBTLE};display:flex;gap:10px;flex-wrap:wrap;margin-top:2px;">
-          <span style="${o.password ? `color:${GREEN};` : ""}">كلمة السر: ${o.password ? "مضبوطة" : "غير محددة"}</span>
-          <span>${linkedDeptsCount} قسم تابع</span>
-        </div>
-      </div>
-    </div>
-    <div style="display:flex;gap:6px;">
-      <button class="icon-btn" style="width:32px;height:32px;border:1px solid ${BORDER}" data-action="start-office-password" data-id="${esc(o.id)}" title="كلمة مرور المكتب">${iconKey(14, INK)}</button>
-      <button class="icon-btn" style="width:32px;height:32px;border:1px solid ${BORDER}" data-action="start-office-edit" data-id="${esc(o.id)}" data-name="${esc(o.name)}" title="تعديل الاسم">${iconPencil(14, INK)}</button>
-      <button class="icon-btn" style="width:32px;height:32px;background:${DANGER_BG}" data-action="offices-manage-open-office" data-id="${esc(o.id)}" title="عرض الأقسام التابعة">${iconChevronLeft(14, ROSE)}</button>
-    </div>
-  </div>`;
 }
 
 /* =============================== مخطط الهيكل التنظيمي (تخطيط حر، admin) ======
@@ -6030,8 +5909,8 @@ function permDropdownChecklistHtml({ action, selected, total, emptyLabel, render
 const SENSITIVE_PAGE_IDS = [
   "site-settings", "roles-manage",
   "admin-reports", "indicators-manage", "goals-manage", "sections-manage",
-  "field-schemas-manage", "offices-manage", "departments-list", "units-list",
-  "centers-list", "org-chart",
+  "field-schemas-manage", "departments-list",
+  "org-chart",
 ];
 // أسماء عرض مخصّصة لمجموعات الصفحات بقائمة صلاحيات "حسابات إضافية" — فقط
 // حيث اسم المجموعة الأصلي (المستخدم بالشريط الجانبي الحقيقي) غير واضح هنا.
@@ -9781,10 +9660,6 @@ function attachClickListener() {
       }
       case "departments-page-open": S.ui.departmentsPageSelectedId = ds.id; render(); break;
       case "departments-page-back": S.ui.departmentsPageSelectedId = null; render(); break;
-      case "offices-manage-open-office": S.ui.officesManageOfficeId = ds.id; S.ui.officesManageDeptId = null; render(); break;
-      case "offices-manage-back-to-list": S.ui.officesManageOfficeId = null; S.ui.officesManageDeptId = null; render(); break;
-      case "offices-manage-open-department": S.ui.officesManageDeptId = ds.id; render(); break;
-      case "offices-manage-back-to-departments": S.ui.officesManageDeptId = null; render(); break;
       case "confirm-delete-report": S.ui.confirmDeleteReportId = ds.id; render(); break;
       case "cancel-delete-report": S.ui.confirmDeleteReportId = null; render(); break;
       case "toggle-report-notes": S.ui.showReportNotesId = S.ui.showReportNotesId === ds.id ? null : ds.id; render(); break;
@@ -9867,7 +9742,7 @@ function attachClickListener() {
         // اطلاع مديرة النظام على واجهة "تقاريري" الحقيقية لوحدة أو مركز — نفس الصفحة تمامًا.
         const unit = S.units.find((u) => u.id === ds.id);
         if (!unit) break;
-        S.adminPreviewOrigin = unit.role === "center" ? "centers-list" : "units-list";
+        S.adminPreviewOrigin = "browse-structure";
         ensureUnitReportsLoaded(unit.id);
         S.currentUnitId = unit.id; S.currentReportId = null; S.view = "unit-reports"; S.openPhaseId = null; S.activeSectionId = null;
         // وضع دخول افتراضي ("الإدارية") لو ما كان عندها اختيار صالح أصلًا — يتيح
