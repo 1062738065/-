@@ -5792,10 +5792,18 @@ function structPanelDetailHtml(sel) {
     ${tabsHtml}${body}
   </div>`;
 }
+function structPanelSectionTabsHtml(section) {
+  return `<div style="display:flex;gap:6px;background:${GRAY_BG};padding:5px;border-radius:14px;margin-bottom:14px;">
+    ${[["struct", "الهيكل والأشخاص"], ["roles", "كل الأدوار"], ["paths", "كل مسارات الاعتماد"]].map(([t, l]) => `<button type="button" data-action="struct-section" data-section="${t}" style="flex:1;font-family:inherit;cursor:pointer;border:none;padding:10px 6px;border-radius:10px;font-size:13px;font-weight:${section === t ? 800 : 600};background:${section === t ? "#fff" : "transparent"};color:${section === t ? ROSE : INK};${section === t ? "box-shadow:0 1px 3px rgba(0,0,0,.08);" : ""}">${l}</button>`).join("")}</div>`;
+}
 function structPanelHtml() {
+  const section = ["roles", "paths"].indexOf(S.ui.structSection) !== -1 ? S.ui.structSection : "struct";
+  if (section === "roles") return `<div style="margin-bottom:18px;">${structPanelSectionTabsHtml(section)}${renderRolesManage(true)}</div>`;
+  if (section === "paths") return `<div style="margin-bottom:18px;">${structPanelSectionTabsHtml(section)}${S.isAdmin ? renderApprovalPathsSetup(true) : `<div class="card" style="text-align:center;padding:30px;">هذه الصفحة لمديرة النظام فقط.</div>`}</div>`;
   const sel = S.ui.structSel || "";
   const empty = !(S.offices || []).length && !S.departments.length && !S.units.length;
   return `<div style="margin-bottom:18px;">
+    ${structPanelSectionTabsHtml(section)}
     <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-bottom:12px;">
       <div style="font-size:15px;font-weight:800;display:flex;align-items:center;gap:8px;">${iconLayers(18, ROSE)} الهيكل والأشخاص</div>
       <div style="display:flex;gap:6px;flex-wrap:wrap;">
@@ -6618,7 +6626,7 @@ function apEditorHtml() {
     <div style="display:flex;gap:6px;margin-top:12px;">${pillBtn("حفظ كمسودة", { action: "ap-save" })}${pillBtn("إلغاء", { variant: "ghost", action: "ap-cancel" })}</div>
   </div>`;
 }
-function renderApprovalPathsSetup() {
+function renderApprovalPathsSetup(embed) {
   const list = approvalPathsList();
   const ed = S.ui.apEdit;
   const rows = list.map((a) => {
@@ -6642,17 +6650,17 @@ function renderApprovalPathsSetup() {
     </div>`;
   }).join("");
   return `
-  <div class="page-wrap"><div class="page-inner narrow">
-    ${topBarHtml({ title: "إعداد مسارات الاعتماد", subtitle: "لمديرة النظام فقط — لا يوجد مسار افتراضي، ولا يعمل أي مسار قبل تفعيله", icon: iconLayers(18, ROSE), backAction: "nav-back-admin" })}
+  ${embed ? "" : `<div class="page-wrap"><div class="page-inner narrow">
+    ${topBarHtml({ title: "إعداد مسارات الاعتماد", subtitle: "لمديرة النظام فقط — لا يوجد مسار افتراضي، ولا يعمل أي مسار قبل تفعيله", icon: iconLayers(18, ROSE), backAction: "nav-back-admin" })}`}
     <div class="card" style="background:${BLUE_BG};border:1px solid #cfe0f5;margin-bottom:14px;">
       <div style="font-size:12px;color:#3a5a85;">لكل جهة ولكل نوع تقرير (من قائمة الفترات) تضيفين المراحل بالترتيب وتحددين من يقوم بكل مرحلة. المسار الجديد يُحفظ مسودة، ولا يُطبَّق على التقارير إلا بعد ضغط «تفعيل». المسارات الحالية في «الهيكل والأشخاص» تبقى كما هي.</div>
     </div>
     ${ed ? apEditorHtml() : `<div style="margin-bottom:12px;">${pillBtn("مسار جديد", { icon: iconPlus(15, "#fff"), action: "ap-new" })}</div>`}
     ${rows || (ed ? "" : `<div class="card" style="text-align:center;color:${SUBTLE};padding:30px 20px;border-style:dashed;">لا توجد مسارات بعد.</div>`)}
-  </div></div>`;
+  ${embed ? "" : "</div></div>"}`;
 }
 const ROLE_MODE_LABELS = { admin: "إدارية (واجهة الوحدة)", head: "رئيسة الوحدة", extra: "المراجعة الإضافية" };
-function renderRolesManage() {
+function renderRolesManage(embed) {
   const ui = S.ui;
   const roles = rolesList(), persons = personsList();
   const editRole = ui.roleEditId ? roles.find((r) => r.id === ui.roleEditId) : null;
@@ -6705,9 +6713,9 @@ function renderRolesManage() {
     </div>`;
   }).join("") || `<div style="font-size:12px;color:${SUBTLE};padding:8px 2px;">لا يوجد أشخاص بعد.</div>`;
   return `
-  <div class="page-wrap"><div class="page-inner narrow">
+  ${embed ? "" : `<div class="page-wrap"><div class="page-inner narrow">
     ${topBarHtml({ title: "المستخدمون", subtitle: USERS_HUB_SUBTITLE, icon: iconUser(18, ROSE), backAction: "nav-back-admin" })}
-    ${accountsHubTabBarHtml("roles-manage")}
+    ${accountsHubTabBarHtml("roles-manage")}`}
     ${rolesBulkCardHtml()}
     <div class="card" style="margin-bottom:18px;">
       <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:6px;">
@@ -6720,7 +6728,7 @@ function renderRolesManage() {
       <div style="font-size:12px;color:#3a5a85;">الأشخاص يُدارون من تبويب «الهيكل والأشخاص»: اضغطي أيقونة 👥 بجانب أي مكتب أو قسم أو وحدة أو مركز. (${personsList().length} شخص مسجّل حاليًا)</div>
     </div>
     ${permLogCardHtml()}
-  </div></div>`;
+  ${embed ? "" : "</div></div>"}`;
 }
 function platformUserRowHtml(pu, allList) {
   const isActive = pu.status !== "disabled";
@@ -10257,8 +10265,15 @@ function attachClickListener() {
       }
 
       case "set-struct-view": S.ui.structView = ds.mode; render(); break;
-      case "struct-select": S.ui.structSel = ds.key; render(); break;
-      case "struct-tab": S.ui.structTab = ds.tab; render(); break;
+      case "struct-select": S.ui.structSel = ds.key; S.ui.rolePermEditId = null; S.ui.personPermEditId = null; S.ui.rolePermForm = null; S.ui.apEdit = null; render(); break;
+      case "struct-tab": S.ui.structTab = ds.tab; S.ui.rolePermEditId = null; S.ui.personPermEditId = null; S.ui.rolePermForm = null; render(); break;
+      case "struct-section": {
+        S.ui.structSection = ds.section;
+        S.ui.apEdit = null; S.ui.rolePermEditId = null; S.ui.personPermEditId = null; S.ui.rolePermForm = null;
+        if (ds.section === "roles") { S.roles = dataStore.getRoles(); S.persons = dataStore.getPersons(); }
+        if (ds.section === "paths") { S.roles = dataStore.getRoles(); S.persons = dataStore.getPersons(); S.approvalPaths = dataStore.getApprovalPaths(); }
+        render(); break;
+      }
       case "struct-ap-new": S.ui.apEdit = { id: null, error: "", draft: { name: "", ownerKind: ds.kind, ownerId: ds.id, periodType: "", authorRoleId: "", stages: [] } }; S.ui.apMsg = null; render(); break;
       case "tree-add-start": S.ui.treeAddFor = { type: ds.type, id: ds.id }; S.ui.treeEditFor = null; S.ui.treeAddKind = null; render(); break;
       case "tree-add-cancel": S.ui.treeAddFor = null; render(); break;
