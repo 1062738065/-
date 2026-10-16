@@ -5807,7 +5807,7 @@ function structPanelHtml() {
     <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-bottom:12px;">
       <div style="font-size:15px;font-weight:800;display:flex;align-items:center;gap:8px;">${iconLayers(18, ROSE)} الهيكل والأشخاص</div>
       <div style="display:flex;gap:6px;flex-wrap:wrap;">
-        ${pillBtn("العرض القديم (الشجرة)", { variant: "ghost", action: "set-struct-view", data: { mode: "tree" } })}
+        ${pillBtn("العرض المبسّط", { variant: "ghost", action: "set-struct-view", data: { mode: "simple" } })}${pillBtn("العرض القديم (الشجرة)", { variant: "ghost", action: "set-struct-view", data: { mode: "tree" } })}
         ${pillBtn("إضافة", { icon: iconPlus(14, "#fff"), action: "tree-add-root", data: { type: "office" } })}
       </div>
     </div>
@@ -5825,6 +5825,184 @@ function structPanelHtml() {
   </div>`;
 }
 
+// ===== العرض المبسّط: أسئلة بسيطة (الأشخاص ← ماذا يرون ← المسار) + نسخ الإعداد + بطاقة الشخص =====
+// إضافة فقط: العرض السابق (ذو التبويبات) والشجرة القديمة يبقيان ويُفتحان من الأزرار أعلى الصفحة.
+function structSimpleRoleCountsText(role) {
+  const p = rolePermsOf(role);
+  const b = p.buttons.length ? p.buttons : p.actions.filter((a) => BUTTON_CATALOG.some((x) => x.id === a));
+  return `${p.pages.length} صفحات · ${b.length} أزرار`;
+}
+function structSimplePathsOf(type, e) {
+  return approvalPathsList().filter((a) => a.ownerKind === type && a.ownerId === e.id);
+}
+function structSimplePeopleHtml(type, e, key) {
+  const kind = STRUCT_OWNER_KIND[type];
+  const ui = S.ui;
+  const roles = rolesList();
+  const list = personsList().filter((p) => (p.ownerKind || "unit") === kind && p.ownerId === e.id);
+  const roleSel = (p) => `<select class="input" data-action="struct-person-role" data-id="${esc(p.id)}" style="width:150px;padding:6px 8px;font-size:12.5px;">
+    <option value="">— بلا دور —</option>${roles.map((r) => `<option value="${esc(r.id)}" ${p.roleId === r.id ? "selected" : ""}>${esc(r.name)}</option>`).join("")}</select>`;
+  const rows = list.map((p) => {
+    const on = p.status !== "disabled";
+    const menu = ui.structPersonMenu === p.id;
+    const hasOv = p.permsOverride && (Array.isArray(p.permsOverride.pages) || Array.isArray(p.permsOverride.actions));
+    const perm = ui.personPermEditId === p.id ? personPermsEditorHtml(p) : "";
+    if (ui.personEditId === p.id) {
+      return perm + `<div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-bottom:6px;">
+        <input class="input" id="sp-ename-${esc(p.id)}" value="${esc(p.name)}" style="flex:1;min-width:120px;" />
+        <select class="input" id="sp-erole-${esc(p.id)}" style="width:150px;"><option value="">— الدور —</option>${roles.map((r) => `<option value="${esc(r.id)}" ${p.roleId === r.id ? "selected" : ""}>${esc(r.name)}</option>`).join("")}</select>
+        <input class="input" id="sp-epin-${esc(p.id)}" inputmode="numeric" placeholder="رمز (اختياري)" value="${esc(p.pin)}" style="width:120px;" />
+        ${pillBtn("حفظ", { action: "struct-person-save", data: { id: p.id } })}${pillBtn("إلغاء", { variant: "ghost", action: "person-cancel" })}</div>`;
+    }
+    return perm + `<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:9px 12px;margin-bottom:6px;background:${GRAY_BG};border:1px solid ${BORDER};border-radius:14px;opacity:${on ? 1 : 0.6};">
+      <span style="width:32px;height:32px;border-radius:50%;background:${ROSE};color:#fff;font-size:13px;font-weight:800;display:flex;align-items:center;justify-content:center;">${esc((p.name || "؟").charAt(0))}</span>
+      <div style="flex:1;min-width:110px;font-size:13.5px;font-weight:700;">${esc(p.name)}<div style="font-size:10.5px;color:${SUBTLE};font-weight:500;">${personEffectivePin(p) ? "برمز" : "بلا رمز"}${hasOv ? " • استثناء خاص" : ""}${on ? "" : " • معطّل"}</div></div>
+      ${roleSel(p)}
+      <button class="icon-btn" style="width:32px;height:32px;border:1px solid ${BORDER}" data-action="struct-person-menu" data-id="${esc(p.id)}" title="المزيد">⋯</button>
+      ${menu ? `<div style="flex-basis:100%;display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end;">${ui.personConfirmDeleteId === p.id
+        ? `${pillBtn("تأكيد الحذف", { variant: "danger", action: "person-delete", data: { id: p.id } })}${pillBtn("تراجع", { variant: "ghost", action: "person-delete-cancel" })}`
+        : `${pillBtn("تعديل", { variant: "ghost", action: "person-edit", data: { id: p.id } })}${pillBtn("استثناء الصلاحيات", { variant: "ghost", action: "person-perm-edit", data: { id: p.id } })}${pillBtn(on ? "تعطيل" : "تفعيل", { variant: "ghost", action: "person-toggle", data: { id: p.id } })}${pillBtn("حذف", { variant: "danger", action: "person-delete-ask", data: { id: p.id } })}`}</div>` : ""}
+    </div>`;
+  }).join("");
+  const err = ui.structPersonError && ui.structPersonError.key === key ? `<div style="color:${DANGER};font-size:11.5px;font-weight:700;margin-top:6px;">${esc(ui.structPersonError.msg)}</div>` : "";
+  const adding = ui.structPersonAdd === key;
+  return `${rows || `<div style="font-size:12px;color:${SUBTLE};padding:4px 2px 8px;">لا يوجد أشخاص بعد.</div>`}
+    ${adding ? `<div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-top:6px;">
+      <input class="input" id="sp-name-${esc(key)}" placeholder="اسم الشخص" style="flex:1;min-width:120px;" />
+      <select class="input" id="sp-role-${esc(key)}" style="width:150px;"><option value="">— الدور —</option>${roles.map((r) => `<option value="${esc(r.id)}">${esc(r.name)}</option>`).join("")}</select>
+      <input class="input" id="sp-pin-${esc(key)}" inputmode="numeric" placeholder="رمز (اختياري)" style="width:120px;" />
+      ${pillBtn("إضافة", { icon: iconPlus(14, "#fff"), action: "struct-person-add", data: { kind, id: e.id, key } })}${pillBtn("إلغاء", { variant: "ghost", action: "struct-person-add-cancel" })}
+    </div>${err}` : ""}
+    ${roles.length ? "" : `<div style="font-size:11px;color:${SUBTLE};margin-top:6px;">أنشئي دورًا أولًا من «إدارة الأدوار» أسفل الصفحة.</div>`}`;
+}
+function structSimpleRoleCardsHtml(type, e) {
+  const kind = STRUCT_OWNER_KIND[type];
+  const roles = rolesList();
+  const card = (r) => {
+    const on = e.baseRoleId === r.id;
+    return `<button type="button" data-action="struct-set-base-role" data-kind="${esc(kind)}" data-id="${esc(e.id)}" data-role="${esc(r.id)}" style="text-align:right;font-family:inherit;cursor:pointer;padding:12px 14px;border-radius:14px;border:${on ? `2px solid ${ROSE}` : `1px solid ${BORDER}`};background:${on ? "#f3e9ef" : GRAY_BG};display:flex;flex-direction:column;gap:3px;">
+      <span style="display:flex;align-items:center;gap:8px;"><span style="width:18px;height:18px;border-radius:50%;${on ? `background:${ROSE};` : "border:1.5px solid #cdb9c1;"}display:flex;align-items:center;justify-content:center;color:#fff;font-size:11px;">${on ? "✓" : ""}</span><b style="font-size:14px;color:${INK};">${esc(r.name)}</b></span>
+      <span style="font-size:11.5px;color:${SUBTLE};">${structSimpleRoleCountsText(r)}</span></button>`;
+  };
+  const none = `<button type="button" data-action="struct-set-base-role" data-kind="${esc(kind)}" data-id="${esc(e.id)}" data-role="" style="text-align:right;font-family:inherit;cursor:pointer;padding:12px 14px;border-radius:14px;border:${!e.baseRoleId ? `2px solid ${ROSE}` : `1px dashed #d9c6cd`};background:${!e.baseRoleId ? "#f3e9ef" : "#fff"};"><b style="font-size:14px;color:${INK};">بلا دور</b><div style="font-size:11.5px;color:${SUBTLE};margin-top:3px;">لا صفحات عند الدخول المباشر</div></button>`;
+  return `<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:10px;">${roles.map(card).join("")}${none}</div>
+    <div style="font-size:11.5px;color:${SUBTLE};margin-top:8px;">لتغيير صفحات الدور أو أزراره نفسه: «إدارة الأدوار» أسفل الصفحة. هنا تختارين فقط.</div>`;
+}
+function structSimpleCopyHtml(type, e, key) {
+  const c = S.ui.structCopy;
+  if (!c || c.key !== key) return "";
+  const lists = type === "office" ? (S.offices || []) : type === "dept" ? S.departments : S.units.filter((u) => u.role !== "admin" && u.role !== "executive" && u.role !== "self_report");
+  const src = lists.filter((x) => x.id !== e.id);
+  const from = c.from ? lists.find((x) => x.id === c.from) : null;
+  const nPaths = from ? structSimplePathsOf(type, from).length : 0;
+  return `<div class="card" style="background:${GRAY_BG};margin-bottom:12px;">
+    <div style="font-size:12.5px;font-weight:800;margin-bottom:8px;">نسخ الإعداد إلى «${esc(e.name)}»</div>
+    <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;">
+      <select class="input" data-action="struct-copy-from" style="width:230px;"><option value="">— من أي جهة؟ —</option>${src.map((x) => `<option value="${esc(x.id)}" ${c.from === x.id ? "selected" : ""}>${esc(x.name)}</option>`).join("")}</select>
+      ${from ? pillBtn("نسخ", { action: "struct-copy-confirm", data: { key } }) : ""}${pillBtn("إلغاء", { variant: "ghost", action: "struct-copy-cancel" })}
+    </div>
+    ${from ? `<div style="font-size:11.5px;color:${SUBTLE};margin-top:8px;">سيُنسخ: الدور الأساسي${from.baseRoleId ? "" : " (بلا دور)"} + ${nPaths} مسار كمسودات (تحتاج تفعيلًا). لا تُنسخ أسماء الأشخاص، ولا يُحذف شيء من هذه الجهة. إن كان لها دور حاليًا فسيُستبدل.</div>` : ""}
+  </div>`;
+}
+function structSimpleStepHead(n, title, extra) {
+  return `<div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;"><span style="width:26px;height:26px;border-radius:50%;background:${ROSE};color:#fff;font-size:13px;font-weight:800;display:flex;align-items:center;justify-content:center;">${n}</span><div style="flex:1;font-size:15px;font-weight:800;">${title}</div>${extra || ""}</div>`;
+}
+function structSimpleDetailHtml(sel) {
+  const [type, ...rest] = String(sel || "").split(":");
+  const id = rest.join(":");
+  const e = sel ? treeEntity(type, id) : null;
+  if (!e) return `<div class="card" style="text-align:center;color:${SUBTLE};padding:40px 20px;border-style:dashed;font-size:13px;">اختاري جهة من القائمة.</div>`;
+  const key = type + ":" + e.id;
+  if (!STRUCT_OWNER_KIND[type]) return structPanelDetailHtml(sel);
+  const confirming = S.ui.treeConfirmDel && S.ui.treeConfirmDel.type === type && S.ui.treeConfirmDel.id === e.id;
+  const menuOpen = S.ui.structMenu === key;
+  const parent = structPanelParentName(type, e);
+  const mv = structPanelMoveHtml(type, e);
+  const menu = menuOpen ? `<div class="card" style="background:${GRAY_BG};margin:10px 0 0;display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
+    ${confirming ? `<span style="font-size:12px;font-weight:700;">حذف "${esc(e.name)}"؟</span>${pillBtn("حذف", { variant: "danger", action: "tree-delete", data: { type, id: e.id } })}${pillBtn("تراجع", { variant: "ghost", action: "tree-cancel-delete" })}`
+      : `${pillBtn("تعديل", { variant: "ghost", action: "tree-edit-start", data: { type, id: e.id } })}${pillBtn("إضافة تحتها/فوقها", { variant: "ghost", action: "tree-add-start", data: { type, id: e.id } })}${mv ? `<span style="font-size:12px;font-weight:700;">يتبع</span>${mv}` : ""}${pillBtn("حذف", { variant: "danger", action: "tree-confirm-delete", data: { type, id: e.id } })}`}
+  </div>` : "";
+  const card = (n, title, extra, body) => `<div class="card" style="padding:16px 18px;margin-bottom:12px;">${structSimpleStepHead(n, title, extra)}${body}</div>`;
+  return `<div style="display:flex;align-items:flex-start;gap:10px;flex-wrap:wrap;margin-bottom:12px;">
+      <div style="flex:1;min-width:180px;"><div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">${structPanelTagHtml(type, e)}<span style="font-size:19px;font-weight:800;">${esc(e.name)}</span></div>
+        ${parent ? `<div style="font-size:12px;color:${SUBTLE};margin-top:4px;">يتبع: ${esc(parent)}</div>` : ""}</div>
+      ${pillBtn("نسخ الإعداد من جهة أخرى", { variant: "ghost", action: "struct-copy-open", data: { key } })}
+      <button class="icon-btn" style="width:38px;height:38px;border:1px solid ${BORDER}" data-action="struct-menu" data-key="${esc(key)}" title="المزيد">⋯</button>
+    </div>
+    ${menu}${treeAddFormHtml(type, e.id)}${treeEditFormHtml(type, e.id)}${structSimpleCopyHtml(type, e, key)}
+    ${card(1, "من الأشخاص؟", S.ui.structPersonAdd === key ? "" : pillBtn("إضافة شخص", { icon: iconPlus(14, "#fff"), action: "struct-person-add-open", data: { key } }), structSimplePeopleHtml(type, e, key))}
+    ${card(2, "ماذا يرى الدخول المباشر لهذه الجهة؟", "", structSimpleRoleCardsHtml(type, e))}
+    ${card(3, "من يعتمد تقاريرها؟", "", structPanelPathTabHtml(type, e))}`;
+}
+function structSimplePeopleViewHtml() {
+  const roles = rolesList();
+  const filt = S.ui.structPeopleFilter || "all";
+  let list = personsList();
+  if (filt === "none") list = list.filter((p) => !roles.some((r) => r.id === p.roleId));
+  else if (filt !== "all") list = list.filter((p) => p.roleId === filt);
+  const ownerOf = (p) => {
+    const k = p.ownerKind === "department" ? "dept" : (p.ownerKind || "unit");
+    const ent = treeEntity(k, p.ownerId);
+    return { key: k + ":" + p.ownerId, name: ent ? ent.name : "(جهة محذوفة)", type: k, ent };
+  };
+  const chip = (id, label) => `<button type="button" data-action="struct-people-filter" data-f="${esc(id)}" style="font-family:inherit;cursor:pointer;padding:7px 14px;border-radius:999px;font-size:12.5px;font-weight:700;border:1px solid ${BORDER};background:${filt === id ? ROSE : "#fff"};color:${filt === id ? "#fff" : INK};">${label}</button>`;
+  const cards = list.map((p) => {
+    const o = ownerOf(p);
+    const r = roles.find((x) => x.id === p.roleId);
+    const paths = o.ent ? structSimplePathsOf(o.type, o.ent) : [];
+    const act = paths.find((a) => a.status === "active");
+    const on = p.status !== "disabled";
+    return `<div class="card" style="padding:14px 16px;${r ? "" : "border:1.5px dashed #e3c9a1;"}opacity:${on ? 1 : 0.6};">
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px;">
+        <span style="width:40px;height:40px;border-radius:50%;background:${ROSE};color:#fff;font-size:16px;font-weight:800;display:flex;align-items:center;justify-content:center;">${esc((p.name || "؟").charAt(0))}</span>
+        <div style="flex:1;min-width:0;"><div style="font-size:14.5px;font-weight:800;">${esc(p.name)}</div>
+          <button type="button" data-action="struct-open-entity" data-key="${esc(o.key)}" style="font-family:inherit;cursor:pointer;background:none;border:none;padding:0;font-size:12px;color:${ROSE};font-weight:700;">${esc(o.name)} ›</button></div></div>
+      <div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;">
+        <div style="padding:9px 11px;background:${GRAY_BG};border:1px solid ${BORDER};border-radius:12px;"><div style="font-size:11px;color:${SUBTLE};">الدور</div>
+          <select class="input" data-action="struct-person-role" data-id="${esc(p.id)}" style="margin-top:4px;padding:5px 8px;font-size:12.5px;"><option value="">— بلا دور —</option>${roles.map((x) => `<option value="${esc(x.id)}" ${p.roleId === x.id ? "selected" : ""}>${esc(x.name)}</option>`).join("")}</select>
+          <div style="font-size:11px;color:${SUBTLE};margin-top:3px;">${r ? structSimpleRoleCountsText(r) : ""}</div></div>
+        <div style="padding:9px 11px;background:${act ? GRAY_BG : "#fdf7ec"};border:1px ${act ? "solid" : "dashed"} ${act ? BORDER : "#e3c9a1"};border-radius:12px;"><div style="font-size:11px;color:${SUBTLE};">مسار تقاريرها</div>
+          <div style="font-size:13px;font-weight:800;margin-top:4px;">${act ? esc(act.name || apOwnerName(act.ownerKind, act.ownerId)) : "لم يُحدَّد"}</div>
+          <div style="font-size:11px;color:${act ? GREEN : "#9a6420"};margin-top:3px;font-weight:700;">${act ? `● مفعّل · ${(act.stages || []).length} مراحل` : (paths.length ? "مسودات غير مفعّلة" : "لا مسار لهذه الجهة")}</div></div>
+      </div>
+      ${!r ? `<div style="margin-top:8px;font-size:12px;color:#9a6420;font-weight:700;">⚠ بلا دور، فلا يرى أي صفحة. اختاري له دورًا.</div>` : ""}
+    </div>`;
+  }).join("");
+  return `<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px;">${chip("all", "الكل")}${roles.map((r) => chip(r.id, esc(r.name))).join("")}${chip("none", "بلا دور ⚠")}</div>
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:12px;">${cards || `<div class="card" style="text-align:center;color:${SUBTLE};padding:30px;border-style:dashed;grid-column:1/-1;">لا يوجد أشخاص بهذا الفلتر.</div>`}</div>
+    <div style="font-size:11.5px;color:${SUBTLE};margin-top:10px;">لإضافة شخص جديد: «حسب الجهة»، ثم اختاري الجهة.</div>`;
+}
+function structSimpleToggleHtml(section) {
+  const b = (id, l) => `<button type="button" data-action="struct-section" data-section="${id}" style="font-family:inherit;cursor:pointer;border:none;padding:8px 16px;border-radius:9px;font-size:13px;font-weight:700;background:${section === id ? ROSE : "transparent"};color:${section === id ? "#fff" : INK};">${l}</button>`;
+  return `<div style="display:flex;gap:4px;background:#fff;border:1px solid ${BORDER};padding:4px;border-radius:12px;">${b("struct", "حسب الجهة")}${b("people", "حسب الشخص")}</div>`;
+}
+function structSimpleHtml() {
+  const section = ["people", "roles", "paths"].indexOf(S.ui.structSection) !== -1 ? S.ui.structSection : "struct";
+  if (section === "roles" || section === "paths") {
+    return `<div style="margin-bottom:18px;">${pillBtn("‹ رجوع للهيكل والأشخاص", { variant: "ghost", action: "struct-section", data: { section: "struct" } })}<div style="height:10px;"></div>
+      ${section === "roles" ? renderRolesManage(true) : (S.isAdmin ? renderApprovalPathsSetup(true) : `<div class="card" style="text-align:center;padding:30px;">هذه الصفحة لمديرة النظام فقط.</div>`)}</div>`;
+  }
+  const sel = S.ui.structSel || "";
+  const empty = !(S.offices || []).length && !S.departments.length && !S.units.length;
+  const header = `<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-bottom:12px;">
+      <div style="font-size:15px;font-weight:800;display:flex;align-items:center;gap:8px;">${iconLayers(18, ROSE)} الهيكل والأشخاص</div>
+      <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;">${structSimpleToggleHtml(section)}${section === "struct" ? pillBtn("إضافة", { icon: iconPlus(14, "#fff"), action: "tree-add-root", data: { type: "office" } }) : ""}</div>
+    </div>
+    ${S.ui.treeAddRoot ? `<div class="card" style="margin-bottom:10px;background:${GRAY_BG};"><div style="display:flex;gap:6px;flex-wrap:wrap;">
+      ${entityJobTitleFieldHtml("tree-root-name")}
+      <input class="input" id="tree-root-email" style="flex:1;min-width:140px;" type="email" placeholder="الإيميل (اختياري)" />
+      <input class="input" id="tree-root-password" style="flex:1;min-width:110px;" placeholder="الرقم السري (اختياري)" />
+      ${pillBtn("حفظ", { action: "tree-root-save", data: { type: S.ui.treeAddRoot } })}${pillBtn("إلغاء", { variant: "ghost", action: "tree-root-cancel" })}
+    </div></div>` : ""}`;
+  const footer = `<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:14px;">
+      ${pillBtn("إدارة الأدوار ›", { variant: "ghost", action: "struct-section", data: { section: "roles" } })}${S.isAdmin ? pillBtn("إدارة المسارات ›", { variant: "ghost", action: "struct-section", data: { section: "paths" } }) : ""}
+      ${pillBtn("العرض السابق (تبويبات)", { variant: "ghost", action: "set-struct-view", data: { mode: "panel" } })}${pillBtn("الشجرة القديمة", { variant: "ghost", action: "set-struct-view", data: { mode: "tree" } })}</div>`;
+  if (section === "people") return `<div style="margin-bottom:18px;">${header}${structSimplePeopleViewHtml()}${footer}</div>`;
+  return `<div style="margin-bottom:18px;">${header}${empty ? `<div class="card" style="text-align:center;color:${SUBTLE};padding:30px;border-style:dashed;">لا يوجد شيء بعد — اضغطي "إضافة" لبدء أول عنصر.</div>` : `<div style="display:flex;gap:14px;flex-wrap:wrap;align-items:flex-start;">
+      <div class="card" style="flex:1 1 250px;max-width:100%;padding:8px;">${structPanelListHtml(sel)}</div>
+      <div style="flex:2 1 380px;min-width:0;">${structSimpleDetailHtml(sel)}</div></div>`}${footer}</div>`;
+}
+
 function renderDepartmentsManage() {
   const ui = S.ui;
   const execUnits = S.units.filter((u) => u.role === "executive");
@@ -5837,7 +6015,7 @@ function renderDepartmentsManage() {
     ${topBarHtml({ title: "المستخدمون", subtitle: USERS_HUB_SUBTITLE, icon: iconUser(18, ROSE), backAction: "nav-back-admin" })}
     ${accountsHubTabBarHtml("units-manage")}
 
-${S.ui.structView !== "lists" ? (S.ui.structView === "tree" ? structureTreeHtml() : structPanelHtml()) : (adminUnits.length ? collapsibleUsersSection({ key: "sysadmin", title: "مديرة النظام", count: adminUnits.length, formHtml: "", listHtml: `<div style="display:flex;flex-direction:column;gap:8px;">${adminUnits.map((u) => simpleAccountRowHtml(u, "مديرة نظام")).join("")}</div>` }) : "")}
+${S.ui.structView !== "lists" ? (S.ui.structView === "tree" ? structureTreeHtml() : S.ui.structView === "panel" ? structPanelHtml() : structSimpleHtml()) : (adminUnits.length ? collapsibleUsersSection({ key: "sysadmin", title: "مديرة النظام", count: adminUnits.length, formHtml: "", listHtml: `<div style="display:flex;flex-direction:column;gap:8px;">${adminUnits.map((u) => simpleAccountRowHtml(u, "مديرة نظام")).join("")}</div>` }) : "")}
 
     ${(S.ui.structView === "lists" && execUnits.length) ? collapsibleUsersSection({
       key: "executive", title: "الإدارة العليا", count: execUnits.length,
@@ -9250,6 +9428,13 @@ function attachFormListeners() {
       render();
       return;
     }
+    if (el.dataset && el.dataset.action === "struct-person-role") {
+      S.persons = personsList().map((p) => p.id === el.dataset.id ? { ...p, roleId: el.value || "" } : p);
+      dataStore.savePersons(S.persons); render(); return;
+    }
+    if (el.dataset && el.dataset.action === "struct-copy-from") {
+      if (S.ui.structCopy) S.ui.structCopy.from = el.value || ""; render(); return;
+    }
     if (el.dataset && el.dataset.action === "hub-nav-select") {
       const b = document.createElement("button"); b.dataset.action = "nav-to"; b.dataset.view = el.value;
       b.style.display = "none"; appEl.appendChild(b); b.click(); if (b.parentNode) b.parentNode.removeChild(b);
@@ -10265,6 +10450,35 @@ function attachClickListener() {
       }
 
       case "set-struct-view": S.ui.structView = ds.mode; render(); break;
+      case "struct-set-base-role": {
+        const rid = ds.role || "";
+        if (ds.kind === "department") { S.departments = S.departments.map((d) => d.id === ds.id ? { ...d, baseRoleId: rid } : d); dataStore.saveDepartments(S.departments); }
+        else if (ds.kind === "office") { S.offices = S.offices.map((o) => o.id === ds.id ? { ...o, baseRoleId: rid } : o); dataStore.saveOffices(S.offices); }
+        else { S.units = S.units.map((u) => u.id === ds.id ? { ...u, baseRoleId: rid } : u); dataStore.saveUnits(S.units); }
+        render(); break;
+      }
+      case "struct-menu": S.ui.structMenu = S.ui.structMenu === ds.key ? null : ds.key; render(); break;
+      case "struct-person-menu": S.ui.structPersonMenu = S.ui.structPersonMenu === ds.id ? null : ds.id; S.ui.personConfirmDeleteId = null; render(); break;
+      case "struct-person-add-open": S.ui.structPersonAdd = ds.key; S.ui.structPersonError = null; render(); break;
+      case "struct-person-add-cancel": S.ui.structPersonAdd = null; S.ui.structPersonError = null; render(); break;
+      case "struct-people-filter": S.ui.structPeopleFilter = ds.f; render(); break;
+      case "struct-open-entity": S.ui.structSel = ds.key; S.ui.structSection = "struct"; render(); break;
+      case "struct-copy-open": S.ui.structCopy = { key: ds.key, from: "" }; render(); break;
+      case "struct-copy-cancel": S.ui.structCopy = null; render(); break;
+      case "struct-copy-confirm": {
+        const c = S.ui.structCopy; if (!c || !c.from) break;
+        const [type, ...rest] = String(ds.key).split(":"); const toId = rest.join(":");
+        const from = treeEntity(type, c.from); if (!from) break;
+        const kind = STRUCT_OWNER_KIND[type];
+        const patch = { baseRoleId: from.baseRoleId || "" };
+        if (kind === "department") { S.departments = S.departments.map((d) => d.id === toId ? { ...d, ...patch } : d); dataStore.saveDepartments(S.departments); }
+        else if (kind === "office") { S.offices = S.offices.map((o) => o.id === toId ? { ...o, ...patch } : o); dataStore.saveOffices(S.offices); }
+        else { S.units = S.units.map((u) => u.id === toId ? { ...u, ...patch } : u); dataStore.saveUnits(S.units); }
+        const clones = approvalPathsList().filter((a) => a.ownerKind === type && a.ownerId === c.from).map((a) => ({ ...JSON.parse(JSON.stringify(a)), id: uid("apath"), ownerId: toId, status: "draft", createdAt: Date.now(), activatedAt: null, stages: (a.stages || []).map((st) => ({ ...st, id: uid("stg") })) }));
+        if (clones.length) { S.approvalPaths = [...approvalPathsList(), ...clones]; dataStore.saveApprovalPaths(S.approvalPaths); }
+        addPermLog("copy-config", toId, apOwnerName(type, toId), `نسخ إعداد من «${from.name}»: الدور الأساسي + ${clones.length} مسار (مسودات)`);
+        S.ui.structCopy = null; render(); break;
+      }
       case "struct-select": S.ui.structSel = ds.key; S.ui.rolePermEditId = null; S.ui.personPermEditId = null; S.ui.rolePermForm = null; S.ui.apEdit = null; render(); break;
       case "struct-tab": S.ui.structTab = ds.tab; S.ui.rolePermEditId = null; S.ui.personPermEditId = null; S.ui.rolePermForm = null; render(); break;
       case "struct-section": {
