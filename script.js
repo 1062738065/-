@@ -2543,7 +2543,8 @@ function personEffectivePin(p) {
 }
 function applyPersonPerms(p) {
   const eff = personEffectivePerms(p);
-  if (eff.pages.length) S.platformUserAllowedPages = normalizeDashboardPages(eff.pages);
+  // دور بلا صفحات = لا صفحات (لا يرث صفحات حساب الجهة) — قرار نجود: الفارغ لا يعني الوراثة.
+  S.platformUserAllowedPages = eff.pages.length ? normalizeDashboardPages(eff.pages) : [];
   if (eff.actions.length) S.platformUserAllowedActions = [...eff.actions];
   const bs = eff.buttons || [];
   const chips = bs.filter((b) => b.indexOf("notify:") !== 0);
@@ -5830,6 +5831,7 @@ function structPanelHtml() {
 function structSimpleRoleCountsText(role) {
   const p = rolePermsOf(role);
   const b = p.buttons.length ? p.buttons : p.actions.filter((a) => BUTTON_CATALOG.some((x) => x.id === a));
+  if (!p.pages.length) return "⚠ بلا صفحات — لا يرى شيئًا";
   return `${p.pages.length} صفحات · ${b.length} أزرار`;
 }
 function structSimplePathsOf(type, e) {
@@ -6570,7 +6572,7 @@ function accountsHubTabBarHtml(activeView) {
 // ---- المرحلة 2: صلاحيات الأدوار + استثناءات الأشخاص + سجل التغييرات ----
 // الصلاحيات تُخزَّن بـ roles.permissions = { pages:[], actions:[] }، واستثناء الشخص بـ
 // persons.perms_override = { pages:[]|null, actions:[]|null } (null/غائب = يرث الدور).
-// فارغ بالدور = يرث صلاحيات حساب الجهة كما هي (لا شيء يتغير).
+// فارغ بالدور = لا صفحات (لا وراثة من حساب الجهة).
 // الفصل (عرض/إنشاء/تعديل/حذف/إرسال/مراجعة/اعتماد) هنا عرض مجمَّع للإجراءات الموجودة فعليًا
 // بالنظام — لا إجراءات جديدة، وتبقى الصفحات هي صلاحية "العرض".
 const PERM_ACTION_GROUPS = [
@@ -6656,7 +6658,7 @@ function rolePermsEditorHtml(role) {
   const f = rolePermFormState();
   return `<div class="card" style="background:${GRAY_BG};margin:0 0 10px;">
     <div style="font-size:12.5px;font-weight:800;margin-bottom:4px;">صلاحيات الدور: ${esc(role.name)}</div>
-    <div class="hint" style="margin-bottom:8px;">الصفحات = صلاحية العرض. اتركي الخيارات فاضية ليرث الدور صلاحيات حساب الجهة كما هي.</div>
+    <div class="hint" style="margin-bottom:8px;">الصفحات = صلاحية العرض. إذا تُركت فارغة فلن يرى هذا الدور أي صفحة.</div>
     <div style="font-size:11.5px;font-weight:800;color:${ROSE};margin-bottom:4px;">الصفحات (عرض)</div>
     ${platformUserPagesChecklistHtml(f.pages, "toggle-role-perm-page")}
     <div style="font-size:11.5px;font-weight:800;color:${ROSE};margin:10px 0 4px;">أزرار الصفحات (التقارير والإرسال والمراجعة والاعتماد)</div>
