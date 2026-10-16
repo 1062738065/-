@@ -1988,10 +1988,6 @@ function render() {
     html = renderPlatformUserRoleSelect();
   } else if (S.view === "report-tabs-manage") {
     html = shellWrap(renderReportTabsManage());
-  } else if (S.view === "approval-paths-setup") {
-    html = shellWrap(S.isAdmin ? renderApprovalPathsSetup() : `<div class="page-wrap"><div class="page-inner narrow"><div class="card" style="text-align:center;padding:30px;">هذه الصفحة لمديرة النظام فقط.</div></div></div>`);
-  } else if (S.view === "roles-manage") {
-    html = shellWrap(renderRolesManage());
   } else {
     html = renderLogin();
   }
@@ -2024,7 +2020,6 @@ const SIDEBAR_PAGES = [
   { id: "admin-reports", label: "الأقسام والوحدات", group: "الرئيسية", icon: "building" },
   { id: "custom-path-inbox", label: "التقارير الواردة لي", group: "الرئيسية", icon: "document" },
   { id: "site-settings", label: "إعدادات الموقع", group: "الرئيسية", icon: "gauge" },
-  { id: "approval-paths-setup", label: "إعداد مسارات الاعتماد", group: "standalone", icon: "layers" },
   // "حسابات إضافية" و"صلاحيات الحسابات" و"المسميات الوظيفية (القوالب)" صارت
   // تبويبات داخل صفحة "المستخدمون" نفسها (accountsHubTabBarHtml) بدل روابط
   // منفصلة بالقائمة الجانبية — طلب نجود الصريح بدمجها. الصفحات الثلاث نفسها
@@ -2068,7 +2063,7 @@ const SIDEBAR_PAGES = [
 // مجموعة واحدة قابلة للطي ("unit-home")، فأصبحت الآن أربعة روابط رئيسية
 // مستقلة بالشريط الجانبي — بلا طي وبلا اشتراط مسبق بوحدة/قسم محدّد، تمامًا
 // بنفس أسلوب "جميع التقارير" — حسب طلب نجود الصريح.
-const SIDEBAR_GROUPS = ["الرئيسية", "إدارة التقارير", "__standalone__all-reports", "__standalone__units-manage", "__standalone__approval-paths-setup", "__standalone__browse-structure", "__standalone__office-archive", "__standalone__office-summary", "__standalone__executive-summary", "__standalone__executive-final-report", "الإدارة العليا", "مكتب الإشراف", "الهيكل التنظيمي", "__standalone__unit-dashboard", "__standalone__unit-reports", "__standalone__unit-report", "__standalone__unit-settings", "__standalone__unit-notifications", "__standalone__unit-all-reports"];
+const SIDEBAR_GROUPS = ["الرئيسية", "إدارة التقارير", "__standalone__all-reports", "__standalone__units-manage", "__standalone__browse-structure", "__standalone__office-archive", "__standalone__office-summary", "__standalone__executive-summary", "__standalone__executive-final-report", "الإدارة العليا", "مكتب الإشراف", "الهيكل التنظيمي", "__standalone__unit-dashboard", "__standalone__unit-reports", "__standalone__unit-report", "__standalone__unit-settings", "__standalone__unit-notifications", "__standalone__unit-all-reports"];
 const SIDEBAR_GROUP_LABELS = { "unit-home": "الرئيسية" };
 
 // كتالوج "إجراءات" مسار اعتماد التقرير — يُستخدم لصلاحيات الأزرار لكل مسمى
@@ -2217,7 +2212,7 @@ function computeVisibleSidebarPagesRaw() {
     // "جميع التقارير") — فتختفي بقية الصفحات الممنوحة فعليًا من الشريط الجانبي
     // بالكامل. الدخول إليها بنفسه يتكفّل الآن بضبط الوحدة المناسبة تلقائيًا
     // (راجع ensureUnitContextForNav) بدل الاعتماد على وجودها مسبقًا.
-    return SIDEBAR_PAGES.filter((p) => p.id !== "approval-paths-setup" && (S.platformUserAllowedPages.includes(p.id) || (p.id === "custom-path-inbox" && userInAnyCustomPath())));
+    return SIDEBAR_PAGES.filter((p) => (S.platformUserAllowedPages.includes(p.id) || (p.id === "custom-path-inbox" && userInAnyCustomPath())));
   }
   // قرار نجود: أي حساب (غير مديرة النظام والإدارة العليا) ما حُددت له صفحات = ما يظهر له شيء.
   if (!S.isAdmin && !S.isExecutive) return userInAnyApStage() ? SIDEBAR_PAGES.filter((p) => p.id === "custom-path-inbox") : [];
@@ -5697,34 +5692,6 @@ function structPanelListHtml(sel) {
     ${looseDepts.length ? sep + grp("أقسام بلا مكتب") + looseDepts.map((d) => deptRow(d, 0)).join("") : ""}
     ${looseUnits.length ? sep + grp("بلا قسم") + looseUnits.map((u) => unitRow(u, 0)).join("") : ""}`;
 }
-function structPanelBaseRoleSelectHtml(kind, e) {
-  const roles = rolesList();
-  return `<select class="input" data-action="set-base-role" data-kind="${esc(kind)}" data-id="${esc(e.id)}" style="width:200px;">
-    <option value="">— بلا دور (لا صفحات) —</option>${roles.map((r) => `<option value="${esc(r.id)}" ${e.baseRoleId === r.id ? "selected" : ""}>${esc(r.name)}</option>`).join("")}</select>`;
-}
-function structPanelPagesTabHtml(type, e) {
-  const kind = STRUCT_OWNER_KIND[type];
-  const role = rolesList().find((r) => r.id === e.baseRoleId);
-  const head = `<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:12px;">
-    <span style="font-size:12px;font-weight:800;">${kind === "unit" ? "دور «الإدارية»" : "دور الحساب الأساسي"}:</span>${structPanelBaseRoleSelectHtml(kind, e)}
-    <span style="font-size:10.5px;color:${SUBTLE};">يحدد صفحات وأزرار الدخول المباشر بدون اختيار شخص.</span></div>`;
-  if (!role) return head + `<div class="card" style="border-style:dashed;text-align:center;color:${SUBTLE};padding:22px;font-size:12px;">لم يُحدَّد دور لهذه الجهة، فلا تظهر لها صفحات عند الدخول المباشر. اختاري دورًا من القائمة أعلاه.</div>`;
-  const p = rolePermsOf(role);
-  const btnIds = p.buttons.length ? p.buttons : p.actions.filter((a) => BUTTON_CATALOG.some((b) => b.id === a));
-  const pageName = (id) => { const x = SIDEBAR_PAGES.find((s) => s.id === id); return x ? x.label : id; };
-  const btnName = (id) => { const x = BUTTON_CATALOG.find((b) => b.id === id); return x ? x.label : id; };
-  const chips = (arr, fn) => arr.length ? arr.map((id) => `<span style="display:inline-block;background:${GRAY_BG};border:1px solid ${BORDER};border-radius:10px;padding:5px 10px;margin:0 0 6px 6px;font-size:12px;font-weight:600;">${esc(fn(id))}</span>`).join("") : `<span style="font-size:12px;color:${SUBTLE};">لا شيء</span>`;
-  const users = personsList().filter((x) => x.roleId === role.id).length
-    + S.units.filter((x) => x.baseRoleId === role.id).length + S.departments.filter((x) => x.baseRoleId === role.id).length + (S.offices || []).filter((x) => x.baseRoleId === role.id).length;
-  const editing = S.ui.rolePermEditId === role.id;
-  return head + `<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:11px 14px;background:#f3e9ef;border-radius:12px;font-size:12.5px;margin-bottom:12px;">
-      <span style="flex:1;min-width:180px;">هذه صلاحيات الدور «<b>${esc(role.name)}</b>» — يستخدمه ${users} جهة/شخص.</span>
-      ${editing ? "" : pillBtn("تعديل صلاحيات الدور", { variant: "soft", action: "role-perm-edit", data: { id: role.id } })}
-    </div>
-    ${editing ? `<div class="hint" style="margin-bottom:8px;color:${DANGER};font-weight:700;">تنبيه: التعديل هنا يغيّر الدور نفسه لكل من يستخدمه (${users}). الاستثناءات الفردية للأشخاص لا تتأثر.</div>${rolePermsEditorHtml(role)}` : `
-    <div style="font-size:13.5px;font-weight:800;margin-bottom:8px;">الصفحات (${p.pages.length})</div>${chips(p.pages, pageName)}
-    <div style="font-size:13.5px;font-weight:800;margin:10px 0 8px;">الأزرار (${btnIds.length})</div>${chips(btnIds, btnName)}`}`;
-}
 function structPanelPathTabHtml(type, e) {
   const list = approvalPathsList().filter((a) => a.ownerKind === type && a.ownerId === e.id);
   const ed = S.ui.apEdit;
@@ -5764,8 +5731,6 @@ function structPanelDetailHtml(sel) {
   const admins = S.units.filter((u) => u.role === "admin");
   const confirming = S.ui.treeConfirmDel && S.ui.treeConfirmDel.type === type && S.ui.treeConfirmDel.id === e.id;
   const parent = structPanelParentName(type, e);
-  const hasTabs = !!STRUCT_OWNER_KIND[type];
-  const tab = ["people", "pages", "path"].indexOf(S.ui.structTab) !== -1 ? S.ui.structTab : "people";
   const actions = confirming
     ? (type === "admin" && admins.length <= 1
       ? `<span style="font-size:12px;font-weight:700;color:${DANGER};">لا يمكن حذف آخر حساب لمديرة النظام — أضيفي حساباً آخر أولاً.</span>${pillBtn("حسناً", { variant: "ghost", action: "tree-cancel-delete" })}`
@@ -5773,12 +5738,6 @@ function structPanelDetailHtml(sel) {
     : `${type === "admin" ? "" : `<button class="icon-btn" style="width:32px;height:32px;border:1px solid ${BORDER}" data-action="tree-add-start" data-type="${type}" data-id="${esc(e.id)}" title="إضافة">${iconPlus(14, INK)}</button>`}
        <button class="icon-btn" style="width:32px;height:32px;border:1px solid ${BORDER}" data-action="tree-edit-start" data-type="${type}" data-id="${esc(e.id)}" title="تعديل">${iconPencil(14, INK)}</button>
        <button class="icon-btn" style="width:32px;height:32px;background:${DANGER_BG}" data-action="tree-confirm-delete" data-type="${type}" data-id="${esc(e.id)}" title="حذف">${iconTrash(14, DANGER)}</button>`;
-  const tabsHtml = hasTabs ? `<div style="display:flex;gap:6px;background:${GRAY_BG};padding:5px;border-radius:14px;margin:14px 0;">
-    ${[["people", "الأشخاص"], ["pages", "الصفحات والأزرار"], ["path", "مسار الاعتماد"]].map(([t, l]) => `<button type="button" data-action="struct-tab" data-tab="${t}" style="flex:1;font-family:inherit;cursor:pointer;border:none;padding:9px 6px;border-radius:10px;font-size:12.5px;font-weight:${tab === t ? 800 : 600};background:${tab === t ? "#fff" : "transparent"};color:${tab === t ? ROSE : INK};${tab === t ? "box-shadow:0 1px 3px rgba(0,0,0,.08);" : ""}">${l}</button>`).join("")}</div>` : "";
-  const body = !hasTabs ? ""
-    : tab === "pages" ? structPanelPagesTabHtml(type, e)
-    : tab === "path" ? structPanelPathTabHtml(type, e)
-    : structPersonsBlockHtml(STRUCT_OWNER_KIND[type], e, key);
   return `<div class="card" style="padding:16px;">
     <div style="display:flex;align-items:flex-start;gap:10px;flex-wrap:wrap;">
       <div style="flex:1;min-width:180px;">
@@ -5790,42 +5749,8 @@ function structPanelDetailHtml(sel) {
     </div>
     ${structPanelMoveHtml(type, e) ? `<div style="display:flex;gap:8px;align-items:center;margin-top:10px;font-size:12px;font-weight:700;">يتبع ${structPanelMoveHtml(type, e)}</div>` : ""}
     ${treeAddFormHtml(type, e.id)}${treeEditFormHtml(type, e.id)}
-    ${tabsHtml}${body}
   </div>`;
 }
-function structPanelSectionTabsHtml(section) {
-  return `<div style="display:flex;gap:6px;background:${GRAY_BG};padding:5px;border-radius:14px;margin-bottom:14px;">
-    ${[["struct", "الهيكل والأشخاص"], ["roles", "كل الأدوار"], ["paths", "كل مسارات الاعتماد"]].map(([t, l]) => `<button type="button" data-action="struct-section" data-section="${t}" style="flex:1;font-family:inherit;cursor:pointer;border:none;padding:10px 6px;border-radius:10px;font-size:13px;font-weight:${section === t ? 800 : 600};background:${section === t ? "#fff" : "transparent"};color:${section === t ? ROSE : INK};${section === t ? "box-shadow:0 1px 3px rgba(0,0,0,.08);" : ""}">${l}</button>`).join("")}</div>`;
-}
-function structPanelHtml() {
-  const section = ["roles", "paths"].indexOf(S.ui.structSection) !== -1 ? S.ui.structSection : "struct";
-  if (section === "roles") return `<div style="margin-bottom:18px;">${structPanelSectionTabsHtml(section)}${renderRolesManage(true)}</div>`;
-  if (section === "paths") return `<div style="margin-bottom:18px;">${structPanelSectionTabsHtml(section)}${S.isAdmin ? renderApprovalPathsSetup(true) : `<div class="card" style="text-align:center;padding:30px;">هذه الصفحة لمديرة النظام فقط.</div>`}</div>`;
-  const sel = S.ui.structSel || "";
-  const empty = !(S.offices || []).length && !S.departments.length && !S.units.length;
-  return `<div style="margin-bottom:18px;">
-    ${structPanelSectionTabsHtml(section)}
-    <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-bottom:12px;">
-      <div style="font-size:15px;font-weight:800;display:flex;align-items:center;gap:8px;">${iconLayers(18, ROSE)} الهيكل والأشخاص</div>
-      <div style="display:flex;gap:6px;flex-wrap:wrap;">
-        ${pillBtn("العرض المبسّط", { variant: "ghost", action: "set-struct-view", data: { mode: "simple" } })}${pillBtn("العرض القديم (الشجرة)", { variant: "ghost", action: "set-struct-view", data: { mode: "tree" } })}
-        ${pillBtn("إضافة", { icon: iconPlus(14, "#fff"), action: "tree-add-root", data: { type: "office" } })}
-      </div>
-    </div>
-    ${S.ui.treeAddRoot ? `<div class="card" style="margin-bottom:10px;background:${GRAY_BG};"><div style="display:flex;gap:6px;flex-wrap:wrap;">
-      ${entityJobTitleFieldHtml("tree-root-name")}
-      <input class="input" id="tree-root-email" style="flex:1;min-width:140px;" type="email" placeholder="الإيميل (اختياري)" />
-      <input class="input" id="tree-root-password" style="flex:1;min-width:110px;" placeholder="الرقم السري (اختياري)" />
-      ${pillBtn("حفظ", { action: "tree-root-save", data: { type: S.ui.treeAddRoot } })}
-      ${pillBtn("إلغاء", { variant: "ghost", action: "tree-root-cancel" })}
-    </div></div>` : ""}
-    ${empty ? `<div class="card" style="text-align:center;color:${SUBTLE};padding:30px;border-style:dashed;">لا يوجد شيء بعد — اضغطي "إضافة" لبدء أول عنصر.</div>` : `<div style="display:flex;gap:14px;flex-wrap:wrap;align-items:flex-start;">
-      <div class="card" style="flex:1 1 270px;max-width:100%;padding:8px;">${structPanelListHtml(sel)}</div>
-      <div style="flex:2 1 380px;min-width:0;">${structPanelDetailHtml(sel)}</div>
-    </div>`}
-  </div>`;
-}
-
 // ===== العرض المبسّط: أسئلة بسيطة (الأشخاص ← ماذا يرون ← المسار) + نسخ الإعداد + بطاقة الشخص =====
 // إضافة فقط: العرض السابق (ذو التبويبات) والشجرة القديمة يبقيان ويُفتحان من الأزرار أعلى الصفحة.
 function structSimpleRoleCountsText(role) {
@@ -5982,7 +5907,7 @@ function structSimpleHtml() {
   const section = ["people", "roles", "paths"].indexOf(S.ui.structSection) !== -1 ? S.ui.structSection : "struct";
   if (section === "roles" || section === "paths") {
     return `<div style="margin-bottom:18px;">${pillBtn("‹ رجوع للهيكل والأشخاص", { variant: "ghost", action: "struct-section", data: { section: "struct" } })}<div style="height:10px;"></div>
-      ${section === "roles" ? renderRolesManage(true) : (S.isAdmin ? renderApprovalPathsSetup(true) : `<div class="card" style="text-align:center;padding:30px;">هذه الصفحة لمديرة النظام فقط.</div>`)}</div>`;
+      ${section === "roles" ? renderRolesManage() : (S.isAdmin ? renderApprovalPathsSetup() : `<div class="card" style="text-align:center;padding:30px;">هذه الصفحة لمديرة النظام فقط.</div>`)}</div>`;
   }
   const sel = S.ui.structSel || "";
   const empty = !(S.offices || []).length && !S.departments.length && !S.units.length;
@@ -5998,7 +5923,7 @@ function structSimpleHtml() {
     </div></div>` : ""}`;
   const footer = `<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:14px;">
       ${pillBtn("إدارة الأدوار ›", { variant: "ghost", action: "struct-section", data: { section: "roles" } })}${S.isAdmin ? pillBtn("إدارة المسارات ›", { variant: "ghost", action: "struct-section", data: { section: "paths" } }) : ""}
-      ${pillBtn("العرض السابق (تبويبات)", { variant: "ghost", action: "set-struct-view", data: { mode: "panel" } })}${pillBtn("الشجرة القديمة", { variant: "ghost", action: "set-struct-view", data: { mode: "tree" } })}</div>`;
+      ${pillBtn("الشجرة القديمة", { variant: "ghost", action: "set-struct-view", data: { mode: "tree" } })}</div>`;
   if (section === "people") return `<div style="margin-bottom:18px;">${header}${structSimplePeopleViewHtml()}${footer}</div>`;
   return `<div style="margin-bottom:18px;">${header}${empty ? `<div class="card" style="text-align:center;color:${SUBTLE};padding:30px;border-style:dashed;">لا يوجد شيء بعد — اضغطي "إضافة" لبدء أول عنصر.</div>` : `<div style="display:flex;gap:14px;flex-wrap:wrap;align-items:flex-start;">
       <div class="card" style="flex:1 1 250px;max-width:100%;padding:8px;">${structPanelListHtml(sel)}</div>
@@ -6017,7 +5942,7 @@ function renderDepartmentsManage() {
     ${topBarHtml({ title: "المستخدمون", subtitle: USERS_HUB_SUBTITLE, icon: iconUser(18, ROSE), backAction: "nav-back-admin" })}
     ${accountsHubTabBarHtml("units-manage")}
 
-${S.ui.structView !== "lists" ? (S.ui.structView === "tree" ? structureTreeHtml() : S.ui.structView === "panel" ? structPanelHtml() : structSimpleHtml()) : (adminUnits.length ? collapsibleUsersSection({ key: "sysadmin", title: "مديرة النظام", count: adminUnits.length, formHtml: "", listHtml: `<div style="display:flex;flex-direction:column;gap:8px;">${adminUnits.map((u) => simpleAccountRowHtml(u, "مديرة نظام")).join("")}</div>` }) : "")}
+${S.ui.structView !== "lists" ? (S.ui.structView === "tree" ? structureTreeHtml() : structSimpleHtml()) : (adminUnits.length ? collapsibleUsersSection({ key: "sysadmin", title: "مديرة النظام", count: adminUnits.length, formHtml: "", listHtml: `<div style="display:flex;flex-direction:column;gap:8px;">${adminUnits.map((u) => simpleAccountRowHtml(u, "مديرة نظام")).join("")}</div>` }) : "")}
 
     ${(S.ui.structView === "lists" && execUnits.length) ? collapsibleUsersSection({
       key: "executive", title: "الإدارة العليا", count: execUnits.length,
@@ -6277,7 +6202,7 @@ function permDropdownChecklistHtml({ action, selected, total, emptyLabel, render
 // "مسمى وظيفي" عادي (زي سكرتارية) يعطيه قدرة أعلى بكثير من المقصود — فتُعرض
 // بقسم منفصل محذّر بصريًا بدل ما تكون مختلطة بصفحات المحتوى العادية.
 const SENSITIVE_PAGE_IDS = [
-  "site-settings", "roles-manage",
+  "site-settings",
   "admin-reports", "indicators-manage", "goals-manage", "sections-manage",
   "field-schemas-manage", "departments-list",
   "org-chart",
@@ -6290,7 +6215,7 @@ function platformUserPagesChecklistHtml(selected, action) {
   const groups = [];
   const sensitivePages = [];
   SIDEBAR_PAGES.forEach((p) => {
-    if (MERGED_DASHBOARD_IDS.indexOf(p.id) !== -1 || p.id === "approval-paths-setup") return;
+    if (MERGED_DASHBOARD_IDS.indexOf(p.id) !== -1) return;
     // صفحات "unit-home" (لوحة معلومات الوحدة/تقارير/إنشاء تقرير/الإعدادات)
     // الآن قابلة للمنح لأي مسمى وظيفي — تحتاج فقط نطاق بيانات محدّد (قسم/مكتب
     // إشراف/وحدة) ليعرف النظام لأي وحدة/قسم ينشئ التقرير (انظر ملاحظة أسفل
@@ -6549,7 +6474,6 @@ function jobTitleTemplateRowHtml(t) {
 // (ماذا يرى كل حساب، ومعها القوالب الجاهزة كتبويب فرعي).
 const ACCOUNTS_HUB_TABS = [
   { view: "units-manage", label: "الهيكل والأشخاص", icon: "layers" },
-  { view: "roles-manage", label: "الأدوار", icon: "key" },
   { view: "org-chart", label: "المخطط الحر", icon: "gauge" },
 ];
 const USERS_HUB_SUBTITLE = "إدارة المستخدمين وصلاحياتهم في النظام مع إمكانية إضافة وحذف وتعديل بياناتهم";
@@ -6806,7 +6730,7 @@ function apEditorHtml() {
     <div style="display:flex;gap:6px;margin-top:12px;">${pillBtn("حفظ كمسودة", { action: "ap-save" })}${pillBtn("إلغاء", { variant: "ghost", action: "ap-cancel" })}</div>
   </div>`;
 }
-function renderApprovalPathsSetup(embed) {
+function renderApprovalPathsSetup() {
   const list = approvalPathsList();
   const ed = S.ui.apEdit;
   const rows = list.map((a) => {
@@ -6830,17 +6754,15 @@ function renderApprovalPathsSetup(embed) {
     </div>`;
   }).join("");
   return `
-  ${embed ? "" : `<div class="page-wrap"><div class="page-inner narrow">
-    ${topBarHtml({ title: "إعداد مسارات الاعتماد", subtitle: "لمديرة النظام فقط — لا يوجد مسار افتراضي، ولا يعمل أي مسار قبل تفعيله", icon: iconLayers(18, ROSE), backAction: "nav-back-admin" })}`}
     <div class="card" style="background:${BLUE_BG};border:1px solid #cfe0f5;margin-bottom:14px;">
       <div style="font-size:12px;color:#3a5a85;">لكل جهة ولكل نوع تقرير (من قائمة الفترات) تضيفين المراحل بالترتيب وتحددين من يقوم بكل مرحلة. المسار الجديد يُحفظ مسودة، ولا يُطبَّق على التقارير إلا بعد ضغط «تفعيل». المسارات الحالية في «الهيكل والأشخاص» تبقى كما هي.</div>
     </div>
     ${ed ? apEditorHtml() : `<div style="margin-bottom:12px;">${pillBtn("مسار جديد", { icon: iconPlus(15, "#fff"), action: "ap-new" })}</div>`}
     ${rows || (ed ? "" : `<div class="card" style="text-align:center;color:${SUBTLE};padding:30px 20px;border-style:dashed;">لا توجد مسارات بعد.</div>`)}
-  ${embed ? "" : "</div></div>"}`;
+  `;
 }
 const ROLE_MODE_LABELS = { admin: "إدارية (واجهة الوحدة)", head: "رئيسة الوحدة", extra: "المراجعة الإضافية" };
-function renderRolesManage(embed) {
+function renderRolesManage() {
   const ui = S.ui;
   const roles = rolesList(), persons = personsList();
   const editRole = ui.roleEditId ? roles.find((r) => r.id === ui.roleEditId) : null;
@@ -6893,9 +6815,6 @@ function renderRolesManage(embed) {
     </div>`;
   }).join("") || `<div style="font-size:12px;color:${SUBTLE};padding:8px 2px;">لا يوجد أشخاص بعد.</div>`;
   return `
-  ${embed ? "" : `<div class="page-wrap"><div class="page-inner narrow">
-    ${topBarHtml({ title: "المستخدمون", subtitle: USERS_HUB_SUBTITLE, icon: iconUser(18, ROSE), backAction: "nav-back-admin" })}
-    ${accountsHubTabBarHtml("roles-manage")}`}
     ${rolesBulkCardHtml()}
     <div class="card" style="margin-bottom:18px;">
       <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:6px;">
@@ -6908,7 +6827,7 @@ function renderRolesManage(embed) {
       <div style="font-size:12px;color:#3a5a85;">الأشخاص يُدارون من تبويب «الهيكل والأشخاص»: اضغطي أيقونة 👥 بجانب أي مكتب أو قسم أو وحدة أو مركز. (${personsList().length} شخص مسجّل حاليًا)</div>
     </div>
     ${permLogCardHtml()}
-  ${embed ? "" : "</div></div>"}`;
+  `;
 }
 function platformUserRowHtml(pu, allList) {
   const isActive = pu.status !== "disabled";
@@ -9532,20 +9451,11 @@ function attachClickListener() {
         if (navView === "custom-path-inbox" && sheetsConfigured()) {
           Promise.all((S.units || []).filter((u) => unitHasCustomPath(u) || apOwnerCandidatesForUnit(u).some((o) => approvalPathsList().some((p) => p.status === "active" && p.ownerKind === o.kind && p.ownerId === o.id))).map((u) => refreshReportsFromSheet(u.id))).then(() => { if (S.currentUser && S.view === "custom-path-inbox") render(); });
         }
-        if (navView === "approval-paths-setup") {
-          S.roles = dataStore.getRoles(); S.persons = dataStore.getPersons(); S.approvalPaths = dataStore.getApprovalPaths();
-          S.ui.apEdit = null;
-          if (sheetsConfigured()) Promise.all([refreshRolesPersonsFromSheet(), refreshApprovalPathsFromSheet()]).then(() => { if (S.view === "approval-paths-setup") render(); });
-        }
         if (navView === "report-tabs-manage") {
           S.reportTabs = dataStore.getReportTabs(); S.ui.rtEdit = null; S.ui.rtMsg = ""; S.ui.rtDeleteId = null;
           if (sheetsConfigured()) refreshReportTabsFromSheet().then(() => { if (S.view === "report-tabs-manage") render(); });
         }
         if (navView === "units-manage") { S.roles = dataStore.getRoles(); S.persons = dataStore.getPersons(); S.approvalPaths = dataStore.getApprovalPaths(); S.ui.apEdit = null; S.ui.rolePermEditId = null; }
-        if (navView === "roles-manage") {
-          S.roles = dataStore.getRoles(); S.persons = dataStore.getPersons();
-          if (sheetsConfigured()) Promise.all([refreshRolesPersonsFromSheet(), refreshPermLogFromSheet()]).then(() => { if (S.view === "roles-manage") render(); });
-        }
         if (navView === "platform-users-manage" || navView === "platform-permissions-manage" || navView === "job-title-templates") {
           S.platformUsers = dataStore.getPlatformUsers();
           S.jobTitleTemplates = dataStore.getJobTitleTemplates();
@@ -10482,12 +10392,17 @@ function attachClickListener() {
         S.ui.structCopy = null; render(); break;
       }
       case "struct-select": S.ui.structSel = ds.key; S.ui.rolePermEditId = null; S.ui.personPermEditId = null; S.ui.rolePermForm = null; S.ui.apEdit = null; render(); break;
-      case "struct-tab": S.ui.structTab = ds.tab; S.ui.rolePermEditId = null; S.ui.personPermEditId = null; S.ui.rolePermForm = null; render(); break;
       case "struct-section": {
         S.ui.structSection = ds.section;
         S.ui.apEdit = null; S.ui.rolePermEditId = null; S.ui.personPermEditId = null; S.ui.rolePermForm = null;
-        if (ds.section === "roles") { S.roles = dataStore.getRoles(); S.persons = dataStore.getPersons(); }
-        if (ds.section === "paths") { S.roles = dataStore.getRoles(); S.persons = dataStore.getPersons(); S.approvalPaths = dataStore.getApprovalPaths(); }
+        if (ds.section === "roles") {
+          S.roles = dataStore.getRoles(); S.persons = dataStore.getPersons();
+          if (sheetsConfigured()) Promise.all([refreshRolesPersonsFromSheet(), refreshPermLogFromSheet()]).then(() => { if (S.ui.structSection === "roles") render(); });
+        }
+        if (ds.section === "paths") {
+          S.roles = dataStore.getRoles(); S.persons = dataStore.getPersons(); S.approvalPaths = dataStore.getApprovalPaths();
+          if (sheetsConfigured()) Promise.all([refreshRolesPersonsFromSheet(), refreshApprovalPathsFromSheet()]).then(() => { if (S.ui.structSection === "paths") render(); });
+        }
         render(); break;
       }
       case "struct-ap-new": S.ui.apEdit = { id: null, error: "", draft: { name: "", ownerKind: ds.kind, ownerId: ds.id, periodType: "", authorRoleId: "", stages: [] } }; S.ui.apMsg = null; render(); break;
