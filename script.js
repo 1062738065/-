@@ -2576,7 +2576,7 @@ function entityLoginSelectHtml() {
           ${ent ? `<div style="font-size:11.5px;color:${SUBTLE};margin-top:4px;">${esc(ent.name)}</div>` : ""}
         </div>
         <div style="display:flex;flex-direction:column;gap:12px;">
-          ${baseRoleIdsOf(ent).length >= 2 ? baseRoleChoiceCardsHtml(baseRoleIdsOf(ent)) : `<button type="button" class="card" data-action="choose-entity-account" style="display:flex;align-items:center;gap:12px;text-align:right;cursor:pointer;border:1px solid ${BORDER};background:#fff;width:100%;">
+          ${ownerActivePersons(pe.kind, pe.id).length ? "" : baseRoleIdsOf(ent).length >= 2 ? baseRoleChoiceCardsHtml(baseRoleIdsOf(ent)) : `<button type="button" class="card" data-action="choose-entity-account" style="display:flex;align-items:center;gap:12px;text-align:right;cursor:pointer;border:1px solid ${BORDER};background:#fff;width:100%;">
             <div style="width:42px;height:42px;border-radius:12px;background:${DANGER_BG};display:flex;align-items:center;justify-content:center;flex-shrink:0;">${iconUser(19, ROSE)}</div>
             <div><div style="font-size:14px;font-weight:800;">${pe.kind === "department" ? "مديرة القسم" : "مكتب الإشراف"}</div><div style="font-size:11px;color:${SUBTLE};margin-top:2px;">الدخول بحساب ${pe.kind === "department" ? "القسم" : "المكتب"} مباشرة</div></div>
           </button>`}
@@ -2651,7 +2651,7 @@ function renderUnitRoleSelect() {
           ${unit ? `<div style="font-size:11.5px;color:${SUBTLE};margin-top:4px;">${esc(unit.name)}</div>` : ""}
         </div>
         <div style="display:flex;flex-direction:column;gap:12px;">
-          ${baseRoleIdsOf(unit).length >= 2 ? baseRoleChoiceCardsHtml(baseRoleIdsOf(unit)) : `          <button type="button" class="card" data-action="choose-unit-entry-mode" data-mode="admin" style="display:flex;align-items:center;gap:12px;text-align:right;cursor:pointer;border:1px solid ${BORDER};background:#fff;width:100%;">
+          ${unitActivePersons(S.pendingUnitLoginId).length ? "" : baseRoleIdsOf(unit).length >= 2 ? baseRoleChoiceCardsHtml(baseRoleIdsOf(unit)) : `          <button type="button" class="card" data-action="choose-unit-entry-mode" data-mode="admin" style="display:flex;align-items:center;gap:12px;text-align:right;cursor:pointer;border:1px solid ${BORDER};background:#fff;width:100%;">
             <div style="width:42px;height:42px;border-radius:12px;background:${DANGER_BG};display:flex;align-items:center;justify-content:center;flex-shrink:0;">${iconDocument(19, ROSE)}</div>
             <div>
               <div style="font-size:14px;font-weight:800;">الإدارية</div>
