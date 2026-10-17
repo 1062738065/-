@@ -2160,6 +2160,9 @@ const BUTTON_ALIASES = {
 };
 // أزرار أساسية تظهر تلقائيًا لكل دور عنده صفحة «إنشاء تقرير» بلا حاجة لتأشيرها.
 const CORE_REPORT_BUTTONS = ["section-save-draft", "toggle-section-completed", "card-preview", "card-view", "card-download", "delete-report"];
+// أزرار المسار القديم: تختفي من قوائم التأشير، ولا يبقى منها إلا ما هو مؤشَّر أصلًا عند الدور (ليتمكن من إزالته).
+// الأزرار نفسها ومعالجاتها لم تُحذف، فلا يتأثر أي دور مؤشَّر عليها.
+const LEGACY_PATH_BUTTONS = ["submit-report-to-head", "start-send-report", "start-head-return", "submit-department-review-decision", "approve-report", "return-report-for-revision", "approve-report-by-head"];
 function coreReportButtonOpen(id) {
   return CORE_REPORT_BUTTONS.includes(id) && Array.isArray(S.platformUserAllowedPages) && S.platformUserAllowedPages.includes("unit-report");
 }
@@ -6272,7 +6275,7 @@ function permButtonsChecklistHtml(allSelected, action) {
   const selectedAll = allSelected || [];
   const selected = selectedAll.filter((x) => String(x).indexOf("notify:") !== 0);
   const groups = [];
-  const shownCatalog = BUTTON_CATALOG.filter((b) => !CORE_REPORT_BUTTONS.includes(b.id));
+  const shownCatalog = BUTTON_CATALOG.filter((b) => !CORE_REPORT_BUTTONS.includes(b.id) && (!LEGACY_PATH_BUTTONS.includes(b.id) || selected.includes(b.id))).map((b) => LEGACY_PATH_BUTTONS.includes(b.id) ? { ...b, label: b.label + " (مسار قديم)" } : b);
   shownCatalog.forEach((b) => { let g = groups.find((x) => x.name === b.g); if (!g) { g = { name: b.g, items: [] }; groups.push(g); } g.items.push(b); });
   return permDropdownChecklistHtml({
     action, selected, total: shownCatalog.length, emptyLabel: "الأزرار",
@@ -6285,10 +6288,10 @@ function rolePermFormState() {
 function permActionsGroupedChecklistHtml(selected, action) {
   selected = selected || [];
   const known = new Set();
-  const groups = PERM_ACTION_GROUPS.map((g) => ({ name: g.name, items: g.ids.filter((id) => !CORE_REPORT_BUTTONS.includes(id)).map((id) => ACTION_CATALOG.find((a) => a.id === id)).filter(Boolean) }));
+  const groups = PERM_ACTION_GROUPS.map((g) => ({ name: g.name, items: g.ids.filter((id) => !CORE_REPORT_BUTTONS.includes(id) && (!LEGACY_PATH_BUTTONS.includes(id) || selected.includes(id))).map((id) => ACTION_CATALOG.find((a) => a.id === id)).filter(Boolean) }));
   // الأزرار الأساسية (حفظ/اكتمال/حذف مسودة) تتبع صفحة «إنشاء تقرير» تلقائيًا فلا تُعرض للتأشير.
   groups.forEach((g) => g.items.forEach((a) => known.add(a.id)));
-  const rest = ACTION_CATALOG.filter((a) => !known.has(a.id) && !CORE_REPORT_BUTTONS.includes(a.id));
+  const rest = ACTION_CATALOG.filter((a) => !known.has(a.id) && !CORE_REPORT_BUTTONS.includes(a.id) && (!LEGACY_PATH_BUTTONS.includes(a.id) || selected.includes(a.id)));
   if (rest.length) groups.push({ name: "أخرى", items: rest });
   return permDropdownChecklistHtml({
     action, selected, total: ACTION_CATALOG.length, emptyLabel: "إجراءات",
