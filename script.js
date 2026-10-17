@@ -2396,7 +2396,7 @@ function renderMainSidebar(mobile) {
       <div class="sidebar-user-avatar">${esc(initial)}</div>
       <div style="min-width:0;">
         <div class="sidebar-user-name">${esc(sbName)}</div>
-        <div class="sidebar-role-badge">${esc(sbPerson && sbPersonRole ? sbPersonRole.name : roleLabel)}</div>
+        <div class="sidebar-role-badge">${esc(sbPerson && sbPersonRole ? sbPersonRole.name : (S.currentEntryRoleName || roleLabel))}</div>
         ${sbPerson && S.currentUser && S.currentUser.name ? `<div style="font-size:10.5px;color:${SUBTLE};margin-top:3px;">${esc(S.currentUser.name)}</div>` : ""}
       </div>
     </div>
@@ -2521,6 +2521,21 @@ function unitSharedPlatformUsers(unit) {
 }
 function rolesList() { return S.roles || (S.roles = dataStore.getRoles()); }
 function personsList() { return S.persons || (S.persons = dataStore.getPersons()); }
+// أدوار الدخول المباشر للجهة: تُخزَّن في نفس عمود base_role_id كمعرّفات مفصولة بفاصلة
+// ("r1,r2"). معرّف واحد = السلوك القديم تمامًا؛ اثنان فأكثر = تظهر بطاقة لكل دور في شاشة
+// «كيف تريدين الدخول؟» ويدخل كل دور بصفحاته هو فقط (بلا جمع صلاحيات).
+function baseRoleIdsRaw(e) { return e && e.baseRoleId ? String(e.baseRoleId).split(",").map((x) => x.trim()).filter(Boolean) : []; }
+function baseRoleIdsOf(e) { const roles = rolesList(); return baseRoleIdsRaw(e).filter((id) => roles.some((r) => r.id === id && r.status !== "disabled")); }
+function baseRoleChoiceCardsHtml(ids) {
+  return ids.map((id) => {
+    const r = rolesList().find((x) => x.id === id);
+    if (!r) return "";
+    return `<button type="button" class="card" data-action="choose-base-role" data-role="${esc(r.id)}" style="display:flex;align-items:center;gap:12px;text-align:right;cursor:pointer;border:1px solid ${BORDER};background:#fff;width:100%;">
+            <div style="width:42px;height:42px;border-radius:12px;background:${DANGER_BG};display:flex;align-items:center;justify-content:center;flex-shrink:0;">${iconUser(19, ROSE)}</div>
+            <div><div style="font-size:14px;font-weight:800;">${esc(r.name)}</div><div style="font-size:11px;color:${SUBTLE};margin-top:2px;">${esc(structSimpleRoleCountsText(r))}</div></div>
+          </button>`;
+  }).join("");
+}
 function ownerActivePersons(kind, id) {
   if (!id) return [];
   const roles = rolesList();
@@ -2561,10 +2576,10 @@ function entityLoginSelectHtml() {
           ${ent ? `<div style="font-size:11.5px;color:${SUBTLE};margin-top:4px;">${esc(ent.name)}</div>` : ""}
         </div>
         <div style="display:flex;flex-direction:column;gap:12px;">
-          <button type="button" class="card" data-action="choose-entity-account" style="display:flex;align-items:center;gap:12px;text-align:right;cursor:pointer;border:1px solid ${BORDER};background:#fff;width:100%;">
+          ${baseRoleIdsOf(ent).length >= 2 ? baseRoleChoiceCardsHtml(baseRoleIdsOf(ent)) : `<button type="button" class="card" data-action="choose-entity-account" style="display:flex;align-items:center;gap:12px;text-align:right;cursor:pointer;border:1px solid ${BORDER};background:#fff;width:100%;">
             <div style="width:42px;height:42px;border-radius:12px;background:${DANGER_BG};display:flex;align-items:center;justify-content:center;flex-shrink:0;">${iconUser(19, ROSE)}</div>
             <div><div style="font-size:14px;font-weight:800;">${pe.kind === "department" ? "مديرة القسم" : "مكتب الإشراف"}</div><div style="font-size:11px;color:${SUBTLE};margin-top:2px;">الدخول بحساب ${pe.kind === "department" ? "القسم" : "المكتب"} مباشرة</div></div>
-          </button>
+          </button>`}
           ${personCardsHtml(ownerActivePersons(pe.kind, pe.id))}
         </div>
       </div>
@@ -2587,11 +2602,13 @@ function applyPersonPerms(p) {
   // «ينبّه» = إدخال بصيغة notify:chip:<tab> داخل نفس قائمة الأزرار (بدون تغيير بنية الصلاحيات)
   S.personNotifyTabs = bs.filter((b) => b.indexOf("notify:chip:") === 0).map((b) => b.slice("notify:chip:".length));
 }
-function enterEntityAsPerson(p) {
+function enterEntityAsPerson(p, role) {
   const pe = S.pendingEntityLogin;
   S.currentPersonId = p ? p.id : null;
   S.currentPersonName = p ? p.name : "";
+  S.currentEntryRoleName = !p && role ? role.name : "";
   if (p) applyPersonPerms(p);
+  else if (role) applyPersonPerms({ roleId: role.id, permsOverride: null });
   S.view = pe.view;
   S.pendingEntityLogin = null;
   S.ui.pinPersonId = null; S.ui.pinError = "";
@@ -2634,7 +2651,7 @@ function renderUnitRoleSelect() {
           ${unit ? `<div style="font-size:11.5px;color:${SUBTLE};margin-top:4px;">${esc(unit.name)}</div>` : ""}
         </div>
         <div style="display:flex;flex-direction:column;gap:12px;">
-          <button type="button" class="card" data-action="choose-unit-entry-mode" data-mode="admin" style="display:flex;align-items:center;gap:12px;text-align:right;cursor:pointer;border:1px solid ${BORDER};background:#fff;width:100%;">
+          ${baseRoleIdsOf(unit).length >= 2 ? baseRoleChoiceCardsHtml(baseRoleIdsOf(unit)) : `          <button type="button" class="card" data-action="choose-unit-entry-mode" data-mode="admin" style="display:flex;align-items:center;gap:12px;text-align:right;cursor:pointer;border:1px solid ${BORDER};background:#fff;width:100%;">
             <div style="width:42px;height:42px;border-radius:12px;background:${DANGER_BG};display:flex;align-items:center;justify-content:center;flex-shrink:0;">${iconDocument(19, ROSE)}</div>
             <div>
               <div style="font-size:14px;font-weight:800;">الإدارية</div>
@@ -2656,7 +2673,7 @@ function renderUnitRoleSelect() {
               <div style="font-size:14px;font-weight:800;">${esc(extraTitle)}</div>
               <div style="font-size:11px;color:${SUBTLE};margin-top:2px;">الدخول إلى واجهة المراجعة الإضافية الخاصة بالوحدة</div>
             </div>
-          </button>` : ""}
+          </button>` : ""}`}
           ${personCardsHtml(unitActivePersons(S.pendingUnitLoginId))}
           ${(S.pendingPlatformUserMatches || []).map((pu) => `
           <button type="button" class="card" data-action="choose-platform-user" data-id="${esc(pu.id)}" style="display:flex;align-items:center;gap:12px;text-align:right;cursor:pointer;border:1px solid ${BORDER};background:#fff;width:100%;">
@@ -3056,7 +3073,9 @@ function doLoginPlatformUser(pu) {
 function applyScopedAccountPermissions(entity) {
   if (!entity) return;
   // دور الحساب الأساسي (يُضبط من «الهيكل والأشخاص») له الأولوية على حقول الصفحات القديمة.
-  if (entity.baseRoleId && rolesList().some((r) => r.id === entity.baseRoleId)) { applyPersonPerms({ roleId: entity.baseRoleId, permsOverride: null }); return; }
+  const baseIds = baseRoleIdsOf(entity);
+  if (baseIds.length >= 2) return; // أكثر من دور: يُطبَّق دور واحد فقط بعد أن تختاره من شاشة «كيف تريدين الدخول؟»
+  if (baseIds.length === 1) { applyPersonPerms({ roleId: baseIds[0], permsOverride: null }); return; }
   if (S.platformUserAllowedPages === null && entity.allowedPages && entity.allowedPages.length) {
     S.platformUserAllowedPages = normalizeDashboardPages(entity.allowedPages);
   }
@@ -3066,7 +3085,7 @@ function applyScopedAccountPermissions(entity) {
 }
 
 function doLogin(user) {
-  S.currentPersonId = null; S.currentPersonName = "";
+  S.currentPersonId = null; S.currentPersonName = ""; S.currentEntryRoleName = "";
   S.currentUser = user;
   S.cameFromAllReports = false;
   S.adminPreviewOrigin = null;
@@ -3117,7 +3136,7 @@ function doLogin(user) {
     applyScopedAccountPermissions(S.offices.find((o) => o.id === S.currentOfficeId));
     S.ui.departmentsPageSelectedId = null;
     S.view = "office-dashboard";
-  } else if (!unitSharedPlatformUsers(S.units.find((u) => u.id === user.unitId)).length && !unitActivePersons(user.unitId).length && (user.role === "center" || (!unitHasHead(S.units.find((u) => u.id === user.unitId)) && !unitHasExtraReview(S.units.find((u) => u.id === user.unitId))))) {
+  } else if (!unitSharedPlatformUsers(S.units.find((u) => u.id === user.unitId)).length && !unitActivePersons(user.unitId).length && baseRoleIdsOf(S.units.find((u) => u.id === user.unitId)).length < 2 && (user.role === "center" || (!unitHasHead(S.units.find((u) => u.id === user.unitId)) && !unitHasExtraReview(S.units.find((u) => u.id === user.unitId))))) {
     // مركز، أو وحدة مُهيّأة صراحة بدون أي مستوى مراجعة داخلي (لا رئيسة ولا
     // مستوى إضافي) — تدخل مباشرة بدون شاشة اختيار صفة، بالضبط كسلوك المركز.
     const unitId = user.unitId;
@@ -3140,7 +3159,8 @@ function doLogin(user) {
   if (S.isDepartmentUser || S.isOfficeUser) {
     const pk = S.isDepartmentUser ? "department" : "office";
     const pid = S.isDepartmentUser ? S.currentDepartmentId : S.currentOfficeId;
-    if (ownerActivePersons(pk, pid).length) { S.pendingEntityLogin = { kind: pk, id: pid, view: S.view }; S.view = "unit-role-select"; }
+    const pEnt = S.isDepartmentUser ? S.departments.find((d) => d.id === pid) : S.offices.find((o) => o.id === pid);
+    if (ownerActivePersons(pk, pid).length || baseRoleIdsOf(pEnt).length >= 2) { S.pendingEntityLogin = { kind: pk, id: pid, view: S.view }; S.view = "unit-role-select"; }
   }
   render();
   if (sheetsConfigured()) {
@@ -3157,7 +3177,7 @@ function doLogin(user) {
 }
 
 function doLogout() {
-  S.currentUser = null; S.currentPersonId = null; S.currentPersonName = ""; S.currentUnitId = null; S.currentDepartmentId = null; S.currentOfficeId = null; S.isAdmin = false; S.isDepartmentUser = false; S.isExecutive = false; S.isOfficeUser = false; S.cameFromAllReports = false; S.adminPreviewOrigin = null; S.pendingUnitLoginId = null; S.pendingEntityLogin = null; S.currentUnitEntryMode = null; S.platformUserAllowedPages = null; S.platformUserAllowedActions = null; S.platformUserAllowedButtons = null; S.personNotifyTabs = null; S.currentPlatformUserTemplateId = ""; S.currentPlatformUserJobTitle = null; S.pendingPlatformUserMatches = null; S.view = "login"; S.ui = {};
+  S.currentUser = null; S.currentPersonId = null; S.currentPersonName = ""; S.currentEntryRoleName = ""; S.currentUnitId = null; S.currentDepartmentId = null; S.currentOfficeId = null; S.isAdmin = false; S.isDepartmentUser = false; S.isExecutive = false; S.isOfficeUser = false; S.cameFromAllReports = false; S.adminPreviewOrigin = null; S.pendingUnitLoginId = null; S.pendingEntityLogin = null; S.currentUnitEntryMode = null; S.platformUserAllowedPages = null; S.platformUserAllowedActions = null; S.platformUserAllowedButtons = null; S.personNotifyTabs = null; S.currentPlatformUserTemplateId = ""; S.currentPlatformUserJobTitle = null; S.pendingPlatformUserMatches = null; S.view = "login"; S.ui = {};
   render();
 }
 
@@ -5912,12 +5932,12 @@ function structSimpleRoleCardsHtml(type, e) {
   const kind = STRUCT_OWNER_KIND[type];
   const roles = rolesList();
   const card = (r) => {
-    const on = e.baseRoleId === r.id;
+    const on = baseRoleIdsRaw(e).includes(r.id);
     return `<button type="button" data-action="struct-set-base-role" data-kind="${esc(kind)}" data-id="${esc(e.id)}" data-role="${esc(r.id)}" style="text-align:right;font-family:inherit;cursor:pointer;padding:12px 14px;border-radius:14px;border:${on ? `2px solid ${ROSE}` : `1px solid ${BORDER}`};background:${on ? "#f3e9ef" : GRAY_BG};display:flex;flex-direction:column;gap:3px;">
       <span style="display:flex;align-items:center;gap:8px;"><span style="width:18px;height:18px;border-radius:50%;${on ? `background:${ROSE};` : "border:1.5px solid #cdb9c1;"}display:flex;align-items:center;justify-content:center;color:#fff;font-size:11px;">${on ? "✓" : ""}</span><b style="font-size:14px;color:${INK};">${esc(r.name)}</b></span>
       <span style="font-size:11.5px;color:${SUBTLE};">${structSimpleRoleCountsText(r)}</span></button>`;
   };
-  const none = `<button type="button" data-action="struct-set-base-role" data-kind="${esc(kind)}" data-id="${esc(e.id)}" data-role="" style="text-align:right;font-family:inherit;cursor:pointer;padding:12px 14px;border-radius:14px;border:${!e.baseRoleId ? `2px solid ${ROSE}` : `1px dashed #d9c6cd`};background:${!e.baseRoleId ? "#f3e9ef" : "#fff"};"><b style="font-size:14px;color:${INK};">بلا دور</b><div style="font-size:11.5px;color:${SUBTLE};margin-top:3px;">لا صفحات عند الدخول المباشر</div></button>`;
+  const none = `<button type="button" data-action="struct-set-base-role" data-kind="${esc(kind)}" data-id="${esc(e.id)}" data-role="" style="text-align:right;font-family:inherit;cursor:pointer;padding:12px 14px;border-radius:14px;border:${!baseRoleIdsRaw(e).length ? `2px solid ${ROSE}` : `1px dashed #d9c6cd`};background:${!baseRoleIdsRaw(e).length ? "#f3e9ef" : "#fff"};"><b style="font-size:14px;color:${INK};">بلا دور</b><div style="font-size:11.5px;color:${SUBTLE};margin-top:3px;">لا صفحات عند الدخول المباشر</div></button>`;
   return `<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:10px;">${roles.map(card).join("")}${none}</div>
     <div style="font-size:11.5px;color:${SUBTLE};margin-top:8px;">لتغيير صفحات الدور أو أزراره نفسه: «إدارة الأدوار» أسفل الصفحة. هنا تختارين فقط.</div>`;
 }
@@ -5964,7 +5984,7 @@ function structSimpleDetailHtml(sel) {
     </div>
     ${menu}${treeAddFormHtml(type, e.id)}${treeEditFormHtml(type, e.id)}${structSimpleCopyHtml(type, e, key)}
     ${card(1, "من الأشخاص؟", S.ui.structPersonAdd === key ? "" : pillBtn("إضافة شخص", { icon: iconPlus(14, "#fff"), action: "struct-person-add-open", data: { key } }), structSimplePeopleHtml(type, e, key))}
-    ${card(2, "ماذا يرى الدخول المباشر لهذه الجهة؟", "", structSimpleRoleCardsHtml(type, e))}
+    ${card(2, "ما أنواع الدخول المباشر لهذه الجهة؟", "", structSimpleRoleCardsHtml(type, e))}
     ${card(3, "من يعتمد تقاريرها؟", "", structPanelPathTabHtml(type, e))}`;
 }
 function structSimplePeopleViewHtml() {
@@ -10003,6 +10023,28 @@ function attachClickListener() {
         S.ui.apConfirmDeleteId = null; render(); break;
       }
       case "choose-entity-account": if (S.pendingEntityLogin) enterEntityAsPerson(null); break;
+      case "choose-base-role": {
+        const role = rolesList().find((r) => r.id === ds.role);
+        if (!role) break;
+        if (S.pendingEntityLogin) { enterEntityAsPerson(null, role); break; }
+        const unitId = S.pendingUnitLoginId;
+        if (!unitId) break;
+        S.currentUnitEntryMode = (role.mode === "head" || role.mode === "extra") ? role.mode : "admin";
+        S.currentPersonId = null; S.currentPersonName = ""; S.currentEntryRoleName = role.name;
+        applyPersonPerms({ roleId: role.id, permsOverride: null });
+        S.reports[unitId] = dataStore.getReports(unitId);
+        S.currentUnitId = unitId;
+        S.currentReportId = null;
+        S.pendingUnitLoginId = null;
+        S.view = "unit-dashboard";
+        if (S.platformUserAllowedPages && S.platformUserAllowedPages.length && !S.platformUserAllowedPages.includes(S.view)) {
+          const t = SIDEBAR_PAGES.find((x) => S.platformUserAllowedPages.includes(x.id));
+          if (t) S.view = t.id;
+        }
+        render();
+        if (sheetsConfigured()) { refreshReportsFromSheet(unitId).then(() => { if (S.currentUser) render(); }); }
+        break;
+      }
       case "choose-person": {
         const p = personsList().find((x) => x.id === ds.id);
         if (!p) break;
@@ -10499,7 +10541,15 @@ function attachClickListener() {
 
       case "set-struct-view": S.ui.structView = ds.mode; render(); break;
       case "struct-set-base-role": {
-        const rid = ds.role || "";
+        // اختيار متعدد: الضغط على دور يضيفه/يزيله من القائمة، و«بلا دور» تفرّغها.
+        const holder0 = ds.kind === "department" ? (S.departments || []).find((d) => d.id === ds.id) : ds.kind === "office" ? (S.offices || []).find((o) => o.id === ds.id) : (S.units || []).find((u) => u.id === ds.id);
+        let rid = "";
+        if (ds.role) {
+          const cur = baseRoleIdsRaw(holder0);
+          const i = cur.indexOf(ds.role);
+          if (i === -1) cur.push(ds.role); else cur.splice(i, 1);
+          rid = cur.join(",");
+        }
         if (ds.kind === "department") { S.departments = S.departments.map((d) => d.id === ds.id ? { ...d, baseRoleId: rid } : d); dataStore.saveDepartments(S.departments); }
         else if (ds.kind === "office") { S.offices = S.offices.map((o) => o.id === ds.id ? { ...o, baseRoleId: rid } : o); dataStore.saveOffices(S.offices); }
         else { S.units = S.units.map((u) => u.id === ds.id ? { ...u, baseRoleId: rid } : u); dataStore.saveUnits(S.units); }
