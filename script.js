@@ -2336,7 +2336,11 @@ function renderMainSidebar(mobile) {
       </div>`;
   }).join("");
 
-  const initial = (S.currentUser && S.currentUser.name ? S.currentUser.name.trim()[0] : "؟");
+  // لو دخل شخص (من شاشة «كيف تريدين الدخول؟») نعرض اسمه ودوره، واسم الحساب (الوحدة/القسم/المكتب) سطرًا صغيرًا تحته.
+  const sbPerson = S.currentPersonId ? personsList().find((p) => p.id === S.currentPersonId) : null;
+  const sbPersonRole = sbPerson ? rolesList().find((r) => r.id === sbPerson.roleId) : null;
+  const sbName = sbPerson ? sbPerson.name : (S.currentUser ? S.currentUser.name : "");
+  const initial = (sbName ? String(sbName).trim()[0] : "؟");
   const roleLabel = S.isAdmin ? "مديرة النظام" : S.isDepartmentUser ? "مديرة قسم" : S.isExecutive ? "الإدارة العليا" : S.isOfficeUser ? "مكتب إشراف" : S.currentUnitEntryMode === "head" ? "رئيسة الوحدة" : S.currentUnitEntryMode === "extra" ? (((S.units.find((u) => u.id === S.currentUnitId) || {}).extraReviewerTitle) || "مراجعة إضافية") : "مسؤولة الوحدة";
   const site = currentSiteSettings();
   const taglineHtml = S.isAdmin ? "" : sidebarTaglineBlockHtml(site);
@@ -2356,8 +2360,9 @@ function renderMainSidebar(mobile) {
     <div class="sidebar-user-block">
       <div class="sidebar-user-avatar">${esc(initial)}</div>
       <div style="min-width:0;">
-        <div class="sidebar-user-name">${esc(S.currentUser ? S.currentUser.name : "")}</div>
-        <div class="sidebar-role-badge">${esc(roleLabel)}</div>
+        <div class="sidebar-user-name">${esc(sbName)}</div>
+        <div class="sidebar-role-badge">${esc(sbPerson && sbPersonRole ? sbPersonRole.name : roleLabel)}</div>
+        ${sbPerson && S.currentUser && S.currentUser.name ? `<div style="font-size:10.5px;color:${SUBTLE};margin-top:3px;">${esc(S.currentUser.name)}</div>` : ""}
       </div>
     </div>
     <div style="display:flex;flex-direction:column;gap:6px;">${groupsHtml}</div>
