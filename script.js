@@ -5441,50 +5441,6 @@ function renderUnitReportsHub() {
 }
 
 /* =============================== Departments / units management ============== */
-function simpleAccountRowHtml(u, roleLabel) {
-  const editingPassword = S.ui.editingUnitPasswordId === u.id;
-  const confirming = S.ui.confirmDeleteUnitId === u.id;
-  if (confirming) {
-    return `<div class="card" style="display:flex;align-items:center;justify-content:space-between;gap:10px;">
-      <span style="font-size:12px;font-weight:700;">حذف "${esc(u.name)}" نهائيًا؟</span>
-      <div style="display:flex;gap:6px;">${pillBtn("حذف", { variant: "danger", action: "delete-unit", data: { id: u.id } })}${pillBtn("تراجع", { variant: "ghost", action: "cancel-confirm-unit" })}</div>
-    </div>`;
-  }
-  if (editingPassword) {
-    return `<div class="card" style="display:flex;gap:6px;align-items:center;">
-      <span style="font-size:12px;font-weight:700;white-space:nowrap;">${esc(u.name)} —</span>
-      <input class="input" id="edit-unit-password" style="flex:1;" placeholder="كلمة المرور الجديدة" value="${esc(S.ui.editUnitPasswordValue || "")}" />
-      <button data-action="save-unit-password" data-id="${esc(u.id)}" style="background:${GREEN_BG};border:none;border-radius:8px;padding:0 10px;cursor:pointer;">${iconCheck(16, GREEN)}</button>
-      <button data-action="cancel-unit-password" style="background:${DANGER_BG};border:none;border-radius:8px;padding:0 10px;cursor:pointer;">${iconX(16, DANGER)}</button>
-    </div>`;
-  }
-  const isActive = u.status !== "disabled";
-  return `<div class="card" style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;opacity:${isActive ? 1 : 0.6}">
-    <div style="display:flex;align-items:center;gap:10px;">
-      <div style="width:34px;height:34px;border-radius:10px;background:${DANGER_BG};display:flex;align-items:center;justify-content:center;">${iconBuilding(ROSE, 16)}</div>
-      <div><div style="font-size:13.5px;font-weight:700;">${esc(u.name)} <span style="font-size:10px;font-weight:700;color:${ROSE};background:${DANGER_BG};padding:2px 7px;border-radius:999px;">${esc(roleLabel)}</span></div>${!isActive ? `<div style="font-size:10.5px;color:${SUBTLE}">معطّل</div>` : ""}</div>
-    </div>
-    <div style="display:flex;gap:6px;align-items:center;">
-      <button class="icon-btn" style="width:32px;height:32px;background:${isActive ? DANGER_BG : GREEN_BG}" data-action="toggle-unit" data-id="${esc(u.id)}" title="${isActive ? "تعطيل" : "تفعيل"}">${iconPower(14, isActive ? DANGER : GREEN)}</button>
-      <button class="icon-btn" style="width:32px;height:32px;border:1px solid ${BORDER}" data-action="start-unit-password" data-id="${esc(u.id)}" title="تغيير كلمة المرور">${iconKey(14, INK)}</button>
-      <button class="icon-btn" style="width:32px;height:32px;border:1px solid ${BORDER}" data-action="confirm-delete-unit" data-id="${esc(u.id)}" title="حذف">${iconTrash(14, DANGER)}</button>
-    </div>
-  </div>`;
-}
-
-function collapsibleUsersSection({ key, title, count, formHtml, listHtml }) {
-  const manualState = (S.ui.usersSectionState || {})[key];
-  const isOpen = manualState !== undefined ? manualState : false;
-  return `
-    <div class="card" style="margin-bottom:10px;padding:0;overflow:hidden;">
-      <button data-action="toggle-users-section" data-key="${esc(key)}" style="width:100%;display:flex;align-items:center;justify-content:space-between;background:none;border:none;cursor:pointer;padding:14px 16px;">
-        <span style="font-size:13.5px;font-weight:800;color:${ROSE};">${esc(title)} <span style="font-size:11px;font-weight:700;color:${SUBTLE};">(${count})</span></span>
-        <span style="display:inline-flex;transition:transform 0.15s;transform:rotate(${isOpen ? "0" : "-90"}deg);">${iconChevronDown(14, SUBTLE)}</span>
-      </button>
-      ${isOpen ? `<div style="padding:0 16px 16px;">${formHtml}${listHtml}</div>` : ""}
-    </div>`;
-}
-
 // نقطة إضافة واحدة موحّدة بدل 6 نماذج دائمة الظهور: ضغطة "+ إضافة" تفتح قائمة
 // أنواع (تفرّع من نفس فكرة الهيكل)، واختيار نوع يفتح نموذجه الفعلي (نفس
 // الحقول وأزرار add-* القديمة تمامًا، بلا أي تغيير بالمنطق) — إضافة واجهة
@@ -5497,85 +5453,6 @@ const ADD_ENTITY_TYPES = [
   { key: "unit", label: "وحدة", sectionKey: "units" },
   { key: "center", label: "مركز", sectionKey: "centers" },
 ];
-
-function addEntityPickerHtml() {
-  const ui = S.ui;
-  const step = ui.addEntityStep;
-  if (!step) {
-    return `<div style="margin-bottom:14px;">${pillBtn("إضافة", { icon: iconPlus(15, "#fff"), action: "start-add-entity" })}</div>`;
-  }
-  if (step === "choose") {
-    return `<div class="card" style="margin-bottom:18px;">
-      <div style="font-size:12.5px;font-weight:800;color:${ROSE};margin-bottom:10px;">ماذا تريدين إضافته؟</div>
-      <div style="display:flex;gap:8px;flex-wrap:wrap;">
-        ${ADD_ENTITY_TYPES.map((t) => pillBtn(t.label, { variant: "ghost", action: "choose-add-entity-type", data: { type: t.key } })).join("")}
-        ${pillBtn("إلغاء", { variant: "ghost", icon: iconX(14, INK), action: "cancel-add-entity" })}
-      </div>
-    </div>`;
-  }
-  const formByType = {
-    executive: `<div style="display:flex;gap:8px;flex-wrap:wrap;">
-      <input class="input" id="new-executive-name" style="flex:2;min-width:160px;" placeholder="اسم الحساب" value="${esc(ui.newExecutiveName || "")}" />
-      <input class="input" id="new-executive-password" style="flex:1;min-width:120px;" placeholder="كلمة المرور" value="${esc(ui.newExecutivePassword || "")}" />
-      <input class="input" id="new-executive-email" style="flex:1;min-width:160px;" type="email" placeholder="الإيميل" value="${esc(ui.newExecutiveEmail || "")}" />
-      ${entityJobTitleFieldHtml("new-executive-jobtitle")}
-      ${pillBtn("إضافة", { icon: iconPlus(15, "#fff"), action: "add-executive" })}
-    </div>`,
-    sysadmin: `<div style="display:flex;gap:8px;flex-wrap:wrap;">
-      <input class="input" id="new-sysadmin-name" style="flex:2;min-width:160px;" placeholder="اسم الحساب" value="${esc(ui.newSysadminName || "")}" />
-      <input class="input" id="new-sysadmin-password" style="flex:1;min-width:120px;" placeholder="كلمة المرور" value="${esc(ui.newSysadminPassword || "")}" />
-      <input class="input" id="new-sysadmin-email" style="flex:1;min-width:160px;" type="email" placeholder="الإيميل" value="${esc(ui.newSysadminEmail || "")}" />
-      ${entityJobTitleFieldHtml("new-sysadmin-jobtitle")}
-      ${pillBtn("إضافة", { icon: iconPlus(15, "#fff"), action: "add-sysadmin" })}
-    </div>`,
-    office: `<div style="display:flex;gap:8px;flex-wrap:wrap;">
-      <input class="input" id="new-office-name" style="flex:2;min-width:160px;" placeholder="اسم مكتب الإشراف الجديد" value="${esc(ui.newOfficeName || "")}" />
-      <input class="input" id="new-office-password" style="flex:1;min-width:120px;" placeholder="كلمة المرور (اختياري)" value="${esc(ui.newOfficePassword || "")}" />
-      <input class="input" id="new-office-email" style="flex:1;min-width:160px;" type="email" placeholder="الإيميل" value="${esc(ui.newOfficeEmail || "")}" />
-      ${entityJobTitleFieldHtml("new-office-jobtitle")}
-      ${pillBtn("إضافة", { icon: iconPlus(15, "#fff"), action: "add-office" })}
-    </div>`,
-    department: `${sheetsConfigured() ? `<div class="hint" style="background:${BLUE_BG};border-radius:10px;padding:9px 12px;margin-bottom:10px;">كلمة مرور القسم (اختيارية) تفتح للقسم كل وحداته التابعة له دفعة واحدة.</div>` : ""}
-    <div style="display:flex;gap:8px;flex-wrap:wrap;">
-      <input class="input" id="new-dept-name" style="flex:2;min-width:160px;" placeholder="اسم القسم الجديد" value="${esc(ui.newDeptName || "")}" />
-      <input class="input" id="new-dept-password" style="flex:1;min-width:120px;" placeholder="كلمة المرور (اختياري)" value="${esc(ui.newDeptPassword || "")}" />
-      <input class="input" id="new-dept-email" style="flex:1;min-width:160px;" type="email" placeholder="الإيميل" value="${esc(ui.newDeptEmail || "")}" />
-      ${entityJobTitleFieldHtml("new-dept-jobtitle")}
-      ${pillBtn("إضافة", { icon: iconPlus(15, "#fff"), action: "add-department" })}
-    </div>`,
-    unit: `${sheetsConfigured() ? `<div class="hint" style="background:${BLUE_BG};border-radius:10px;padding:9px 12px;margin-bottom:10px;">كلمة المرور هنا هي نفسها اللي تسجّل بيها الوحدة دخولها.</div>` : ""}
-    <div style="display:flex;gap:8px;flex-wrap:wrap;">
-      <input class="input" id="new-unit-name" style="flex:2;min-width:160px;" placeholder="اسم الوحدة الجديدة" value="${esc(ui.newUnitName || "")}" />
-      <input class="input" id="new-unit-password" style="flex:1;min-width:120px;" placeholder="كلمة المرور" value="${esc(ui.newUnitPassword || "")}" />
-      <input class="input" id="new-unit-email" style="flex:1;min-width:160px;" type="email" placeholder="الإيميل" value="${esc(ui.newUnitEmail || "")}" />
-      <select class="input" id="new-unit-dept" style="flex:1;min-width:140px;">
-        <option value="">القسم (اختياري)</option>
-        ${S.departments.map((d) => `<option value="${esc(d.id)}" ${ui.newUnitDept === d.id ? "selected" : ""}>${esc(d.name)}</option>`).join("")}
-      </select>
-      ${entityJobTitleFieldHtml("new-unit-jobtitle")}
-      ${pillBtn("إضافة", { icon: iconPlus(15, "#fff"), action: "add-unit" })}
-    </div>`,
-    center: `<div style="display:flex;gap:8px;flex-wrap:wrap;">
-      <input class="input" id="new-center-name" style="flex:2;min-width:160px;" placeholder="اسم المركز الجديد" value="${esc(ui.newCenterName || "")}" />
-      <input class="input" id="new-center-password" style="flex:1;min-width:120px;" placeholder="كلمة المرور" value="${esc(ui.newCenterPassword || "")}" />
-      <input class="input" id="new-center-email" style="flex:1;min-width:160px;" type="email" placeholder="الإيميل" value="${esc(ui.newCenterEmail || "")}" />
-      <select class="input" id="new-center-dept" style="flex:1;min-width:140px;">
-        <option value="">القسم (اختياري)</option>
-        ${S.departments.map((d) => `<option value="${esc(d.id)}" ${ui.newCenterDept === d.id ? "selected" : ""}>${esc(d.name)}</option>`).join("")}
-      </select>
-      ${entityJobTitleFieldHtml("new-center-jobtitle")}
-      ${pillBtn("إضافة", { icon: iconPlus(15, "#fff"), action: "add-center" })}
-    </div>`,
-  };
-  const typeInfo = ADD_ENTITY_TYPES.find((t) => t.key === step);
-  return `<div class="card" style="margin-bottom:18px;">
-    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;">
-      <span style="font-size:12.5px;font-weight:800;color:${ROSE};">إضافة ${esc(typeInfo ? typeInfo.label : "")}</span>
-      ${pillBtn("رجوع", { variant: "ghost", action: "start-add-entity" })}
-    </div>
-    ${formByType[step] || ""}
-  </div>`;
-}
 
 
 /* ---------- شجرة الهيكل (مكتب ← قسم ← وحدة) بنفس شكل المخطط الحر:
@@ -5625,127 +5502,6 @@ function treeEditFormHtml(type, id) {
   </div>`;
 }
 const STRUCT_OWNER_KIND = { unit: "unit", dept: "department", office: "office" };
-function structPersonsBlockHtml(kind, e, key) {
-  const ui = S.ui;
-  const roles = rolesList();
-  const list = personsList().filter((p) => (p.ownerKind || "unit") === kind && p.ownerId === e.id);
-  const roleOpts = (cur) => `<option value="">— الدور —</option>${roles.map((r) => `<option value="${esc(r.id)}" ${cur === r.id ? "selected" : ""}>${esc(r.name)}</option>`).join("")}`;
-  const rows = list.map((p) => {
-    const r = roles.find((x) => x.id === p.roleId);
-    const on = p.status !== "disabled";
-    const hasOv = p.permsOverride && (Array.isArray(p.permsOverride.pages) || Array.isArray(p.permsOverride.actions));
-    const perm = ui.personPermEditId === p.id ? personPermsEditorHtml(p) : "";
-    if (ui.personEditId === p.id) {
-      return perm + `<div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-bottom:6px;">
-        <input class="input" id="sp-ename-${esc(p.id)}" value="${esc(p.name)}" style="flex:1;min-width:120px;" />
-        <select class="input" id="sp-erole-${esc(p.id)}" style="width:150px;">${roleOpts(p.roleId)}</select>
-        <input class="input" id="sp-epin-${esc(p.id)}" inputmode="numeric" placeholder="رمز (اختياري)" value="${esc(p.pin)}" style="width:120px;" />
-        ${pillBtn("حفظ", { action: "struct-person-save", data: { id: p.id } })}${pillBtn("إلغاء", { variant: "ghost", action: "person-cancel" })}
-      </div>`;
-    }
-    return perm + `<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;padding:6px 0;border-top:1px solid ${BORDER};opacity:${on ? 1 : 0.6};">
-      <div><span style="font-size:12.5px;font-weight:800;">${esc(p.name)}</span> <span style="font-size:11px;color:${SUBTLE};">• ${esc(r ? r.name : "(بلا دور)")}${personEffectivePin(p) ? " • برمز" : ""}${hasOv ? " • استثناء خاص" : ""}${on ? "" : " • معطّل"}</span></div>
-      <div style="display:flex;gap:5px;align-items:center;">${ui.personConfirmDeleteId === p.id
-        ? `${pillBtn("تأكيد الحذف", { variant: "danger", action: "person-delete", data: { id: p.id } })}${pillBtn("تراجع", { variant: "ghost", action: "person-delete-cancel" })}`
-        : `<button class="icon-btn" style="width:28px;height:28px;border:1px solid ${BORDER}" data-action="person-perm-edit" data-id="${esc(p.id)}" title="استثناء الصلاحيات">${iconKey(12, INK)}</button>
-           <button class="icon-btn" style="width:28px;height:28px;border:1px solid ${BORDER}" data-action="person-edit" data-id="${esc(p.id)}" title="تعديل">${iconPencil(12, INK)}</button>
-           <button class="icon-btn" style="width:28px;height:28px;background:${on ? DANGER_BG : GREEN_BG}" data-action="person-toggle" data-id="${esc(p.id)}" title="${on ? "تعطيل" : "تفعيل"}">${iconPower(12, on ? DANGER : GREEN)}</button>
-           <button class="icon-btn" style="width:28px;height:28px;background:${DANGER_BG}" data-action="person-delete-ask" data-id="${esc(p.id)}" title="حذف">${iconTrash(12, DANGER)}</button>`}</div>
-    </div>`;
-  }).join("");
-  const err = ui.structPersonError && ui.structPersonError.key === key ? `<div style="color:${DANGER};font-size:11.5px;font-weight:700;margin-top:6px;">${esc(ui.structPersonError.msg)}</div>` : "";
-  return `<div class="card" style="margin:0 0 8px;background:${GRAY_BG};padding:10px 12px;">
-    <div style="font-size:12px;font-weight:800;color:${ROSE};margin-bottom:6px;">الأشخاص — ${esc(e.name)} (${list.length})</div>
-    <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-bottom:8px;padding-bottom:8px;border-bottom:1px solid ${BORDER};">
-      <span style="font-size:11.5px;font-weight:800;">${kind === "unit" ? "دور «الإدارية»" : "دور الحساب الأساسي"}:</span>
-      <select class="input" data-action="set-base-role" data-kind="${esc(kind)}" data-id="${esc(e.id)}" style="width:190px;">
-        <option value="">— بلا دور (لا صفحات) —</option>${roles.map((r) => `<option value="${esc(r.id)}" ${e.baseRoleId === r.id ? "selected" : ""}>${esc(r.name)}</option>`).join("")}
-      </select>
-      <span style="font-size:10.5px;color:${SUBTLE};">يحدد صفحات وأزرار الدخول المباشر بدون اختيار شخص.</span>
-    </div>
-    ${rows || `<div style="font-size:11.5px;color:${SUBTLE};padding:4px 0;">لا يوجد أشخاص بعد.</div>`}
-    <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-top:8px;">
-      <input class="input" id="sp-name-${esc(key)}" placeholder="اسم الشخص" style="flex:1;min-width:120px;" />
-      <select class="input" id="sp-role-${esc(key)}" style="width:150px;">${roleOpts("")}</select>
-      <input class="input" id="sp-pin-${esc(key)}" inputmode="numeric" placeholder="رمز (اختياري)" style="width:120px;" />
-      ${pillBtn("إضافة", { icon: iconPlus(14, "#fff"), action: "struct-person-add", data: { kind, id: e.id, key } })}
-    </div>${err}
-    ${roles.length ? "" : `<div style="font-size:11px;color:${SUBTLE};margin-top:6px;">أنشئي دورًا أولًا من تبويب «الأدوار».</div>`}
-  </div>`;
-}
-function treeNodeHtml(e, tag, type, moveHtml, childrenHtml, depth, opts) {
-  opts = opts || {};
-  const key = type + ":" + e.id;
-  const collapsed = !!(S.ui.treeCollapsed || {})[key];
-  const hasChildren = !!childrenHtml;
-  const confirming = S.ui.treeConfirmDel && S.ui.treeConfirmDel.type === type && S.ui.treeConfirmDel.id === e.id;
-  const actions = confirming
-    ? (opts.lastAdmin
-      ? `<span style="font-size:12px;font-weight:700;color:${DANGER};">لا يمكن حذف آخر حساب لمديرة النظام — أضيفي حساباً آخر أولاً.</span>${pillBtn("حسناً", { variant: "ghost", action: "tree-cancel-delete" })}`
-      : `<span style="font-size:12px;font-weight:700;">حذف "${esc(e.name)}"؟</span>${pillBtn("حذف", { variant: "danger", action: "tree-delete", data: { type, id: e.id } })}${pillBtn("تراجع", { variant: "ghost", action: "tree-cancel-delete" })}`)
-    : `${moveHtml}
-      ${opts.noAdd ? "" : `<button class="icon-btn" style="width:28px;height:28px;border:1px solid ${BORDER}" data-action="tree-add-start" data-type="${type}" data-id="${esc(e.id)}" title="إضافة">${iconPlus(13, INK)}</button>`}
-      ${(type === "unit" || type === "dept" || type === "office") ? `<button class="icon-btn" style="width:auto;min-width:28px;height:28px;padding:0 6px;border:1px solid ${BORDER};gap:3px;" data-action="struct-persons-toggle" data-key="${esc(key)}" title="الأشخاص">${iconUser(13, INK)}<span style="font-size:10.5px;font-weight:800;">${personsList().filter((x) => (x.ownerKind || "unit") === STRUCT_OWNER_KIND[type] && x.ownerId === e.id).length}</span></button>` : ""}
-      ${type === "unit" ? `<button class="icon-btn" style="width:28px;height:28px;border:1px solid ${BORDER}" data-action="start-unit-approval-edit" data-id="${esc(e.id)}" title="مسار الاعتماد">${iconLayers(13, INK)}</button>` : ""}
-      <button class="icon-btn" style="width:28px;height:28px;border:1px solid ${BORDER}" data-action="tree-edit-start" data-type="${type}" data-id="${esc(e.id)}" title="تعديل">${iconPencil(13, INK)}</button>
-      ${opts.noDelete ? "" : `<button class="icon-btn" style="width:28px;height:28px;background:${DANGER_BG}" data-action="tree-confirm-delete" data-type="${type}" data-id="${esc(e.id)}" title="حذف">${iconTrash(13, DANGER)}</button>`}`;
-  return `<div style="margin-right:${depth > 0 ? 22 : 0}px;${depth > 0 ? `border-right:2px solid ${BORDER};padding-right:14px;` : ""}">
-    <div class="card" style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:6px;padding:7px 12px;border-radius:12px;">
-      <button class="icon-btn" style="width:26px;height:26px;flex-shrink:0;${hasChildren ? "" : "visibility:hidden;"}" data-action="tree-toggle" data-key="${esc(key)}" title="${collapsed ? "توسيع" : "طيّ"}">${collapsed ? iconChevronLeft(14, INK) : iconChevronDown ? iconChevronDown(14, INK) : "▾"}</button>
-      <div style="flex:1;min-width:120px;">
-        <div style="font-size:13px;font-weight:800;">${esc(e.name)}${opts.badge ? ` <span style="font-size:10px;font-weight:700;color:${ROSE};background:${DANGER_BG};padding:2px 8px;border-radius:999px;">${opts.badge}</span>` : ""}</div>
-        ${e.email ? `<div style="font-size:10.5px;color:${SUBTLE}">${esc(e.email)}</div>` : ""}
-      </div>
-      <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;">${actions}</div>
-    </div>
-    ${treeAddFormHtml(type, e.id)}${treeEditFormHtml(type, e.id)}${(S.ui.structPersonsOpen || {})[key] ? structPersonsBlockHtml(STRUCT_OWNER_KIND[type], e, key) : ""}${type === "unit" && S.ui.editingUnitApprovalId === e.id ? `<div style="margin:6px 0;">${unitRowHtml(e)}</div>` : ""}
-    ${collapsed ? "" : childrenHtml}
-  </div>`;
-}
-function structureTreeHtml() {
-  const offices = S.offices || [];
-  const units = S.units.filter((u) => u.role !== "admin" && u.role !== "executive" && u.role !== "self_report");
-  const sel = (action, id, first, opts, cur) => `<select class="input" style="padding:5px 8px;font-size:12px;width:120px;" data-action="${action}" data-id="${esc(id)}" title="نقل">
-    <option value="">${first}</option>${opts.map((o) => `<option value="${esc(o.id)}" ${cur === o.id ? "selected" : ""}>${esc(o.name)}</option>`).join("")}</select>`;
-  const unitNode = (u, depth) => treeNodeHtml(u, u.role === "center" ? "مركز" : "وحدة", "unit", sel("assign-unit-dept", u.id, "بلا", S.departments, u.departmentId), "", depth);
-  const deptNode = (d, depth) => treeNodeHtml(d, "قسم", "dept", sel("assign-dept-office", d.id, "بلا", offices, d.officeId),
-    units.filter((u) => u.departmentId === d.id).map((u) => unitNode(u, depth + 1)).join(""), depth);
-  const officeNode = (o, depth, guard) => {
-    const kids = offices.filter((x) => x.parentOfficeId === o.id && guard.indexOf(x.id) === -1).map((x) => officeNode(x, depth + 1, guard.concat(o.id))).join("");
-    const deps = S.departments.filter((d) => d.officeId === o.id).map((d) => deptNode(d, depth + 1)).join("");
-    const blocked = officeScopeIds(o.id);
-    return treeNodeHtml(o, "مكتب", "office", sel("assign-office-parent", o.id, "بلا", offices.filter((x) => blocked.indexOf(x.id) === -1).concat(S.units.filter((u) => u.role === "executive")), o.parentOfficeId), kids + deps, depth);
-  };
-  const execs = S.units.filter((u) => u.role === "executive");
-  const admins = S.units.filter((u) => u.role === "admin");
-  const isRoot = (o) => !o.parentOfficeId || (!offices.some((x) => x.id === o.parentOfficeId) && !execs.some((x) => x.id === o.parentOfficeId));
-  const execNode = (u) => treeNodeHtml(u, "إدارة عليا", "exec", "",
-    offices.filter((o) => o.parentOfficeId === u.id).map((o) => officeNode(o, 1, [])).join(""), 0);
-  const looseDepts = S.departments.filter((d) => !offices.some((o) => o.id === d.officeId));
-  const looseUnits = units.filter((u) => !S.departments.some((d) => d.id === u.departmentId));
-  return `<div style="margin-bottom:18px;">
-    <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-bottom:12px;">
-      <div style="font-size:15px;font-weight:800;display:flex;align-items:center;gap:8px;">${iconLayers(18, ROSE)} الهيكل التنظيمي</div>
-      ${pillBtn("إضافة", { icon: iconPlus(14, "#fff"), action: "tree-add-root", data: { type: "office" } })}
-    </div>
-    ${S.ui.treeAddRoot ? `<div class="card" style="margin-bottom:10px;background:${GRAY_BG};"><div style="display:flex;gap:6px;flex-wrap:wrap;">
-      ${entityJobTitleFieldHtml("tree-root-name")}
-      <input class="input" id="tree-root-email" style="flex:1;min-width:140px;" type="email" placeholder="الإيميل (اختياري)" />
-      <input class="input" id="tree-root-password" style="flex:1;min-width:110px;" placeholder="الرقم السري (اختياري)" />
-      ${pillBtn("حفظ", { action: "tree-root-save", data: { type: S.ui.treeAddRoot } })}
-      ${pillBtn("إلغاء", { variant: "ghost", action: "tree-root-cancel" })}
-    </div></div>` : ""}
-    ${admins.map((u) => treeNodeHtml(u, "", "admin", "", "", 0, { noAdd: true, lastAdmin: admins.length <= 1, badge: "مديرة النظام" })).join("")}
-    <div style="${admins.length ? `margin-right:22px;border-right:2px solid ${BORDER};padding-right:14px;` : ""}">
-    ${execs.map((u) => execNode(u)).join("")}
-    ${offices.filter(isRoot).map((o) => officeNode(o, 0, [])).join("")}
-    ${looseDepts.length ? `<div style="font-size:12px;font-weight:800;color:${ROSE};margin:10px 0 6px;">بلا مكتب</div>${looseDepts.map((d) => deptNode(d, 0)).join("")}` : ""}
-    ${looseUnits.length ? `<div style="font-size:12px;font-weight:800;color:${ROSE};margin:10px 0 6px;">بلا قسم</div>${looseUnits.map((u) => unitNode(u, 0)).join("")}` : ""}
-    </div>
-    ${!offices.length && !S.departments.length && !units.length && !execs.length ? `<div class="card" style="text-align:center;color:${SUBTLE};padding:30px;border-style:dashed;">لا يوجد شيء بعد — اضغطي "إضافة" لبدء أول عنصر.</div>` : ""}
-  </div>`;
-}
-
 // ===== عرض «القائمة مع لوحة التفاصيل» لصفحة الهيكل والأشخاص =====
 // إضافة جديدة فقط: الشجرة القديمة (structureTreeHtml) تبقى كما هي وتُفتح من زر «العرض القديم».
 // لا بيانات جديدة ولا أعمدة: تستخدم نفس الأشخاص والأدوار والمسارات ونفس الإجراءات الموجودة.
@@ -5973,7 +5729,7 @@ function structSimpleDetailHtml(sel) {
   const mv = structPanelMoveHtml(type, e);
   const menu = menuOpen ? `<div class="card" style="background:${GRAY_BG};margin:10px 0 0;display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
     ${confirming ? `<span style="font-size:12px;font-weight:700;">حذف "${esc(e.name)}"؟</span>${pillBtn("حذف", { variant: "danger", action: "tree-delete", data: { type, id: e.id } })}${pillBtn("تراجع", { variant: "ghost", action: "tree-cancel-delete" })}`
-      : `${pillBtn("تعديل", { variant: "ghost", action: "tree-edit-start", data: { type, id: e.id } })}${pillBtn("إضافة تحتها/فوقها", { variant: "ghost", action: "tree-add-start", data: { type, id: e.id } })}${mv ? `<span style="font-size:12px;font-weight:700;">يتبع</span>${mv}` : ""}${pillBtn("حذف", { variant: "danger", action: "tree-confirm-delete", data: { type, id: e.id } })}`}
+      : `${pillBtn("تعديل", { variant: "ghost", action: "tree-edit-start", data: { type, id: e.id } })}${pillBtn("إضافة تحتها/فوقها", { variant: "ghost", action: "tree-add-start", data: { type, id: e.id } })}${type === "unit" ? pillBtn("المسار القديم (رئيسة / مراجعة إضافية)", { variant: "ghost", action: "start-unit-approval-edit", data: { id: e.id } }) : ""}${mv ? `<span style="font-size:12px;font-weight:700;">يتبع</span>${mv}` : ""}${pillBtn("حذف", { variant: "danger", action: "tree-confirm-delete", data: { type, id: e.id } })}`}
   </div>` : "";
   const card = (n, title, extra, body) => `<div class="card" style="padding:16px 18px;margin-bottom:12px;">${structSimpleStepHead(n, title, extra)}${body}</div>`;
   return `<div style="display:flex;align-items:flex-start;gap:10px;flex-wrap:wrap;margin-bottom:12px;">
@@ -5983,6 +5739,7 @@ function structSimpleDetailHtml(sel) {
       <button class="icon-btn" style="width:38px;height:38px;border:1px solid ${BORDER}" data-action="struct-menu" data-key="${esc(key)}" title="المزيد">⋯</button>
     </div>
     ${menu}${treeAddFormHtml(type, e.id)}${treeEditFormHtml(type, e.id)}${structSimpleCopyHtml(type, e, key)}
+    ${type === "unit" && S.ui.editingUnitApprovalId === e.id ? `<div style="margin:6px 0 12px;">${unitRowHtml(e)}</div>` : ""}
     ${card(1, "من الأشخاص؟", S.ui.structPersonAdd === key ? "" : pillBtn("إضافة شخص", { icon: iconPlus(14, "#fff"), action: "struct-person-add-open", data: { key } }), structSimplePeopleHtml(type, e, key))}
     ${card(2, "ما أنواع الدخول المباشر لهذه الجهة؟", "", structSimpleRoleCardsHtml(type, e))}
     ${card(3, "من يعتمد تقاريرها؟", "", structPanelPathTabHtml(type, e))}`;
@@ -6049,7 +5806,7 @@ function structSimpleHtml() {
     </div></div>` : ""}`;
   const footer = `<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:14px;">
       ${pillBtn("إدارة الأدوار ›", { variant: "ghost", action: "struct-section", data: { section: "roles" } })}${S.isAdmin ? pillBtn("إدارة المسارات ›", { variant: "ghost", action: "struct-section", data: { section: "paths" } }) : ""}
-      ${pillBtn("الشجرة القديمة", { variant: "ghost", action: "set-struct-view", data: { mode: "tree" } })}</div>`;
+    </div>`;
   if (section === "people") return `<div style="margin-bottom:18px;">${header}${structSimplePeopleViewHtml()}${footer}</div>`;
   return `<div style="margin-bottom:18px;">${header}${empty ? `<div class="card" style="text-align:center;color:${SUBTLE};padding:30px;border-style:dashed;">لا يوجد شيء بعد — اضغطي "إضافة" لبدء أول عنصر.</div>` : `<div style="display:flex;gap:14px;flex-wrap:wrap;align-items:flex-start;">
       <div class="card" style="flex:1 1 250px;max-width:100%;padding:8px;">${structPanelListHtml(sel)}</div>
@@ -6057,145 +5814,13 @@ function structSimpleHtml() {
 }
 
 function renderDepartmentsManage() {
-  const ui = S.ui;
-  const execUnits = S.units.filter((u) => u.role === "executive");
-  const adminUnits = S.units.filter((u) => u.role === "admin");
-  const unitUnits = S.units.filter((u) => u.role !== "center" && u.role !== "admin" && u.role !== "executive" && u.role !== "self_report");
-  const centerUnits = S.units.filter((u) => u.role === "center");
-
   return `
   <div class="page-wrap"><div class="page-inner">
     ${topBarHtml({ title: "المستخدمون", subtitle: USERS_HUB_SUBTITLE, icon: iconUser(18, ROSE), backAction: "nav-back-admin" })}
     ${accountsHubTabBarHtml("units-manage")}
 
-${S.ui.structView !== "lists" ? (S.ui.structView === "tree" ? structureTreeHtml() : structSimpleHtml()) : (adminUnits.length ? collapsibleUsersSection({ key: "sysadmin", title: "مديرة النظام", count: adminUnits.length, formHtml: "", listHtml: `<div style="display:flex;flex-direction:column;gap:8px;">${adminUnits.map((u) => simpleAccountRowHtml(u, "مديرة نظام")).join("")}</div>` }) : "")}
-
-    ${(S.ui.structView === "lists" && execUnits.length) ? collapsibleUsersSection({
-      key: "executive", title: "الإدارة العليا", count: execUnits.length,
-      formHtml: "",
-      listHtml: `<div style="display:flex;flex-direction:column;gap:8px;">${execUnits.map((u) => simpleAccountRowHtml(u, "إدارة عليا")).join("")}</div>`,
-    }) : ""}
-
-    ${(S.ui.structView === "lists" && (S.offices || []).length) ? collapsibleUsersSection({
-      key: "offices", title: "مكاتب الإشراف", count: (S.offices || []).length,
-      formHtml: "",
-      listHtml: `<div style="display:flex;flex-direction:column;gap:8px;">${(S.offices || []).map((o) => officeRowHtml(o)).join("")}</div>`,
-    }) : ""}
-
-    ${(S.ui.structView === "lists" && S.departments.length) ? collapsibleUsersSection({
-      key: "departments", title: "الأقسام", count: S.departments.length,
-      formHtml: "",
-      listHtml: `<div style="display:flex;flex-direction:column;gap:8px;">${S.departments.map((d) => departmentRowHtml(d)).join("")}</div>`,
-    }) : ""}
-
-    ${(S.ui.structView === "lists" && unitUnits.length) ? collapsibleUsersSection({
-      key: "units", title: "الوحدات", count: unitUnits.length,
-      formHtml: "",
-      listHtml: `<div style="display:flex;flex-direction:column;gap:8px;">${unitUnits.map((u) => unitRowHtml(u)).join("")}</div>`,
-    }) : ""}
-
-    ${(S.ui.structView === "lists" && centerUnits.length) ? collapsibleUsersSection({
-      key: "centers", title: "المراكز", count: centerUnits.length,
-      formHtml: "",
-      listHtml: `<div style="display:flex;flex-direction:column;gap:8px;">${centerUnits.map((u) => unitRowHtml(u)).join("")}</div>`,
-    }) : ""}
-
-    ${S.ui.structView === "lists" && !execUnits.length && !adminUnits.length && !(S.offices || []).length && !S.departments.length && !unitUnits.length && !centerUnits.length
-      ? `<div class="card" style="text-align:center;color:${SUBTLE};padding:36px 20px;border-style:dashed;">لا توجد أي جهات بعد — ابدئي بالضغط على "إضافة" أعلاه.</div>` : ""}
+${structSimpleHtml()}
   </div></div>`;
-}
-
-function departmentRowHtml(d) {
-  const isActive = d.status === "active";
-  const editing = S.ui.editingDeptId === d.id;
-  const editingPassword = S.ui.editingDeptPasswordId === d.id;
-  const confirming = S.ui.confirmDeleteDeptId === d.id;
-  const confirmingRemove = S.ui.confirmRemoveDeptId === d.id;
-  if (confirmingRemove) {
-    return `<div class="card" style="display:flex;align-items:center;justify-content:space-between;gap:10px;">
-      <span style="font-size:12px;font-weight:700;">حذف "${esc(d.name)}" نهائيًا؟ الوحدات التابعة له تصبح بدون قسم.</span>
-      <div style="display:flex;gap:6px;">${pillBtn("حذف", { variant: "danger", action: "delete-department", data: { id: d.id } })}${pillBtn("تراجع", { variant: "ghost", action: "cancel-remove-department" })}</div>
-    </div>`;
-  }
-  if (confirming) {
-    return `<div class="card" style="display:flex;align-items:center;justify-content:space-between;gap:10px;">
-      <span style="font-size:12px;font-weight:700;">تعطيل/تفعيل "${esc(d.name)}"؟</span>
-      <div style="display:flex;gap:6px;">${pillBtn("تأكيد", { variant: "danger", action: "toggle-department", data: { id: d.id } })}${pillBtn("تراجع", { variant: "ghost", action: "cancel-confirm-dept" })}</div>
-    </div>`;
-  }
-  if (editingPassword) {
-    return `<div class="card" style="display:flex;gap:6px;align-items:center;">
-      <span style="font-size:12px;font-weight:700;white-space:nowrap;">${esc(d.name)} —</span>
-      <input class="input" id="edit-dept-password" style="flex:1;" placeholder="كلمة المرور الجديدة (فارغة = بدون دخول بالقسم)" value="${esc(S.ui.editDeptPasswordValue || "")}" />
-      <button data-action="save-dept-password" data-id="${esc(d.id)}" style="background:${GREEN_BG};border:none;border-radius:8px;padding:0 10px;cursor:pointer;">${iconCheck(16, GREEN)}</button>
-      <button data-action="cancel-dept-password" style="background:${DANGER_BG};border:none;border-radius:8px;padding:0 10px;cursor:pointer;">${iconX(16, DANGER)}</button>
-    </div>`;
-  }
-  if (editing) {
-    return `<div class="card" style="display:flex;gap:6px;">
-      <input class="input" id="edit-dept-name" style="flex:1;" value="${esc(S.ui.editDeptValue || "")}" />
-      <button data-action="save-dept-edit" data-id="${esc(d.id)}" style="background:${GREEN_BG};border:none;border-radius:8px;padding:0 10px;cursor:pointer;color:${GREEN}">${iconCheck(16, GREEN)}</button>
-      <button data-action="cancel-dept-edit" style="background:${DANGER_BG};border:none;border-radius:8px;padding:0 10px;cursor:pointer;">${iconX(16, DANGER)}</button>
-    </div>`;
-  }
-  const linkedOffice = (S.offices || []).find((o) => o.id === d.officeId);
-  return `<div class="card" style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;opacity:${isActive ? 1 : 0.6}">
-    <div style="display:flex;align-items:center;gap:10px;">
-      <div style="width:34px;height:34px;border-radius:10px;background:${DANGER_BG};display:flex;align-items:center;justify-content:center;">${iconLayers(16, ROSE)}</div>
-      <div><div style="font-size:13.5px;font-weight:700;">${esc(d.name)}</div>${!isActive ? `<div style="font-size:10.5px;color:${SUBTLE}">معطّل</div>` : d.password ? `<div style="font-size:10.5px;color:${GREEN}">دخول بكلمة سر القسم مفعّل</div>` : ""}${linkedOffice ? `<div style="font-size:10.5px;color:${SUBTLE}">تابع لـ ${esc(linkedOffice.name)}</div>` : ""}</div>
-    </div>
-    <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;">
-      <select class="input" style="padding:6px 8px;font-size:12px;width:170px;" data-action="assign-dept-office" data-id="${esc(d.id)}">
-        <option value="">بدون مكتب إشراف</option>
-        ${(S.offices || []).map((o) => `<option value="${esc(o.id)}" ${d.officeId === o.id ? "selected" : ""}>${esc(o.name)}</option>`).join("")}
-      </select>
-      <button class="icon-btn" style="width:32px;height:32px;border:1px solid ${BORDER}" data-action="start-dept-password" data-id="${esc(d.id)}" title="كلمة مرور القسم">${iconKey(14, INK)}</button>
-      <button class="icon-btn" style="width:32px;height:32px;border:1px solid ${BORDER}" data-action="start-dept-edit" data-id="${esc(d.id)}" data-name="${esc(d.name)}" title="تعديل">${iconPencil(14, INK)}</button>
-      <button class="icon-btn" style="width:32px;height:32px;background:${isActive ? DANGER_BG : GREEN_BG}" data-action="toggle-department" data-id="${esc(d.id)}" title="${isActive ? "تعطيل" : "تفعيل"}">${iconPower(14, isActive ? DANGER : GREEN)}</button>
-      <button class="icon-btn" style="width:32px;height:32px;border:1px solid ${BORDER}" data-action="confirm-remove-department" data-id="${esc(d.id)}" title="حذف">${iconTrash(14, DANGER)}</button>
-    </div>
-  </div>`;
-}
-
-function officeRowHtml(o) {
-  const isActive = o.status === "active";
-  const editing = S.ui.editingOfficeId === o.id;
-  const editingPassword = S.ui.editingOfficePasswordId === o.id;
-  const confirming = S.ui.confirmRemoveOfficeId === o.id;
-  const linkedDeptsCount = S.departments.filter((d) => d.officeId === o.id).length;
-  if (confirming) {
-    return `<div class="card" style="display:flex;align-items:center;justify-content:space-between;gap:10px;">
-      <span style="font-size:12px;font-weight:700;">حذف "${esc(o.name)}" نهائيًا؟ الأقسام التابعة له تصبح بدون مكتب إشراف.</span>
-      <div style="display:flex;gap:6px;">${pillBtn("حذف", { variant: "danger", action: "delete-office", data: { id: o.id } })}${pillBtn("تراجع", { variant: "ghost", action: "cancel-remove-office" })}</div>
-    </div>`;
-  }
-  if (editingPassword) {
-    return `<div class="card" style="display:flex;gap:6px;align-items:center;">
-      <span style="font-size:12px;font-weight:700;white-space:nowrap;">${esc(o.name)} —</span>
-      <input class="input" id="edit-office-password" style="flex:1;" placeholder="كلمة المرور الجديدة" value="${esc(S.ui.editOfficePasswordValue || "")}" />
-      <button data-action="save-office-password" data-id="${esc(o.id)}" style="background:${GREEN_BG};border:none;border-radius:8px;padding:0 10px;cursor:pointer;">${iconCheck(16, GREEN)}</button>
-      <button data-action="cancel-office-password" style="background:${DANGER_BG};border:none;border-radius:8px;padding:0 10px;cursor:pointer;">${iconX(16, DANGER)}</button>
-    </div>`;
-  }
-  if (editing) {
-    return `<div class="card" style="display:flex;gap:6px;">
-      <input class="input" id="edit-office-name" style="flex:1;" value="${esc(S.ui.editOfficeValue || "")}" />
-      <button data-action="save-office-edit" data-id="${esc(o.id)}" style="background:${GREEN_BG};border:none;border-radius:8px;padding:0 10px;cursor:pointer;color:${GREEN}">${iconCheck(16, GREEN)}</button>
-      <button data-action="cancel-office-edit" style="background:${DANGER_BG};border:none;border-radius:8px;padding:0 10px;cursor:pointer;">${iconX(16, DANGER)}</button>
-    </div>`;
-  }
-  return `<div class="card" style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;opacity:${isActive ? 1 : 0.6}">
-    <div style="display:flex;align-items:center;gap:10px;">
-      <div style="width:34px;height:34px;border-radius:10px;background:${DANGER_BG};display:flex;align-items:center;justify-content:center;">${iconLayers(16, ROSE)}</div>
-      <div><div style="font-size:13.5px;font-weight:700;">${esc(o.name)}</div>${!isActive ? `<div style="font-size:10.5px;color:${SUBTLE}">معطّل</div>` : o.password ? `<div style="font-size:10.5px;color:${GREEN}">كلمة سر المكتب مضبوطة</div>` : `<div style="font-size:10.5px;color:${SUBTLE}">${linkedDeptsCount} قسم تابع</div>`}</div>
-    </div>
-    <div style="display:flex;gap:6px;">
-      <button class="icon-btn" style="width:32px;height:32px;border:1px solid ${BORDER}" data-action="start-office-password" data-id="${esc(o.id)}" title="كلمة مرور المكتب">${iconKey(14, INK)}</button>
-      <button class="icon-btn" style="width:32px;height:32px;border:1px solid ${BORDER}" data-action="start-office-edit" data-id="${esc(o.id)}" data-name="${esc(o.name)}" title="تعديل">${iconPencil(14, INK)}</button>
-      <button class="icon-btn" style="width:32px;height:32px;background:${isActive ? DANGER_BG : GREEN_BG}" data-action="toggle-office" data-id="${esc(o.id)}" title="${isActive ? "تعطيل" : "تفعيل"}">${iconPower(14, isActive ? DANGER : GREEN)}</button>
-      <button class="icon-btn" style="width:32px;height:32px;border:1px solid ${BORDER}" data-action="confirm-remove-office" data-id="${esc(o.id)}" title="حذف">${iconTrash(14, DANGER)}</button>
-    </div>
-  </div>`;
 }
 
 function unitRowHtml(u) {
@@ -9491,10 +9116,6 @@ function attachFormListeners() {
       b.style.display = "none"; appEl.appendChild(b); b.click(); if (b.parentNode) b.parentNode.removeChild(b);
       return;
     }
-    if (el.dataset && el.dataset.action === "set-struct-view-select") {
-      S.ui.structView = el.value === "lists" ? "lists" : "tree"; render();
-      return;
-    }
     if (el.dataset && el.dataset.action === "assign-office-parent") {
       const o = (S.offices || []).find((x) => x.id === el.dataset.id);
       if (o && officeScopeIds(o.id).indexOf(el.value) === -1) { o.parentOfficeId = el.value; dataStore.saveOffices(S.offices); }
@@ -10539,7 +10160,6 @@ function attachClickListener() {
         break;
       }
 
-      case "set-struct-view": S.ui.structView = ds.mode; render(); break;
       case "struct-set-base-role": {
         // اختيار متعدد: الضغط على دور يضيفه/يزيله من القائمة، و«بلا دور» تفرّغها.
         const holder0 = ds.kind === "department" ? (S.departments || []).find((d) => d.id === ds.id) : ds.kind === "office" ? (S.offices || []).find((o) => o.id === ds.id) : (S.units || []).find((u) => u.id === ds.id);
