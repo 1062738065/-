@@ -5776,6 +5776,9 @@ function structSimplePeopleViewHtml() {
           <div style="font-size:11px;color:${act ? GREEN : "#9a6420"};margin-top:3px;font-weight:700;">${act ? `● مفعّل · ${(act.stages || []).length} مراحل` : (paths.length ? "مسودات غير مفعّلة" : "لا مسار لهذه الجهة")}</div></div>
       </div>
       ${!r ? `<div style="margin-top:8px;font-size:12px;color:#9a6420;font-weight:700;">⚠ بلا دور، فلا يرى أي صفحة. اختاري له دورًا.</div>` : ""}
+      <div style="margin-top:10px;display:flex;align-items:center;gap:8px;flex-wrap:wrap;justify-content:flex-end;">${S.ui.personConfirmDeleteId === p.id
+        ? `<span style="font-size:12px;color:${DANGER};font-weight:700;">حذف «${esc(p.name)}» نهائيًا؟</span>${pillBtn("تأكيد الحذف", { variant: "danger", action: "person-delete", data: { id: p.id } })}${pillBtn("تراجع", { variant: "ghost", action: "person-delete-cancel" })}`
+        : pillBtn("حذف الشخص", { variant: "danger", action: "person-delete-ask", data: { id: p.id } })}</div>
     </div>`;
   }).join("");
   return `<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px;">${chip("all", "الكل")}${roles.map((r) => chip(r.id, esc(r.name))).join("")}${chip("none", "بلا دور ⚠")}</div>
