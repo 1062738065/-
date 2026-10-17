@@ -1006,6 +1006,10 @@ function rowToSiteSettings(r) {
 // بنفس أسلوب site_settings بالضبط.
 function orgChartToRow(nodes) { return { id: "main", nodes: nodes || [] }; }
 function rowToOrgChart(r) { return Array.isArray(r.nodes) ? r.nodes : []; }
+// ما يظهر في «لوحة المعلومات» لكل نوع جهة: { [kind]: { hidden: [مفاتيح العناصر المخفية] } }.
+// الفارغ = كل شيء ظاهر كما كان. صف واحد (id: "main") بنفس أسلوب org_chart.
+function dashboardConfigToRow(cfg) { return { id: "main", config: cfg || {} }; }
+function rowToDashboardConfig(r) { return (r && r.config && typeof r.config === "object") ? r.config : {}; }
 function indDefToRow(d) { return { id: d.id, name: d.name, category: d.category || "", direction: d.direction || "", nature: d.nature || "", frequency: d.frequency || "", unit: d.unit || "", target: String(d.target ?? ""), data_source: d.dataSource || "", calculation_method: d.calculationMethod || "" }; }
 function rowToIndDef(r) { return { id: r.id, name: r.name, category: r.category || "", direction: r.direction || "", nature: r.nature || "", frequency: r.frequency || "", unit: r.unit || "", target: r.target || "", dataSource: r.data_source || "", calculationMethod: r.calculation_method || "" }; }
 function goalToRow(g, kind) { return { id: g.id, name: g.name, kind }; }
@@ -1070,7 +1074,7 @@ const UNITS_KEY = "prs:units", DEPARTMENTS_KEY = "prs:departments", OFFICES_KEY 
       INDICATOR_DEFINITIONS_KEY = "prs:indicator-definitions", GOALS_DEFINITIONS_KEY = "prs:goals-definitions",
       SITE_SETTINGS_KEY = "prs:site-settings", REPORT_SECTIONS_KEY = "prs:report-sections",
       SECTION_FIELD_SCHEMAS_KEY = "prs:section-field-schemas", PLATFORM_USERS_KEY = "prs:platform-users",
-      ORG_CHART_KEY = "prs:org-chart", JOB_TITLE_TEMPLATES_KEY = "prs:job-title-templates", ROLES_KEY = "prs:roles", PERSONS_KEY = "prs:persons", PERM_LOG_KEY = "prs:perm-log", APPROVAL_PATHS_KEY = "prs:approval-paths";
+      ORG_CHART_KEY = "prs:org-chart", DASHBOARD_CONFIG_KEY = "prs:dashboard-config", JOB_TITLE_TEMPLATES_KEY = "prs:job-title-templates", ROLES_KEY = "prs:roles", PERSONS_KEY = "prs:persons", PERM_LOG_KEY = "prs:perm-log", APPROVAL_PATHS_KEY = "prs:approval-paths";
 const DEFAULT_SITE_COLORS = { primary: "#6b2337", background: "#F2ECE8" };
 // ألوان الموقع الإضافية + ضبط عبارة الشريط الجانبي + ألوان بطاقات تصفّح الهيكل —
 // تُحفظ كلها في عمود واحد theme_json بجدول site_settings (نص JSON).
@@ -1230,6 +1234,11 @@ const dataStore = {
     const gone = removedIdsFor(OFFICES_KEY, o.map((x) => x.id), idsOfList);
     lsSet(OFFICES_KEY, JSON.stringify(o));
     if (sheetsConfigured()) queueSupabaseReplaceTable("offices", o.map(officeToRow), "id", gone).catch(() => {});
+  },
+  getDashboardConfig() { try { const v = lsGet(DASHBOARD_CONFIG_KEY); return v ? JSON.parse(v) : {}; } catch (e) { return {}; } },
+  saveDashboardConfig(cfg) {
+    lsSet(DASHBOARD_CONFIG_KEY, JSON.stringify(cfg));
+    if (sheetsConfigured()) supabaseRequest("dashboard_config", { method: "POST", prefer: "return=minimal,resolution=merge-duplicates", body: JSON.stringify(dashboardConfigToRow(cfg)) }).catch(() => {});
   },
   cacheOfficesLocally(o) { lsSet(OFFICES_KEY, JSON.stringify(o)); },
   getUnits() { const v = lsGet(UNITS_KEY); if (v) return JSON.parse(v); const seed = seedUnits(); lsSet(UNITS_KEY, JSON.stringify(seed)); return seed; },
@@ -2927,6 +2936,14 @@ async function refreshSiteSettingsFromSheet() {
   }
 }
 
+async function refreshDashboardConfigFromSheet() {
+  if (!sheetsConfigured()) return;
+  const res = await supabaseRequest("dashboard_config?id=eq.main&select=*");
+  if (res.ok && Array.isArray(res.data) && res.data.length) {
+    S.dashboardConfig = rowToDashboardConfig(res.data[0]);
+    lsSet(DASHBOARD_CONFIG_KEY, JSON.stringify(S.dashboardConfig));
+  }
+}
 async function refreshOrgChartFromSheet() {
   if (!sheetsConfigured()) return;
   const res = await supabaseRequest("org_chart?id=eq.main&select=*");
@@ -3243,6 +3260,46 @@ function statIconCardHtml(label, value, iconHtml, iconBg) {
   </div>`;
 }
 
+/* ---- إعدادات ما يظهر في لوحة المعلومات (حسب نوع الجهة) ---- */
+const DASH_KINDS = [
+  { id: "admin", label: "مديرة النظام" }, { id: "executive", label: "الإدارة العليا" },
+  { id: "office", label: "المكتب" }, { id: "dept", label: "القسم" }, { id: "unit", label: "الوحدة" },
+];
+// اللوحة العامة (مديرة النظام / المكتب / القسم / الوحدة)
+const DASH_STD_BLOCKS = [
+  { key: "banner", label: "البانر والبحث" }, { key: "stats", label: "بطاقات الأرقام الأربع" },
+  { key: "recent", label: "أحدث التقارير" }, { key: "totalPie", label: "رسم إجمالي التقارير" },
+  { key: "bars", label: "نسبة الإنجاز حسب الوحدة", not: ["unit"] },
+  { key: "indPie", label: "توزيع حالات المؤشرات" }, { key: "goalPie", label: "توزيع مستويات تحقق الأهداف" },
+  { key: "indicators", label: "جدول مؤشرات الأداء" }, { key: "goals", label: "جدول الأهداف التشغيلية" },
+];
+const DASH_STD_KINDS = ["admin", "office", "dept", "unit"];
+// لوحة الإشراف (الإدارة العليا، وصفحة لوحة المكتب القديمة)
+const DASH_EX_BLOCKS = [
+  { key: "exStats", label: "بطاقات الأرقام الأربع" }, { key: "exCompletion", label: "نسبة إنجاز التقارير إجمالًا" },
+  { key: "exDeptPerf", label: "ملخص أداء الأقسام" }, { key: "exStatus", label: "توزيع حالات التقارير" },
+  { key: "exUnitPerf", label: "نسبة الإنجاز حسب الوحدة" }, { key: "exPeriod", label: "مقارنة عدد التقارير حسب الفترة" },
+];
+const DASH_EX_KINDS = ["executive", "office"];
+function dashConfig() { return S.dashboardConfig || (S.dashboardConfig = dataStore.getDashboardConfig()); }
+function dashHidden(kind, key) { const c = dashConfig()[kind]; return !!(c && Array.isArray(c.hidden) && c.hidden.indexOf(key) !== -1); }
+function dashBlock(kind, key, html) { return dashHidden(kind, key) ? "" : html; }
+function dashRecentGrid(kind, recentHtml, totalHtml) {
+  const a = dashBlock(kind, "recent", recentHtml), b = dashBlock(kind, "totalPie", totalHtml);
+  if (!a && !b) return "";
+  return `<div style="display:grid;grid-template-columns:${a && b ? "2fr 1fr" : "1fr"};gap:14px;margin-bottom:18px;" class="dash-recent-grid">${a}${b}</div>`;
+}
+function dashExGrid(kind, deptHtml, statusHtml) {
+  const a = dashBlock(kind, "exDeptPerf", deptHtml), b = dashBlock(kind, "exStatus", statusHtml);
+  if (!a && !b) return "";
+  return `<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:14px;margin-bottom:18px;">${a}${b}</div>`;
+}
+function dashPieGrid(kind, indHtml, goalHtml) {
+  const a = dashBlock(kind, "indPie", indHtml), b = dashBlock(kind, "goalPie", goalHtml);
+  if (!a && !b) return "";
+  return `<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:14px;margin-bottom:18px;">${a}${b}</div>`;
+}
+
 function renderDashboard() {
   // "لوحة المعلومات" صارت صفحة واحدة ذكية — تبقى بنفس شكلها الكامل المعتاد
   // (البانر + بطاقات الإحصاءات + الرسوم البيانية + جداول المؤشرات/الأهداف)
@@ -3269,6 +3326,7 @@ function renderDashboard() {
       ensureUnitReportsLoaded(u.id).filter((r) => r.status === "under_review").forEach((r) => pendingReports.push({ unit: u, report: r }));
     });
     return renderDashboardBody(units, {
+      kind: "dept",
       title: dept.name,
       subtitle: `مرحبًا — نظرة شاملة على ${units.length} وحدة تابعة لهذا القسم`,
       topBarRight: adminDeptPreview && S.adminPreviewOrigin
@@ -3284,6 +3342,7 @@ function renderDashboard() {
     // تظهر فقط ضمن "جميع التقارير" لمن أعلى من المكتب.
     const units = officeUnits(office.id).filter((u) => u.role !== "self_report");
     return renderDashboardBody(units, {
+      kind: "office",
       title: office.name,
       subtitle: `نظرة شاملة على ${units.length} وحدة تابعة لهذا المكتب`,
       topBarRight: pillBtn("خروج", { variant: "danger", icon: iconLogout(15, DANGER), action: "logout" }),
@@ -3310,6 +3369,7 @@ function renderDashboard() {
 // محدّدة)، بدل تكرار نفس الكود. opts: { title, subtitle, topBarRight, extraTop }.
 function renderDashboardBody(activeUnits, opts) {
   opts = opts || {};
+  const dkind = opts.kind || "admin";
   let totalCompleted = 0, totalSections = 0;
   const allIndicators = [], allGoals = [];
   const allReportsFlat = [];
@@ -3397,7 +3457,7 @@ function renderDashboardBody(activeUnits, opts) {
     ${topBarHtml({ title: opts.title || "لوحة المعلومات", subtitle: opts.subtitle || `مرحبًا ${esc(S.currentUser.name)} — نظرة شاملة على كل الوحدات`, right: opts.topBarRight })}
     ${opts.extraTop || ""}
 
-    <div class="hero-banner">
+    ${dashBlock(dkind, "banner", `<div class="hero-banner">
       <img class="hero-banner-bg" src="${esc(siteBannerSrc(site))}" alt="" />
       <div class="hero-banner-text">
         <div class="hero-banner-eyebrow">مرحبًا بك في</div>
@@ -3408,16 +3468,16 @@ function renderDashboardBody(activeUnits, opts) {
         ${iconSearch(16, SUBTLE)}
         <input id="dashboard-search" class="search-input" placeholder="ابحث عن تقرير، قسم أو موظف..." />
       </div>
-    </div>
+    </div>`)}
 
-    <div class="stat-grid">
+    ${dashBlock(dkind, "stats", `<div class="stat-grid">
       ${statIconCardHtml("تقارير هذا الأسبوع", reportsThisWeek, iconCalendarSmall(18, ROSE), GREEN_BG)}
       ${statIconCardHtml("تقرير مكتمل", completedReportsCount, iconCheckCircle(18, GREEN), GREEN_BG)}
       ${statIconCardHtml("تقرير قيد المراجعة", underReviewReportsCount, iconDocument(18, GOLD), GOLD_BG)}
       ${statIconCardHtml("عدد الوحدات", activeUnits.length, iconBuilding(ROSE, 18), BLUE_BG)}
-    </div>
+    </div>`)}
 
-    <div style="display:grid;grid-template-columns:2fr 1fr;gap:14px;margin-bottom:18px;" class="dash-recent-grid">
+    ${dashRecentGrid(dkind, `
       <div class="card">
         <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">
           <div class="prs-title" style="font-size:14px;font-weight:800;">أحدث التقارير</div>
@@ -3427,29 +3487,25 @@ function renderDashboardBody(activeUnits, opts) {
           `<div class="table-wrap"><table class="prs-table" id="recent-reports-table"><thead><tr style="background:${GRAY_BG}">
             <th>الحالة</th><th>تاريخ الإعداد</th><th>القسم</th><th>اسم التقرير</th>
           </tr></thead><tbody>${recentRows}</tbody></table></div>`}
-      </div>
+      </div>`, `
       <div class="card">
         <div class="prs-title" style="font-size:13.5px;font-weight:800;margin-bottom:12px;">إجمالي التقارير</div>
         ${totalReportsPieHtml}
-      </div>
-    </div>
+      </div>`)}
 
-    <div class="card" style="margin-bottom:18px;">
+    ${dashBlock(dkind, "bars", `<div class="card" style="margin-bottom:18px;">
       <div class="prs-title" style="font-size:14px;font-weight:800;margin-bottom:12px;">نسبة الإنجاز حسب الوحدة</div>
       ${barsHtml}
-    </div>
-    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:14px;margin-bottom:18px;">
-      <div class="card"><div class="prs-title" style="font-size:13.5px;font-weight:800;margin-bottom:12px;">توزيع حالات المؤشرات</div>${indicatorPieHtml}</div>
-      <div class="card"><div class="prs-title" style="font-size:13.5px;font-weight:800;margin-bottom:12px;">توزيع مستويات تحقق الأهداف</div>${goalPieHtml}</div>
-    </div>
-    <div class="card" style="margin-bottom:18px;">
+    </div>`)}
+    ${dashPieGrid(dkind, `<div class="card"><div class="prs-title" style="font-size:13.5px;font-weight:800;margin-bottom:12px;">توزيع حالات المؤشرات</div>${indicatorPieHtml}</div>`, `<div class="card"><div class="prs-title" style="font-size:13.5px;font-weight:800;margin-bottom:12px;">توزيع مستويات تحقق الأهداف</div>${goalPieHtml}</div>`)}
+    ${dashBlock(dkind, "indicators", `<div class="card" style="margin-bottom:18px;">
       <div class="prs-title" style="font-size:14px;font-weight:800;margin-bottom:12px;">مؤشرات الأداء — كل الوحدات</div>
       ${allIndicators.length === 0 ? `<div style="font-size:12.5px;color:${SUBTLE}">لا توجد مؤشرات مُدخلة بعد.</div>` : `
       <div class="table-wrap"><table class="prs-table"><thead><tr style="background:${GOLD_BG}">
         <th style="color:#8a6a35">الوحدة</th><th style="color:#8a6a35">المؤشر</th><th style="text-align:center;color:#8a6a35">المستهدف</th><th style="text-align:center;color:#8a6a35">المتحقق</th><th style="text-align:center;color:#8a6a35">النسبة</th>
       </tr></thead><tbody>${indicatorsRows}</tbody></table></div>`}
-    </div>
-    <div class="card">
+    </div>`)}
+    ${dashBlock(dkind, "goals", `<div class="card">
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">
         <div class="prs-title" style="font-size:14px;font-weight:800;">الأهداف التشغيلية — كل الوحدات</div>
         <span style="font-size:11px;color:${SUBTLE}">متوسط النسبة: ${avgGoalPct}٪</span>
@@ -3458,7 +3514,7 @@ function renderDashboardBody(activeUnits, opts) {
       <div class="table-wrap"><table class="prs-table"><thead><tr style="background:${GREEN_BG}">
         <th style="color:${ROSE}">الوحدة</th><th style="color:${ROSE}">الهدف التشغيلي</th><th style="text-align:center;color:${ROSE}">المستوى</th><th style="text-align:center;color:${ROSE};width:70px">النسبة</th>
       </tr></thead><tbody>${goalsRows}</tbody></table></div>`}
-    </div>
+    </div>`)}
     ${opts.extraBottom || ""}
   </div></div>`;
 }
@@ -3543,7 +3599,7 @@ function renderUnitDashboard() {
     ${topBarHtml({ title: "لوحة المعلومات", subtitle: `مرحبًا ${esc(S.currentUser.name)} — نظرة عامة على تقارير ${esc(unit.name)}` })}
     ${scopedUnitSwitcherHtml()}
 
-    <div class="hero-banner">
+    ${dashBlock("unit", "banner", `<div class="hero-banner">
       <img class="hero-banner-bg" src="${esc(siteBannerSrc(site))}" alt="" />
       <div class="hero-banner-text">
         <div class="hero-banner-eyebrow">مرحبًا بك في</div>
@@ -3554,16 +3610,16 @@ function renderUnitDashboard() {
         ${iconSearch(16, SUBTLE)}
         <input id="dashboard-search" class="search-input" placeholder="ابحثي عن تقرير..." />
       </div>
-    </div>
+    </div>`)}
 
-    <div class="stat-grid">
+    ${dashBlock("unit", "stats", `<div class="stat-grid">
       ${statIconCardHtml("تقارير هذا الأسبوع", reportsThisWeek, iconCalendarSmall(18, ROSE), GREEN_BG)}
       ${statIconCardHtml("تقرير مكتمل", completedReportsCount, iconCheckCircle(18, GREEN), GREEN_BG)}
       ${statIconCardHtml("تقرير قيد المراجعة", underReviewReportsCount, iconDocument(18, GOLD), GOLD_BG)}
       ${statIconCardHtml("إجمالي التقارير", reports.length, iconBuilding(ROSE, 18), BLUE_BG)}
-    </div>
+    </div>`)}
 
-    <div style="display:grid;grid-template-columns:2fr 1fr;gap:14px;margin-bottom:18px;" class="dash-recent-grid">
+    ${dashRecentGrid("unit", `
       <div class="card">
         <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">
           <div class="prs-title" style="font-size:14px;font-weight:800;">أحدث التقارير</div>
@@ -3573,25 +3629,21 @@ function renderUnitDashboard() {
           `<div class="table-wrap"><table class="prs-table" id="recent-reports-table"><thead><tr style="background:${GRAY_BG}">
             <th>الحالة</th><th>تاريخ الإعداد</th><th>اسم التقرير</th>
           </tr></thead><tbody>${recentRows}</tbody></table></div>`}
-      </div>
+      </div>`, `
       <div class="card">
         <div class="prs-title" style="font-size:13.5px;font-weight:800;margin-bottom:12px;">إجمالي التقارير</div>
         ${totalReportsPieHtml}
-      </div>
-    </div>
+      </div>`)}
 
-    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:14px;margin-bottom:18px;">
-      <div class="card"><div class="prs-title" style="font-size:13.5px;font-weight:800;margin-bottom:12px;">توزيع حالات المؤشرات</div>${indicatorPieHtml}</div>
-      <div class="card"><div class="prs-title" style="font-size:13.5px;font-weight:800;margin-bottom:12px;">توزيع مستويات تحقق الأهداف</div>${goalPieHtml}</div>
-    </div>
-    <div class="card" style="margin-bottom:18px;">
+    ${dashPieGrid("unit", `<div class="card"><div class="prs-title" style="font-size:13.5px;font-weight:800;margin-bottom:12px;">توزيع حالات المؤشرات</div>${indicatorPieHtml}</div>`, `<div class="card"><div class="prs-title" style="font-size:13.5px;font-weight:800;margin-bottom:12px;">توزيع مستويات تحقق الأهداف</div>${goalPieHtml}</div>`)}
+    ${dashBlock("unit", "indicators", `<div class="card" style="margin-bottom:18px;">
       <div class="prs-title" style="font-size:14px;font-weight:800;margin-bottom:12px;">مؤشرات الأداء</div>
       ${allIndicators.length === 0 ? `<div style="font-size:12.5px;color:${SUBTLE}">لا توجد مؤشرات مُدخلة بعد.</div>` : `
       <div class="table-wrap"><table class="prs-table"><thead><tr style="background:${GOLD_BG}">
         <th style="color:#8a6a35">المؤشر</th><th style="text-align:center;color:#8a6a35">المستهدف</th><th style="text-align:center;color:#8a6a35">المتحقق</th><th style="text-align:center;color:#8a6a35">النسبة</th>
       </tr></thead><tbody>${indicatorsRows}</tbody></table></div>`}
-    </div>
-    <div class="card">
+    </div>`)}
+    ${dashBlock("unit", "goals", `<div class="card">
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">
         <div class="prs-title" style="font-size:14px;font-weight:800;">الأهداف التشغيلية</div>
         <span style="font-size:11px;color:${SUBTLE}">متوسط النسبة: ${avgGoalPct}٪</span>
@@ -3600,7 +3652,7 @@ function renderUnitDashboard() {
       <div class="table-wrap"><table class="prs-table"><thead><tr style="background:${GREEN_BG}">
         <th style="color:${ROSE}">الهدف التشغيلي</th><th style="text-align:center;color:${ROSE}">المستوى</th><th style="text-align:center;color:${ROSE};width:70px">النسبة</th>
       </tr></thead><tbody>${goalsRows}</tbody></table></div>`}
-    </div>
+    </div>`)}
   </div></div>`;
 }
 
@@ -3937,6 +3989,29 @@ function renderOrgChartPage() {
 }
 
 /* =============================== Site settings (admin) ======================= */
+function dashSettingsCardHtml() {
+  const group = (title, blocks, kindIds) => {
+    const kinds = DASH_KINDS.filter((k) => kindIds.indexOf(k.id) !== -1);
+    const cell = (k, b) => {
+      if (b.not && b.not.indexOf(k.id) !== -1) return `<td style="text-align:center;color:${SUBTLE};">—</td>`;
+      const shown = !dashHidden(k.id, b.key);
+      return `<td style="text-align:center;"><button type="button" data-action="dash-toggle" data-kind="${esc(k.id)}" data-key="${esc(b.key)}" title="${shown ? "ظاهر — اضغطي للإخفاء" : "مخفي — اضغطي للإظهار"}" style="width:34px;height:30px;border-radius:9px;cursor:pointer;font-size:15px;font-weight:800;border:1px solid ${shown ? GREEN : BORDER};background:${shown ? GREEN_BG : "#fff"};color:${shown ? GREEN : DANGER};">${shown ? "✓" : "✗"}</button></td>`;
+    };
+    return `<div style="margin-bottom:18px;">
+      <div style="font-size:13px;font-weight:800;margin-bottom:8px;">${esc(title)}</div>
+      <div class="table-wrap"><table class="prs-table"><thead><tr style="background:${GRAY_BG}"><th>العنصر</th>${kinds.map((k) => `<th style="text-align:center;">${esc(k.label)}</th>`).join("")}</tr></thead>
+      <tbody>${blocks.map((b) => `<tr><td style="font-weight:600;">${esc(b.label)}</td>${kinds.map((k) => cell(k, b)).join("")}</tr>`).join("")}</tbody></table></div>
+    </div>`;
+  };
+  const anyHidden = DASH_KINDS.some((k) => (dashConfig()[k.id] && (dashConfig()[k.id].hidden || []).length));
+  return `<div class="card" style="max-width:760px;margin-bottom:16px;">
+    <div class="subhead" style="margin-top:0;">ما يظهر في لوحة المعلومات</div>
+    <div class="hint" style="margin-bottom:14px;">✓ يظهر · ✗ مخفي. الاختيار لنوع الجهة كله (كل الأقسام ترى الشكل نفسه). يُحفظ فورًا. الأصل أن كل شيء ظاهر.</div>
+    ${group("اللوحة العامة", DASH_STD_BLOCKS, DASH_STD_KINDS)}
+    ${group("لوحة الإشراف (الإدارة العليا، وصفحة لوحة المكتب القديمة)", DASH_EX_BLOCKS, DASH_EX_KINDS)}
+    <div>${pillBtn("إظهار كل العناصر للجميع", { variant: "ghost", icon: iconX(14, INK), action: "dash-reset", disabled: !anyHidden })}</div>
+  </div>`;
+}
 function renderSiteSettings() {
   const current = S.siteSettings || dataStore.getSiteSettings();
   const theme = themeOf(current);
@@ -4135,6 +4210,8 @@ function renderSiteSettings() {
         ${imgPreviewBlock(current.sidebarTaglineImage || "", "عبارة الشريط الجانبي", `width:90px;height:60px;`, "site-tagline-image-file", "remove-site-tagline-image", !!current.sidebarTaglineImage)}
       </div>
     </div>
+
+    ${dashSettingsCardHtml()}
 
     <div class="card" style="max-width:560px;">
       <div style="display:flex;gap:8px;flex-wrap:wrap;">
@@ -4475,7 +4552,7 @@ function renderOfficeDashboard() {
   if (!office) return officeNotFoundPageHtml();
   const units = officeUnits(office.id);
   const depts = S.departments.filter((d) => officeScopeIds(office.id).includes(d.officeId) && d.status === "active");
-  return renderExecutiveDashboard(units, depts, { subtitle: `نظرة إشرافية شاملة على وحدات ${office.name}`, extraTop: adminScopeSwitcherHtml("office") });
+  return renderExecutiveDashboard(units, depts, { kind: "office", subtitle: `نظرة إشرافية شاملة على وحدات ${office.name}`, extraTop: adminScopeSwitcherHtml("office") });
 }
 
 // وحدات/أقسام النطاق الفعلي للحساب الحالي (نفس منطق "لوحة المعلومات") — تُستخدم
@@ -4735,6 +4812,7 @@ function hijriMonthLabel(ts) {
 // شي) ومن لوحة معلومات مكتب الإشراف (وحدات/أقسام مكتبه فقط) بنفس الدالة تمامًا.
 function renderExecutiveDashboard(scopeUnits, scopeDepartments, opts) {
   opts = opts || {};
+  const xk = opts.kind || "executive";
   const units = scopeUnits || S.units.filter((u) => u.status === "active" && u.role !== "admin" && u.role !== "executive" && u.role !== "self_report");
   const activeDepartments = scopeDepartments || S.departments.filter((d) => d.status === "active");
   const flat = scopeUnits ? collectReportsFlatForUnits(units) : collectAllReportsFlat();
@@ -4770,32 +4848,29 @@ function renderExecutiveDashboard(scopeUnits, scopeDepartments, opts) {
     ${topBarHtml({ title: "لوحة المعلومات", subtitle: opts.subtitle || "نظرة إشرافية شاملة على كل الأقسام والوحدات",
       right: pillBtn("خروج", { variant: "danger", icon: iconLogout(15, DANGER), action: "logout" }) })}
     ${opts.extraTop || ""}
-    <div class="stat-grid" style="margin-bottom:18px;">
+    ${dashBlock(xk, "exStats", `<div class="stat-grid" style="margin-bottom:18px;">
       ${statIconCardHtml("إجمالي التقارير", total, iconDocument(18, ROSE), DANGER_BG)}
       ${statIconCardHtml("تقارير مكتملة", completed, iconCheckCircle(18, GREEN), GREEN_BG)}
       ${statIconCardHtml("قيد الإعداد", inProgress, iconGauge(GOLD, 18), GOLD_BG)}
       ${statIconCardHtml("تقارير متأخرة", overdue, iconBell(18, DANGER), DANGER_BG)}
-    </div>
-    <div class="card" style="margin-bottom:18px;">
+    </div>`)}
+    ${dashBlock(xk, "exCompletion", `<div class="card" style="margin-bottom:18px;">
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;">
         <div class="prs-title" style="font-size:14px;font-weight:800;">نسبة إنجاز التقارير إجمالاً</div>
         <span style="font-size:16px;font-weight:900;color:${ROSE}">${completionPct}٪</span>
       </div>
       ${progressBarHtml(completionPct, ROSE)}
-    </div>
-    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:14px;margin-bottom:18px;">
-      <div class="card"><div class="prs-title" style="font-size:13.5px;font-weight:800;margin-bottom:12px;">ملخص أداء الأقسام</div>
-        ${deptPerf.length ? svgBarChart(deptPerf, { height: 180 }) : emptyHint("لا توجد أقسام نشطة بعد.")}</div>
-      <div class="card"><div class="prs-title" style="font-size:13.5px;font-weight:800;margin-bottom:12px;">توزيع حالات التقارير</div>${total ? statusPie : emptyHint("لا توجد تقارير بعد.")}</div>
-    </div>
-    <div class="card" style="margin-bottom:18px;">
+    </div>`)}
+    ${dashExGrid(xk, `<div class="card"><div class="prs-title" style="font-size:13.5px;font-weight:800;margin-bottom:12px;">ملخص أداء الأقسام</div>
+        ${deptPerf.length ? svgBarChart(deptPerf, { height: 180 }) : emptyHint("لا توجد أقسام نشطة بعد.")}</div>`, `<div class="card"><div class="prs-title" style="font-size:13.5px;font-weight:800;margin-bottom:12px;">توزيع حالات التقارير</div>${total ? statusPie : emptyHint("لا توجد تقارير بعد.")}</div>`)}
+    ${dashBlock(xk, "exUnitPerf", `<div class="card" style="margin-bottom:18px;">
       <div class="prs-title" style="font-size:14px;font-weight:800;margin-bottom:12px;">نسبة الإنجاز حسب الوحدة</div>
       ${unitPerf.length ? progressListHtml(unitPerf) : emptyHint("لا توجد وحدات نشطة بعد.")}
-    </div>
-    <div class="card">
+    </div>`)}
+    ${dashBlock(xk, "exPeriod", `<div class="card">
       <div class="prs-title" style="font-size:14px;font-weight:800;margin-bottom:12px;">مقارنة عدد التقارير حسب الفترة</div>
       ${periodChart}
-    </div>
+    </div>`)}
   </div></div>`;
 }
 
@@ -9518,6 +9593,32 @@ function attachClickListener() {
         break;
       }
       case "nav-back-admin": S.view = "browse-structure"; render(); break;
+      case "dash-toggle": {
+        if (!S.isAdmin) break;
+        const kind = ds.kind, key = ds.key;
+        if (!DASH_KINDS.some((k) => k.id === kind) || !key) break;
+        const cfg = JSON.parse(JSON.stringify(dashConfig()));
+        const cur = (cfg[kind] && Array.isArray(cfg[kind].hidden)) ? cfg[kind].hidden.slice() : [];
+        const i = cur.indexOf(key);
+        const nowHidden = i === -1;
+        if (nowHidden) cur.push(key); else cur.splice(i, 1);
+        cfg[kind] = { ...(cfg[kind] || {}), hidden: cur };
+        S.dashboardConfig = cfg;
+        dataStore.saveDashboardConfig(cfg);
+        const blk = DASH_STD_BLOCKS.concat(DASH_EX_BLOCKS).find((b) => b.key === key);
+        const kl = (DASH_KINDS.find((k) => k.id === kind) || {}).label || kind;
+        addPermLog("dashboard", kind, kl, (nowHidden ? "إخفاء «" : "إظهار «") + (blk ? blk.label : key) + "» من لوحة المعلومات");
+        render();
+        break;
+      }
+      case "dash-reset": {
+        if (!S.isAdmin) break;
+        S.dashboardConfig = {};
+        dataStore.saveDashboardConfig({});
+        addPermLog("dashboard", "all", "كل الجهات", "إظهار كل عناصر لوحة المعلومات");
+        render();
+        break;
+      }
       case "save-site-settings": {
         const settings = S.siteSettings || dataStore.getSiteSettings();
         dataStore.saveSiteSettings(settings);
@@ -11567,6 +11668,7 @@ function boot() {
   attachClickListener();
   render();
   if (sheetsConfigured()) refreshSiteSettingsFromSheet().then(() => render());
+  if (sheetsConfigured()) refreshDashboardConfigFromSheet().then(() => render()).catch(() => {});
 }
 
 document.addEventListener("DOMContentLoaded", boot);
