@@ -676,20 +676,33 @@ function reportSupabaseWriteError(table, msg) {
     bar.textContent = "تعذّر حفظ التغيير بقاعدة البيانات (جدول " + table + "): " + msg + " — لم يُحذف شيء. (اضغطي لإغلاق)";
   } catch (e) { /* تجاهل */ }
 }
-async function supabaseReplaceTable(table, rows, keyCol) {
+// حفظ غير إتلافي: يضيف ويعدّل الصفوف المرسلة فقط (upsert)، ولا يحذف من القاعدة إلا الصفوف
+// التي حُذفت فعلًا من هذا المتصفح (removedIds). فلا تُمحى صفوف لمجرد أن هذا المتصفح لا يعرفها
+// (نسخة قديمة / تبويب آخر).
+async function supabaseReplaceTable(table, rows, keyCol, removedIds) {
   keyCol = keyCol || "id";
   if (!sheetsConfigured()) return;
-  if (!rows.length) {
-    const del = await supabaseRequest(`${table}?${keyCol}=neq.__none__`, { method: "DELETE", prefer: "return=minimal" });
-    if (!del.ok) reportSupabaseWriteError(table, del.error);
-    return;
+  if (rows.length) {
+    const up = await supabaseRequest(`${table}?on_conflict=${keyCol}`, { method: "POST", prefer: "resolution=merge-duplicates,return=minimal", body: JSON.stringify(rows) });
+    if (!up.ok) { reportSupabaseWriteError(table, up.error); return; }
   }
-  const up = await supabaseRequest(`${table}?on_conflict=${keyCol}`, { method: "POST", prefer: "resolution=merge-duplicates,return=minimal", body: JSON.stringify(rows) });
-  if (!up.ok) { reportSupabaseWriteError(table, up.error); return; }
-  const ids = rows.map((r) => '"' + String(r[keyCol]).replace(/"/g, "") + '"').join(",");
-  const del = await supabaseRequest(`${table}?${keyCol}=not.in.(${encodeURIComponent(ids)})`, { method: "DELETE", prefer: "return=minimal" });
-  if (!del.ok) reportSupabaseWriteError(table, del.error);
+  const gone = (removedIds || []).filter((x) => x !== undefined && x !== null && x !== "");
+  if (gone.length) {
+    const ids = gone.map((x) => '"' + String(x).replace(/"/g, "") + '"').join(",");
+    const del = await supabaseRequest(`${table}?${keyCol}=in.(${encodeURIComponent(ids)})`, { method: "DELETE", prefer: "return=minimal" });
+    if (!del.ok) reportSupabaseWriteError(table, del.error);
+  }
 }
+// المعرّفات التي كانت في النسخة المحلية قبل هذا الحفظ وليست في القائمة الجديدة = حُذفت هنا عمدًا.
+function removedIdsFor(lsKey, newIds, idsOf) {
+  try {
+    const v = lsGet(lsKey);
+    if (!v) return [];
+    const keep = new Set(newIds.map(String));
+    return idsOf(JSON.parse(v)).filter((id) => !keep.has(String(id)));
+  } catch (e) { return []; }
+}
+const idsOfList = (l) => (Array.isArray(l) ? l : []).map((x) => x && x.id);
 
 // طابور كتابة لكل جدول: لو صار أكثر من تعديل سريع بعد بعض (مثال: ضغط "نقل لأعلى"
 // عدة مرات متتالية بسرعة على حقل)، كل تعديل يبدأ كتابته للقاعدة فقط بعد ما تخلص
@@ -699,9 +712,9 @@ async function supabaseReplaceTable(table, rows, keyCol) {
 // الجدول قبل ما تقرأ منه، عشان ما ترجع بنسخة قديمة وتطبّقها فوق تعديل المستخدم
 // الأحدث (وهذا بالضبط سبب مشكلة "رجع الترتيب تحت" اللي لاحظتها).
 const supabaseWriteQueues = {};
-function queueSupabaseReplaceTable(table, rows, keyCol) {
+function queueSupabaseReplaceTable(table, rows, keyCol, removedIds) {
   const prev = supabaseWriteQueues[table] || Promise.resolve();
-  const next = prev.catch(() => {}).then(() => supabaseReplaceTable(table, rows, keyCol));
+  const next = prev.catch(() => {}).then(() => supabaseReplaceTable(table, rows, keyCol, removedIds));
   supabaseWriteQueues[table] = next;
   return next;
 }
@@ -1208,24 +1221,28 @@ const dataStore = {
     return linked.departments;
   },
   saveDepartments(d) {
+    const gone = removedIdsFor(DEPARTMENTS_KEY, d.map((x) => x.id), idsOfList);
     lsSet(DEPARTMENTS_KEY, JSON.stringify(d));
-    if (sheetsConfigured()) queueSupabaseReplaceTable("departments", d.map(deptToRow)).catch(() => {});
+    if (sheetsConfigured()) queueSupabaseReplaceTable("departments", d.map(deptToRow), "id", gone).catch(() => {});
   },
   getOffices() { const v = lsGet(OFFICES_KEY); if (v) return JSON.parse(v); const seed = seedOffices(); lsSet(OFFICES_KEY, JSON.stringify(seed)); return seed; },
   saveOffices(o) {
+    const gone = removedIdsFor(OFFICES_KEY, o.map((x) => x.id), idsOfList);
     lsSet(OFFICES_KEY, JSON.stringify(o));
-    if (sheetsConfigured()) queueSupabaseReplaceTable("offices", o.map(officeToRow)).catch(() => {});
+    if (sheetsConfigured()) queueSupabaseReplaceTable("offices", o.map(officeToRow), "id", gone).catch(() => {});
   },
   cacheOfficesLocally(o) { lsSet(OFFICES_KEY, JSON.stringify(o)); },
   getUnits() { const v = lsGet(UNITS_KEY); if (v) return JSON.parse(v); const seed = seedUnits(); lsSet(UNITS_KEY, JSON.stringify(seed)); return seed; },
   saveUnits(u) {
+    const gone = removedIdsFor(UNITS_KEY, u.map((x) => x.id), idsOfList);
     lsSet(UNITS_KEY, JSON.stringify(u));
-    if (sheetsConfigured()) queueSupabaseReplaceTable("units", u.map(unitToRow)).catch(() => {});
+    if (sheetsConfigured()) queueSupabaseReplaceTable("units", u.map(unitToRow), "id", gone).catch(() => {});
   },
   getIndicatorDefinitions() { const v = lsGet(INDICATOR_DEFINITIONS_KEY); return v ? JSON.parse(v) : []; },
   saveIndicatorDefinitions(d) {
+    const gone = removedIdsFor(INDICATOR_DEFINITIONS_KEY, d.map((x) => x.id), idsOfList);
     lsSet(INDICATOR_DEFINITIONS_KEY, JSON.stringify(d));
-    if (sheetsConfigured()) queueSupabaseReplaceTable("indicator_definitions", d.map(indDefToRow)).catch(() => {});
+    if (sheetsConfigured()) queueSupabaseReplaceTable("indicator_definitions", d.map(indDefToRow), "id", gone).catch(() => {});
   },
   getSiteSettings() { const v = lsGet(SITE_SETTINGS_KEY); return { ...DEFAULT_SITE_COLORS, ...DEFAULT_BRANDING, ...(v ? JSON.parse(v) : {}) }; },
   saveSiteSettings(s) {
@@ -1242,50 +1259,58 @@ const dataStore = {
   cacheDepartmentsLocally(d) { lsSet(DEPARTMENTS_KEY, JSON.stringify(d)); },
   getRoles() { const v = lsGet(ROLES_KEY); return v ? JSON.parse(v) : []; },
   saveRoles(list) {
+    const gone = removedIdsFor(ROLES_KEY, list.map((x) => x.id), idsOfList);
     lsSet(ROLES_KEY, JSON.stringify(list));
-    if (sheetsConfigured()) queueSupabaseReplaceTable("roles", list.map(roleToRow)).catch(() => {});
+    if (sheetsConfigured()) queueSupabaseReplaceTable("roles", list.map(roleToRow), "id", gone).catch(() => {});
   },
   getReportTabs() { const v = lsGet(REPORT_TABS_KEY); return v ? JSON.parse(v) : []; },
   saveReportTabs(list) {
+    const gone = removedIdsFor(REPORT_TABS_KEY, list.map((x) => x.id), idsOfList);
     lsSet(REPORT_TABS_KEY, JSON.stringify(list));
-    if (sheetsConfigured()) queueSupabaseReplaceTable("report_tabs", list.map(reportTabToRow)).catch(() => {});
+    if (sheetsConfigured()) queueSupabaseReplaceTable("report_tabs", list.map(reportTabToRow), "id", gone).catch(() => {});
   },
   getApprovalPaths() { const v = lsGet(APPROVAL_PATHS_KEY); return v ? JSON.parse(v) : []; },
   saveApprovalPaths(list) {
+    const gone = removedIdsFor(APPROVAL_PATHS_KEY, list.map((x) => x.id), idsOfList);
     lsSet(APPROVAL_PATHS_KEY, JSON.stringify(list));
-    if (sheetsConfigured()) queueSupabaseReplaceTable("approval_paths", list.map(approvalPathToRow)).catch(() => {});
+    if (sheetsConfigured()) queueSupabaseReplaceTable("approval_paths", list.map(approvalPathToRow), "id", gone).catch(() => {});
   },
   getPermLog() { const v = lsGet(PERM_LOG_KEY); return v ? JSON.parse(v) : []; },
   getPersons() { const v = lsGet(PERSONS_KEY); return v ? JSON.parse(v) : []; },
   savePersons(list) {
+    const gone = removedIdsFor(PERSONS_KEY, list.map((x) => x.id), idsOfList);
     lsSet(PERSONS_KEY, JSON.stringify(list));
-    if (sheetsConfigured()) queueSupabaseReplaceTable("persons", list.map(personToRow)).catch(() => {});
+    if (sheetsConfigured()) queueSupabaseReplaceTable("persons", list.map(personToRow), "id", gone).catch(() => {});
   },
   getPlatformUsers() { const v = lsGet(PLATFORM_USERS_KEY); return v ? JSON.parse(v) : []; },
   savePlatformUsers(list) {
+    const gone = removedIdsFor(PLATFORM_USERS_KEY, list.map((x) => x.id), idsOfList);
     lsSet(PLATFORM_USERS_KEY, JSON.stringify(list));
-    if (sheetsConfigured()) queueSupabaseReplaceTable("platform_users", list.map(platformUserToRow)).catch(() => {});
+    if (sheetsConfigured()) queueSupabaseReplaceTable("platform_users", list.map(platformUserToRow), "id", gone).catch(() => {});
   },
   cachePlatformUsersLocally(list) { lsSet(PLATFORM_USERS_KEY, JSON.stringify(list)); },
   getJobTitleTemplates() { const v = lsGet(JOB_TITLE_TEMPLATES_KEY); return v ? JSON.parse(v) : []; },
   saveJobTitleTemplates(list) {
+    const gone = removedIdsFor(JOB_TITLE_TEMPLATES_KEY, list.map((x) => x.id), idsOfList);
     lsSet(JOB_TITLE_TEMPLATES_KEY, JSON.stringify(list));
-    if (sheetsConfigured()) queueSupabaseReplaceTable("job_title_templates", list.map(jobTitleTemplateToRow)).catch(() => {});
+    if (sheetsConfigured()) queueSupabaseReplaceTable("job_title_templates", list.map(jobTitleTemplateToRow), "id", gone).catch(() => {});
   },
   cacheJobTitleTemplatesLocally(list) { lsSet(JOB_TITLE_TEMPLATES_KEY, JSON.stringify(list)); },
   getGoalsDefinitions() { const v = lsGet(GOALS_DEFINITIONS_KEY); return v ? JSON.parse(v) : { strategic: [], operational: [] }; },
   saveGoalsDefinitions(d) {
+    const gone = removedIdsFor(GOALS_DEFINITIONS_KEY, (d.strategic || []).concat(d.operational || []).map((g) => g.id), (o) => ((o && o.strategic) || []).concat((o && o.operational) || []).map((g) => g.id));
     lsSet(GOALS_DEFINITIONS_KEY, JSON.stringify(d));
     if (sheetsConfigured()) {
       const rows = (d.strategic || []).map((g) => goalToRow(g, "strategic")).concat((d.operational || []).map((g) => goalToRow(g, "operational")));
-      queueSupabaseReplaceTable("goals_definitions", rows).catch(() => {});
+      queueSupabaseReplaceTable("goals_definitions", rows, "id", gone).catch(() => {});
     }
   },
   cacheGoalsDefinitionsLocally(d) { lsSet(GOALS_DEFINITIONS_KEY, JSON.stringify(d)); },
   getReportSectionDefs() { const v = lsGet(REPORT_SECTIONS_KEY); return v ? JSON.parse(v) : DEFAULT_SECTIONS.map((s, i) => ({ id: s.id, label: s.label, order: i, enabled: true })); },
   saveReportSectionDefs(list) {
+    const gone = removedIdsFor(REPORT_SECTIONS_KEY, list.map((x) => x.id), idsOfList);
     lsSet(REPORT_SECTIONS_KEY, JSON.stringify(list));
-    if (sheetsConfigured()) queueSupabaseReplaceTable("report_sections", list.map(sectionDefToRow)).catch(() => {});
+    if (sheetsConfigured()) queueSupabaseReplaceTable("report_sections", list.map(sectionDefToRow), "id", gone).catch(() => {});
   },
   cacheReportSectionDefsLocally(list) { lsSet(REPORT_SECTIONS_KEY, JSON.stringify(list)); },
   // خريطة { sectionId: [field, field, ...] } — تخصيصات حقول الأقسام المبنية على
@@ -1293,8 +1318,9 @@ const dataStore = {
   // النظام التعريفات الافتراضية المكتوبة بالكود كما هي.
   getSectionFieldSchemas() { const v = lsGet(SECTION_FIELD_SCHEMAS_KEY); return v ? JSON.parse(v) : {}; },
   saveSectionFieldSchemas(map) {
+    const gone = removedIdsFor(SECTION_FIELD_SCHEMAS_KEY, Object.keys(map), (o) => Object.keys(o || {}));
     lsSet(SECTION_FIELD_SCHEMAS_KEY, JSON.stringify(map));
-    if (sheetsConfigured()) queueSupabaseReplaceTable("section_field_schemas", Object.keys(map).map((id) => fieldSchemaToRow(id, map[id])), "section_id").catch(() => {});
+    if (sheetsConfigured()) queueSupabaseReplaceTable("section_field_schemas", Object.keys(map).map((id) => fieldSchemaToRow(id, map[id])), "section_id", gone).catch(() => {});
   },
   cacheSectionFieldSchemasLocally(map) { lsSet(SECTION_FIELD_SCHEMAS_KEY, JSON.stringify(map)); },
   // Each unit now holds a LIST of report entries (one per period/submission),
@@ -6766,7 +6792,7 @@ function renderApprovalPathsSetup() {
     ${rows || (ed ? "" : `<div class="card" style="text-align:center;color:${SUBTLE};padding:30px 20px;border-style:dashed;">لا توجد مسارات بعد.</div>`)}
   `;
 }
-const ROLE_MODE_LABELS = { admin: "إدارية (واجهة الوحدة)", head: "رئيسة الوحدة", extra: "المراجعة الإضافية" };
+const ROLE_MODE_LABELS = { admin: "إدارية (واجهة الوحدة)", head: "رئيسة الوحدة", extra: "المراجعة الإضافية", entity: "قسم أو مكتب (بلا واجهة وحدة)" };
 function renderRolesManage() {
   const ui = S.ui;
   const roles = rolesList(), persons = personsList();
@@ -6779,7 +6805,11 @@ function renderRolesManage() {
   const roleForm = (ui.roleShowAdd || editRole) ? `<div class="card" style="background:${GRAY_BG};margin-bottom:12px;">
       <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:8px;">
         <input class="input" id="role-name" placeholder="اسم الدور (مثال: رئيسة الوحدة)" value="${esc(editRole ? editRole.name : "")}" />
-        <select class="input" id="role-mode">${Object.keys(ROLE_MODE_LABELS).map((k) => `<option value="${k}" ${editRole && editRole.mode === k ? "selected" : ""}>${esc(ROLE_MODE_LABELS[k])}</option>`).join("")}</select>
+        <div>
+          <div style="font-size:11px;font-weight:700;color:${SUBTLE};margin-bottom:3px;">نوع الدخول (للوحدات فقط)</div>
+          <select class="input" id="role-mode" style="width:100%;">${Object.keys(ROLE_MODE_LABELS).map((k) => `<option value="${k}" ${editRole && editRole.mode === k ? "selected" : ""}>${esc(ROLE_MODE_LABELS[k])}</option>`).join("")}</select>
+          <div style="font-size:10.5px;color:${SUBTLE};margin-top:3px;line-height:1.6;">يحدد واجهة الوحدة عند الدخول بهذا الدور. للأقسام والمكاتب اختاري «قسم أو مكتب» — صلاحياتها تأتي من الصفحات والأزرار فقط.</div>
+        </div>
         <input class="input" id="role-pin" inputmode="numeric" placeholder="رمز PIN (اختياري)" value="${esc(editRole ? editRole.pin : "")}" />
         <input class="input" id="role-desc" placeholder="وصف (اختياري)" value="${esc(editRole ? editRole.description : "")}" />
       </div>
@@ -9895,7 +9925,7 @@ function attachClickListener() {
         const list = rolesList();
         const dup = list.find((r) => r.name === name && r.id !== S.ui.roleEditId);
         if (dup) { S.ui.roleError = "يوجد دور بنفس الاسم"; render(); break; }
-        const mode = ["admin", "head", "extra"].includes(g("role-mode")) ? g("role-mode") : "admin";
+        const mode = ["admin", "head", "extra", "entity"].includes(g("role-mode")) ? g("role-mode") : "admin";
         const pin = g("role-pin");
         if (S.ui.roleEditId) {
           S.roles = list.map((r) => r.id === S.ui.roleEditId ? { ...r, name, mode, pin, description: g("role-desc") } : r);
