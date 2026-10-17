@@ -2158,8 +2158,14 @@ const BUTTON_ALIASES = {
   "ap-advance": ["custom-path-send"],
   "ap-return": ["custom-path-return", "start-head-return"],
 };
+// أزرار أساسية تظهر تلقائيًا لكل دور عنده صفحة «إنشاء تقرير» بلا حاجة لتأشيرها.
+const CORE_REPORT_BUTTONS = ["section-save-draft", "toggle-section-completed", "card-preview", "card-view", "card-download", "delete-report"];
+function coreReportButtonOpen(id) {
+  return CORE_REPORT_BUTTONS.includes(id) && Array.isArray(S.platformUserAllowedPages) && S.platformUserAllowedPages.includes("unit-report");
+}
 function buttonAllowed(id) {
   if (!S.platformUserAllowedButtons) return true;
+  if (coreReportButtonOpen(id)) return true;
   if (S.platformUserAllowedButtons.includes(id)) return true;
   return (BUTTON_ALIASES[id] || []).some((a) => S.platformUserAllowedButtons.includes(a));
 }
@@ -2179,6 +2185,7 @@ function applyButtonPermissions() {
 // اللي ما حُدّد لها إجراءات صراحة) — يعمل بكل شي مسموح له أصلًا بالأدوار.
 function platformActionAllowed(actionId) {
   if (S.platformUserAllowedButtons && BUTTON_CATALOG.some((b) => b.id === actionId) && !buttonAllowed(actionId)) return false;
+  if (coreReportButtonOpen(actionId)) return true;
   if (!S.platformUserAllowedActions) return true;
   // «تقرير جديد» يرث صلاحية «إنشاء تقرير» القديمة
   return S.platformUserAllowedActions.includes(actionId === "create-new-report" ? "open-or-create-report" : actionId);
@@ -6265,9 +6272,10 @@ function permButtonsChecklistHtml(allSelected, action) {
   const selectedAll = allSelected || [];
   const selected = selectedAll.filter((x) => String(x).indexOf("notify:") !== 0);
   const groups = [];
-  BUTTON_CATALOG.forEach((b) => { let g = groups.find((x) => x.name === b.g); if (!g) { g = { name: b.g, items: [] }; groups.push(g); } g.items.push(b); });
+  const shownCatalog = BUTTON_CATALOG.filter((b) => !CORE_REPORT_BUTTONS.includes(b.id));
+  shownCatalog.forEach((b) => { let g = groups.find((x) => x.name === b.g); if (!g) { g = { name: b.g, items: [] }; groups.push(g); } g.items.push(b); });
   return permDropdownChecklistHtml({
-    action, selected, total: BUTTON_CATALOG.length, emptyLabel: "الأزرار",
+    action, selected, total: shownCatalog.length, emptyLabel: "الأزرار",
     renderList: () => groups.map((g) => `<div style="margin-bottom:8px;"><div style="font-size:10.5px;font-weight:800;color:${ROSE};margin-bottom:4px;">${esc(g.name)}</div>${g.items.map((b) => permCheckboxRowHtml(action, b.id, b.label, selected.includes(b.id)) + (b.id.indexOf("chip:") === 0 ? `<div style="padding-inline-start:22px;">${permCheckboxRowHtml(action, "notify:" + b.id, "↳ ينبّه بعدد تقارير هذا الزر (في التنبيهات)", selectedAll.includes("notify:" + b.id))}</div>` : "")).join("")}</div>`).join(""),
   });
 }
@@ -6277,9 +6285,10 @@ function rolePermFormState() {
 function permActionsGroupedChecklistHtml(selected, action) {
   selected = selected || [];
   const known = new Set();
-  const groups = PERM_ACTION_GROUPS.map((g) => ({ name: g.name, items: g.ids.map((id) => ACTION_CATALOG.find((a) => a.id === id)).filter(Boolean) }));
+  const groups = PERM_ACTION_GROUPS.map((g) => ({ name: g.name, items: g.ids.filter((id) => !CORE_REPORT_BUTTONS.includes(id)).map((id) => ACTION_CATALOG.find((a) => a.id === id)).filter(Boolean) }));
+  // الأزرار الأساسية (حفظ/اكتمال/حذف مسودة) تتبع صفحة «إنشاء تقرير» تلقائيًا فلا تُعرض للتأشير.
   groups.forEach((g) => g.items.forEach((a) => known.add(a.id)));
-  const rest = ACTION_CATALOG.filter((a) => !known.has(a.id));
+  const rest = ACTION_CATALOG.filter((a) => !known.has(a.id) && !CORE_REPORT_BUTTONS.includes(a.id));
   if (rest.length) groups.push({ name: "أخرى", items: rest });
   return permDropdownChecklistHtml({
     action, selected, total: ACTION_CATALOG.length, emptyLabel: "إجراءات",
