@@ -859,9 +859,16 @@ const REPORT_TABS_DEFAULT = [
 ];
 function reportTabToRow(t, i) { return { id: t.id, label: t.label || "", statuses: t.statuses || [], admin_statuses: t.adminStatuses || [], special: t.special || "", mode: t.mode || "", order_index: i, enabled: t.enabled !== false, created_at: t.createdAt || Date.now() }; }
 function rowToReportTab(r) { return { id: r.id, label: r.label || "", statuses: Array.isArray(r.statuses) ? r.statuses : [], adminStatuses: Array.isArray(r.admin_statuses) ? r.admin_statuses : [], special: r.special || "", mode: r.mode || "", enabled: r.enabled !== false, order: Number(r.order_index) || 0, createdAt: Number(r.created_at) || 0 }; }
+// زر «بانتظار مراجعتي»: التقارير التي وصلت لمرحلتي في مسار الاعتماد (يحل محل صفحة «التقارير الواردة لي»).
+// يُضاف تلقائيًا للقائمة (دون تخزين) إن لم يكن موجودًا فيها، فلا يحتاج SQL.
+const MINE_TAB_ID = "pending_mine";
+const MINE_TAB = { id: MINE_TAB_ID, label: "بانتظار مراجعتي", special: "mine", mode: "", statuses: [], adminStatuses: [], enabled: true };
 function reportTabsList() {
   if (!S.reportTabs) S.reportTabs = dataStore.getReportTabs();
-  return S.reportTabs.length ? S.reportTabs : REPORT_TABS_DEFAULT;
+  const base = S.reportTabs.length ? S.reportTabs : REPORT_TABS_DEFAULT;
+  if (base.some((t) => t.id === MINE_TAB_ID)) return base;
+  const i = base.length && base[0].special === "all" ? 1 : 0;
+  return [...base.slice(0, i), MINE_TAB, ...base.slice(i)];
 }
 function reportTabDef(id) { return reportTabsList().find((t) => t.id === id) || null; }
 function reportTabModeSuffix(t) { return t.mode === "head" ? " (رئيسة الوحدة)" : t.mode === "extra" ? " (المراجعة الإضافية)" : ""; }
@@ -1694,7 +1701,7 @@ function renderCustomPathInbox() {
   const items = apPendingForMe();
   return `
   <div class="page-wrap"><div class="page-inner narrow">
-    ${topBarHtml({ title: "التقارير الواردة لي", subtitle: "تقارير وصلت لمرحلتك — اطّلعي عليها ثم اعتمديها وأرسليها أو أعيديها للتعديل" })}
+    ${topBarHtml({ title: "بانتظار مراجعتي", subtitle: "تقارير وصلت لمرحلتك — اطّلعي عليها ثم اعتمديها وأرسليها أو أعيديها للتعديل" })}
     ${items.length === 0 ? `<div class="card" style="text-align:center;color:${SUBTLE};padding:36px;border-style:dashed;">لا توجد تقارير بانتظارك حاليًا.</div>` : `
     <div style="display:flex;flex-direction:column;gap:12px;">
       ${items.map((item) => apInboxCardHtml(item)).join("")}
@@ -2053,7 +2060,7 @@ const HOME_GROUP_ORDER = ["dashboard", "admin-reports"];
 const SIDEBAR_PAGES = [
   { id: "dashboard", label: "لوحة المعلومات", group: "الرئيسية", icon: "home" },
   { id: "admin-reports", label: "الأقسام والوحدات", group: "الرئيسية", icon: "building" },
-  { id: "custom-path-inbox", label: "التقارير الواردة لي", group: "الرئيسية", icon: "document" },
+  { id: "custom-path-inbox", label: "بانتظار مراجعتي", group: "الرئيسية", icon: "document" },
   { id: "site-settings", label: "إعدادات الموقع", group: "الرئيسية", icon: "gauge" },
   // "حسابات إضافية" و"صلاحيات الحسابات" و"المسميات الوظيفية (القوالب)" صارت
   // تبويبات داخل صفحة "المستخدمون" نفسها (accountsHubTabBarHtml) بدل روابط
@@ -2169,6 +2176,7 @@ function coreReportButtonOpen(id) {
 function buttonAllowed(id) {
   if (!S.platformUserAllowedButtons) return true;
   if (coreReportButtonOpen(id)) return true;
+  if (id === "chip:" + MINE_TAB_ID && userInAnyApStage()) return true;
   if (S.platformUserAllowedButtons.includes(id)) return true;
   return (BUTTON_ALIASES[id] || []).some((a) => S.platformUserAllowedButtons.includes(a));
 }
@@ -2237,9 +2245,16 @@ function normalizeDashboardPages(arr) {
 function sidebarPageActive(p) {
   return S.view === p.id || MERGED_PAGE_MAP[S.view] === p.id;
 }
+function inboxViaReportsHub(visibleIds) {
+  if (S.isAdmin || S.isDepartmentUser || S.isOfficeUser || !S.currentUnitId) return false;
+  const ids = visibleIds || new Set(computeVisibleSidebarPagesRaw().map((p) => MERGED_PAGE_MAP[p.id] || p.id));
+  return ids.has("unit-reports");
+}
 function computeVisibleSidebarPages() {
   const raw = computeVisibleSidebarPagesRaw();
   const ids = new Set(raw.map((p) => MERGED_PAGE_MAP[p.id] || p.id));
+  // «بانتظار مراجعتي» صار زرًّا داخل صفحة التقارير؛ لا يبقى رابطًا مستقلًّا إلا لمن لا يملك صفحة التقارير (حساب قسم/مكتب مثلًا).
+  if (inboxViaReportsHub(ids)) ids.delete("custom-path-inbox");
   // "مخطط الهيكل التنظيمي" صار تبويبًا داخل المستخدمون (لا رابط مستقل بالشريط).
   return SIDEBAR_PAGES.filter((p) => ids.has(p.id) && p.id !== "org-chart" && !(p.id === "unit-report" && adminReportsReadOnly()));
 }
@@ -2309,7 +2324,8 @@ function computeNotificationCount() { return computeNotificationCountBase() + ap
 function apNotifCardsHtml() {
   const n = apPendingForMe().length;
   if (!n) return "";
-  return `<button class="card" data-action="nav-to" data-view="custom-path-inbox" style="display:flex;align-items:center;gap:12px;width:100%;text-align:right;cursor:pointer;margin-bottom:10px;border:1.5px solid ${ROSE};">
+  const viaHub = inboxViaReportsHub();
+  return `<button class="card" ${viaHub ? `data-action="goto-report-tab" data-filter="${MINE_TAB_ID}"` : `data-action="nav-to" data-view="custom-path-inbox"`} style="display:flex;align-items:center;gap:12px;width:100%;text-align:right;cursor:pointer;margin-bottom:10px;border:1.5px solid ${ROSE};">
     <div style="width:38px;height:38px;border-radius:11px;background:${DANGER_BG};display:flex;align-items:center;justify-content:center;flex-shrink:0;">${iconBell(17, ROSE)}</div>
     <div style="flex:1;min-width:0;"><div style="font-size:13px;font-weight:700;">${n} تقرير بانتظار مرحلتك في مسار الاعتماد</div></div>
     ${iconChevronLeft(14, SUBTLE)}
@@ -5387,18 +5403,22 @@ function renderUnitReportsHub() {
   const tabs = reportTabsList().filter((t) => t.enabled !== false && (!t.mode || (t.mode === "head" && isHeadMode) || (t.mode === "extra" && isExtraMode))).map((t) => ({ id: t.id, label: t.label }));
   // أزرار محددة من مديرة النظام لهذا الحساب/المسمى (إن وُجدت) تحل محل الأزرار الافتراضية.
   const tabsCfg = effectiveReportTabsConfig();
+  // «بانتظار مراجعتي» يظهر تلقائيًا لمن هو في مرحلة بمسار اعتماد (أو إن اختارته مديرة النظام صراحة).
+  if (!userInAnyApStage()) { const mi = tabs.findIndex((t) => t.id === MINE_TAB_ID); if (mi >= 0) tabs.splice(mi, 1); }
   if (tabsCfg && tabsCfg.tabs.length) {
     const chosen = reportTabsList().filter((t) => t.enabled !== false && tabsCfg.tabs.includes(t.id)).map((t) => ({ id: t.id, label: t.label }));
     tabs.length = 0; chosen.forEach((t) => tabs.push(t));
   }
   if (!tabs.some((t) => t.id === filter)) filter = tabs.length ? tabs[0].id : "all";
   const countFor = (id) => {
+    if (tabSpecial(id) === "mine") return apPendingForMe().length;
     if (tabSpecial(id) === "all") return list.filter((r) => !isReportArchived(r)).length;
     if (tabSpecial(id) === "archived") return list.filter((r) => isReportArchived(r)).length;
     return list.filter((r) => reportMatchesTab(r, id) && !isReportArchived(r)).length;
   };
 
-  let filtered = tabSpecial(filter) === "all" ? list.filter((r) => !isReportArchived(r))
+  const mineMode = tabSpecial(filter) === "mine";
+  let filtered = mineMode ? [] : tabSpecial(filter) === "all" ? list.filter((r) => !isReportArchived(r))
     : tabSpecial(filter) === "archived" ? list.filter((r) => isReportArchived(r))
     : list.filter((r) => reportMatchesTab(r, filter) && !isReportArchived(r));
   if (typeFilter) filtered = filtered.filter((r) => (r.sections?.basic?.data?.periodType || "") === typeFilter);
@@ -5445,7 +5465,7 @@ function renderUnitReportsHub() {
     </div>
     <div style="font-size:12px;color:${SUBTLE};margin-bottom:10px;">عدد التقارير: ${sorted.length}</div>
 
-    ${sorted.length === 0 ? `<div class="card" style="text-align:center;color:${SUBTLE};padding:36px;">لا توجد تقارير مطابقة${filter === "all" ? " — ابدئي بإنشاء تقرير جديد من الشريط الجانبي." : "."}</div>` :
+    ${mineMode ? (apPendingForMe().length === 0 ? `<div class="card" style="text-align:center;color:${SUBTLE};padding:36px;border-style:dashed;">لا توجد تقارير بانتظارك حاليًا.</div>` : `<div style="display:flex;flex-direction:column;gap:12px;">${apPendingForMe().map((item) => apInboxCardHtml(item)).join("")}</div>`) : sorted.length === 0 ? `<div class="card" style="text-align:center;color:${SUBTLE};padding:36px;">لا توجد تقارير مطابقة${filter === "all" ? " — ابدئي بإنشاء تقرير جديد من الشريط الجانبي." : "."}</div>` :
       `<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:12px;" id="unit-reports-grid">${sorted.map((entry) => `<div data-search="${esc((entry.label || "").toLowerCase())}">${reportCardHtml(unit, entry)}</div>`).join("")}</div>`}
   </div></div>`;
 }
