@@ -4911,7 +4911,7 @@ function hijriYearFromTs(ts) {
 function reportHijriYearNum(r) {
   if (!r) return null;
   const raw = (r.sections && r.sections.basic && r.sections.basic.data && r.sections.basic.data.hijriYear) || (r.shared && r.shared.hijriYear) || "";
-  const m = String(raw).match(/\d{4}/);
+  const m = String(raw).replace(/[٠-٩]/g, (c) => String("٠١٢٣٤٥٦٧٨٩".indexOf(c))).match(/\d{4}/);
   if (m) return Number(m[0]);
   return r.createdAt ? hijriYearFromTs(r.createdAt) : null;
 }
@@ -5117,15 +5117,25 @@ function programsYearOptions(units) {
   units.forEach((u) => ensureUnitReportsLoaded(u.id).forEach((r) => { if ((r.sections?.programs?.data?.programs || []).length) { const y = reportHijriYearNum(r); if (y) set.add(y); } }));
   return [...set].sort((a, b) => b - a);
 }
-// السنة المختارة لكتلتي البرامج والإحصائية: "" = كل السنوات؛ افتراضيًا السنة الحالية.
-function dashProgramsYear() {
+// السنة المختارة لكتلتي البرامج والإحصائية: "all" = كل السنوات؛ افتراضيًا أحدث سنة
+// فيها أعمال مُدخلة فعلًا (وإن لم توجد أي أعمال: السنة الهجرية الحالية).
+function latestProgramsYear(units) {
+  let best = null;
+  units.forEach((u) => ensureUnitReportsLoaded(u.id).forEach((r) => {
+    if (!(r.sections?.programs?.data?.programs || []).some((p) => p && String(p.name || "").trim())) return;
+    const y = reportHijriYearNum(r);
+    if (y && (best == null || y > best)) best = y;
+  }));
+  return best;
+}
+function dashProgramsYear(units) {
   const v = S.ui.dashProgYear;
   if (v === "all") return null;
   if (v) return Number(v);
-  return hijriYearFromTs(Date.now());
+  return latestProgramsYear(units || []) || hijriYearFromTs(Date.now());
 }
 function dashYearSelectHtml(units) {
-  const cur = S.ui.dashProgYear || String(hijriYearFromTs(Date.now()));
+  const cur = S.ui.dashProgYear || String(dashProgramsYear(units));
   const opts = programsYearOptions(units);
   return `<select class="input" data-action="dash-prog-year" style="width:auto;padding:6px 10px;font-size:12px;">
     <option value="all" ${cur === "all" ? "selected" : ""}>كل السنوات</option>
@@ -5134,7 +5144,7 @@ function dashYearSelectHtml(units) {
 }
 
 function achievementCardHtml(units) {
-  const year = dashProgramsYear();
+  const year = dashProgramsYear(units);
   const progs = collectProgramsForUnits(units, year);
   const stats = achievementStats(progs);
   const completed = progs.filter((x) => x.p.executionStatus === "مكتمل").length;
@@ -5174,7 +5184,7 @@ function achievementCardHtml(units) {
 }
 
 function programsCardHtml(units) {
-  const year = dashProgramsYear();
+  const year = dashProgramsYear(units);
   const progs = collectProgramsForUnits(units, year).sort((a, b) => (b.report.createdAt || 0) - (a.report.createdAt || 0));
   const statusColor = { "مكتمل": [GREEN, GREEN_BG], "مستمر": [BLUE, BLUE_BG], "متعثر": [DANGER, DANGER_BG], "مؤجل": [GOLD, GOLD_BG], "ملغى": [SUBTLE, GRAY_BG] };
   const rows = progs.map(({ unit, report, p }) => {
