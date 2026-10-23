@@ -4291,16 +4291,20 @@ function olParentOptionsHtml(selectedId, excludeId) {
   walk("", 0);
   return `<option value="" ${!selectedId ? "selected" : ""}>— أعلى الهيكل (بدون أب)</option>${opts.join("")}`;
 }
-function olLinkEntityOptions(kind) {
-  if (kind === "office") return (S.offices || []).filter((o) => o.status !== "disabled");
-  if (kind === "dept") return (S.departments || []).filter((d) => d.status === "active");
-  if (kind === "unit") return (S.units || []).filter((u) => u.status === "active" && u.role !== "admin" && u.role !== "self_report").map((u) => (u.role === "executive" ? { ...u, name: u.name + " (إدارة عليا)" } : u.role === "center" ? { ...u, name: u.name + " (مركز)" } : u));
-  return [];
+// كل الجهات من النوع المختار (المعطّلة يُكتب بجانبها «معطّل»)، عدا المربوطة بمستوى آخر
+function olLinkEntityOptions(kind, selfLevelId, curLinkId) {
+  const taken = new Set(olActive().filter((l) => l.id !== selfLevelId && l.linkKind === kind && l.linkId).map((l) => l.linkId));
+  const off = (e) => (e.status === "disabled" ? { ...e, name: e.name + " (معطّل)" } : e);
+  let list = [];
+  if (kind === "office") list = (S.offices || []).map(off);
+  else if (kind === "dept") list = (S.departments || []).map(off);
+  else if (kind === "unit") list = (S.units || []).filter((u) => u.role !== "admin" && u.role !== "self_report").map((u) => off(u.role === "executive" ? { ...u, name: u.name + " (إدارة عليا)" } : u.role === "center" ? { ...u, name: u.name + " (مركز)" } : u));
+  return list.filter((e) => !taken.has(e.id) || e.id === curLinkId);
 }
 function olFormHtml() {
   const ui = olUi(); const f = ui.form;
   const types = levelTypesList();
-  const ents = olLinkEntityOptions(f.linkKind);
+  const ents = olLinkEntityOptions(f.linkKind, f.id, f.linkId);
   const usedBy = (f.linkKind && f.linkId) ? olActive().find((l) => l.id !== f.id && l.linkKind === f.linkKind && l.linkId === f.linkId) : null;
   return `<div class="card card-lg">
     <div class="prs-title" style="font-size:15px;font-weight:800;margin-bottom:14px;">${f.mode === "edit" ? "تعديل مستوى" : "إضافة مستوى"}</div>
@@ -4437,6 +4441,43 @@ function olSidePanelHtml(l) {
   </div>`;
 }
 // الجهات اللي ما دخلت الشجرة بعد + حسابات مديرة النظام
+// جهة لها حساب وليست في الشجرة: إضافة للشجرة، تعطيل/تفعيل الحساب، حذف
+function olEntityRecord(x) {
+  return x.linkKind === "office" ? (S.offices || []).find((o) => o.id === x.id) : x.linkKind === "dept" ? (S.departments || []).find((d) => d.id === x.id) : (S.units || []).find((u) => u.id === x.id);
+}
+function olUnlinkedChipHtml(x) {
+  const rec = olEntityRecord(x) || {};
+  const off = rec.status === "disabled";
+  const key = x.linkKind + ":" + x.id;
+  const toggleAction = x.linkKind === "office" ? "toggle-office" : x.linkKind === "dept" ? "toggle-department" : "toggle-unit";
+  const small = `display:inline-flex;align-items:center;justify-content:center;min-width:36px;height:36px;border:none;border-inline-start:1px solid ${BORDER};background:transparent;cursor:pointer;font-family:inherit;font-size:11.5px;color:${INK};padding:0 10px;`;
+  return `<span style="display:inline-flex;align-items:center;border:1px solid ${S.ui.olUnlinkedDel === key ? DANGER : BORDER};border-radius:999px;background:${off ? GRAY_BG : "#fff"};overflow:hidden;">
+    <button type="button" data-action="ol-add-entity" data-key="${esc(key)}" title="إضافة للشجرة" style="display:inline-flex;align-items:center;gap:6px;min-height:36px;padding:0 12px;border:none;background:transparent;font-family:inherit;font-size:12px;cursor:pointer;color:${INK};"><span style="color:#6f5f66;">${esc(x.kind)}</span><b style="${off ? "opacity:.6;" : ""}">${esc(x.name)}</b>${off ? `<span style="font-size:10.5px;color:#7a4d16;">(معطّل)</span>` : ""}${iconPlus(12, ROSE)}</button>
+    <button type="button" data-action="${toggleAction}" data-id="${esc(x.id)}" style="${small}" title="${off ? "تفعيل الحساب" : "تعطيل الحساب"}">${off ? "تفعيل" : "تعطيل"}</button>
+    <button type="button" data-action="ol-unlinked-del-ask" data-key="${esc(key)}" style="${small}color:${DANGER};" title="حذف الحساب" aria-label="حذف ${esc(x.name)}">${iconTrash(13, DANGER)}</button>
+  </span>`;
+}
+function olUnlinkedDeleteHtml(list) {
+  const key = S.ui.olUnlinkedDel;
+  const x = key && list.find((e) => e.linkKind + ":" + e.id === key);
+  if (!x) return "";
+  const type = x.linkKind === "office" ? "office" : x.linkKind === "dept" ? "dept" : "unit";
+  const reports = type === "unit" ? ensureUnitReportsLoaded(x.id).length : 0;
+  const under = type === "dept" ? (S.units || []).filter((u) => u.departmentId === x.id).length : type === "office" ? (S.departments || []).filter((d) => d.officeId === x.id).length : 0;
+  const step2 = S.ui.olUnlinkedDelStep === 2;
+  const msg = type === "unit"
+    ? (reports ? `⚠️ هذا الحساب له <b>${reports}</b> تقرير، و<b>حذفه يحذف تقاريره من القاعدة نهائيًا</b>. إذا تبين تحتفظين بها، استخدمي «تعطيل» بدل الحذف.` : "ما له تقارير. يُحذف الحساب نهائيًا.")
+    : `ما تُحذف أي تقارير.${under ? ` ${under} ${type === "dept" ? "وحدة تتبعه تصير" : "قسم يتبعه يصير"} بدون ${type === "dept" ? "قسم" : "مكتب"}.` : ""}`;
+  const needTwo = type === "unit" && reports > 0;
+  return `<div style="margin-top:12px;border:1.5px solid ${DANGER};border-radius:14px;padding:12px 14px;background:#fff;display:flex;flex-direction:column;gap:8px;">
+    <div style="font-size:13px;font-weight:800;">حذف حساب «${esc(x.name)}» (${esc(x.kind)})؟</div>
+    <div style="font-size:12px;line-height:1.9;color:#5c4f55;">${msg}</div>
+    <div style="display:flex;gap:6px;flex-wrap:wrap;">
+      ${needTwo && !step2 ? pillBtn("متابعة الحذف", { variant: "danger", action: "ol-unlinked-del-next" }) : pillBtn(needTwo ? `تأكيد نهائي — حذف الحساب و${reports} تقرير` : "نعم، احذفي الحساب", { variant: "danger", action: "tree-delete", data: { type, id: x.id } })}
+      ${pillBtn("إلغاء", { variant: "ghost", action: "ol-unlinked-del-cancel" })}
+    </div>
+  </div>`;
+}
 function olUnlinkedCardHtml() {
   const ui = olUi();
   const list = olUnlinkedEntities();
@@ -4453,7 +4494,8 @@ function olUnlinkedCardHtml() {
         ${ui.importEntitiesConfirm ? `<span style="display:inline-flex;gap:6px;align-items:center;flex-wrap:wrap;"><span style="font-size:12px;font-weight:700;">إضافة الكل بنفس ترتيبها الحالي (مكتب ← قسم ← وحدة)؟</span>${pillBtn("إضافة", { action: "ol-import-entities" })}${pillBtn("تراجع", { variant: "ghost", action: "ol-import-entities-cancel" })}</span>`
           : pillBtn("إضافة الكل للشجرة تلقائيًا", { variant: "soft", icon: iconLayers(13, GREEN), action: "ol-import-entities-ask" })}
       </div>
-      <div style="display:flex;gap:6px;flex-wrap:wrap;">${list.map((x) => `<button type="button" data-action="ol-add-entity" data-key="${esc(x.linkKind + ":" + x.id)}" title="إضافة للشجرة" style="display:inline-flex;align-items:center;gap:6px;min-height:36px;padding:0 12px;border-radius:999px;border:1px solid ${BORDER};background:#fff;font-family:inherit;font-size:12px;cursor:pointer;color:${INK};"><span style="color:#6f5f66;">${esc(x.kind)}</span><b>${esc(x.name)}</b>${iconPlus(12, ROSE)}</button>`).join("")}</div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;">${list.map((x) => olUnlinkedChipHtml(x)).join("")}</div>
+      ${olUnlinkedDeleteHtml(list)}
     </div>` : ""}
     ${S.isAdmin && admins.length ? `<div class="card card-lg" style="margin-top:14px;"><div style="font-size:14px;font-weight:800;margin-bottom:6px;">حسابات مديرة النظام</div>${adminRows}</div>` : ""}
     ${S.isAdmin ? `<div class="card card-lg" style="margin-top:14px;display:flex;flex-direction:column;gap:8px;">
@@ -5250,7 +5292,7 @@ function rptStore() {
     sizes: Array.isArray(t.sizes) ? t.sizes.filter((z) => z && z.id && Number(z.w) >= 50 && Number(z.h) >= 50) : [] };
 }
 function rptNormalize(s) {
-  ["hidden", "titles", "hiddenCols"].forEach((k) => { if (!s[k] || typeof s[k] !== "object" || Array.isArray(s[k])) s[k] = {}; });
+  ["hidden", "titles", "hiddenCols", "colsShow"].forEach((k) => { if (!s[k] || typeof s[k] !== "object" || Array.isArray(s[k])) s[k] = {}; });
   if (!Array.isArray(s.order)) s.order = [];
   if (!s.charts || typeof s.charts !== "object" || Array.isArray(s.charts)) s.charts = {};
   if (s.breakEach) { s.perPage = 1; delete s.breakEach; } // إعداد قديم: «كل فصل بصفحة»
@@ -5813,9 +5855,8 @@ function rmPanelHtml(st) {
       const open = isUnit && st.openCols === c.key;
       const colsHtml = open ? (c.sections || []).map((sid) => {
         const sc = SECTIONS.find((x) => x.id === sid);
-        const heads = (cols && cols[sid]) || [];
-        const hiddenNow = d.hiddenCols[sid] || [];
-        return `<div style="margin-top:8px;"><div class="rm-hint" style="font-weight:800;">${esc(sc ? sc.label : sid)}</div>${heads.length ? `<div class="rm-pills">${heads.map((h) => { const on = !hiddenNow.includes(h); return `<button type="button" class="rm-pill rm-pill-sm${on ? " on" : ""}" data-action="rm-col" data-sec="${esc(sid)}" data-col="${esc(h)}" aria-pressed="${on}">${on ? "✓ " : ""}${esc(h)}</button>`; }).join("")}</div>` : `<div class="rm-hint">لا يحتوي جدولًا.</div>`}</div>`;
+        const heads = rptSectionColumns(sid, d, cols);
+        return `<div style="margin-top:8px;"><div class="rm-hint" style="font-weight:800;">${esc(sc ? sc.label : sid)}${rptSchemaFor(sid) && sid !== "review" ? " — من «إدارة حقول الأقسام»" : ""}</div>${heads.length ? `<div class="rm-pills">${heads.map((h) => `<button type="button" class="rm-pill rm-pill-sm${h.on ? " on" : ""}" data-action="rm-col" data-sec="${esc(sid)}" data-col="${esc(h.label)}" data-def="${h.def ? 1 : 0}" aria-pressed="${h.on}">${h.on ? "✓ " : ""}${esc(h.label)}</button>`).join("")}</div>` : `<div class="rm-hint">لا يحتوي جدولًا.</div>`}</div>`;
       }).join("") : "";
       return `<div class="rm-chapter${hid ? " off" : ""}">
         <div class="rm-row" style="flex-wrap:nowrap;">
@@ -5961,15 +6002,17 @@ function handleReportsManageAction(action, ds) {
     }
     case "rm-cols": st.openCols = st.openCols === ds.key ? null : ds.key; break;
     case "rm-col": {
-      const cur = (d.hiddenCols[ds.sec] || []).slice();
-      const i = cur.indexOf(ds.col);
-      if (i >= 0) cur.splice(i, 1);
-      else {
-        const all = ((st.colsCache || (st.colsCache = rptUnitColumns()))[ds.sec] || []);
-        if (all.filter((h) => !cur.includes(h)).length <= 1) { alert("لازم يبقى عمود واحد على الأقل."); break; }
-        cur.push(ds.col);
-      }
-      d.hiddenCols = { ...d.hiddenCols, [ds.sec]: cur }; break;
+      const cols = rptSectionColumns(ds.sec, d, st.colsCache || (st.colsCache = rptUnitColumns()));
+      const col = cols.find((c) => c.label === ds.col);
+      if (!col) break;
+      if (col.on && cols.filter((c) => c.on).length <= 1) { alert("لازم يبقى عمود واحد على الأقل."); break; }
+      const hid = (d.hiddenCols[ds.sec] || []).filter((x) => x !== ds.col);
+      const show = (d.colsShow[ds.sec] || []).filter((x) => x !== ds.col);
+      if (col.on) { if (col.def) hid.push(ds.col); } // إخفاء
+      else if (!col.def) show.push(ds.col); // إظهار حقل مخفي افتراضيًا
+      d.hiddenCols = { ...d.hiddenCols, [ds.sec]: hid };
+      d.colsShow = { ...d.colsShow, [ds.sec]: show };
+      break;
     }
     case "rm-bg-remove": d.bgImage = ""; break;
     case "rm-ab-add": d.approvalBoxes = [...(d.approvalBoxes || []), { role: "", name: "" }].slice(0, 6); break;
@@ -9001,6 +9044,14 @@ function sectionDefRowHtml(def, index, total) {
       <button data-action="cancel-section-edit" style="background:${DANGER_BG};border:none;border-radius:8px;padding:0 10px;cursor:pointer;">${iconX(16, DANGER)}</button>
     </div>`;
   }
+  if (S.ui.secDelAsk === def.id) {
+    const used = (S.units || []).reduce((n, u) => n + ensureUnitReportsLoaded(u.id).filter((r) => sectionHasData(r, def.id)).length, 0);
+    return `<div class="card" style="border:1.5px solid ${DANGER};display:flex;flex-direction:column;gap:8px;">
+      <div style="font-size:13px;font-weight:800;">حذف قسم «${esc(def.label)}»؟</div>
+      <div style="font-size:12px;color:#6f5f66;line-height:1.8;">${used ? `فيه <b>${used}</b> تقرير كُتب فيه هذا القسم — ما يُحذف شيء من التقارير، لكن ما يظهر هذا القسم فيها بعد الحذف.` : "ما فيه تقارير كُتب فيها هذا القسم."} يُحذف معه تعريف حقوله.</div>
+      <div style="display:flex;gap:6px;">${pillBtn("نعم، احذفيه", { variant: "danger", action: "delete-report-section", data: { id: def.id } })}${pillBtn("إلغاء", { variant: "ghost", action: "delete-report-section-cancel" })}</div>
+    </div>`;
+  }
   return `<div class="card" style="display:flex;align-items:center;justify-content:space-between;gap:10px;${enabled ? "" : "opacity:.55;"}">
     <div style="display:flex;align-items:center;gap:10px;min-width:0;">
       <div style="width:34px;height:34px;border-radius:10px;background:${GOLD_BG};display:flex;align-items:center;justify-content:center;flex-shrink:0;">${iconLayers(16, GOLD)}</div>
@@ -9013,6 +9064,7 @@ function sectionDefRowHtml(def, index, total) {
       <button class="icon-btn" style="width:32px;height:32px;border:1px solid ${BORDER}" data-action="move-report-section" data-id="${esc(def.id)}" data-dir="up" ${index === 0 ? "disabled" : ""} title="نقل لأعلى">${iconChevronUp(14, INK)}</button>
       <button class="icon-btn" style="width:32px;height:32px;border:1px solid ${BORDER}" data-action="move-report-section" data-id="${esc(def.id)}" data-dir="down" ${index === total - 1 ? "disabled" : ""} title="نقل لأسفل">${iconChevronDown(14, INK)}</button>
       <button class="icon-btn" style="width:32px;height:32px;border:1px solid ${BORDER}" data-action="start-section-edit" data-id="${esc(def.id)}" data-name="${esc(def.label)}" title="تعديل الاسم">${iconPencil(14, INK)}</button>
+      ${isCustom ? `<button class="icon-btn" style="width:32px;height:32px;background:${DANGER_BG}" data-action="delete-report-section-ask" data-id="${esc(def.id)}" title="حذف القسم" aria-label="حذف القسم">${iconTrash(14, DANGER)}</button>` : ""}
       <button class="icon-btn" style="width:32px;height:32px;background:${enabled ? DANGER_BG : GREEN_BG}" data-action="toggle-report-section" data-id="${esc(def.id)}" title="${enabled ? "تعطيل" : "تفعيل"}">${iconPower(14, enabled ? DANGER : GREEN)}</button>
     </div>
   </div>`;
@@ -9135,14 +9187,16 @@ const SCHEMA_FIELD_TYPES_SELECTABLE = ["text", "textarea", "number", "date", "se
 const SCHEMA_FIELD_TYPES_WITH_OPTIONS = ["select", "radio", "expandableSelect", "checklist"];
 
 function fieldSchemaManagedSections() {
-  return Object.keys(SECTION_FIELD_SCHEMAS).map((id) => {
+  // الأقسام المضافة من «إدارة أقسام التقرير» تظهر هنا أيضًا لتُضاف لها حقولها
+  const custom = SECTIONS.filter((sc) => !DEFAULT_SECTIONS.some((x) => x.id === sc.id) && !SECTION_FIELD_SCHEMAS[sc.id]).map((sc) => ({ id: sc.id, label: sc.label + " (قسم مضاف)" }));
+  return custom.concat(Object.keys(SECTION_FIELD_SCHEMAS).map((id) => {
     const schema = SECTION_FIELD_SCHEMAS[id] || {};
     const sectionDef = SECTIONS.find((s) => s.id === id);
     // sectionLabel تسمية صريحة اختيارية — تُستخدم لأي تعريف حقول مضمّن داخل قسم
     // مكتوب يدويًا (id غير مطابق لأي قسم فعلي، مثال: "analysisComparisons")، عشان
     // يبين بتبويب واضح بلوحة "إدارة حقول الأقسام" بدل معرّف تقني.
     return { id, label: schema.sectionLabel || (sectionDef && sectionDef.label) || schema.itemLabel || id };
-  });
+  }));
 }
 
 function fieldEditFormHtml(draft, isNew) {
@@ -9842,7 +9896,7 @@ function renderSectionFields(section, d, unit, report) {
   // دالتها اليدوية (basicSectionHtml/reviewSectionHtml) هي اللي تستخدم الحقول
   // الآن عبر renderSchemaFixedHtml، مع الحفاظ على منطق عرض/زخرفة خاص بها.
   const schema = SECTION_FIELD_SCHEMAS[section.id];
-  if (schema && !schema.fixed) return renderSchemaRepeaterHtml(schema, d);
+  if (schema && !schema.fixed && (schema.fields || []).length) return renderSchemaRepeaterHtml(schema, d);
   switch (section.id) {
     case "basic": return basicSectionHtml(d, unit);
     case "kpi": return kpiSectionHtml(d, report);
@@ -10461,19 +10515,82 @@ function schemaFieldText(v) {
   if (typeof v === "object") return Object.keys(v).filter((k) => v[k]).join("، ");
   return String(v);
 }
-function schemaSectionReportHtml(schema, d, sectionId) {
-  const fields = (schema.fields || []).filter((f) => f && f.id);
-  if (schema.fixed) {
-    const rows = fields.filter((f) => schemaFieldText(d[f.id])).map((f) => [esc(f.label || f.id), esc(schemaFieldText(d[f.id]))]);
-    return rows.length ? reportTable(["البند", "القيمة"], rows) : emptyHint("لم يُدخل محتوى بعد.");
-  }
-  const items = (Array.isArray(d[schema.arrayKey || sectionId]) ? d[schema.arrayKey || sectionId] : []).filter(rptHasValue);
-  if (!items.length) return emptyHint("لم يُدخل محتوى بعد.");
-  const short = fields.filter((f) => f.type !== "textarea");
-  const long = fields.filter((f) => f.type === "textarea");
-  let html = short.length ? reportTable(short.map((f) => f.label || f.id), items.map((it) => short.map((f) => esc(schemaFieldText(it[f.id]) || "—")))) : "";
-  items.forEach((it, i) => long.forEach((f) => { const t = schemaFieldText(it[f.id]); if (t) html += textBlock(`${f.label || f.id}${items.length > 1 ? " — " + (schemaFieldText(it[(short[0] || {}).id]) || arabicDigits(i + 1)) : ""}`, t); }));
+/* ---- جداول «عرض التقرير كاملًا» تُبنى من حقول «إدارة حقول الأقسام» ----
+   كل حقل = عمود (النصوص الطويلة تُكتب تحت الجدول). أي حقل تضيفه مديرة النظام يظهر تلقائيًا،
+   وحقول الكود الأصلية التي لم تكن في الجدول سابقًا مخفية افتراضيًا (تُظهر من «تنسيق وإنشاء التقارير»). */
+const RPT_LEGACY_COLS = {
+  recommendations: ["text", "source", "level", "priority", "responsibleParty"],
+  programs: ["name", "workType", "targetGroup", "targetCount", "actualBeneficiaries", "achievedCount", "executionStatus", "highlightResult"],
+  tools: ["name", "toolType", "sampleSize", "respondentsCount", "responseRate", "resultQuality"],
+  challenges: ["name", "area", "severity", "scope", "stillOngoing"],
+  improvement: ["name", "field", "priority", "ease", "responsiblePerson"],
+  initiatives: ["name", "entryType", "stage", "beneficiariesCount"],
+  impact: ["title", "impactType", "beneficiariesCount", "ongoing"],
+  strengths: ["name", "area", "continuity", "transferable", "description"],
+  evidence: ["name", "evidenceType", "relatedDepartment", "fileLink", "confidentiality"],
+  analysis: ["topic", "resultValue", "judgment", "changeReason"],
+};
+const RPT_LEGACY_BLOCKS = { programs: ["highlightResult"], strengths: ["description"] };
+// حقول الكود الأصلية لكل قسم (قبل أي تعديل من «إدارة حقول الأقسام»)
+const RPT_CODE_FIELD_IDS = Object.keys(SECTION_FIELD_SCHEMAS).reduce((m, k) => { m[k] = (SECTION_FIELD_SCHEMAS[k].fields || []).map((f) => f.id); return m; }, {});
+function rptSchemaFor(sid) { return sid === "analysis" ? SECTION_FIELD_SCHEMAS.analysisComparisons : SECTION_FIELD_SCHEMAS[sid]; }
+function rptSchemaKey(sid) { return sid === "analysis" ? "analysisComparisons" : sid; }
+function rptFieldDefaultOn(sid, f) {
+  const legacy = RPT_LEGACY_COLS[sid];
+  if (!legacy) return true; // قسم مضاف أو بلا جدول سابق: كل الحقول ظاهرة
+  if (!(RPT_CODE_FIELD_IDS[rptSchemaKey(sid)] || []).includes(f.id)) return true; // حقل أضافته مديرة النظام
+  return legacy.includes(f.id);
+}
+// ظهور الحقل حسب إعداد التنسيق (hidden = مخفي، show = إظهار حقل مخفي افتراضيًا). الاسم = مفتاح العمود.
+function rptFieldVisibleIn(sid, f, hiddenCols, colsShow) {
+  const lbl = f.label || f.id;
+  if (((colsShow || {})[sid] || []).includes(lbl)) return true;
+  return rptFieldDefaultOn(sid, f) && !(((hiddenCols || {})[sid] || []).includes(lbl));
+}
+function rptVisibleFields(sid) {
+  const sc = rptSchemaFor(sid);
+  const fields = sc ? (sc.fields || []).filter((f) => f && f.id) : [];
+  const ctx = RPT_CTX || {};
+  return fields.filter((f) => rptFieldVisibleIn(sid, f, ctx.hiddenCols, ctx.colsShow));
+}
+function rptFieldCellHtml(sid, f, it) {
+  let v = it[f.id];
+  if (f.type === "computed" && f.id === "responseRate") { const r = computeResponseRate(it.sampleSize, it.respondentsCount); return r != null ? r + "٪" : "—"; }
+  const t = schemaFieldText(v);
+  if (!t) return "—";
+  if (f.id === "severity") { const m = challengeSeverityMeta(t); return badgeHtml(t, m.color, m.bg); }
+  if (f.id === "priority") { const m = improvementPriorityMeta(t); return badgeHtml(t, m.color, m.bg); }
+  if (f.id === "judgment") { const m = comparisonJudgmentMeta(t); return badgeHtml(t, m.color, m.bg); }
+  if (f.id === "achievedCount" && it.countUnit) return esc(t + " " + schemaFieldText(it.countUnit));
+  return esc(t);
+}
+// جدول عام لعناصر قسم + النصوص الطويلة تحته
+function rptSchemaItemsHtml(sid, items, emptyText) {
+  items = (items || []).filter(rptHasValue);
+  if (!items.length) return emptyHint(emptyText || "لم يُدخل محتوى بعد.");
+  const fields = rptVisibleFields(sid);
+  // النص الطويل يُكتب تحت الجدول، إلا ما كان عمودًا أصلًا في الجدول القديم (مثل «نص التوصية»)
+  const asCol = (f) => f.type !== "textarea" || ((RPT_LEGACY_COLS[sid] || []).includes(f.id) && !(RPT_LEGACY_BLOCKS[sid] || []).includes(f.id));
+  const short = fields.filter(asCol);
+  const long = fields.filter((f) => !asCol(f));
+  const titleOf = (it, i) => schemaFieldText(it.name) || schemaFieldText(it.title) || schemaFieldText(it[(short[0] || {}).id]) || arabicDigits(i + 1);
+  let html = short.length ? reportTable(short.map((f) => f.label || f.id), items.map((it) => short.map((f) => rptFieldCellHtml(sid, f, it)))) : "";
+  items.forEach((it, i) => long.forEach((f) => { const t = schemaFieldText(it[f.id]); if (t) html += textBlock(`${f.label || f.id}${items.length > 1 || !short.length ? " — " + titleOf(it, i) : ""}`, t); }));
   return html;
+}
+// قسم بحقول ثابتة (عنصر واحد)
+function rptSchemaFixedHtml(sid, d) {
+  const fields = rptVisibleFields(sid).filter((f) => schemaFieldText(d[f.id]));
+  return fields.length ? reportTable(["البند", "القيمة"], fields.map((f) => [esc(f.label || f.id), rptFieldCellHtml(sid, f, d)])) : emptyHint("لم يُدخل محتوى بعد.");
+}
+function rptSectionItemsOf(sid, d) { const sc = rptSchemaFor(sid); return sc ? d[sc.arrayKey || sid] || [] : []; }
+// أعمدة قسم لصفحة التنسيق: [{label, on, def}] — من الحقول (أو من الجداول المرسومة للأقسام الخاصة)
+function rptSectionColumns(sid, s, captured) {
+  const sc = rptSchemaFor(sid);
+  if (sc && !(sid === "review")) {
+    return (sc.fields || []).filter((f) => f && f.id).map((f) => ({ label: f.label || f.id, def: rptFieldDefaultOn(sid, f), on: rptFieldVisibleIn(sid, f, s.hiddenCols, s.colsShow) }));
+  }
+  return ((captured || {})[sid] || []).map((h) => ({ label: h, def: true, on: !((s.hiddenCols[sid] || []).includes(h)) }));
 }
 function sectionBodyOnly(section, saved, report) {
   const d = (saved && saved.data) || {};
@@ -10489,19 +10606,9 @@ function sectionBodyOnly(section, saved, report) {
           <div><div style="font-size:9.5px;color:var(--rpt-gray);">${esc(it.label)}</div><div style="font-size:11.5px;font-weight:700;color:var(--rpt-ink);">${esc(it.value)}</div></div>
         </div>`).join("")}</div>`;
     };
-    body = `<div class="rpt-subheading" style="margin-top:0;">بيانات الجهة والفترة</div>`;
-    body += factGrid([
-      { icon: iconBuilding2, label: "الجهة الرئيسية", value: d.mainEntity }, { icon: iconDocument, label: "الجهة التي ترفع التقرير", value: d.reportingEntityType },
-      { icon: iconBuilding2, label: "اسم الجهة", value: d.entityName }, { icon: iconBuilding2, label: "اسم المكتب", value: d.officeName },
-      { icon: iconCalendarSmall, label: "الفترة", value: d.periodType }, { icon: iconCalendarSmall, label: "من", value: d.startDate },
-      { icon: iconCalendarSmall, label: "إلى", value: d.endDate }, { icon: iconCalendarSmall, label: "العام الهجري", value: d.hijriYear },
-      { icon: iconCalendarSmall, label: "الشهر", value: d.month }, { icon: iconCalendarSmall, label: "الفصل", value: d.term },
-    ]);
-    body += `<div class="rpt-subheading">بيانات الإعداد</div>`;
-    body += factGrid([
-      { icon: iconPencil, label: "معدّة التقرير", value: d.preparerName }, { icon: iconDocument, label: "المسمى الوظيفي", value: d.preparerTitle },
-      { icon: iconCheckCircle, label: "الرئيسة المباشرة", value: d.managerName },
-    ]);
+    const icon = (f) => (f.type === "date" || /date|year|month|term|period/i.test(f.id) ? iconCalendarSmall : /prepar|manager|name$/i.test(f.id) ? iconPencil : iconBuilding2);
+    body = factGrid(rptVisibleFields("basic").map((f) => ({ icon: icon(f), label: f.label || f.id, value: schemaFieldText(d[f.id]) })));
+    if (!body) body = emptyHint("لم تُدخل البيانات الأساسية بعد.");
 
   } else if (section.id === "kpi") {
     const rows = (d.indicators || []).filter((r) => r.name);
@@ -10542,28 +10649,16 @@ function sectionBodyOnly(section, saved, report) {
       const shades = ["#6b2337", "#8a3350", "#c26b85", "#d8c4a8", "#a8a29a"];
       const donutData = Object.keys(statusCounts).map((k, i) => ({ label: k, value: statusCounts[k], color: shades[i % shades.length] }));
       body = rptChart("u-programs", donutData, { size: 150, wrapDonut: "max-width:220px;margin:0 auto 14px;" });
-      body += reportTable(["اسم العمل", "النوع", "الفئة المستهدفة", "المستهدف", "المستفيدات الفعلي", "المنجز", "الحالة"], rows.map((p) => [
-        esc(p.name || "—"), esc(p.workType || "—"), esc(p.targetGroup || "—"), esc(p.targetCount || "—"), esc(p.actualBeneficiaries || "—"),
-        p.achievedCount !== "" && p.achievedCount != null ? esc(p.achievedCount + (p.countUnit ? " " + p.countUnit : "")) : "—", esc(p.executionStatus || "—"),
-      ]));
+      body += rptSchemaItemsHtml("programs", rows);
     } else { body = emptyHint("لا توجد أعمال مُدخلة."); }
-    body += rows.filter((p) => p.highlightResult).map((p) => textBlock(`أبرز نتيجة — ${p.name}`, p.highlightResult)).join("");
 
   } else if (section.id === "tools") {
-    const rows = d.tools || [];
-    body = rows.length ? reportTable(["اسم الأداة", "النوع", "حجم العينة", "المستجيبات", "نسبة الاستجابة", "الجودة"], rows.map((t) => [
-      esc(t.name || "—"), esc(t.toolType || "—"), esc(t.sampleSize || "—"), esc(t.respondentsCount || "—"),
-      computeResponseRate(t.sampleSize, t.respondentsCount) != null ? computeResponseRate(t.sampleSize, t.respondentsCount) + "٪" : "—", esc(t.resultQuality || "—"),
-    ])) : emptyHint("لا توجد أدوات مُدخلة.");
+    body = rptSchemaItemsHtml("tools", d.tools, "لا توجد أدوات مُدخلة.");
 
   } else if (section.id === "analysis") {
     body = textBlock("أبرز نتيجة إيجابية", d.positiveResult) + textBlock("تفسيرها", d.positiveInterpretation) +
       textBlock("أبرز نتيجة تحتاج تحسين", d.improvementResult) + textBlock("الإجراء المقترح", d.improvementAction);
-    const comps = d.comparisons || [];
-    if (comps.length) body += reportTable(["الموضوع", "النتيجة", "الحكم", "سبب التغير"], comps.map((c) => {
-      const jm = comparisonJudgmentMeta(c.judgment);
-      return [esc(c.topic || "—"), esc(c.resultValue || "—"), c.judgment ? badgeHtml(c.judgment, jm.color, jm.bg) : "—", esc(c.changeReason || "—")];
-    }));
+    if ((d.comparisons || []).filter(rptHasValue).length) body += rptSchemaItemsHtml("analysis", d.comparisons);
     body += textBlock("الخلاصة التحليلية", d.summary);
 
   } else if (section.id === "strengths") {
@@ -10575,11 +10670,8 @@ function sectionBodyOnly(section, saved, report) {
           <div style="font-size:11px;font-weight:700;color:var(--rpt-burgundy);">${esc(s.name || "—")}</div>
         </div>`).join("");
       body = `<div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:14px;">${cards}</div>`;
-      body += reportTable(["اسم نقطة القوة", "المجال", "الاستمرارية", "قابلة للنقل"], rows.map((s) => [
-        esc(s.name || "—"), esc(s.area || "—"), esc(s.continuity || "—"), esc(s.transferable || "—"),
-      ]));
+      body += rptSchemaItemsHtml("strengths", rows);
     } else { body = emptyHint("لا توجد نقاط قوة مُدخلة."); }
-    body += rows.filter((s) => s.description).map((s) => textBlock(`وصف — ${s.name}`, s.description)).join("");
 
   } else if (section.id === "challenges") {
     const rows = d.challenges || [];
@@ -10589,24 +10681,14 @@ function sectionBodyOnly(section, saved, report) {
       const sevShades = { "حرج": DANGER, "مرتفع": "#c9863a", "متوسط": GOLD, "منخفض": GREEN };
       const donutData = Object.keys(sevCounts).map((k) => ({ label: k, value: sevCounts[k], color: sevShades[k] || SUBTLE }));
       body = rows.length > 1 ? rptChart("u-challenges", donutData, { size: 140, wrapDonut: "max-width:200px;margin:0 auto 14px;" }) : "";
-      body += reportTable(["اسم الصعوبة", "المجال", "المستوى", "النطاق", "ما زالت قائمة؟"], rows.map((c) => {
-        const sm = challengeSeverityMeta(c.severity);
-        return [esc(c.name || "—"), esc(c.area || "—"), c.severity ? badgeHtml(c.severity, sm.color, sm.bg) : "—", esc(c.scope || "—"), esc(c.stillOngoing || "—")];
-      }));
+      body += rptSchemaItemsHtml("challenges", rows);
     } else { body = emptyHint("لا توجد صعوبات مُدخلة."); }
 
   } else if (section.id === "improvement") {
-    const rows = d.opportunities || [];
-    body = rows.length ? reportTable(["اسم فرصة التحسين", "المجال", "الأولوية", "سهولة التنفيذ", "المسؤولة"], rows.map((o) => {
-      const pm = improvementPriorityMeta(o.priority);
-      return [esc(o.name || "—"), esc(o.field || "—"), o.priority ? badgeHtml(o.priority, pm.color, pm.bg) : "—", esc(o.ease || "—"), esc(o.responsiblePerson || "—")];
-    })) : emptyHint("لا توجد فرص تحسين مُدخلة.");
+    body = rptSchemaItemsHtml("improvement", d.opportunities, "لا توجد فرص تحسين مُدخلة.");
 
   } else if (section.id === "initiatives") {
-    const rows = d.initiatives || [];
-    body = rows.length ? reportTable(["اسم المبادرة", "النوع", "المرحلة", "عدد المستفيدات"], rows.map((it) => [
-      esc(it.name || "—"), esc(it.entryType || "—"), esc(it.stage || "—"), esc(it.beneficiariesCount || "—"),
-    ])) : emptyHint("لا توجد مبادرات مُدخلة.");
+    body = rptSchemaItemsHtml("initiatives", d.initiatives, "لا توجد مبادرات مُدخلة.");
 
   } else if (section.id === "impact") {
     const rows = d.impactStories || [];
@@ -10618,9 +10700,7 @@ function sectionBodyOnly(section, saved, report) {
           <div style="font-size:9.5px;color:var(--rpt-gray);margin-top:2px;">${esc(it.beneficiariesCount || "—")} مستفيدة</div>
         </div>`).join("");
       body = `<div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:14px;">${cards}</div>`;
-      body += reportTable(["العنوان", "نوع الأثر", "عدد المستفيدات", "مستمر؟"], rows.map((it) => [
-        esc(it.title || "—"), esc(it.impactType || "—"), esc(it.beneficiariesCount || "—"), esc(it.ongoing || "—"),
-      ]));
+      body += rptSchemaItemsHtml("impact", rows);
     } else { body = emptyHint("لا توجد قصص أثر مُدخلة."); }
 
   } else if (section.id === "recommendations") {
@@ -10631,30 +10711,27 @@ function sectionBodyOnly(section, saved, report) {
       const prShades = { "عاجلة": DANGER, "عالية": "#c9863a", "متوسطة": GOLD, "منخفضة": GREEN };
       const prData = Object.keys(prCounts).map((k) => ({ label: k, value: prCounts[k], color: prShades[k] || SUBTLE }));
       body = rows.length > 1 ? rptChart("u-recs", prData, { height: 130 }) : "";
-      body += reportTable(["نص التوصية", "المصدر", "المستوى", "الأولوية", "الجهة المسؤولة"], rows.map((it) => {
-        const pm = improvementPriorityMeta(it.priority);
-        return [esc(it.text || "—"), esc(it.source || "—"), esc(it.level || "—"), it.priority ? badgeHtml(it.priority, pm.color, pm.bg) : "—", esc(it.responsibleParty || "—")];
-      }));
+      body += rptSchemaItemsHtml("recommendations", rows);
     } else { body = emptyHint("لا توجد توصيات مُدخلة."); }
 
   } else if (section.id === "nextplan") {
-    const rows = d.mainTasks || [];
+    const rows = (d.mainTasks || []).filter(rptHasValue);
     if (rows.length) {
+      const fields = rptVisibleFields("nextplan");
+      const head = fields.find((f) => f.id === "name") || fields[0];
+      const rest = fields.filter((f) => f !== head);
       body = rows.map((it, i) => `
         <div style="display:flex;gap:10px;align-items:flex-start;margin-bottom:10px;">
           <div style="width:24px;height:24px;border-radius:50%;background:var(--rpt-burgundy);color:#fff;font-size:11px;font-weight:800;display:flex;align-items:center;justify-content:center;flex-shrink:0;">${arabicDigits(i + 1)}</div>
           <div style="flex:1;border-bottom:1px solid var(--rpt-line);padding-bottom:8px;">
-            <div style="font-size:12px;font-weight:700;color:var(--rpt-ink);">${esc(it.name || "—")}</div>
-            <div style="font-size:10.5px;color:var(--rpt-gray);margin-top:2px;">${esc(it.goal || "—")} — ${esc(it.responsiblePerson || "—")} — ${esc(it.expectedDate || "—")}</div>
+            <div style="font-size:12px;font-weight:700;color:var(--rpt-ink);">${esc((head && schemaFieldText(it[head.id])) || "—")}</div>
+            ${rest.length ? `<div style="font-size:10.5px;color:var(--rpt-gray);margin-top:2px;">${rest.map((f) => esc(schemaFieldText(it[f.id]) || "—")).join(" — ")}</div>` : ""}
           </div>
         </div>`).join("");
     } else { body = emptyHint("لم تُضف أعمال رئيسة بعد."); }
 
   } else if (section.id === "evidence") {
-    const rows = d.evidenceItems || [];
-    body = rows.length ? reportTable(["اسم الشاهد", "النوع", "القسم المرتبط", "رابط الملف", "درجة السرية"], rows.map((it) => [
-      esc(it.name || "—"), esc(it.evidenceType || "—"), esc(it.relatedDepartment || "—"), esc(it.fileLink || "—"), esc(it.confidentiality || "—"),
-    ])) : emptyHint("لا توجد شواهد مُدخلة بعد.");
+    body = rptSchemaItemsHtml("evidence", d.evidenceItems, "لا توجد شواهد مُدخلة بعد.");
 
   } else if (section.id === "review") {
     const checklist = d.checklist || {};
@@ -10670,8 +10747,11 @@ function sectionBodyOnly(section, saved, report) {
     if (d.managerDecision) body += kvBlock([kv("قرار المراجعة", d.managerDecision)]);
     if (d.managerNotesText) body += textBlock("ملاحظات المديرة المباشرة", d.managerNotesText);
 
-  } else if (SECTION_FIELD_SCHEMAS[section.id]) {
-    body = schemaSectionReportHtml(SECTION_FIELD_SCHEMAS[section.id], d, section.id);
+  } else if (SECTION_FIELD_SCHEMAS[section.id] && (SECTION_FIELD_SCHEMAS[section.id].fields || []).length) {
+    // قسم مضاف له حقول من «إدارة حقول الأقسام»
+    const sc = SECTION_FIELD_SCHEMAS[section.id];
+    body = sc.fixed ? rptSchemaFixedHtml(section.id, d) : rptSchemaItemsHtml(section.id, rptSectionItemsOf(section.id, d));
+    if (d.content) body = textBlock("المحتوى", d.content) + body.replace(/<div class="hint">لم يُدخل محتوى بعد.<\/div>/, "");
   } else {
     body = textBlock("المحتوى", d.content) || emptyHint("لم يُدخل محتوى بعد.");
   }
@@ -10854,7 +10934,7 @@ function fullReportOrPreviewBody(unit, report, afterPage, opts) {
   const dept = S.departments.find((x) => x.id === unit.departmentId);
   const chapters = rptOrdered(unitChapterDefs(), s).filter((c) => review || (!s.hidden[c.key] &&
     (s.showEmpty || opts.capture || c.special || c.sections.some((sid) => sectionHasData(report, sid)))));
-  return rptWithCtx({ ...rptChartCtx(s), hiddenCols: review ? null : s.hiddenCols, capture: opts.capture || null }, () => {
+  return rptWithCtx({ ...rptChartCtx(s), hiddenCols: review ? null : s.hiddenCols, colsShow: s.colsShow, capture: opts.capture || null }, () => {
     // «ملخص التقرير» بصفحة مستقلة، ثم الأقسام (عدد محدد بكل صفحة، 0 = متتابعة)، و«الإغلاق والاعتماد» مع آخر صفحة
     const per = Number(s.perPage) || 0;
     const pages = [];
@@ -12390,9 +12470,12 @@ function attachClickListener() {
         treeDeleteEntity(ds.type, ds.id);
         // المستوى المربوط بالجهة المحذوفة يبقى بالشجرة لكن بدون ربط
         if (currentOrgLevels().some((l) => l.linkId === ds.id)) saveOrgLevels(currentOrgLevels().map((l) => (l.linkId === ds.id ? { ...l, linkKind: "", linkId: "" } : l)));
-        S.ui.treeConfirmDel = null; render();
+        S.ui.treeConfirmDel = null; S.ui.olUnlinkedDel = null; S.ui.olUnlinkedDelStep = null; render();
         break;
       }
+      case "ol-unlinked-del-ask": S.ui.olUnlinkedDel = ds.key; S.ui.olUnlinkedDelStep = 1; render(); break;
+      case "ol-unlinked-del-next": S.ui.olUnlinkedDelStep = 2; render(); break;
+      case "ol-unlinked-del-cancel": S.ui.olUnlinkedDel = null; S.ui.olUnlinkedDelStep = null; render(); break;
       case "add-department": {
         const nameEl = document.getElementById("new-dept-name");
         const name = (nameEl.value || "").trim();
@@ -13028,6 +13111,20 @@ function attachClickListener() {
         }
         S.ui.editingSectionId = null; render(); break;
       }
+      case "delete-report-section-ask": S.ui.secDelAsk = ds.id; render(); break;
+      case "delete-report-section-cancel": S.ui.secDelAsk = null; render(); break;
+      case "delete-report-section": {
+        if (DEFAULT_SECTIONS.some((x) => x.id === ds.id)) break; // الأقسام الأساسية لا تُحذف
+        const updated = sortedSectionDefs().filter((x) => x.id !== ds.id);
+        applyReportSectionDefs(updated);
+        dataStore.saveReportSectionDefs(updated);
+        if (SECTION_FIELD_SCHEMAS[ds.id]) {
+          delete SECTION_FIELD_SCHEMAS[ds.id];
+          const map = { ...dataStore.getSectionFieldSchemas() }; delete map[ds.id];
+          dataStore.saveSectionFieldSchemas(map);
+        }
+        S.ui.secDelAsk = null; render(); break;
+      }
       case "toggle-report-section": {
         const updated = sortedSectionDefs().map((s) => s.id === ds.id ? { ...s, enabled: s.enabled === false } : s);
         applyReportSectionDefs(updated);
@@ -13094,7 +13191,9 @@ function attachClickListener() {
         render(); break;
       }
       case "save-schema-field": {
-        const sectionId = S.ui.fieldSchemaSection;
+        const sectionId = S.ui.fieldSchemaSection || (fieldSchemaManagedSections()[0] || {}).id;
+        // قسم مضاف بلا حقول بعد: ننشئ تعريفه (قائمة عناصر بنفس معرّف القسم)
+        if (!SECTION_FIELD_SCHEMAS[sectionId] && SECTIONS.some((x) => x.id === sectionId)) setSectionFieldsLive(sectionId, []);
         const schema = SECTION_FIELD_SCHEMAS[sectionId];
         if (!schema) break;
         const draft = S.ui.fieldEditDraft || {};
