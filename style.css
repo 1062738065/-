@@ -424,6 +424,8 @@ table.prs-table td { padding: 8px 10px; border-top: 1px solid var(--border); }
 .rpt-chapter-body, .rpt-wrap .hint { text-align: justify; text-align-last: right; }
 .rpt-chapter-body table.prs-table th { background: var(--rpt-th-bg, #f4ece4) !important; color: var(--rpt-th-color, var(--rpt-burgundy)) !important; }
 .rpt-wrap table.prs-table { font-size: var(--rpt-table-fs, 12px); }
+.rpt-wrap table.prs-table th { text-align: var(--rpt-th-align, right); }
+.rpt-wrap table.prs-table td { text-align: var(--rpt-td-align, right); text-align-last: auto; }
 .rpt-zebra .rpt-chapter-body table.prs-table tbody tr:nth-child(even) td { background: rgba(107,35,55,0.045); }
 .rpt-tnone .rpt-chapter-body table.prs-table td { border-top-color: transparent !important; }
 .rpt-tgrid .rpt-chapter-body table.prs-table th, .rpt-tgrid .rpt-chapter-body table.prs-table td { border: 1px solid var(--rpt-line) !important; }

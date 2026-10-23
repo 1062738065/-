@@ -3372,10 +3372,7 @@ function progressListHtml(items) {
 function svgBarChart(items, opts) {
   // items: [{label, value}], value in 0..100 (percent)
   opts = opts || {};
-  if (RPT_CTX && RPT_CTX.chartType === "hide") return "";
-  if (RPT_CTX && RPT_CTX.mono) { const sh = rptMonoShades(RPT_CTX.main, items.length); items = items.map((it, i) => ({ ...it, color: sh[i] })); }
-  const sc = (RPT_CTX && RPT_CTX.scale) || 1;
-  const w = opts.width || 640, h = Math.round((opts.height || 220) * sc);
+  const w = opts.width || 640, h = opts.height || 220;
   const padTop = 14, padBottom = 34, padRight = 34, padLeft = 6;
   const chartW = w - padRight - padLeft, chartH = h - padTop - padBottom;
   const n = items.length || 1;
@@ -3408,15 +3405,7 @@ function svgBarChart(items, opts) {
 function svgPieChart(slices, opts) {
   // slices: [{label, value, color}]
   opts = opts || {};
-  if (RPT_CTX && RPT_CTX.chartType === "hide") return "";
-  if (RPT_CTX && RPT_CTX.mono) { const sh = rptMonoShades(RPT_CTX.main, slices.length); slices = slices.map((x, i) => ({ ...x, color: sh[i] })); }
-  if (RPT_CTX && RPT_CTX.chartType === "bars") {
-    // تنسيق «أعمدة لكل الرسوم»: التوزيع يُعرض كنسبة كل فئة من المجموع
-    const tot = slices.reduce((a, x) => a + (Number(x.value) || 0), 0);
-    if (!tot) return "";
-    return svgBarChart(slices.map((x) => ({ label: x.label, value: Math.round(((Number(x.value) || 0) / tot) * 100), color: x.color })), { height: 160 });
-  }
-  const size = Math.round((opts.size || 160) * ((RPT_CTX && RPT_CTX.scale) || 1)), r = size / 2 - 4, cx = size / 2, cy = size / 2;
+  const size = opts.size || 160, r = size / 2 - 4, cx = size / 2, cy = size / 2;
   const total = slices.reduce((s, x) => s + x.value, 0);
   if (!total) return `<div style="font-size:12px;color:${SUBTLE};text-align:center;padding:20px 0;">لا توجد بيانات كافية للرسم</div>`;
   let angle = -Math.PI / 2;
@@ -5053,16 +5042,16 @@ const RPT_COMMON_DEFAULTS = {
   size: "A4", orient: "portrait", margin: "normal", mt: 18, mb: 18, mr: 15, ml: 15,
   paper: "#FFFDF9", bgImage: "", watermark: false, frame: false, spine: false,
   showHead: false, headRight: "", headLogo: true, headCenter: "", headLeft: "", showFoot: false, footText: "", pageNum: "none",
-  order: [], hidden: {}, titles: {}, hiddenCols: {}, limit: 10, breakEach: false,
-  chartType: "auto", chartColors: "status", chartSize: "md",
+  order: [], hidden: {}, titles: {}, hiddenCols: {}, limit: 10, perPage: 0, showEmpty: false,
+  charts: {}, thAlign: "right", tdAlign: "right", numCenter: false,
   thBg: "#f4ece4", thColor: "", tableBorders: "rows", zebra: false, tableFs: 12,
   fontBody: "Almarai", fontTitle: "Amiri", fontHeading: "Cairo", mainColor: "#6b2337", chapterBg: "#f3e8dd",
   showCover: true, showCoverMeta: true, assocName: "جمعية فرقان لتحفيظ القرآن الكريم بالطائف", coverTitle: "", coverSub: "", preparedBy: "",
 };
 const RPT_FINAL_DEFAULTS = { ...RPT_COMMON_DEFAULTS, coverTitle: "التقرير الإداري النهائي", coverSub: "تقرير منتقى — أبرز ما يستحق قرار الإدارة، لا كل البيانات", preparedBy: "الإدارة العليا" };
-const RPT_UNIT_DEFAULTS = { ...RPT_COMMON_DEFAULTS, fontTitle: "Cairo", pageNum: "paren", spine: true };
+const RPT_UNIT_DEFAULTS = { ...RPT_COMMON_DEFAULTS, fontTitle: "Cairo", pageNum: "paren", spine: true, perPage: 2 };
 const RPT_CUSTOM_DEFAULTS = { ...RPT_COMMON_DEFAULTS, name: "", scopeLevelId: "", periodKind: "all", year: "", coverSub: "", preparedBy: "" };
-const RPT_NUM_KEYS = ["mt", "mb", "mr", "ml", "limit", "tableFs", "year"];
+const RPT_NUM_KEYS = ["mt", "mb", "mr", "ml", "limit", "tableFs", "year", "perPage"];
 // فصول التقرير المجمّع (التقرير الإداري النهائي + أي تقرير جديد)
 const AGG_CHAPTERS = [
   { key: "summary", title: "ملخص الإدارة", icon: "sparkles" },
@@ -5078,20 +5067,33 @@ const AGG_CHAPTERS = [
   { key: "nextTasks", title: "أولويات الفترة القادمة", icon: "calendar" },
   { key: "closing", title: "الخاتمة والاعتماد", icon: "check" },
 ];
-// فصول "عرض التقرير كاملًا" (تقرير الوحدة) — page = الصفحة الافتراضية (الفصول بنفس الرقم تجتمع بصفحة واحدة)
-const UNIT_CHAPTERS = [
-  { key: "summary", title: "ملخص التقرير", icon: "sparkles", page: 0, special: "summary" },
-  { key: "basic", title: "بيانات التقرير", icon: "document", page: 1, sections: ["basic"] },
-  { key: "goals", title: "الأهداف والمؤشرات", icon: "target", page: 1, sections: ["goals", "kpi"] },
-  { key: "exec", title: "مرحلة التنفيذ", icon: "layers", page: 2, sections: ["programs", "tools"] },
-  { key: "eval", title: "مرحلة التقييم", icon: "check", page: 3, sections: ["analysis", "strengths"] },
-  { key: "impact", title: "الأثر والتميز", icon: "sparkles", page: 4, sections: ["initiatives", "impact"] },
-  { key: "challenges", title: "التحديات والملاحظات", icon: "bell", page: 5, sections: ["challenges"] },
-  { key: "improve", title: "التوصيات والتحسين", icon: "pencil", page: 5, sections: ["improvement", "recommendations"] },
-  { key: "approval", title: "الإغلاق والاعتماد", icon: "check", page: 6, special: "approval" },
-  { key: "nextplan", title: "خطة الفترة القادمة", icon: "calendar", page: 7, sections: ["nextplan"] },
-  { key: "evidence", title: "الأدلة والمرفقات", icon: "save", page: 7, sections: ["evidence", "review"] },
-];
+// فصول "عرض التقرير كاملًا" (تقرير الوحدة) = أقسام التعبئة نفسها (إدارة أقسام التقرير) بنفس الأسماء والترتيب،
+// + «ملخص التقرير» أولًا و«الإغلاق والاعتماد» آخرًا. أي قسم جديد يظهر تلقائيًا.
+const UNIT_SECTION_ICONS = { basic: "document", goals: "target", kpi: "gauge", programs: "layers", tools: "layers", analysis: "check", strengths: "check", challenges: "bell", improvement: "pencil", initiatives: "sparkles", impact: "sparkles", recommendations: "pencil", nextplan: "calendar", evidence: "save", review: "check" };
+function unitChapterDefs() {
+  return [
+    { key: "summary", title: "ملخص التقرير", icon: "sparkles", special: "summary" },
+    ...SECTIONS.map((sc) => ({ key: sc.id, title: sc.label, icon: UNIT_SECTION_ICONS[sc.id] || "document", sections: [sc.id] })),
+    { key: "approval", title: "الإغلاق والاعتماد", icon: "check", special: "approval" },
+  ];
+}
+// الرسوم البيانية في كل تقرير — لكل رسم إعداده (النوع، الألوان، الحجم).
+// dist = توزيع فئات (دائري/أعمدة)، series = قيمة لكل عنصر بنسبة مئوية (أعمدة/خطي)
+const RPT_CHARTS = {
+  unit: [
+    { id: "u-indStatus", title: "توزيع حالات المؤشرات", where: "ملخص التقرير", kind: "dist", native: "donut", cats: () => ["متحقق", "قريب من المستهدف", "يحتاج تدخلاً", "متعثر", "بلا بيانات"] },
+    { id: "u-goalLevels", title: "توزيع مستويات تحقق الأهداف", where: "ملخص التقرير", kind: "dist", native: "donut", cats: () => GOAL_LEVELS.slice() },
+    { id: "u-kpi", title: "نسبة إنجاز كل مؤشر", where: "مؤشرات الأداء", kind: "series", native: "bars" },
+    { id: "u-programs", title: "حالة تنفيذ الأعمال", where: "الأعمال والبرامج", kind: "dist", native: "donut", cats: () => [...(((SECTION_FIELD_SCHEMAS.programs || {}).fields || []).find((f) => f.id === "executionStatus") || { options: [] }).options || [], "غير محدد"] },
+    { id: "u-challenges", title: "مستويات الصعوبات", where: "الصعوبات والتحديات", kind: "dist", native: "donut", cats: () => ["حرج", "مرتفع", "متوسط", "منخفض", "غير محدد"] },
+    { id: "u-recs", title: "أولويات التوصيات", where: "التوصيات", kind: "dist", native: "bars", cats: () => ["عاجلة", "عالية", "متوسطة", "منخفضة", "غير محدد"] },
+  ],
+  agg: [
+    { id: "a-status", title: "حالة التقارير", where: "ملخص الإدارة", kind: "dist", native: "donut", cats: () => ["مكتمل", "قيد الإعداد"] },
+    { id: "a-deptPerf", title: "متوسط أداء الأقسام", where: "مستوى أداء الأقسام والوحدات", kind: "series", native: "bars" },
+  ],
+};
+function rptChartDef(id) { return [...RPT_CHARTS.unit, ...RPT_CHARTS.agg].find((c) => c.id === id) || { id, kind: "series", native: "bars" }; }
 function rptIcon(key) {
   const m = { sparkles: iconSparkles, building: iconBuilding2, gauge: iconGauge2, layers: iconLayers, check: iconCheckCircle, bell: iconBell, pencil: iconPencil, calendar: iconCalendarSmall, document: iconDocument, target: iconTarget, save: iconSave };
   return m[key] || iconDocument;
@@ -5104,7 +5106,10 @@ function rptStore() {
 function rptNormalize(s) {
   ["hidden", "titles", "hiddenCols"].forEach((k) => { if (!s[k] || typeof s[k] !== "object" || Array.isArray(s[k])) s[k] = {}; });
   if (!Array.isArray(s.order)) s.order = [];
-  RPT_NUM_KEYS.forEach((k) => { if (k !== "year") s[k] = Number(s[k]) || RPT_COMMON_DEFAULTS[k]; });
+  if (!s.charts || typeof s.charts !== "object" || Array.isArray(s.charts)) s.charts = {};
+  if (s.breakEach) { s.perPage = 1; delete s.breakEach; } // إعداد قديم: «كل فصل بصفحة»
+  s.perPage = Math.max(0, Math.min(6, Number(s.perPage) || 0));
+  RPT_NUM_KEYS.forEach((k) => { if (k !== "year" && k !== "perPage") s[k] = Number(s[k]) || RPT_COMMON_DEFAULTS[k]; });
   if (!RPT_SIZES[s.size]) s.size = "A4";
   return s;
 }
@@ -5162,6 +5167,7 @@ function rptWrap(s, inner, isPreview) {
   let vars = `--rpt-burgundy:${main};--rpt-burgundy-dark:${mixHex(main, "#000000", 0.25)};--rpt-paper:${rptCssSafe(s.paper)};--rpt-chapter-bg:${rptCssSafe(s.chapterBg)};` +
     `--rpt-font-body:'${rptCssSafe(s.fontBody)}';--rpt-font-title:'${rptCssSafe(s.fontTitle)}';--rpt-font-heading:'${rptCssSafe(s.fontHeading)}';` +
     `--rpt-page-w:${w}mm;--rpt-page-h:${h}mm;--rpt-mt:${t}mm;--rpt-mb:${b}mm;--rpt-mr:${r}mm;--rpt-ml:${l}mm;` +
+    `--rpt-th-align:${["right", "center", "left"].includes(s.thAlign) ? s.thAlign : "right"};--rpt-td-align:${["right", "center", "left"].includes(s.tdAlign) ? s.tdAlign : "right"};` +
     `--rpt-th-bg:${rptCssSafe(s.thBg)};--rpt-th-color:${rptCssSafe(s.thColor || main)};--rpt-table-fs:${Math.max(9, Math.min(16, Number(s.tableFs) || 12))}px;`;
   if (s.bgImage && RPT_DATA_IMG_RE.test(s.bgImage)) vars += `--rpt-bg-img:url("${s.bgImage}");`;
   const cls = ["rpt-wrap", s.zebra ? "rpt-zebra" : "", s.tableBorders === "grid" ? "rpt-tgrid" : s.tableBorders === "none" ? "rpt-tnone" : "", s.frame ? "rpt-frame" : "", vars.indexOf("--rpt-bg-img") !== -1 ? "rpt-bgimg" : ""].filter(Boolean).join(" ");
@@ -5185,7 +5191,59 @@ function rptPageHtml(s, inner, n, total) {
 /* ---- سياق الرسم: نوع الرسوم وألوانها وحجمها والأعمدة المخفية — يقرؤه svgBarChart/svgPieChart/reportTable ---- */
 let RPT_CTX = null;
 function rptWithCtx(ctx, fn) { const prev = RPT_CTX; RPT_CTX = ctx; try { return fn(); } finally { RPT_CTX = prev; } }
-function rptChartCtx(s) { return { chartType: s.chartType, mono: s.chartColors === "main", main: s.mainColor, scale: { sm: 0.75, md: 1, lg: 1.3 }[s.chartSize] || 1 }; }
+function rptChartCtx(s) {
+  // s.chartType/chartColors/chartSize = إعدادات عامة قديمة (قبل إعداد كل رسم) — تبقى قيمة افتراضية لما لم يُضبط
+  return { charts: s.charts || {}, legacy: { type: s.chartType === "hide" ? "hide" : "auto", colors: s.chartColors === "main" ? "main" : "status", size: s.chartSize || "md" }, main: s.mainColor,
+    numCenter: !!s.numCenter };
+}
+function rptChartCfg(id) {
+  const ctx = RPT_CTX || {};
+  const lg = ctx.legacy || { type: "auto", colors: "status", size: "md" };
+  const c = (ctx.charts && ctx.charts[id]) || {};
+  return { type: c.type || lg.type, colors: c.colors || lg.colors, size: c.size || lg.size, custom: c.custom || {} };
+}
+// يرسم رسمًا بيانيًا حسب إعداده في «إدارة التقارير». items: [{label, value, color}]
+// dist: القيم أعداد لكل فئة. series: القيم نسب 0..100. wrapDonut: تنسيق حاوية الدائري.
+function rptChart(id, items, opts) {
+  opts = opts || {};
+  const def = rptChartDef(id);
+  const cfg = rptChartCfg(id);
+  let type = cfg.type === "auto" || !cfg.type ? def.native : cfg.type;
+  if (def.kind === "dist" && type === "line") type = "bars";
+  if (def.kind === "series" && type === "donut") type = "bars";
+  if (type === "hide" || !items.length) return "";
+  const main = (RPT_CTX && RPT_CTX.main) || "#6b2337";
+  if (cfg.colors === "main") { const sh = rptMonoShades(main, items.length); items = items.map((it, i) => ({ ...it, color: sh[i] })); }
+  else if (cfg.colors === "custom") items = items.map((it) => ({ ...it, color: cfg.custom[it.label] || cfg.custom.__all || it.color }));
+  const scale = { sm: 0.75, md: 1, lg: 1.3 }[cfg.size] || 1;
+  if (def.kind === "dist") {
+    if (type === "bars") {
+      const tot = items.reduce((a, x) => a + (Number(x.value) || 0), 0);
+      if (!tot) return "";
+      return `<div style="margin-bottom:14px;">${svgBarChart(items.map((x) => ({ label: x.label, value: Math.round(((Number(x.value) || 0) / tot) * 100), color: x.color })), { height: Math.round((opts.height || 150) * scale) })}</div>`;
+    }
+    return `<div style="${opts.wrapDonut || "margin:0 auto 14px;"}">${svgPieChart(items, { size: Math.round((opts.size || 140) * scale) })}</div>`;
+  }
+  const h = Math.round((opts.height || 180) * scale);
+  return `<div style="margin-bottom:14px;">${type === "line" ? svgLineChart(items, { height: h }) : svgBarChart(items, { height: h })}</div>`;
+}
+function svgLineChart(items, opts) {
+  opts = opts || {};
+  const w = 640, h = opts.height || 200, padTop = 18, padBottom = 34, padX = 30;
+  const chartH = h - padTop - padBottom, n = items.length;
+  const xFor = (i) => (n === 1 ? w / 2 : padX + (i * (w - padX * 2)) / (n - 1));
+  const yFor = (v) => padTop + chartH - (Math.max(0, Math.min(100, v)) / 100) * chartH;
+  const color = (items[0] && items[0].color) || "var(--rpt-burgundy)";
+  const grid = [0, 50, 100].map((g) => `<line x1="${padX}" y1="${yFor(g)}" x2="${w - padX}" y2="${yFor(g)}" stroke="${BORDER}" stroke-dasharray="3,3" />`).join("");
+  const pts = items.map((it, i) => `${xFor(i).toFixed(1)},${yFor(it.value).toFixed(1)}`).join(" ");
+  const dots = items.map((it, i) => {
+    const label = it.label.length > 12 ? it.label.slice(0, 12) + "…" : it.label;
+    return `<circle cx="${xFor(i).toFixed(1)}" cy="${yFor(it.value).toFixed(1)}" r="4.5" fill="${it.color || color}"><title>${esc(it.label)}: ${it.value}٪</title></circle>
+      <text x="${xFor(i).toFixed(1)}" y="${(yFor(it.value) - 9).toFixed(1)}" font-size="10.5" font-weight="800" fill="${INK}" text-anchor="middle">${it.value}٪</text>
+      <text x="${xFor(i).toFixed(1)}" y="${h - padBottom + 16}" font-size="9.5" fill="${SUBTLE}" text-anchor="middle">${esc(label)}</text>`;
+  }).join("");
+  return `<svg viewBox="0 0 ${w} ${h}" width="100%" height="${h}" style="max-width:100%;">${grid}<polyline points="${pts}" fill="none" stroke="${color}" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" />${dots}</svg>`;
+}
 function rptMonoShades(main, n) { const steps = [0, 0.3, 0.5, 0.65, 0.78, 0.86]; return Array.from({ length: n }, (_, i) => mixHex(main, "#ffffff", steps[i % steps.length])); }
 
 /* ---- التقرير المجمّع: البيانات ---- */
@@ -5254,6 +5312,8 @@ function aggReportData(s) {
     nextTasks: nextTasks.slice(0, lim * 2),
     yearCompareHtml: () => yearCompareReportChapterBody(finalUnits),
     programsHtml: () => programsReportChapterBody(finalUnits, year),
+    hasYearCompare: () => { const yc = yearlyComparisonData(finalUnits); return !!(yc.indicators.length || yc.goals.length); },
+    hasPrograms: () => collectProgramsForUnits(finalUnits, year).length > 0,
   };
 }
 // بيانات وهمية للمعاينة في صفحة إدارة التقارير (لا علاقة لها بأي تقرير حقيقي)
@@ -5274,12 +5334,18 @@ function aggFakeData(s) {
     initiatives: rows(Math.min(lim, 6), (i, u) => ({ unitName: u, name: "مبادرة نموذجية " + arabicDigits(i + 1), scalability: "قابلة للتعميم" })),
     nextTasks: rows(Math.min(lim * 2, 6), (i, u) => ({ unitName: u, name: "عمل قادم " + arabicDigits(i + 1), expectedDate: "١٤٤٨/٠٩/٠١" })),
     yearCompareHtml: () => reportTable(["البند", "1446هـ", "1447هـ", "1448هـ"], [["متوسط تحقق المؤشرات", "71٪", "78٪", "84٪"], ["متوسط تحقق الأهداف التشغيلية", "65٪", "72٪", "80٪"], ["عدد الوحدات المُبلِّغة", 6, 7, 8]]),
+    hasYearCompare: () => true, hasPrograms: () => true,
     programsHtml: () => `<div class="rpt-subheading">إحصائية الإنجاز</div>` + reportTable(["نوع العمل", "عدد الأعمال", "المكتمل", "وحدة العدّ", "المستهدف", "المنجز", "النسبة"], [["زيارة إشرافية", 12, 10, "مركز", 45, 39, "87٪"], ["برنامج تدريبي", 6, 5, "برنامج", 8, 6, "75٪"]]),
   };
 }
+// هل للفصل بيانات؟ (الفصول الفارغة لا تظهر إلا بخيار «إظهار الأقسام الفارغة»)
+function aggChapterHasData(key, data) {
+  const m = { perf: data.deptPerf.length || data.unitRows.length, indicators: data.indicators.length, yearCompare: data.hasYearCompare(), programs: data.hasPrograms(),
+    achievements: data.achievements.length, strengths: data.strengths.length, challenges: data.challenges.length, recs: data.recs.length, initiatives: data.initiatives.length, nextTasks: data.nextTasks.length };
+  return key in m ? !!m[key] : true;
+}
 function aggChapterBody(key, data, s) {
   const starTd = (c) => (c ? `<span style="color:${GOLD};">⭐</span>` : "");
-  const showCharts = s.chartType !== "hide";
   if (key === "summary") {
     return `<div class="stat-grid" style="margin-bottom:14px;">
         ${statIconCardHtml("إجمالي التقارير", data.total, iconDocument(18, "var(--rpt-burgundy)"), "#f4ece4")}
@@ -5287,11 +5353,11 @@ function aggChapterBody(key, data, s) {
         ${statIconCardHtml("عدد الأقسام", data.deptCount, iconBuilding("var(--rpt-burgundy)", 18), "#f4ece4")}
         ${statIconCardHtml("عدد الوحدات", data.unitCount, iconLayers(18, "var(--rpt-burgundy)"), "#f4ece4")}
       </div>
-      ${showCharts && data.total ? `<div style="max-width:320px;margin:0 auto 12px;">${svgPieChart([{ label: "مكتمل", value: data.completed, color: GREEN }, { label: "قيد الإعداد", value: data.total - data.completed, color: GOLD }], { size: 130 })}</div>` : ""}
+      ${data.total ? rptChart("a-status", [{ label: "مكتمل", value: data.completed, color: GREEN }, { label: "قيد الإعداد", value: data.total - data.completed, color: GOLD }], { size: 130, wrapDonut: "max-width:320px;margin:0 auto 12px;" }) : ""}
       <div class="hint">⭐ = عنصر اعتمدته مديرة القسم كأبرز نتيجة تستحق وصول الإدارة العليا.</div>`;
   }
   if (key === "perf") {
-    const chart = showCharts && data.deptPerf.length ? `<div style="margin-bottom:12px;">${svgBarChart(data.deptPerf.map((d) => ({ label: d.name, value: d.avg, color: "var(--rpt-burgundy)" })), { height: 170 })}</div>` : "";
+    const chart = rptChart("a-deptPerf", data.deptPerf.map((d) => ({ label: d.name, value: d.avg, color: "var(--rpt-burgundy)" })), { height: 170 });
     return chart + reportTable(["القسم", "عدد الوحدات", "متوسط الإنجاز"], data.deptPerf.map((d) => [esc(d.name), d.count, d.avg + "٪"])) + reportTable(["الوحدة", "القسم", "نسبة الإنجاز"], data.unitRows);
   }
   if (key === "indicators") return data.indicators.length ? reportTable(["الوحدة", "المؤشر", "المتحقق"], data.indicators.map((r) => [esc(r.unitName), esc(r.name), esc(r.actual || "—")])) : emptyHint("لا توجد مؤشرات مُدخلة بعد.");
@@ -5315,10 +5381,11 @@ function aggChapterBody(key, data, s) {
 // مستند التقرير المجمّع كاملًا (غلاف + فصول) حسب التنسيق
 function aggReportDocHtml(s, data) {
   return rptWithCtx({ ...rptChartCtx(s), hiddenCols: s.hiddenCols }, () => {
-    const chapters = rptOrdered(AGG_CHAPTERS, s).filter((c) => !s.hidden[c.key]);
+    const chapters = rptOrdered(AGG_CHAPTERS, s).filter((c) => !s.hidden[c.key] && (s.showEmpty || aggChapterHasData(c.key, data)));
     const pages = [];
+    const per = Number(s.perPage) || 0;
     chapters.forEach((c, i) => {
-      if (!pages.length || s.breakEach) pages.push("");
+      if (!pages.length || (per && i % per === 0)) pages.push("");
       RPT_CTX.section = c.key;
       pages[pages.length - 1] += execChapterHtml(i + 1, rptIcon(c.icon), rptChapterTitle(c, s), aggChapterBody(c.key, data, s));
       RPT_CTX.section = null;
@@ -5385,8 +5452,29 @@ function rptFakeUnitReport() {
       nextplan: st({ mainTasks: [{ name: "عمل رئيسي قادم", goal: "الهدف", responsiblePerson: "المسؤولة", expectedDate: "١٤٤٨/٠٦/٠١" }] }),
       evidence: st({ evidenceItems: [{ name: "شاهد نموذجي", evidenceType: "صورة", relatedDepartment: "الوحدة", fileLink: "—", confidentiality: "عام" }] }),
       review: st({ checklist: {}, content: "خلاصة نهائية نموذجية." }),
+      ...rptFakeCustomSections(),
     },
   };
+}
+// بيانات نموذجية لأي قسم أُضيف من «إدارة أقسام التقرير» (حسب حقوله)
+function rptFakeCustomSections() {
+  const out = {};
+  const sample = (f, i) => {
+    if (f.type === "number") return String(10 + i * 5);
+    if (f.type === "date") return "١٤٤٨/٠٣/٠١";
+    if (f.type === "checklist") { const o = {}; (f.options || []).slice(0, 2).forEach((x) => { o[x] = true; }); return o; }
+    if (f.options && f.options.length) return f.options[i % f.options.length];
+    return (f.label || "حقل") + " — نموذج";
+  };
+  SECTIONS.forEach((sc) => {
+    if (DEFAULT_SECTIONS.some((x) => x.id === sc.id)) return;
+    const schema = SECTION_FIELD_SCHEMAS[sc.id];
+    if (!schema) { out[sc.id] = { status: "completed", data: { content: "نص نموذجي لهذا القسم." } }; return; }
+    const fields = (schema.fields || []).filter((f) => f && f.id);
+    const item = (i) => { const o = { id: "fx" + i }; fields.forEach((f) => { o[f.id] = sample(f, i); }); return o; };
+    out[sc.id] = { status: "completed", data: schema.fixed ? item(0) : { [schema.arrayKey || sc.id]: [item(0), item(1)] } };
+  });
+  return out;
 }
 const RPT_FAKE_UNIT = { id: "preview-unit", name: "وحدة نموذجية", departmentId: "", status: "active" };
 // أعمدة كل قسم (تُستخرج من رسم التقرير النموذجي نفسه، فتبقى مطابقة دائمًا لما يظهر فعلًا)
@@ -5407,6 +5495,14 @@ function rmState() {
 function rmDirty(st) { return JSON.stringify(st.draft) !== JSON.stringify(rptSettings(st.sel)); }
 function rmSetField(key, value) {
   const st = rmState(), d = st.draft;
+  if (key.indexOf("chart|") === 0 || key.indexOf("chartc|") === 0) {
+    const [kind, id, prop] = key.split("|");
+    const cur = { ...((d.charts || {})[id] || {}) };
+    if (kind === "chart") cur[prop] = value;
+    else cur.custom = { ...(cur.custom || {}), [prop]: /^#[0-9a-fA-F]{6}$/.test(value) ? value : "#6b2337" };
+    d.charts = { ...(d.charts || {}), [id]: cur };
+    return;
+  }
   if (key.indexOf("title:") === 0) { d.titles = { ...d.titles, [key.slice(6)]: String(value).slice(0, 120) }; return; }
   if (key === "name") {
     const nv = String(value).trim().slice(0, 80) || "تقرير مجمّع";
@@ -5480,7 +5576,7 @@ function rmPanelHtml(st) {
         rmFieldHtml("", rmToggle("showCoverMeta", "مربع الأرقام (الأقسام، الوحدات، التقارير، الفترة)", d.showCoverMeta)) : "");
   }
   if (tab === "chapters") {
-    const defs = isUnit ? UNIT_CHAPTERS : AGG_CHAPTERS;
+    const defs = isUnit ? unitChapterDefs() : AGG_CHAPTERS;
     const list = rptOrdered(defs, d);
     const cols = isUnit && st.openCols ? (st.colsCache || (st.colsCache = rptUnitColumns())) : null;
     const rows = list.map((c, i) => {
@@ -5504,15 +5600,43 @@ function rmPanelHtml(st) {
         ${isUnit && c.sections ? `<button type="button" class="rm-link" data-action="rm-cols" data-key="${esc(c.key)}">${open ? "إخفاء الأعمدة ▴" : "الأعمدة الظاهرة في جداوله ▾"}</button>${colsHtml}` : ""}
       </div>`;
     }).join("");
-    return `<div class="rm-hint" style="margin-bottom:10px;">▲▼ للترتيب · اكتبي اسمًا جديدًا للفصل (فارغ = الاسم الأصلي) · «ظاهر/مخفي» للإظهار.${isUnit ? " الإخفاء لا يمس بيانات التقرير، والمراجِعة في مسار الاعتماد ترى كل الأقسام دائمًا." : ""}</div>
+    return `<div class="rm-hint" style="margin-bottom:10px;">${isUnit ? "الفصول هنا هي أقسام التعبئة نفسها (من «إدارة أقسام التقرير») بنفس أسمائها وترتيبها — أي قسم جديد يظهر هنا تلقائيًا. " : ""}▲▼ للترتيب · اكتبي اسمًا جديدًا للفصل (فارغ = الاسم الأصلي) · «ظاهر/مخفي» للإظهار.${isUnit ? " الإخفاء لا يمس بيانات التقرير، والمراجِعة في مسار الاعتماد ترى كل الأقسام دائمًا." : ""}</div>
       ${rows}
-      <div style="margin-top:12px;">${rmFieldHtml("", rmToggle("breakEach", "كل فصل يبدأ بصفحة جديدة", d.breakEach))}</div>
+      <div style="margin-top:12px;display:flex;flex-direction:column;gap:12px;">
+        ${rmFieldHtml("", rmToggle("showEmpty", d.showEmpty ? "الأقسام الفارغة تظهر (مكتوب تحتها «لا توجد بيانات»)" : "الأقسام الفارغة لا تظهر", d.showEmpty))}
+        ${rmFieldHtml("عدد الفصول في كل صفحة", rmPills("perPage", d.perPage, [["1", "فصل واحد"], ["2", "فصلان"], ["3", "٣ فصول"], ["0", "متتابعة بلا فواصل"]]), isUnit ? "«ملخص التقرير» دائمًا بصفحة مستقلة." : "")}
+      </div>
       ${isUnit ? "" : rmFieldHtml("أقصى عدد عناصر في كل جدول", rmNum("limit", d.limit, 1, 100), "المؤشرات وأولويات الفترة القادمة: ضعف هذا العدد.")}`;
   }
   if (tab === "visuals") {
-    return rmFieldHtml("الرسوم البيانية", rmPills("chartType", d.chartType, [["auto", "حسب البيانات (أعمدة/دائري)"], ["bars", "أعمدة لكل الرسوم"], ["hide", "إخفاء الرسوم"]])) +
-      (d.chartType === "hide" ? "" : rmFieldHtml("ألوان الرسوم", rmPills("chartColors", d.chartColors, [["status", "ألوان الحالة"], ["main", "درجات اللون الرئيسي"]])) + rmFieldHtml("حجم الرسوم", rmPills("chartSize", d.chartSize, [["sm", "صغير"], ["md", "عادي"], ["lg", "كبير"]]))) +
+    const charts = isUnit ? RPT_CHARTS.unit : RPT_CHARTS.agg;
+    const chartsHtml = charts.map((def) => {
+      const c = d.charts[def.id] || {};
+      const rawType = c.type || (d.chartType === "hide" ? "hide" : "auto");
+      const type = rawType === "auto" ? def.native : rawType;
+      const colors = c.colors || (d.chartColors === "main" ? "main" : "status");
+      const size = c.size || d.chartSize || "md";
+      const k = (prop) => `chart|${def.id}|${prop}`;
+      const typeOpts = def.kind === "dist" ? [["donut", "دائري"], ["bars", "أعمدة"], ["hide", "إخفاء"]] : [["bars", "أعمدة"], ["line", "خطي"], ["hide", "إخفاء"]];
+      let custom = "";
+      if (type !== "hide" && colors === "custom") {
+        const cats = def.kind === "dist" ? def.cats() : ["__all"];
+        const sh = rptMonoShades(d.mainColor, cats.length);
+        custom = `<div class="rm-row" style="margin-top:8px;">${cats.map((cat, i) => `<label class="rm-mini">${esc(cat === "__all" ? "لون الرسم" : cat)}${rmColor(`chartc|${def.id}|${cat}`, (c.custom || {})[cat] || sh[i])}</label>`).join("")}</div>`;
+      }
+      return `<div class="rm-chapter">
+        <div style="font-size:13px;font-weight:800;">${esc(def.title)} <span class="rm-hint" style="font-weight:600;">— في «${esc(def.where)}»</span></div>
+        <div style="display:flex;flex-direction:column;gap:8px;margin-top:8px;">
+          ${rmPills(k("type"), type, typeOpts)}
+          ${type === "hide" ? "" : rmPills(k("colors"), colors, [["status", "ألوان الحالة"], ["main", "درجات اللون الرئيسي"], ["custom", "ألوان أختارها"]]) + custom + rmPills(k("size"), size, [["sm", "صغير"], ["md", "عادي"], ["lg", "كبير"]])}
+        </div>
+      </div>`;
+    }).join("");
+    return `<div class="rm-label">الرسوم البيانية — لكل رسم إعداده</div><div class="rm-hint">تظهر لكل رسم الأنواع المناسبة لبياناته فقط (التوزيع: دائري/أعمدة، والنِّسب المنفصلة: أعمدة/خطي).</div>${chartsHtml}` +
       `<div class="rm-sep"></div>` +
+      rmFieldHtml("محاذاة رأس الجدول", rmPills("thAlign", d.thAlign, [["right", "يمين"], ["center", "وسط"], ["left", "يسار"]])) +
+      rmFieldHtml("محاذاة الكلام داخل الجدول", rmPills("tdAlign", d.tdAlign, [["right", "يمين"], ["center", "وسط"], ["left", "يسار"]])) +
+      rmFieldHtml("", rmToggle("numCenter", "توسيط الأرقام والنسب تلقائيًا", d.numCenter)) +
       rmFieldHtml("ألوان رأس الجدول", `<div class="rm-row"><label class="rm-mini">الخلفية${rmColor("thBg", d.thBg)}</label><label class="rm-mini">النص${rmColor("thColor", d.thColor || d.mainColor)}</label></div>`) +
       rmFieldHtml("حدود الخلايا", rmPills("tableBorders", d.tableBorders, [["rows", "خطوط بين الصفوف"], ["grid", "شبكة كاملة"], ["none", "بدون"]])) +
       rmFieldHtml("", rmToggle("zebra", "تلوين الصفوف بالتناوب", d.zebra)) +
@@ -5597,7 +5721,7 @@ function handleReportsManageAction(action, ds) {
     case "rm-toggle": d[ds.key] = !d[ds.key]; break;
     case "rm-hide": d.hidden = { ...d.hidden, [ds.key]: !d.hidden[ds.key] }; break;
     case "rm-move": {
-      const defs = st.sel === "unit" ? UNIT_CHAPTERS : AGG_CHAPTERS;
+      const defs = st.sel === "unit" ? unitChapterDefs() : AGG_CHAPTERS;
       const ord = rptOrdered(defs, d).map((c) => c.key);
       const i = ord.indexOf(ds.key), j = i + Number(ds.dir);
       if (i < 0 || j < 0 || j >= ord.length) break;
@@ -10028,11 +10152,34 @@ function reportTable(headers, rows) {
   }
   return `<div class="table-wrap" style="margin-bottom:10px;"><table class="prs-table">
     <thead><tr style="background:${GRAY_BG}">${headers.map((h) => `<th>${esc(h)}</th>`).join("")}</tr></thead>
-    <tbody>${rows.map((r) => `<tr>${r.map((c) => `<td>${c}</td>`).join("")}</tr>`).join("")}</tbody>
+    <tbody>${rows.map((r) => `<tr>${r.map((c) => `<td${RPT_CTX && RPT_CTX.numCenter && rptIsNumCell(c) ? ' style="text-align:center"' : ""}>${c}</td>`).join("")}</tr>`).join("")}</tbody>
   </table></div>`;
 }
+// خلية رقمية (عدد/نسبة/كسر) — لخيار «توسيط الأرقام تلقائيًا»
+function rptIsNumCell(c) { const t = String(c == null ? "" : c).replace(/<[^>]*>/g, "").trim(); return /[0-9٠-٩]/.test(t) && /^[\s0-9٠-٩.,٫٪%\/+\-—()]+$/.test(t); }
 function emptyHint(label) { return `<div class="hint">${esc(label)}</div>`; }
 
+// عرض عام لأي قسم أُضيف من «إدارة أقسام التقرير» (حقوله من «إدارة حقول الأقسام»)
+function schemaFieldText(v) {
+  if (v == null || v === "") return "";
+  if (Array.isArray(v)) return v.filter((x) => x != null && x !== "").join("، ");
+  if (typeof v === "object") return Object.keys(v).filter((k) => v[k]).join("، ");
+  return String(v);
+}
+function schemaSectionReportHtml(schema, d, sectionId) {
+  const fields = (schema.fields || []).filter((f) => f && f.id);
+  if (schema.fixed) {
+    const rows = fields.filter((f) => schemaFieldText(d[f.id])).map((f) => [esc(f.label || f.id), esc(schemaFieldText(d[f.id]))]);
+    return rows.length ? reportTable(["البند", "القيمة"], rows) : emptyHint("لم يُدخل محتوى بعد.");
+  }
+  const items = (Array.isArray(d[schema.arrayKey || sectionId]) ? d[schema.arrayKey || sectionId] : []).filter(rptHasValue);
+  if (!items.length) return emptyHint("لم يُدخل محتوى بعد.");
+  const short = fields.filter((f) => f.type !== "textarea");
+  const long = fields.filter((f) => f.type === "textarea");
+  let html = short.length ? reportTable(short.map((f) => f.label || f.id), items.map((it) => short.map((f) => esc(schemaFieldText(it[f.id]) || "—")))) : "";
+  items.forEach((it, i) => long.forEach((f) => { const t = schemaFieldText(it[f.id]); if (t) html += textBlock(`${f.label || f.id}${items.length > 1 ? " — " + (schemaFieldText(it[(short[0] || {}).id]) || arabicDigits(i + 1)) : ""}`, t); }));
+  return html;
+}
 function sectionBodyOnly(section, saved, report) {
   const d = (saved && saved.data) || {};
   let body = "";
@@ -10071,7 +10218,7 @@ function sectionBodyOnly(section, saved, report) {
         const status = def ? computeIndicatorStatus(resolved) : { emoji: "⚪", label: "—", color: SUBTLE, ratio: null };
         return { label: row.name, value: Math.round(Math.min(1, resolved.ratio || 0) * 100), color: status.color, row, def, status };
       });
-      body = `<div style="margin-bottom:14px;">${svgBarChart(barData, { height: 190 })}</div>` +
+      body = rptChart("u-kpi", barData, { height: 190 }) +
         reportTable(["المؤشر", "المستهدف", "المتحقق", "الحالة"], barData.map((b) => [
           esc(b.row.name),
           esc(b.def && b.def.target !== "" ? b.def.target : "—"),
@@ -10099,7 +10246,7 @@ function sectionBodyOnly(section, saved, report) {
       rows.forEach((p) => { const k = p.executionStatus || "غير محدد"; statusCounts[k] = (statusCounts[k] || 0) + 1; });
       const shades = ["#6b2337", "#8a3350", "#c26b85", "#d8c4a8", "#a8a29a"];
       const donutData = Object.keys(statusCounts).map((k, i) => ({ label: k, value: statusCounts[k], color: shades[i % shades.length] }));
-      body = `<div style="max-width:220px;margin:0 auto 14px;">${svgPieChart(donutData, { size: 150 })}</div>`;
+      body = rptChart("u-programs", donutData, { size: 150, wrapDonut: "max-width:220px;margin:0 auto 14px;" });
       body += reportTable(["اسم العمل", "النوع", "الفئة المستهدفة", "المستهدف", "المستفيدات الفعلي", "المنجز", "الحالة"], rows.map((p) => [
         esc(p.name || "—"), esc(p.workType || "—"), esc(p.targetGroup || "—"), esc(p.targetCount || "—"), esc(p.actualBeneficiaries || "—"),
         p.achievedCount !== "" && p.achievedCount != null ? esc(p.achievedCount + (p.countUnit ? " " + p.countUnit : "")) : "—", esc(p.executionStatus || "—"),
@@ -10146,7 +10293,7 @@ function sectionBodyOnly(section, saved, report) {
       rows.forEach((c) => { const k = c.severity || "غير محدد"; sevCounts[k] = (sevCounts[k] || 0) + 1; });
       const sevShades = { "حرج": DANGER, "مرتفع": "#c9863a", "متوسط": GOLD, "منخفض": GREEN };
       const donutData = Object.keys(sevCounts).map((k) => ({ label: k, value: sevCounts[k], color: sevShades[k] || SUBTLE }));
-      body = rows.length > 1 ? `<div style="max-width:200px;margin:0 auto 14px;">${svgPieChart(donutData, { size: 140 })}</div>` : "";
+      body = rows.length > 1 ? rptChart("u-challenges", donutData, { size: 140, wrapDonut: "max-width:200px;margin:0 auto 14px;" }) : "";
       body += reportTable(["اسم الصعوبة", "المجال", "المستوى", "النطاق", "ما زالت قائمة؟"], rows.map((c) => {
         const sm = challengeSeverityMeta(c.severity);
         return [esc(c.name || "—"), esc(c.area || "—"), c.severity ? badgeHtml(c.severity, sm.color, sm.bg) : "—", esc(c.scope || "—"), esc(c.stillOngoing || "—")];
@@ -10187,8 +10334,8 @@ function sectionBodyOnly(section, saved, report) {
       const prCounts = {};
       rows.forEach((it) => { const k = it.priority || "غير محدد"; prCounts[k] = (prCounts[k] || 0) + 1; });
       const prShades = { "عاجلة": DANGER, "عالية": "#c9863a", "متوسطة": GOLD, "منخفضة": GREEN };
-      const barData = Object.keys(prCounts).map((k) => ({ label: k, value: Math.round((prCounts[k] / rows.length) * 100), color: prShades[k] || SUBTLE }));
-      body = rows.length > 1 ? `<div style="margin-bottom:14px;">${svgBarChart(barData, { height: 130 })}</div>` : "";
+      const prData = Object.keys(prCounts).map((k) => ({ label: k, value: prCounts[k], color: prShades[k] || SUBTLE }));
+      body = rows.length > 1 ? rptChart("u-recs", prData, { height: 130 }) : "";
       body += reportTable(["نص التوصية", "المصدر", "المستوى", "الأولوية", "الجهة المسؤولة"], rows.map((it) => {
         const pm = improvementPriorityMeta(it.priority);
         return [esc(it.text || "—"), esc(it.source || "—"), esc(it.level || "—"), it.priority ? badgeHtml(it.priority, pm.color, pm.bg) : "—", esc(it.responsibleParty || "—")];
@@ -10228,6 +10375,8 @@ function sectionBodyOnly(section, saved, report) {
     if (d.managerDecision) body += kvBlock([kv("قرار المراجعة", d.managerDecision)]);
     if (d.managerNotesText) body += textBlock("ملاحظات المديرة المباشرة", d.managerNotesText);
 
+  } else if (SECTION_FIELD_SCHEMAS[section.id]) {
+    body = schemaSectionReportHtml(SECTION_FIELD_SCHEMAS[section.id], d, section.id);
   } else {
     body = textBlock("المحتوى", d.content) || emptyHint("لم يُدخل محتوى بعد.");
   }
@@ -10276,15 +10425,15 @@ function reportSummaryHtml(report, title) {
   const avgGoalPct = goalsFlat.length ? Math.round(goalsFlat.reduce((s, g) => s + (Number(g.percentage) || 0), 0) / goalsFlat.length) : 0;
 
   const RPT_SHADES = ["#4d1827", "#8a3350", "#c26b85", "#d8c4a8", "#a8a29a"];
-  const indicatorPie = indicators.length ? svgPieChart([
+  const indicatorPie = indicators.length ? rptChart("u-indStatus", [
     { label: "متحقق", value: statusCounts.achieved, color: RPT_SHADES[0] },
     { label: "قريب من المستهدف", value: statusCounts.close, color: RPT_SHADES[1] },
     { label: "يحتاج تدخلاً", value: statusCounts.needsAction, color: RPT_SHADES[2] },
     { label: "متعثر", value: statusCounts.struggling, color: RPT_SHADES[3] },
     { label: "بلا بيانات", value: statusCounts.noData, color: RPT_SHADES[4] },
-  ], { size: 120 }) : emptyHint("لا توجد مؤشرات بعد.");
+  ], { size: 120, wrapDonut: "" }) : emptyHint("لا توجد مؤشرات بعد.");
 
-  const goalPie = goalsFlat.length ? svgPieChart(GOAL_LEVELS.map((lvl, i) => ({ label: lvl, value: goalLevelCounts[lvl] || 0, color: RPT_SHADES[i % RPT_SHADES.length] })), { size: 120 }) : emptyHint("لا توجد أهداف بعد.");
+  const goalPie = goalsFlat.length ? rptChart("u-goalLevels", GOAL_LEVELS.map((lvl, i) => ({ label: lvl, value: goalLevelCounts[lvl] || 0, color: RPT_SHADES[i % RPT_SHADES.length] })), { size: 120, wrapDonut: "" }) : emptyHint("لا توجد أهداف بعد.");
 
   return `
     <div class="rpt-chapter-head">
@@ -10297,10 +10446,10 @@ function reportSummaryHtml(report, title) {
       ${statIconCardHtml("عدد الأهداف التشغيلية", goalsFlat.length, iconLayers(18, "var(--rpt-burgundy)"), "#f4ece4")}
       ${statIconCardHtml("متوسط نسبة تحقق الأهداف", avgGoalPct + "٪", iconCheckCircle(18, "var(--rpt-burgundy)"), "#f4ece4")}
     </div>
-    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:14px;">
-      <div><div class="rpt-subheading" style="margin-top:0;">توزيع حالات المؤشرات</div>${indicatorPie}</div>
-      <div><div class="rpt-subheading" style="margin-top:0;">توزيع مستويات تحقق الأهداف</div>${goalPie}</div>
-    </div>`;
+    ${indicatorPie || goalPie ? `<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:14px;">
+      ${indicatorPie ? `<div><div class="rpt-subheading" style="margin-top:0;">توزيع حالات المؤشرات</div>${indicatorPie}</div>` : ""}
+      ${goalPie ? `<div><div class="rpt-subheading" style="margin-top:0;">توزيع مستويات تحقق الأهداف</div>${goalPie}</div>` : ""}
+    </div>` : ""}`;
 }
 
 /* يجمع أكثر من قسم تحت عنوان فصل واحد رسمي — إذا كان الفصل يحوي أكثر من قسم،
@@ -10405,30 +10554,50 @@ function reportApprovalHtml(report, title) {
 /* هيكل التقرير الرسمي (الافتراضي): غلاف ← ملخص ← بيانات التقرير ← الأهداف والمؤشرات ←
    مرحلة التنفيذ ← مرحلة التقييم ← الأثر والتميز ← التحديات ← التوصيات ← الإغلاق والاعتماد ←
    خطة الفترة القادمة ← الأدلة والمرفقات. الترتيب والإخفاء والأسماء والأعمدة من «إدارة التقارير»
-   (UNIT_CHAPTERS). في وضع المراجعة (afterPage) تظهر كل الفصول والأعمدة دائمًا. */
+   (unitChapterDefs = أقسام التعبئة نفسها). في وضع المراجعة (afterPage) تظهر كل الفصول والأعمدة دائمًا. */
 function fullReportOrPreviewBody(unit, report, afterPage, opts) {
   opts = opts || {};
   const s = opts.settings || rptSettings("unit");
   const review = !!afterPage;
   const dept = S.departments.find((x) => x.id === unit.departmentId);
-  const chapters = rptOrdered(UNIT_CHAPTERS, s).filter((c) => review || !s.hidden[c.key]);
+  const chapters = rptOrdered(unitChapterDefs(), s).filter((c) => review || (!s.hidden[c.key] &&
+    (s.showEmpty || opts.capture || c.special || c.sections.some((sid) => sectionHasData(report, sid)))));
   return rptWithCtx({ ...rptChartCtx(s), hiddenCols: review ? null : s.hiddenCols, capture: opts.capture || null }, () => {
+    // «ملخص التقرير» بصفحة مستقلة، ثم الأقسام (عدد محدد بكل صفحة، 0 = متتابعة)، و«الإغلاق والاعتماد» مع آخر صفحة
+    const per = Number(s.perPage) || 0;
     const pages = [];
-    let prevPage = null;
+    let inPage = 0;
     chapters.forEach((c) => {
-      if (!pages.length || s.breakEach || c.page !== prevPage) pages.push({ html: "", ids: [] });
-      prevPage = c.page;
-      const pg = pages[pages.length - 1];
       const title = rptChapterTitle(c, s);
+      const newPage = !pages.length || c.special === "summary" || (pages[pages.length - 1].summary) || (per && inPage >= per && c.special !== "approval");
+      if (newPage) { pages.push({ html: "", ids: [], summary: c.special === "summary" }); inPage = 0; }
+      const pg = pages[pages.length - 1];
       if (c.special === "summary") pg.html += reportSummaryHtml(report, title);
       else if (c.special === "approval") pg.html += reportApprovalHtml(report, title);
-      else { pg.html += reportChapterHtml(rptIcon(c.icon), title, c.sections, report); pg.ids.push(...c.sections); }
+      else { pg.html += reportChapterHtml(rptIcon(c.icon), title, c.sections, report); pg.ids.push(...c.sections); inPage++; }
     });
     const hasCover = !!s.showCover;
     const total = pages.length + (hasCover ? 1 : 0);
     return (hasCover ? reportCoverPageHtml(unit, report, dept, s, total) : "") +
       pages.map((p, i) => rptPageHtml(s, p.html, i + 1 + (hasCover ? 1 : 0), total) + (afterPage ? afterPage(i, p.ids) : "")).join("");
   });
+}
+// هل في القسم بيانات مُدخلة فعلًا؟ (المعرّفات والتواريخ التقنية لا تُحسب)
+const RPT_IGNORE_KEYS = ["id", "_id", "uid", "createdAt", "updatedAt", "status", "reviewNote"];
+function rptHasValue(v) {
+  if (v == null) return false;
+  if (typeof v === "string") return v.trim() !== "";
+  if (typeof v === "number") return isFinite(v);
+  if (typeof v === "boolean") return v;
+  if (Array.isArray(v)) return v.some(rptHasValue);
+  if (typeof v === "object") return Object.keys(v).some((k) => !RPT_IGNORE_KEYS.includes(k) && rptHasValue(v[k]));
+  return false;
+}
+function sectionHasData(report, sid) {
+  const d = report && report.sections && report.sections[sid] && report.sections[sid].data;
+  if (!d) return false;
+  if (sid === "kpi") return (d.indicators || []).some((r) => r && r.name && rptHasValue(r.actual)) || rptHasValue(d.notes);
+  return rptHasValue(d);
 }
 
 // ===== مراجعة داخل صفحات التقرير: المراجِعة (صاحبة المرحلة) تكتب ملاحظة تحت كل صفحة أثناء القراءة =====
