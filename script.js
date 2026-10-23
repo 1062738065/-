@@ -642,11 +642,11 @@ const MANAGER_NOTE_OPTIONS = ["معتمد دون ملاحظات", "معتمد ب
 const SUPABASE_URL = "https://apgjeohiworbtatagxbn.supabase.co";
 const SUPABASE_ANON_KEY = "sb_publishable_AsbCJxBM7C_wLqaBQ2WsDw_1xIxJ3kb";
 
-function sheetsConfigured() { return !!SUPABASE_URL && !!SUPABASE_ANON_KEY; }
+function dbConnected() { return !!SUPABASE_URL && !!SUPABASE_ANON_KEY; }
 
 async function supabaseRequest(path, options) {
   options = options || {};
-  if (!sheetsConfigured()) return { ok: false, error: "لم يتم ربط الموقع بقاعدة البيانات بعد" };
+  if (!dbConnected()) return { ok: false, error: "لم يتم ربط الموقع بقاعدة البيانات بعد" };
   try {
     const res = await fetch(`${SUPABASE_URL}/rest/v1/${path}`, {
       method: options.method || "GET",
@@ -696,7 +696,7 @@ function reportSupabaseWriteError(table, msg) {
 // (نسخة قديمة / تبويب آخر).
 async function supabaseReplaceTable(table, rows, keyCol, removedIds) {
   keyCol = keyCol || "id";
-  if (!sheetsConfigured()) return;
+  if (!dbConnected()) return;
   if (rows.length) {
     const up = await supabaseRequest(`${table}?on_conflict=${keyCol}`, { method: "POST", prefer: "resolution=merge-duplicates,return=minimal", body: JSON.stringify(rows) });
     if (!up.ok) { reportSupabaseWriteError(table, up.error); return; }
@@ -723,7 +723,7 @@ const idsOfList = (l) => (Array.isArray(l) ? l : []).map((x) => x && x.id);
 // عدة مرات متتالية بسرعة على حقل)، كل تعديل يبدأ كتابته للقاعدة فقط بعد ما تخلص
 // كتابة التعديل اللي قبله تمامًا — بدل ما تتسابق الطلبات وتوصل بترتيب معكوس فتطغى
 // نتيجة قديمة على نتيجة أحدث بالغلط. ودالة pendingSupabaseWrite تتيح لأي شاشة
-// "تحديث من القاعدة" (refresh*FromSheet) أن تنتظر اكتمال آخر كتابة معلّقة لنفس
+// "تحديث من القاعدة" (refresh*FromDb) أن تنتظر اكتمال آخر كتابة معلّقة لنفس
 // الجدول قبل ما تقرأ منه، عشان ما ترجع بنسخة قديمة وتطبّقها فوق تعديل المستخدم
 // الأحدث (وهذا بالضبط سبب مشكلة "رجع الترتيب تحت" اللي لاحظتها).
 const supabaseWriteQueues = {};
@@ -1249,41 +1249,41 @@ const dataStore = {
   saveDepartments(d) {
     const gone = removedIdsFor(DEPARTMENTS_KEY, d.map((x) => x.id), idsOfList);
     lsSet(DEPARTMENTS_KEY, JSON.stringify(d));
-    if (sheetsConfigured()) queueSupabaseReplaceTable("departments", d.map(deptToRow), "id", gone).catch(() => {});
+    if (dbConnected()) queueSupabaseReplaceTable("departments", d.map(deptToRow), "id", gone).catch(() => {});
   },
   getOffices() { const v = lsGet(OFFICES_KEY); if (v) return JSON.parse(v); const seed = seedOffices(); lsSet(OFFICES_KEY, JSON.stringify(seed)); return seed; },
   saveOffices(o) {
     const gone = removedIdsFor(OFFICES_KEY, o.map((x) => x.id), idsOfList);
     lsSet(OFFICES_KEY, JSON.stringify(o));
-    if (sheetsConfigured()) queueSupabaseReplaceTable("offices", o.map(officeToRow), "id", gone).catch(() => {});
+    if (dbConnected()) queueSupabaseReplaceTable("offices", o.map(officeToRow), "id", gone).catch(() => {});
   },
   getDashboardConfig() { try { const v = lsGet(DASHBOARD_CONFIG_KEY); return v ? JSON.parse(v) : {}; } catch (e) { return {}; } },
   saveDashboardConfig(cfg) {
     lsSet(DASHBOARD_CONFIG_KEY, JSON.stringify(cfg));
-    if (sheetsConfigured()) supabaseRequest("dashboard_config", { method: "POST", prefer: "return=minimal,resolution=merge-duplicates", body: JSON.stringify(dashboardConfigToRow(cfg)) }).catch(() => {});
+    if (dbConnected()) supabaseRequest("dashboard_config", { method: "POST", prefer: "return=minimal,resolution=merge-duplicates", body: JSON.stringify(dashboardConfigToRow(cfg)) }).catch(() => {});
   },
   cacheOfficesLocally(o) { lsSet(OFFICES_KEY, JSON.stringify(o)); },
   getUnits() { const v = lsGet(UNITS_KEY); if (v) return JSON.parse(v); const seed = seedUnits(); lsSet(UNITS_KEY, JSON.stringify(seed)); return seed; },
   saveUnits(u) {
     const gone = removedIdsFor(UNITS_KEY, u.map((x) => x.id), idsOfList);
     lsSet(UNITS_KEY, JSON.stringify(u));
-    if (sheetsConfigured()) queueSupabaseReplaceTable("units", u.map(unitToRow), "id", gone).catch(() => {});
+    if (dbConnected()) queueSupabaseReplaceTable("units", u.map(unitToRow), "id", gone).catch(() => {});
   },
   getIndicatorDefinitions() { const v = lsGet(INDICATOR_DEFINITIONS_KEY); return v ? JSON.parse(v) : []; },
   saveIndicatorDefinitions(d) {
     const gone = removedIdsFor(INDICATOR_DEFINITIONS_KEY, d.map((x) => x.id), idsOfList);
     lsSet(INDICATOR_DEFINITIONS_KEY, JSON.stringify(d));
-    if (sheetsConfigured()) queueSupabaseReplaceTable("indicator_definitions", d.map(indDefToRow), "id", gone).catch(() => {});
+    if (dbConnected()) queueSupabaseReplaceTable("indicator_definitions", d.map(indDefToRow), "id", gone).catch(() => {});
   },
   getSiteSettings() { const v = lsGet(SITE_SETTINGS_KEY); return { ...DEFAULT_SITE_COLORS, ...DEFAULT_BRANDING, ...(v ? JSON.parse(v) : {}) }; },
   saveSiteSettings(s) {
     lsSet(SITE_SETTINGS_KEY, JSON.stringify(s));
-    if (sheetsConfigured()) supabaseRequest("site_settings", { method: "POST", prefer: "return=minimal,resolution=merge-duplicates", body: JSON.stringify(siteSettingsToRow(s)) }).catch(() => {});
+    if (dbConnected()) supabaseRequest("site_settings", { method: "POST", prefer: "return=minimal,resolution=merge-duplicates", body: JSON.stringify(siteSettingsToRow(s)) }).catch(() => {});
   },
   getOrgChart() { const v = lsGet(ORG_CHART_KEY); return v ? JSON.parse(v) : []; },
   saveOrgChart(nodes) {
     lsSet(ORG_CHART_KEY, JSON.stringify(nodes));
-    if (sheetsConfigured()) supabaseRequest("org_chart", { method: "POST", prefer: "return=minimal,resolution=merge-duplicates", body: JSON.stringify(orgChartToRow(nodes)) }).catch(() => {});
+    if (dbConnected()) supabaseRequest("org_chart", { method: "POST", prefer: "return=minimal,resolution=merge-duplicates", body: JSON.stringify(orgChartToRow(nodes)) }).catch(() => {});
   },
   cacheIndicatorDefinitionsLocally(d) { lsSet(INDICATOR_DEFINITIONS_KEY, JSON.stringify(d)); },
   cacheUnitsLocally(u) { lsSet(UNITS_KEY, JSON.stringify(u)); },
@@ -1292,46 +1292,46 @@ const dataStore = {
   saveRoles(list) {
     const gone = removedIdsFor(ROLES_KEY, list.map((x) => x.id), idsOfList);
     lsSet(ROLES_KEY, JSON.stringify(list));
-    if (sheetsConfigured()) queueSupabaseReplaceTable("roles", list.map(roleToRow), "id", gone).catch(() => {});
+    if (dbConnected()) queueSupabaseReplaceTable("roles", list.map(roleToRow), "id", gone).catch(() => {});
   },
   getReportTabs() { const v = lsGet(REPORT_TABS_KEY); return v ? JSON.parse(v) : []; },
   saveReportTabs(list) {
     const gone = removedIdsFor(REPORT_TABS_KEY, list.map((x) => x.id), idsOfList);
     lsSet(REPORT_TABS_KEY, JSON.stringify(list));
-    if (sheetsConfigured()) queueSupabaseReplaceTable("report_tabs", list.map(reportTabToRow), "id", gone).catch(() => {});
+    if (dbConnected()) queueSupabaseReplaceTable("report_tabs", list.map(reportTabToRow), "id", gone).catch(() => {});
   },
   getApprovalPaths() { const v = lsGet(APPROVAL_PATHS_KEY); return v ? JSON.parse(v) : []; },
   saveApprovalPaths(list) {
     const gone = removedIdsFor(APPROVAL_PATHS_KEY, list.map((x) => x.id), idsOfList);
     lsSet(APPROVAL_PATHS_KEY, JSON.stringify(list));
-    if (sheetsConfigured()) queueSupabaseReplaceTable("approval_paths", list.map(approvalPathToRow), "id", gone).catch(() => {});
+    if (dbConnected()) queueSupabaseReplaceTable("approval_paths", list.map(approvalPathToRow), "id", gone).catch(() => {});
   },
   getPermLog() { const v = lsGet(PERM_LOG_KEY); return v ? JSON.parse(v) : []; },
   getPersons() { const v = lsGet(PERSONS_KEY); return v ? JSON.parse(v) : []; },
   savePersons(list) {
     const gone = removedIdsFor(PERSONS_KEY, list.map((x) => x.id), idsOfList);
     lsSet(PERSONS_KEY, JSON.stringify(list));
-    if (sheetsConfigured()) queueSupabaseReplaceTable("persons", list.map(personToRow), "id", gone).catch(() => {});
+    if (dbConnected()) queueSupabaseReplaceTable("persons", list.map(personToRow), "id", gone).catch(() => {});
   },
   getPlatformUsers() { const v = lsGet(PLATFORM_USERS_KEY); return v ? JSON.parse(v) : []; },
   savePlatformUsers(list) {
     const gone = removedIdsFor(PLATFORM_USERS_KEY, list.map((x) => x.id), idsOfList);
     lsSet(PLATFORM_USERS_KEY, JSON.stringify(list));
-    if (sheetsConfigured()) queueSupabaseReplaceTable("platform_users", list.map(platformUserToRow), "id", gone).catch(() => {});
+    if (dbConnected()) queueSupabaseReplaceTable("platform_users", list.map(platformUserToRow), "id", gone).catch(() => {});
   },
   cachePlatformUsersLocally(list) { lsSet(PLATFORM_USERS_KEY, JSON.stringify(list)); },
   getJobTitleTemplates() { const v = lsGet(JOB_TITLE_TEMPLATES_KEY); return v ? JSON.parse(v) : []; },
   saveJobTitleTemplates(list) {
     const gone = removedIdsFor(JOB_TITLE_TEMPLATES_KEY, list.map((x) => x.id), idsOfList);
     lsSet(JOB_TITLE_TEMPLATES_KEY, JSON.stringify(list));
-    if (sheetsConfigured()) queueSupabaseReplaceTable("job_title_templates", list.map(jobTitleTemplateToRow), "id", gone).catch(() => {});
+    if (dbConnected()) queueSupabaseReplaceTable("job_title_templates", list.map(jobTitleTemplateToRow), "id", gone).catch(() => {});
   },
   cacheJobTitleTemplatesLocally(list) { lsSet(JOB_TITLE_TEMPLATES_KEY, JSON.stringify(list)); },
   getGoalsDefinitions() { const v = lsGet(GOALS_DEFINITIONS_KEY); return v ? JSON.parse(v) : { strategic: [], operational: [] }; },
   saveGoalsDefinitions(d) {
     const gone = removedIdsFor(GOALS_DEFINITIONS_KEY, (d.strategic || []).concat(d.operational || []).map((g) => g.id), (o) => ((o && o.strategic) || []).concat((o && o.operational) || []).map((g) => g.id));
     lsSet(GOALS_DEFINITIONS_KEY, JSON.stringify(d));
-    if (sheetsConfigured()) {
+    if (dbConnected()) {
       const rows = (d.strategic || []).map((g) => goalToRow(g, "strategic")).concat((d.operational || []).map((g) => goalToRow(g, "operational")));
       queueSupabaseReplaceTable("goals_definitions", rows, "id", gone).catch(() => {});
     }
@@ -1341,7 +1341,7 @@ const dataStore = {
   saveReportSectionDefs(list) {
     const gone = removedIdsFor(REPORT_SECTIONS_KEY, list.map((x) => x.id), idsOfList);
     lsSet(REPORT_SECTIONS_KEY, JSON.stringify(list));
-    if (sheetsConfigured()) queueSupabaseReplaceTable("report_sections", list.map(sectionDefToRow), "id", gone).catch(() => {});
+    if (dbConnected()) queueSupabaseReplaceTable("report_sections", list.map(sectionDefToRow), "id", gone).catch(() => {});
   },
   cacheReportSectionDefsLocally(list) { lsSet(REPORT_SECTIONS_KEY, JSON.stringify(list)); },
   // خريطة { sectionId: [field, field, ...] } — تخصيصات حقول الأقسام المبنية على
@@ -1351,7 +1351,7 @@ const dataStore = {
   saveSectionFieldSchemas(map) {
     const gone = removedIdsFor(SECTION_FIELD_SCHEMAS_KEY, Object.keys(map), (o) => Object.keys(o || {}));
     lsSet(SECTION_FIELD_SCHEMAS_KEY, JSON.stringify(map));
-    if (sheetsConfigured()) queueSupabaseReplaceTable("section_field_schemas", Object.keys(map).map((id) => fieldSchemaToRow(id, map[id])), "section_id", gone).catch(() => {});
+    if (dbConnected()) queueSupabaseReplaceTable("section_field_schemas", Object.keys(map).map((id) => fieldSchemaToRow(id, map[id])), "section_id", gone).catch(() => {});
   },
   cacheSectionFieldSchemasLocally(map) { lsSet(SECTION_FIELD_SCHEMAS_KEY, JSON.stringify(map)); },
   // Each unit now holds a LIST of report entries (one per period/submission),
@@ -1377,12 +1377,12 @@ const dataStore = {
   cacheReportsLocally(unitId, list) { lsSet(reportsKey(unitId), JSON.stringify(list)); },
   deleteReports(unitId) {
     lsDelete(reportsKey(unitId)); lsDelete(reportKey(unitId));
-    if (sheetsConfigured()) supabaseRequest(`reports?unit_id=eq.${encodeURIComponent(unitId)}`, { method: "DELETE", prefer: "return=minimal" }).catch(() => {});
+    if (dbConnected()) supabaseRequest(`reports?unit_id=eq.${encodeURIComponent(unitId)}`, { method: "DELETE", prefer: "return=minimal" }).catch(() => {});
   },
   deleteOneReport(unitId, reportId) {
     const list = ensureUnitReportsLoaded(unitId).filter((r) => r.id !== reportId);
     lsSet(reportsKey(unitId), JSON.stringify(list));
-    if (sheetsConfigured()) supabaseRequest(`reports?id=eq.${encodeURIComponent(reportId)}`, { method: "DELETE", prefer: "return=minimal" }).catch(() => {});
+    if (dbConnected()) supabaseRequest(`reports?id=eq.${encodeURIComponent(reportId)}`, { method: "DELETE", prefer: "return=minimal" }).catch(() => {});
     return list;
   },
 };
@@ -1414,11 +1414,9 @@ function isUnitInUserScope(unitId) {
   if (S.isOfficeUser) return officeUnits(S.currentOfficeId).some((u) => u.id === unitId);
   return unit.id === S.currentUnitId;
 }
-// يرفع بيانات التقرير فعليًا لقاعدة Supabase (upsert بمفتاح id) — كانت هذي
-// الدالة قديمًا خاصة بجوجل شيت فقط وما تحدّثت وقت التحويل لـ Supabase، فكانت
-// التقارير تُحفظ محليًا بس وما توصل لقاعدة البيانات الحقيقية إطلاقًا. صُلّحت.
-function pushReportMetaToSheet(unitId, entry) {
-  if (!sheetsConfigured()) return;
+// يرفع بيانات التقرير لقاعدة Supabase (upsert بمفتاح id).
+function pushReportToDb(unitId, entry) {
+  if (!dbConnected()) return;
   supabaseRequest("reports?on_conflict=id", { method: "POST", prefer: "return=minimal,resolution=merge-duplicates", body: JSON.stringify(reportToRow(unitId, entry)) })
     .then((res) => { if (res && !res.ok) reportSupabaseWriteError("reports", res.error); })
     .catch(() => {});
@@ -1433,7 +1431,7 @@ function saveReportEntry(unitId, updatedEntry) {
   const list = ensureUnitReportsLoaded(unitId).map((r) => (r.id === updatedEntry.id ? updatedEntry : r));
   S.reports[unitId] = list;
   dataStore.saveReports(unitId, list);
-  pushReportMetaToSheet(unitId, updatedEntry);
+  pushReportToDb(unitId, updatedEntry);
 }
 function createNewReportEntry(unitId) {
   if (adminReportsReadOnly()) return null;
@@ -1441,7 +1439,7 @@ function createNewReportEntry(unitId) {
   const entry = { id: uid("rep"), label: "تقرير جديد", status: "draft", createdAt: Date.now(), updatedAt: Date.now(), sections: {}, shared: {}, indicatorHistory: {} };
   S.reports[unitId] = [...list, entry];
   dataStore.saveReports(unitId, S.reports[unitId]);
-  pushReportMetaToSheet(unitId, entry);
+  pushReportToDb(unitId, entry);
   return entry;
 }
 function reportStatusMeta(status) {
@@ -2738,7 +2736,7 @@ function enterUnitAsPerson(p) {
   S.ui.pinPersonId = null; S.ui.pinError = "";
   S.view = "unit-dashboard";
   render();
-  if (sheetsConfigured()) { refreshReportsFromSheet(unitId).then(() => { if (S.currentUser) render(); }); }
+  if (dbConnected()) { refreshReportsFromDb(unitId).then(() => { if (S.currentUser) render(); }); }
 }
 function renderUnitRoleSelect() {
   if (S.pendingEntityLogin) return entityLoginSelectHtml();
@@ -2857,7 +2855,7 @@ function renderLogin() {
         ${en ? `<button type="button" data-action="entry-clear" style="display:block;margin:14px auto 0;background:none;border:none;color:${SUBTLE};font-size:11.5px;cursor:pointer;text-decoration:underline;font-family:inherit;">${portalEnabled() ? "رجوع" : "الدخول بحساب آخر"}</button>` : ""}
         ${!en && S.ui.portalSkip && portalEnabled() ? `<button type="button" data-action="portal-return" style="display:block;margin:14px auto 0;background:none;border:none;color:${SUBTLE};font-size:11.5px;cursor:pointer;text-decoration:underline;font-family:inherit;">رجوع لبوابة الدخول</button>` : ""}
       </div>
-      ${sheetsConfigured()
+      ${dbConnected()
         ? `<div class="login-hint" style="color:${GREEN}">مربوط بقاعدة البيانات ✓ — سجّلي بالاسم وكلمة المرور المسجّلة بها</div>`
         : `<div class="login-hint">بيانات تجريبية للاختبار — مديرة النظام: admin / admin123 — موظفة وحدة: unit1 / 1234</div>`}
     </div>
@@ -2868,19 +2866,19 @@ async function handleLoginSubmit() {
   const username = document.getElementById("login-username").value.trim();
   const password = document.getElementById("login-password").value;
 
-  if (sheetsConfigured()) {
+  if (dbConnected()) {
     S.ui.loginBusy = true; render();
     const result = await supabaseLogin(username, password);
     if (result.ok) {
-      await refreshUnitsAndDepartmentsFromSheet();
+      await refreshUnitsAndDepartmentsFromDb();
       if (result.user && (result.user.role === "department" || result.user.role === "office")) {
-        try { await refreshRolesPersonsFromSheet(); } catch (e) { /* نكمل بالنسخة المحلية */ }
+        try { await refreshRolesPersonsFromDb(); } catch (e) { /* نكمل بالنسخة المحلية */ }
       }
-      try { await refreshReportTabsFromSheet(); } catch (e) { /* نكمل بالنسخة المحلية */ }
-      try { await refreshOrgLevelsFromSheet(); } catch (e) { /* نكمل بالنسخة المحلية */ }
+      try { await refreshReportTabsFromDb(); } catch (e) { /* نكمل بالنسخة المحلية */ }
+      try { await refreshOrgLevelsFromDb(); } catch (e) { /* نكمل بالنسخة المحلية */ }
       if (result.user && result.user.role !== "admin" && result.user.unitId) {
         // نحتاج الأشخاص (platform_users) والقوالب قبل شاشة "كيف تريدين الدخول؟"
-        try { await refreshPlatformUsersFromSheet(); await refreshJobTitleTemplatesFromSheet(); await refreshRolesPersonsFromSheet(); } catch (e) { /* نكمل بالنسخة المحلية */ }
+        try { await refreshPlatformUsersFromDb(); await refreshJobTitleTemplatesFromDb(); await refreshRolesPersonsFromDb(); } catch (e) { /* نكمل بالنسخة المحلية */ }
       }
       S.ui.loginBusy = false;
       S.ui.loginError = "";
@@ -2899,7 +2897,7 @@ async function handleLoginSubmit() {
     const lvRes = await supabaseRequest(`org_levels?login_id=eq.${encodeURIComponent(username)}&password=eq.${encodeURIComponent(password)}&status=eq.active&select=*&limit=1`);
     if (lvRes.ok && Array.isArray(lvRes.data) && lvRes.data.length) {
       S.ui.loginBusy = true; render();
-      try { await refreshUnitsAndDepartmentsFromSheet(); await refreshOrgLevelsFromSheet(); await refreshRolesPersonsFromSheet(); await refreshApprovalPathsFromSheet(); } catch (e) { /* نكمل بالنسخة المحلية */ }
+      try { await refreshUnitsAndDepartmentsFromDb(); await refreshOrgLevelsFromDb(); await refreshRolesPersonsFromDb(); await refreshApprovalPathsFromDb(); } catch (e) { /* نكمل بالنسخة المحلية */ }
       S.ui.loginBusy = false; S.ui.loginError = "";
       const lv = olFind(lvRes.data[0].id) || rowToOrgLevel(lvRes.data[0]);
       doLoginLevel(lv);
@@ -2920,14 +2918,14 @@ async function handleLoginSubmit() {
   S.ui.loginError = "اسم المستخدم أو كلمة السر غير صحيحة"; render();
 }
 
-async function refreshUnitsAndDepartmentsFromSheet() {
-  if (!sheetsConfigured()) return;
+async function refreshUnitsAndDepartmentsFromDb() {
+  if (!dbConnected()) return;
   await Promise.all([pendingSupabaseWrite("units"), pendingSupabaseWrite("departments"), pendingSupabaseWrite("offices")]);
   const [unitsRes, deptRes, officesRes] = await Promise.all([
     supabaseRequest("units?select=*"),
     supabaseRequest("departments?select=*"),
     supabaseRequest("offices?select=*"),
-    refreshReportSectionsFromSheet(),
+    refreshReportSectionsFromDb(),
   ]);
   if (unitsRes.ok && Array.isArray(unitsRes.data)) {
     S.units = unitsRes.data.map(rowToUnit);
@@ -2945,8 +2943,8 @@ async function refreshUnitsAndDepartmentsFromSheet() {
   }
 }
 
-async function refreshIndicatorDefinitionsFromSheet() {
-  if (!sheetsConfigured()) return;
+async function refreshIndicatorDefinitionsFromDb() {
+  if (!dbConnected()) return;
   await pendingSupabaseWrite("indicator_definitions");
   const res = await supabaseRequest("indicator_definitions?select=*");
   if (res.ok && Array.isArray(res.data)) {
@@ -2955,8 +2953,8 @@ async function refreshIndicatorDefinitionsFromSheet() {
   }
 }
 
-async function refreshGoalsDefinitionsFromSheet() {
-  if (!sheetsConfigured()) return;
+async function refreshGoalsDefinitionsFromDb() {
+  if (!dbConnected()) return;
   await pendingSupabaseWrite("goals_definitions");
   const res = await supabaseRequest("goals_definitions?select=*");
   if (res.ok && Array.isArray(res.data)) {
@@ -2968,8 +2966,8 @@ async function refreshGoalsDefinitionsFromSheet() {
   }
 }
 
-async function refreshPlatformUsersFromSheet() {
-  if (!sheetsConfigured()) return;
+async function refreshPlatformUsersFromDb() {
+  if (!dbConnected()) return;
   await pendingSupabaseWrite("platform_users");
   const res = await supabaseRequest("platform_users?select=*");
   if (res.ok && Array.isArray(res.data)) {
@@ -2977,15 +2975,15 @@ async function refreshPlatformUsersFromSheet() {
     dataStore.cachePlatformUsersLocally(S.platformUsers);
   }
 }
-async function refreshRolesPersonsFromSheet() {
-  if (!sheetsConfigured()) return;
+async function refreshRolesPersonsFromDb() {
+  if (!dbConnected()) return;
   await Promise.all([pendingSupabaseWrite("roles"), pendingSupabaseWrite("persons")]);
   const [r1, r2] = await Promise.all([supabaseRequest("roles?select=*"), supabaseRequest("persons?select=*")]);
   if (r1.ok && Array.isArray(r1.data)) { S.roles = r1.data.map(rowToRole); lsSet(ROLES_KEY, JSON.stringify(S.roles)); }
   if (r2.ok && Array.isArray(r2.data)) { S.persons = r2.data.map(rowToPerson); lsSet(PERSONS_KEY, JSON.stringify(S.persons)); }
 }
-async function refreshJobTitleTemplatesFromSheet() {
-  if (!sheetsConfigured()) return;
+async function refreshJobTitleTemplatesFromDb() {
+  if (!dbConnected()) return;
   await pendingSupabaseWrite("job_title_templates");
   const res = await supabaseRequest("job_title_templates?select=*");
   if (res.ok && Array.isArray(res.data)) {
@@ -3003,8 +3001,8 @@ function applyReportSectionDefs(list) {
   if (!SECTIONS.length) SECTIONS = DEFAULT_SECTIONS.map((s) => ({ ...s })); // شبكة أمان: لا يبقى النظام بلا أقسام أبدًا
 }
 
-async function refreshReportSectionsFromSheet() {
-  if (!sheetsConfigured()) return;
+async function refreshReportSectionsFromDb() {
+  if (!dbConnected()) return;
   await pendingSupabaseWrite("report_sections");
   const res = await supabaseRequest("report_sections?select=*");
   if (res.ok && Array.isArray(res.data)) {
@@ -3060,8 +3058,8 @@ function applyFieldSchemaOverrides(map) {
   });
 }
 
-async function refreshSectionFieldSchemasFromSheet() {
-  if (!sheetsConfigured()) return;
+async function refreshSectionFieldSchemasFromDb() {
+  if (!dbConnected()) return;
   await pendingSupabaseWrite("section_field_schemas");
   const res = await supabaseRequest("section_field_schemas?select=*");
   if (res.ok && Array.isArray(res.data) && res.data.length) {
@@ -3072,8 +3070,8 @@ async function refreshSectionFieldSchemasFromSheet() {
   }
 }
 
-async function refreshSiteSettingsFromSheet() {
-  if (!sheetsConfigured()) return;
+async function refreshSiteSettingsFromDb() {
+  if (!dbConnected()) return;
   const res = await supabaseRequest("site_settings?id=eq.main&select=*");
   if (res.ok && Array.isArray(res.data) && res.data.length) {
     S.siteSettings = rowToSiteSettings(res.data[0]);
@@ -3082,16 +3080,19 @@ async function refreshSiteSettingsFromSheet() {
   }
 }
 
-async function refreshDashboardConfigFromSheet() {
-  if (!sheetsConfigured()) return;
+async function refreshDashboardConfigFromDb() {
+  if (!dbConnected()) return;
   const res = await supabaseRequest("dashboard_config?id=eq.main&select=*");
   if (res.ok && Array.isArray(res.data) && res.data.length) {
     S.dashboardConfig = rowToDashboardConfig(res.data[0]);
     lsSet(DASHBOARD_CONFIG_KEY, JSON.stringify(S.dashboardConfig));
   }
 }
-async function refreshOrgChartFromSheet() {
-  if (!sheetsConfigured()) return;
+
+// المخطط الحر من القاعدة — يُحمَّل عند فتح "الهيكل المرن" حتى يعمل زر "نقل أسماء المخطط الحر"
+// حتى لو بُني المخطط من جهاز آخر (كان سابقًا يُقرأ من الجهاز نفسه فقط).
+async function refreshOrgChartFromDb() {
+  if (!dbConnected()) return;
   const res = await supabaseRequest("org_chart?id=eq.main&select=*");
   if (res.ok && Array.isArray(res.data) && res.data.length) {
     S.orgChart = rowToOrgChart(res.data[0]);
@@ -3099,8 +3100,8 @@ async function refreshOrgChartFromSheet() {
   }
 }
 
-async function refreshReportsFromSheet(unitId) {
-  if (!sheetsConfigured()) return;
+async function refreshReportsFromDb(unitId) {
+  if (!dbConnected()) return;
   const res = await supabaseRequest(`reports?unit_id=eq.${encodeURIComponent(unitId)}&select=*`);
   if (res.ok && Array.isArray(res.data)) {
     S.reports[unitId] = res.data.map(rowToReport);
@@ -3294,15 +3295,15 @@ function doLogin(user) {
     if (ownerActivePersons(pk, pid).length || baseRoleIdsOf(pEnt).length >= 2) { S.pendingEntityLogin = { kind: pk, id: pid, view: S.view }; S.view = "unit-role-select"; }
   }
   render();
-  if (sheetsConfigured()) {
+  if (dbConnected()) {
     if (S.isAdmin || S.isExecutive) {
-      Promise.all(scopeUnitsFilter(S.units).map((u) => refreshReportsFromSheet(u.id))).then(() => { if (S.currentUser) render(); });
+      Promise.all(scopeUnitsFilter(S.units).map((u) => refreshReportsFromDb(u.id))).then(() => { if (S.currentUser) render(); });
     } else if (S.isDepartmentUser) {
-      Promise.all(S.units.filter((u) => u.departmentId === S.currentDepartmentId).map((u) => refreshReportsFromSheet(u.id))).then(() => { if (S.currentUser) render(); });
+      Promise.all(S.units.filter((u) => u.departmentId === S.currentDepartmentId).map((u) => refreshReportsFromDb(u.id))).then(() => { if (S.currentUser) render(); });
     } else if (S.isOfficeUser) {
-      Promise.all(officeUnits(S.currentOfficeId).map((u) => refreshReportsFromSheet(u.id))).then(() => { if (S.currentUser) render(); });
+      Promise.all(officeUnits(S.currentOfficeId).map((u) => refreshReportsFromDb(u.id))).then(() => { if (S.currentUser) render(); });
     } else if (S.currentUnitId) {
-      refreshReportsFromSheet(S.currentUnitId).then(() => { if (S.currentUser) render(); });
+      refreshReportsFromDb(S.currentUnitId).then(() => { if (S.currentUser) render(); });
     }
   }
 }
@@ -4182,10 +4183,10 @@ function saveOrgLevels(list) {
   const gone = removedIdsFor(ORG_LEVELS_KEY, list.map((x) => x.id), idsOfList);
   S.orgLevels = list;
   lsSet(ORG_LEVELS_KEY, JSON.stringify(list));
-  if (sheetsConfigured()) queueSupabaseReplaceTable("org_levels", list.map(orgLevelToRow), "id", gone).catch(() => {});
+  if (dbConnected()) queueSupabaseReplaceTable("org_levels", list.map(orgLevelToRow), "id", gone).catch(() => {});
 }
-async function refreshOrgLevelsFromSheet() {
-  if (!sheetsConfigured()) return;
+async function refreshOrgLevelsFromDb() {
+  if (!dbConnected()) return;
   await pendingSupabaseWrite("org_levels");
   const res = await supabaseRequest("org_levels?select=*");
   if (res.ok && Array.isArray(res.data)) {
@@ -4844,7 +4845,7 @@ function portalPreload() {
   // مع قاعدة البيانات: نقرأ النسخة المحفوظة محليًا فقط (بدون زرع بيانات تجريبية أو أي كتابة)،
   // ثم تُحدَّث من القاعدة بالخلفية. بدون قاعدة: نفس مصدر البيانات المحلي المعتاد.
   const cached = (k) => { try { const v = lsGet(k); return v ? JSON.parse(v) : []; } catch (e) { return []; } };
-  if (sheetsConfigured()) {
+  if (dbConnected()) {
     if (!(S.units && S.units.length)) S.units = cached(UNITS_KEY);
     if (!(S.departments && S.departments.length)) S.departments = cached(DEPARTMENTS_KEY);
     if (!(S.offices && S.offices.length)) S.offices = cached(OFFICES_KEY);
@@ -7530,22 +7531,22 @@ function addPermLog(targetKind, targetId, targetName, summary) {
   const e = { id: uid("plog"), at: Date.now(), by: (S.currentUser && S.currentUser.name) || "", targetKind, targetId, targetName, summary };
   S.permLog = [e, ...(S.permLog || dataStore.getPermLog())].slice(0, 200);
   lsSet(PERM_LOG_KEY, JSON.stringify(S.permLog));
-  if (sheetsConfigured()) supabaseRequest("permission_log", { method: "POST", prefer: "return=minimal", body: JSON.stringify(permLogToRow(e)) }).catch(() => {});
+  if (dbConnected()) supabaseRequest("permission_log", { method: "POST", prefer: "return=minimal", body: JSON.stringify(permLogToRow(e)) }).catch(() => {});
 }
-async function refreshReportTabsFromSheet() {
-  if (!sheetsConfigured()) return;
+async function refreshReportTabsFromDb() {
+  if (!dbConnected()) return;
   await pendingSupabaseWrite("report_tabs");
   const res = await supabaseRequest("report_tabs?select=*");
   if (res.ok && Array.isArray(res.data)) { S.reportTabs = res.data.map(rowToReportTab).sort((a, b) => a.order - b.order); lsSet(REPORT_TABS_KEY, JSON.stringify(S.reportTabs)); syncReportTabCatalog(); }
 }
-async function refreshApprovalPathsFromSheet() {
-  if (!sheetsConfigured()) return;
+async function refreshApprovalPathsFromDb() {
+  if (!dbConnected()) return;
   await pendingSupabaseWrite("approval_paths");
   const res = await supabaseRequest("approval_paths?select=*");
   if (res.ok && Array.isArray(res.data)) { S.approvalPaths = res.data.map(rowToApprovalPath); lsSet(APPROVAL_PATHS_KEY, JSON.stringify(S.approvalPaths)); }
 }
-async function refreshPermLogFromSheet() {
-  if (!sheetsConfigured()) return;
+async function refreshPermLogFromDb() {
+  if (!dbConnected()) return;
   const res = await supabaseRequest("permission_log?select=*&order=at.desc&limit=100");
   if (res.ok && Array.isArray(res.data)) { S.permLog = res.data.map(rowToPermLog); lsSet(PERM_LOG_KEY, JSON.stringify(S.permLog)); }
 }
@@ -8842,8 +8843,7 @@ function persistSection(sectionId, data, status) {
     updatedIndicatorHistory = nextHistory;
   }
   const updatedEntry = { ...current, label: updatedLabel, sections: updatedSections, shared: updatedShared, indicatorHistory: updatedIndicatorHistory, updatedAt: Date.now(), lastSectionId: sectionId };
-  // saveReportEntry يرفع التقرير كامل (بكل أقسامه) لـ Supabase دفعة وحدة —
-  // ما يحتاج استدعاء إضافي لكل قسم على حدة زي أسلوب جوجل شيت.
+  // saveReportEntry يرفع التقرير كامل (بكل أقسامه) لـ Supabase دفعة وحدة.
   saveReportEntry(unitId, updatedEntry);
 }
 
@@ -10436,37 +10436,38 @@ function attachClickListener() {
         // محدّدة (طلب نجود الصريح). نتأكد هنا من وجود وحدة صالحة قبل الدخول،
         // بدل أن تبقى الصفحة فارغة/معطّلة.
         ensureUnitContextForNav(navView);
-        if (navView === "custom-path-inbox" && sheetsConfigured()) {
-          Promise.all((S.units || []).filter((u) => unitHasCustomPath(u) || apOwnerCandidatesForUnit(u).some((o) => approvalPathsList().some((p) => p.status === "active" && p.ownerKind === o.kind && p.ownerId === o.id))).map((u) => refreshReportsFromSheet(u.id))).then(() => { if (S.currentUser && S.view === "custom-path-inbox") render(); });
+        if (navView === "custom-path-inbox" && dbConnected()) {
+          Promise.all((S.units || []).filter((u) => unitHasCustomPath(u) || apOwnerCandidatesForUnit(u).some((o) => approvalPathsList().some((p) => p.status === "active" && p.ownerKind === o.kind && p.ownerId === o.id))).map((u) => refreshReportsFromDb(u.id))).then(() => { if (S.currentUser && S.view === "custom-path-inbox") render(); });
         }
         if (navView === "report-tabs-manage") {
           S.reportTabs = dataStore.getReportTabs(); S.ui.rtEdit = null; S.ui.rtMsg = ""; S.ui.rtDeleteId = null;
-          if (sheetsConfigured()) refreshReportTabsFromSheet().then(() => { if (S.view === "report-tabs-manage") render(); });
+          if (dbConnected()) refreshReportTabsFromDb().then(() => { if (S.view === "report-tabs-manage") render(); });
         }
-        if (navView === "org-levels") { S.roles = dataStore.getRoles(); S.approvalPaths = dataStore.getApprovalPaths(); if (sheetsConfigured()) Promise.all([refreshOrgLevelsFromSheet(), refreshRolesPersonsFromSheet(), refreshApprovalPathsFromSheet()]).then(() => { if (S.view === "org-levels") render(); }).catch(() => {}); }
+        if (navView === "org-chart" && dbConnected()) refreshOrgChartFromDb().then(() => { if (S.view === "org-chart") render(); }).catch(() => {});
+        if (navView === "org-levels") { S.roles = dataStore.getRoles(); S.approvalPaths = dataStore.getApprovalPaths(); if (dbConnected()) Promise.all([refreshOrgLevelsFromDb(), refreshRolesPersonsFromDb(), refreshApprovalPathsFromDb(), refreshOrgChartFromDb()]).then(() => { if (S.view === "org-levels") render(); }).catch(() => {}); }
         if (navView === "units-manage") { S.roles = dataStore.getRoles(); S.persons = dataStore.getPersons(); S.approvalPaths = dataStore.getApprovalPaths(); S.ui.apEdit = null; S.ui.rolePermEditId = null; }
         if (navView === "platform-users-manage" || navView === "platform-permissions-manage" || navView === "job-title-templates") {
           S.platformUsers = dataStore.getPlatformUsers();
           S.jobTitleTemplates = dataStore.getJobTitleTemplates();
         }
         render();
-        if (sheetsConfigured()) {
+        if (dbConnected()) {
           if (navView === "admin-reports" || navView === "units-manage" || navView === "dashboard") {
-            refreshUnitsAndDepartmentsFromSheet().then(() => { if (S.view === navView) render(); });
+            refreshUnitsAndDepartmentsFromDb().then(() => { if (S.view === navView) render(); });
           } else if (navView === "indicators-manage") {
-            refreshIndicatorDefinitionsFromSheet().then(() => { if (S.view === navView) render(); });
+            refreshIndicatorDefinitionsFromDb().then(() => { if (S.view === navView) render(); });
           } else if (navView === "goals-manage") {
-            refreshGoalsDefinitionsFromSheet().then(() => { if (S.view === navView) render(); });
+            refreshGoalsDefinitionsFromDb().then(() => { if (S.view === navView) render(); });
           } else if (navView === "sections-manage") {
-            refreshReportSectionsFromSheet().then(() => { if (S.view === navView) render(); });
+            refreshReportSectionsFromDb().then(() => { if (S.view === navView) render(); });
           } else if (navView === "field-schemas-manage") {
-            refreshSectionFieldSchemasFromSheet().then(() => { if (S.view === navView) render(); });
+            refreshSectionFieldSchemasFromDb().then(() => { if (S.view === navView) render(); });
           } else if (navView === "unit-reports" && S.currentUnitId) {
-            refreshReportsFromSheet(S.currentUnitId).then(() => { if (S.view === navView) render(); });
+            refreshReportsFromDb(S.currentUnitId).then(() => { if (S.view === navView) render(); });
           } else if (navView === "platform-users-manage") {
-            refreshPlatformUsersFromSheet().then(() => { if (S.view === navView) render(); });
+            refreshPlatformUsersFromDb().then(() => { if (S.view === navView) render(); });
           } else if (navView === "job-title-templates") {
-            refreshJobTitleTemplatesFromSheet().then(() => { if (S.view === navView) render(); });
+            refreshJobTitleTemplatesFromDb().then(() => { if (S.view === navView) render(); });
           }
         }
         break;
@@ -10733,7 +10734,7 @@ function attachClickListener() {
         S.pendingUnitLoginId = null;
         S.view = "unit-dashboard";
         render();
-        if (sheetsConfigured()) { refreshReportsFromSheet(unitId).then(() => { if (S.currentUser) render(); }); }
+        if (dbConnected()) { refreshReportsFromDb(unitId).then(() => { if (S.currentUser) render(); }); }
         break;
       }
       case "toggle-role-perm-page": { const a = rolePermFormState().pages; const i = a.indexOf(ds.id); if (i >= 0) a.splice(i, 1); else a.push(ds.id); render(); break; }
@@ -10794,7 +10795,7 @@ function attachClickListener() {
         if (!S.roles) S.roles = dataStore.getRoles();
         if (!S.persons) S.persons = dataStore.getPersons();
         render();
-        if (S.ui.structPersonsOpen[ds.key] && sheetsConfigured()) refreshRolesPersonsFromSheet().then(() => { if (S.view === "units-manage") render(); });
+        if (S.ui.structPersonsOpen[ds.key] && dbConnected()) refreshRolesPersonsFromDb().then(() => { if (S.view === "units-manage") render(); });
         break;
       }
       case "struct-person-add": {
@@ -10926,7 +10927,7 @@ function attachClickListener() {
           if (t) S.view = t.id;
         }
         render();
-        if (sheetsConfigured()) { refreshReportsFromSheet(unitId).then(() => { if (S.currentUser) render(); }); }
+        if (dbConnected()) { refreshReportsFromDb(unitId).then(() => { if (S.currentUser) render(); }); }
         break;
       }
       case "choose-person": {
@@ -11046,7 +11047,7 @@ function attachClickListener() {
         S.adminPreviewOrigin = null;
         ensureUnitReportsLoaded(unitId);
         S.currentUnitId = unitId; S.currentReportId = null; S.view = "unit-reports"; S.openPhaseId = null; S.activeSectionId = null; render();
-        if (sheetsConfigured()) refreshReportsFromSheet(unitId).then(() => { if (S.currentUnitId === unitId) render(); });
+        if (dbConnected()) refreshReportsFromDb(unitId).then(() => { if (S.currentUnitId === unitId) render(); });
         break;
       }
       case "bs-open": {
@@ -11098,7 +11099,7 @@ function attachClickListener() {
         // تبديله لاحقًا من الصفحة نفسها (adminUnitSwitcherHtml) لمنظور "رئيسة الوحدة".
         if (S.currentUnitEntryMode !== "admin" && S.currentUnitEntryMode !== "head") S.currentUnitEntryMode = "admin";
         render();
-        if (sheetsConfigured()) refreshReportsFromSheet(unit.id).then(() => { if (S.currentUnitId === unit.id) render(); });
+        if (dbConnected()) refreshReportsFromDb(unit.id).then(() => { if (S.currentUnitId === unit.id) render(); });
         break;
       }
       case "admin-set-unit-entry-mode": {
@@ -11398,7 +11399,7 @@ function attachClickListener() {
         break;
       }
       case "generate-ai-summary": {
-        if (!sheetsConfigured()) {
+        if (!dbConnected()) {
           S.ui.aiSummaryError = "هذي الميزة تحتاج ربط الموقع بقاعدة البيانات أولاً.";
           render();
           break;
@@ -11466,11 +11467,11 @@ function attachClickListener() {
         S.ui.apEdit = null; S.ui.rolePermEditId = null; S.ui.personPermEditId = null; S.ui.rolePermForm = null;
         if (ds.section === "roles") {
           S.roles = dataStore.getRoles(); S.persons = dataStore.getPersons();
-          if (sheetsConfigured()) Promise.all([refreshRolesPersonsFromSheet(), refreshPermLogFromSheet()]).then(() => { if (S.ui.structSection === "roles") render(); });
+          if (dbConnected()) Promise.all([refreshRolesPersonsFromDb(), refreshPermLogFromDb()]).then(() => { if (S.ui.structSection === "roles") render(); });
         }
         if (ds.section === "paths") {
           S.roles = dataStore.getRoles(); S.persons = dataStore.getPersons(); S.approvalPaths = dataStore.getApprovalPaths();
-          if (sheetsConfigured()) Promise.all([refreshRolesPersonsFromSheet(), refreshApprovalPathsFromSheet()]).then(() => { if (S.ui.structSection === "paths") render(); });
+          if (dbConnected()) Promise.all([refreshRolesPersonsFromDb(), refreshApprovalPathsFromDb()]).then(() => { if (S.ui.structSection === "paths") render(); });
         }
         render(); break;
       }
@@ -12604,13 +12605,13 @@ function boot() {
   portalPreload();
   if (S.entryLink) applyEntryHomeScreen();
   render();
-  if (sheetsConfigured()) refreshSiteSettingsFromSheet().then(() => {
+  if (dbConnected()) refreshSiteSettingsFromDb().then(() => {
     applyEntryHomeScreen(); render();
     // رابط جهة أو بوابة دخول مفعّلة: نحدّث أسماء الجهات والهيكل من القاعدة قبل الدخول
-    if (S.entryLink || portalEnabled()) Promise.all([refreshUnitsAndDepartmentsFromSheet(), refreshOrgLevelsFromSheet()]).then(() => { applyEntryHomeScreen(); if (!S.currentUser) render(); }).catch(() => {});
+    if (S.entryLink || portalEnabled()) Promise.all([refreshUnitsAndDepartmentsFromDb(), refreshOrgLevelsFromDb()]).then(() => { applyEntryHomeScreen(); if (!S.currentUser) render(); }).catch(() => {});
   });
-  if (sheetsConfigured()) refreshDashboardConfigFromSheet().then(() => render()).catch(() => {});
-  if (sheetsConfigured()) refreshOrgLevelsFromSheet().then(() => { if (S.view === "org-levels") render(); }).catch(() => {});
+  if (dbConnected()) refreshDashboardConfigFromDb().then(() => render()).catch(() => {});
+  if (dbConnected()) refreshOrgLevelsFromDb().then(() => { if (S.view === "org-levels") render(); }).catch(() => {});
 }
 
 document.addEventListener("DOMContentLoaded", boot);
