@@ -5540,7 +5540,6 @@ function aggChapterHasData(key, data) {
   return key in m ? !!m[key] : true;
 }
 function aggChapterBody(key, data, s) {
-  const starTd = (c) => (c ? `<span style="color:${GOLD};">⭐</span>` : "");
   if (key === "summary") {
     return `<div class="stat-grid" style="margin-bottom:14px;">
         ${statIconCardHtml("إجمالي التقارير", data.total, iconDocument(18, "var(--rpt-burgundy)"), "#f4ece4")}
@@ -5549,7 +5548,7 @@ function aggChapterBody(key, data, s) {
         ${statIconCardHtml("عدد الوحدات", data.unitCount, iconLayers(18, "var(--rpt-burgundy)"), "#f4ece4")}
       </div>
       ${data.total ? rptChart("a-status", [{ label: "مكتمل", value: data.completed, color: GREEN }, { label: "قيد الإعداد", value: data.total - data.completed, color: GOLD }], { size: 130, wrapDonut: "max-width:320px;margin:0 auto 12px;" }) : ""}
-      <div class="hint">⭐ = عنصر اعتمدته مديرة القسم كأبرز نتيجة تستحق وصول الإدارة العليا.</div>`;
+`;
   }
   if (key === "perf") {
     const chart = rptChart("a-deptPerf", data.deptPerf.map((d) => ({ label: d.name, value: d.avg, color: "var(--rpt-burgundy)" })), { height: 170 });
@@ -5558,10 +5557,10 @@ function aggChapterBody(key, data, s) {
   if (key === "indicators") return data.indicators.length ? reportTable(["الوحدة", "المؤشر", "المتحقق"], data.indicators.map((r) => [esc(r.unitName), esc(r.name), esc(r.actual || "—")])) : emptyHint("لا توجد مؤشرات مُدخلة بعد.");
   if (key === "yearCompare") return data.yearCompareHtml();
   if (key === "programs") return data.programsHtml();
-  if (key === "achievements") return data.achievements.length ? reportTable(["الوحدة", "العمل", "الأثر", ""], data.achievements.map((a) => [esc(a.unitName), esc(a.name || "—"), esc(a.highlightResult), starTd(a.curated)])) : emptyHint("لا توجد إنجازات بارزة مُدخلة بعد.");
-  if (key === "strengths") return data.strengths.length ? reportTable(["الوحدة", "نقطة القوة", "المجال", ""], data.strengths.map((x) => [esc(x.unitName), esc(x.name || "—"), esc(x.area || "—"), starTd(x.curated)])) : emptyHint("لا توجد نقاط قوة مُدخلة بعد.");
-  if (key === "challenges") return data.challenges.length ? reportTable(["الوحدة", "الصعوبة", "المستوى", ""], data.challenges.map((c) => { const sm = challengeSeverityMeta(c.severity); return [esc(c.unitName), esc(c.name || "—"), c.severity ? badgeHtml(c.severity, sm.color, sm.bg) : "—", starTd(c.curated)]; })) : emptyHint("لا توجد تحديات مُدخلة بعد.");
-  if (key === "recs") return data.recs.length ? reportTable(["الوحدة", "التوصية", "الأولوية", ""], data.recs.map((r) => { const pm = improvementPriorityMeta(r.priority); return [esc(r.unitName), esc(r.text || "—"), r.priority ? badgeHtml(r.priority, pm.color, pm.bg) : "—", starTd(r.curated)]; })) : emptyHint("لا توجد توصيات مُدخلة بعد.");
+  if (key === "achievements") return data.achievements.length ? reportTable(["الوحدة", "العمل", "الأثر"], data.achievements.map((a) => [esc(a.unitName), esc(a.name || "—"), esc(a.highlightResult)])) : emptyHint("لا توجد إنجازات بارزة مُدخلة بعد.");
+  if (key === "strengths") return data.strengths.length ? reportTable(["الوحدة", "نقطة القوة", "المجال"], data.strengths.map((x) => [esc(x.unitName), esc(x.name || "—"), esc(x.area || "—")])) : emptyHint("لا توجد نقاط قوة مُدخلة بعد.");
+  if (key === "challenges") return data.challenges.length ? reportTable(["الوحدة", "الصعوبة", "المستوى"], data.challenges.map((c) => { const sm = challengeSeverityMeta(c.severity); return [esc(c.unitName), esc(c.name || "—"), c.severity ? badgeHtml(c.severity, sm.color, sm.bg) : "—"]; })) : emptyHint("لا توجد تحديات مُدخلة بعد.");
+  if (key === "recs") return data.recs.length ? reportTable(["الوحدة", "التوصية", "الأولوية"], data.recs.map((r) => { const pm = improvementPriorityMeta(r.priority); return [esc(r.unitName), esc(r.text || "—"), r.priority ? badgeHtml(r.priority, pm.color, pm.bg) : "—"]; })) : emptyHint("لا توجد توصيات مُدخلة بعد.");
   if (key === "initiatives") return data.initiatives.length ? reportTable(["الوحدة", "اسم المبادرة", "قابلية التعميم"], data.initiatives.map((it) => [esc(it.unitName), esc(it.name || "—"), esc(it.scalability || "—")])) : emptyHint("لا توجد مبادرات قابلة للتعميم مُدخلة بعد.");
   if (key === "nextTasks") return data.nextTasks.length ? reportTable(["الوحدة", "العمل الرئيسي القادم", "الموعد المتوقع"], data.nextTasks.map((t) => [esc(t.unitName), esc(t.name || "—"), esc(t.expectedDate || "—")])) : emptyHint("لم تُضف أولويات للفترة القادمة بعد.");
   if (key === "closing") return rptApprovalGridHtml(s.approvalBoxes, { "{الإعداد}": s.preparedBy });
@@ -6535,7 +6534,7 @@ function reviewDecisionsSectionHtml(pendingReports) {
 function curationKey(kind, reportId, itemId) { return `${kind}:${reportId}:${itemId}`; }
 function isDeptCurated(dept, key) { return !!(dept.curation && dept.curation.approvedKeys && dept.curation.approvedKeys.includes(key)); }
 function isOfficeCurated(office, key) { return !!(office.curation && office.curation.approvedKeys && office.curation.approvedKeys.includes(key)); }
-// عنصر يظهر "⭐ معتمد" بالملخص التنفيذي/التقرير النهائي لو اعتمدته مديرة القسم
+// عنصر اعتمدته مديرة القسم يظهر أولًا في الملخص التنفيذي/التقرير النهائي (بدون علامة)
 // أو مكتب الإشراف (أيهما اعتمده) — طبقتا إشراف مستقلتان، كل وحدة يمر اعتمادها
 // عبر الاثنتين إن وُجدتا.
 function isItemCurated(unit, key) {
@@ -7435,7 +7434,7 @@ function renderExecutiveSummary(scopeUnits, scopeDepartments, opts) {
     <div class="card" style="margin-bottom:16px;">
       <div class="prs-title" style="font-size:14px;font-weight:800;margin-bottom:10px;">أهم النتائج والإنجازات</div>
       ${achievements.length === 0 ? emptyHint("لا توجد نتائج بارزة مُدخلة بعد.") :
-        achievements.map((p) => `<div class="hint good" style="margin-bottom:6px;">${iconCheckCircle(13, GREEN)} ${esc(p.name || "عمل")}: ${esc(p.highlightResult)} ${p.curated ? `<span style="color:${GOLD};">⭐ معتمد من القسم</span>` : ""}</div>`).join("")}
+        achievements.map((p) => `<div class="hint good" style="margin-bottom:6px;">${iconCheckCircle(13, GREEN)} ${esc(p.name || "عمل")}: ${esc(p.highlightResult)}</div>`).join("")}
     </div>
 
     <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:14px;margin-bottom:16px;">
@@ -7453,13 +7452,13 @@ function renderExecutiveSummary(scopeUnits, scopeDepartments, opts) {
     <div class="card" style="margin-bottom:16px;">
       <div class="prs-title" style="font-size:14px;font-weight:800;margin-bottom:10px;">أبرز التحديات</div>
       ${allChallenges.length === 0 ? emptyHint("لا توجد تحديات مُدخلة بعد.") :
-        reportTable(["اسم الصعوبة", "الوحدة", "المستوى", ""], allChallenges.slice(0, 8).map((c) => { const sm = challengeSeverityMeta(c.severity); return [esc(c.name || "—"), esc(c.unitName), c.severity ? badgeHtml(c.severity, sm.color, sm.bg) : "—", c.curated ? `<span style="color:${GOLD};">⭐</span>` : ""]; }))}
+        reportTable(["اسم الصعوبة", "الوحدة", "المستوى"], allChallenges.slice(0, 8).map((c) => { const sm = challengeSeverityMeta(c.severity); return [esc(c.name || "—"), esc(c.unitName), c.severity ? badgeHtml(c.severity, sm.color, sm.bg) : "—"]; }))}
     </div>
 
     <div class="card" style="margin-bottom:16px;">
       <div class="prs-title" style="font-size:14px;font-weight:800;margin-bottom:10px;">التوصيات</div>
       ${allRecommendations.length === 0 ? emptyHint("لا توجد توصيات مُدخلة بعد.") :
-        reportTable(["نص التوصية", "الوحدة", "الأولوية", ""], allRecommendations.slice(0, 8).map((r) => { const pm = improvementPriorityMeta(r.priority); return [esc(r.text || "—"), esc(r.unitName), r.priority ? badgeHtml(r.priority, pm.color, pm.bg) : "—", r.curated ? `<span style="color:${GOLD};">⭐</span>` : ""]; }))}
+        reportTable(["نص التوصية", "الوحدة", "الأولوية"], allRecommendations.slice(0, 8).map((r) => { const pm = improvementPriorityMeta(r.priority); return [esc(r.text || "—"), esc(r.unitName), r.priority ? badgeHtml(r.priority, pm.color, pm.bg) : "—"]; }))}
     </div>
 
     <div class="card" style="margin-bottom:16px;">
