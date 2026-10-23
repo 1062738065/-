@@ -2038,9 +2038,8 @@ function render() {
     html = shellWrap(renderBrowseStructure());
   } else if (S.view === "departments-list") {
     html = shellWrap(renderDepartmentsPage());
-  } else if (S.view === "org-chart") {
-    html = shellWrap(renderOrgChartPage());
-  } else if (S.view === "org-levels") {
+  } else if (S.view === "org-levels" || S.view === "units-manage" || S.view === "org-chart") {
+    // صفحة "المستخدمون" الموحّدة (الهيكل + الحسابات + الأشخاص + الأدوار + المسارات)
     html = shellWrap(renderOrgLevelsPage());
   } else if (S.view === "department-curation") {
     html = shellWrap(renderCurationUnified());
@@ -2052,8 +2051,6 @@ function render() {
     html = shellWrap(renderExecutiveFinalReport());
   } else if (S.view === "all-reports") {
     html = shellWrap(renderAllReports());
-  } else if (S.view === "units-manage") {
-    html = shellWrap(renderDepartmentsManage());
   } else if (S.view === "indicators-manage") {
     html = shellWrap(renderIndicatorsManage());
   } else if (S.view === "goals-manage") {
@@ -2131,10 +2128,6 @@ const SIDEBAR_PAGES = [
   { id: "admin-reports", label: "الأقسام والوحدات", group: "الرئيسية", icon: "building" },
   { id: "custom-path-inbox", label: "بانتظار مراجعتي", group: "الرئيسية", icon: "document" },
   { id: "site-settings", label: "إعدادات الموقع", group: "الرئيسية", icon: "gauge" },
-  // "حسابات إضافية" و"صلاحيات الحسابات" و"المسميات الوظيفية (القوالب)" صارت
-  // تبويبات داخل صفحة "المستخدمون" نفسها (accountsHubTabBarHtml) بدل روابط
-  // منفصلة بالقائمة الجانبية — طلب نجود الصريح بدمجها. الصفحات الثلاث نفسها
-  // (views) باقية تمامًا بدون أي تغيير بمنطقها، بس ما تُسرد هنا كروابط مستقلة.
   { id: "all-reports", label: "جميع التقارير", group: "standalone", icon: "document" },
   { id: "indicators-manage", label: "إدارة مؤشرات الأداء", group: "إدارة التقارير", icon: "gauge" },
   { id: "goals-manage", label: "إدارة الأهداف والمستهدفات", group: "إدارة التقارير", icon: "target" },
@@ -2143,10 +2136,6 @@ const SIDEBAR_PAGES = [
   { id: "field-schemas-manage", label: "إدارة حقول الأقسام", group: "إدارة التقارير", icon: "layers" },
   { id: "units-manage", label: "المستخدمون", group: "standalone", icon: "building" },
   { id: "departments-list", label: "الأقسام", group: "الهيكل التنظيمي", icon: "building" },
-  // صفحة مستقلة تمامًا عن الأربعة أعلاه: مخطط مسميات وظيفية حرّ للتخطيط فقط
-  // (بدون حسابات تسجيل دخول أو ربط بمسار اعتماد التقارير) — الصفحات الأربع
-  // الأصلية تبقى كما هي تمامًا، هذي إضافة فقط (راجع renderOrgChartPage).
-  { id: "org-chart", label: "مخطط الهيكل التنظيمي", group: "الهيكل التنظيمي", icon: "layers" },
   { id: "browse-structure", label: "تصفّح الهيكل", group: "standalone", icon: "layers" },
   // صفحة مستقلة قائمة بذاتها (نفس نمط "office-curation" للمكتب) — بدل ما تكون
   // قسمًا مدمجًا داخل صفحة أخرى، حسب طلب نجود الصريح.
@@ -2331,8 +2320,7 @@ function computeVisibleSidebarPages() {
   const ids = new Set(raw.map((p) => MERGED_PAGE_MAP[p.id] || p.id));
   // «بانتظار مراجعتي» صار زرًّا داخل صفحة التقارير؛ لا يبقى رابطًا مستقلًّا إلا لمن لا يملك صفحة التقارير (حساب قسم/مكتب مثلًا).
   if (inboxViaReportsHub(ids)) ids.delete("custom-path-inbox");
-  // "مخطط الهيكل التنظيمي" صار تبويبًا داخل المستخدمون (لا رابط مستقل بالشريط).
-  return SIDEBAR_PAGES.filter((p) => ids.has(p.id) && p.id !== "org-chart" && !(p.id === "unit-report" && adminReportsReadOnly()));
+  return SIDEBAR_PAGES.filter((p) => ids.has(p.id) && !(p.id === "unit-report" && adminReportsReadOnly()));
 }
 function computeVisibleSidebarPagesRaw() {
   // مجموعة "unit-home" (تُعرض الآن كروابط رئيسية مستقلة بالشريط الجانبي —
@@ -3202,7 +3190,7 @@ function doLoginPlatformUser(pu) {
 // صلاحيات بعد (القيمة الافتراضية: مصفوفة فاضية) يبقى بلا أي قيد تمامًا كالسابق.
 function applyScopedAccountPermissions(entity) {
   if (!entity) return;
-  // دور الحساب الأساسي (يُضبط من «الهيكل والأشخاص») له الأولوية على حقول الصفحات القديمة.
+  // دور الحساب الأساسي (يُضبط من «المستخدمون ← الهيكل ← البيانات والحساب») له الأولوية على حقول الصفحات القديمة.
   const baseIds = baseRoleIdsOf(entity);
   if (baseIds.length >= 2) return; // أكثر من دور: يُطبَّق دور واحد فقط بعد أن تختاره من شاشة «كيف تريدين الدخول؟»
   if (baseIds.length === 1) { applyPersonPerms({ roleId: baseIds[0], permsOverride: null }); return; }
@@ -4059,100 +4047,6 @@ function renderBrowseStructure() {
    المكتب) ولا بمسار اعتماد التقارير — أداة تخطيط وتصوّر بصري فقط، منفصلة تمامًا
    عن الصفحات الأربع (مكاتب الإشراف/الأقسام/الوحدات/المراكز) اللي تبقى كما هي. */
 function currentOrgChart() { return S.orgChart || (S.orgChart = dataStore.getOrgChart()); }
-function orgChartFindParentArray(nodes, id, parentArr) {
-  parentArr = parentArr || nodes;
-  for (const n of nodes) {
-    if (n.id === id) return parentArr;
-    const found = orgChartFindParentArray(n.children || [], id, n.children || []);
-    if (found) return found;
-  }
-  return null;
-}
-function orgChartFindNode(nodes, id) {
-  for (const n of nodes) {
-    if (n.id === id) return n;
-    const found = orgChartFindNode(n.children || [], id);
-    if (found) return found;
-  }
-  return null;
-}
-function orgChartCountDescendants(node) {
-  let count = 0;
-  (node.children || []).forEach((c) => { count += 1 + orgChartCountDescendants(c); });
-  return count;
-}
-function orgChartNodeHtml(node, depth) {
-  const collapsed = !!(S.ui.orgChartCollapsed || {})[node.id];
-  const editing = S.ui.orgChartEditingId === node.id;
-  const confirming = S.ui.orgChartConfirmDeleteId === node.id;
-  const addingChild = S.ui.orgChartAddingParentId === node.id;
-  const hasChildren = (node.children || []).length > 0;
-  const descCount = orgChartCountDescendants(node);
-
-  let rowInner;
-  if (editing) {
-    rowInner = `
-      <input class="input" id="org-chart-edit-${esc(node.id)}" style="flex:1;" value="${esc(S.ui.orgChartEditValue || node.title)}" />
-      <button data-action="org-chart-save-edit" data-id="${esc(node.id)}" style="background:${GREEN_BG};border:none;border-radius:8px;padding:0 10px;cursor:pointer;">${iconCheck(16, GREEN)}</button>
-      <button data-action="org-chart-cancel-edit" style="background:${DANGER_BG};border:none;border-radius:8px;padding:0 10px;cursor:pointer;">${iconX(16, DANGER)}</button>`;
-  } else if (confirming) {
-    rowInner = `
-      <span style="font-size:12px;font-weight:700;flex:1;">حذف "${esc(node.title)}"${descCount ? ` وكل ما تحتها (${descCount})؟` : "؟"}</span>
-      ${pillBtn("حذف", { variant: "danger", action: "org-chart-delete", data: { id: node.id } })}
-      ${pillBtn("تراجع", { variant: "ghost", action: "org-chart-cancel-delete" })}`;
-  } else {
-    rowInner = `
-      <button class="icon-btn" style="width:26px;height:26px;flex-shrink:0;${hasChildren ? "" : "visibility:hidden;"}" data-action="org-chart-toggle-collapse" data-id="${esc(node.id)}" title="${collapsed ? "توسيع" : "طيّ"}">
-        <span style="display:inline-flex;transition:transform 0.15s;transform:rotate(${collapsed ? "-90" : "0"}deg);">${iconChevronDown(12, SUBTLE)}</span>
-      </button>
-      <span style="font-size:13px;font-weight:700;flex:1;">${esc(node.title)}</span>
-      <div style="display:flex;gap:6px;">
-        <button class="icon-btn" style="width:28px;height:28px;border:1px solid ${BORDER}" data-action="org-chart-start-add-child" data-id="${esc(node.id)}" title="إضافة تفرع">${iconPlus(13, INK)}</button>
-        <button class="icon-btn" style="width:28px;height:28px;border:1px solid ${BORDER}" data-action="org-chart-start-edit" data-id="${esc(node.id)}" title="تعديل">${iconPencil(13, INK)}</button>
-        <button class="icon-btn" style="width:28px;height:28px;background:${DANGER_BG}" data-action="org-chart-confirm-delete" data-id="${esc(node.id)}" title="حذف">${iconTrash(13, DANGER)}</button>
-      </div>`;
-  }
-
-  const addChildFormHtml = addingChild ? `
-    <div style="display:flex;gap:6px;margin-top:8px;">
-      <input class="input" id="org-chart-new-child-${esc(node.id)}" style="flex:1;" placeholder="المسمى الوظيفي الجديد" />
-      ${pillBtn("إضافة", { icon: iconPlus(14, "#fff"), action: "org-chart-save-add-child", data: { id: node.id } })}
-      ${pillBtn("إلغاء", { variant: "ghost", action: "org-chart-cancel-add-child" })}
-    </div>` : "";
-
-  const childrenHtml = (!collapsed && hasChildren) ? `
-    <div style="margin-top:8px;display:flex;flex-direction:column;gap:8px;">
-      ${node.children.map((c) => orgChartNodeHtml(c, depth + 1)).join("")}
-    </div>` : "";
-
-  return `
-  <div style="margin-right:${depth > 0 ? 22 : 0}px;${depth > 0 ? `border-right:2px solid ${BORDER};padding-right:14px;` : ""}">
-    <div class="card" style="display:flex;align-items:center;gap:8px;">${rowInner}</div>
-    ${addChildFormHtml}
-    ${childrenHtml}
-  </div>`;
-}
-function renderOrgChartPage() {
-  const nodes = currentOrgChart();
-  const addingRoot = !!S.ui.orgChartAddingRoot;
-  return `
-  <div class="page-wrap"><div class="page-inner">
-    ${topBarHtml({ title: "المستخدمون", subtitle: USERS_HUB_SUBTITLE, icon: iconUser(18, ROSE), backAction: "nav-back-admin" })}
-    ${accountsHubTabBarHtml("org-chart")}
-    <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-bottom:12px;">
-      <div style="font-size:15px;font-weight:800;display:flex;align-items:center;gap:8px;">${iconTarget(18, ROSE)} المخطط الحر <span style="font-size:11px;color:${SUBTLE};font-weight:600;">مسميات وظيفية للتخطيط فقط، بدون حسابات دخول</span></div>
-      ${pillBtn("إضافة", { icon: iconPlus(15, "#fff"), action: "org-chart-start-add-root" })}
-    </div>
-    ${addingRoot ? `
-      <div class="card" style="display:flex;gap:6px;margin-bottom:14px;">
-        <input class="input" id="org-chart-new-root" style="flex:1;" placeholder="المسمى الوظيفي الجديد (عنصر رئيسي)" />
-        ${pillBtn("إضافة", { icon: iconPlus(14, "#fff"), action: "org-chart-save-add-root" })}
-        ${pillBtn("إلغاء", { variant: "ghost", action: "org-chart-cancel-add-root" })}
-      </div>` : ""}
-    ${nodes.length === 0 && !addingRoot ? `<div class="card" style="text-align:center;color:${SUBTLE};padding:36px;">لا يوجد شيء بالمخطط بعد — اضغطي "إضافة" لبدء أول عنصر.</div>` :
-      `<div style="display:flex;flex-direction:column;gap:10px;">${nodes.map((n) => orgChartNodeHtml(n, 0)).join("")}</div>`}
-  </div></div>`;
-}
 
 /* =============================== الهيكل المرن (org_levels) ====================
    شجرة مستويات بلا حد للعمق فوق النظام الحالي — لا تمس جداول الوحدات/الأقسام/
@@ -4167,7 +4061,8 @@ function renderOrgChartPage() {
 const ORG_LEVELS_KEY = "prs:org-levels";
 const DEFAULT_LEVEL_TYPES = ["مساعدة", "قسم", "مكتب", "مديرة", "مجلس", "وحدة", "مركز"];
 const LEVEL_TYPE_PALETTE = [["#6b2337", "#f6e6eb"], ["#7a4d16", "#fbf0e1"], ["#24527a", "#e6eff7"], ["#5b3a73", "#efe7f5"], ["#2E6B52", "#e7f5ee"], ["#4d5a66", "#eaeef2"], ["#8a3350", "#fbeaf0"], ["#6b5a12", "#f7f1d9"]];
-const OL_LINK_KINDS = [{ id: "", label: "بدون — مستوى جديد" }, { id: "office", label: "مكتب موجود" }, { id: "dept", label: "قسم موجود" }, { id: "unit", label: "وحدة / مركز موجود" }];
+const OL_LINK_KINDS = [{ id: "", label: "بدون حساب — مستوى للتنظيم فقط" }, { id: "new", label: "+ إنشاء حساب جديد" }, { id: "office", label: "ربط بمكتب موجود" }, { id: "dept", label: "ربط بقسم موجود" }, { id: "unit", label: "ربط بوحدة / مركز / إدارة عليا موجودة" }];
+const OL_NEW_KINDS = [{ id: "unit", label: "وحدة" }, { id: "center", label: "مركز" }, { id: "dept", label: "قسم" }, { id: "office", label: "مكتب" }, { id: "exec", label: "إدارة عليا" }];
 
 function orgLevelToRow(l) {
   return { id: l.id, name: l.name || "", level_type: l.type || "", parent_id: l.parentId || "", link_kind: l.linkKind || "", link_id: l.linkId || "",
@@ -4203,7 +4098,6 @@ function saveSiteTheme(patch) {
   S.siteSettings = { ...S.siteSettings, theme: { ...(S.siteSettings.theme || {}), ...patch } };
   dataStore.saveSiteSettings(S.siteSettings);
 }
-function freeChartHidden() { return !!((((S.siteSettings || {}).theme) || {}).hideFreeChart); }
 function levelTypeChipHtml(type) {
   if (!type) return `<span style="font-size:10.5px;font-weight:700;padding:3px 9px;border-radius:999px;white-space:nowrap;color:#5c4f55;background:${GRAY_BG};">بدون نوع</span>`;
   const types = levelTypesList();
@@ -4232,8 +4126,26 @@ function olLinkedEntity(l) {
   if (!l || !l.linkKind || !l.linkId) return null;
   if (l.linkKind === "office") { const o = (S.offices || []).find((x) => x.id === l.linkId); return o ? { name: o.name, kind: "مكتب" } : { name: "(جهة محذوفة)", kind: "مكتب" }; }
   if (l.linkKind === "dept") { const d = (S.departments || []).find((x) => x.id === l.linkId); return d ? { name: d.name, kind: "قسم" } : { name: "(جهة محذوفة)", kind: "قسم" }; }
-  const u = (S.units || []).find((x) => x.id === l.linkId); return u ? { name: u.name, kind: u.role === "center" ? "مركز" : "وحدة" } : { name: "(جهة محذوفة)", kind: "وحدة" };
+  const u = (S.units || []).find((x) => x.id === l.linkId); return u ? { name: u.name, kind: u.role === "center" ? "مركز" : u.role === "executive" ? "إدارة عليا" : "وحدة" } : { name: "(جهة محذوفة)", kind: "وحدة" };
 }
+// نوع الجهة المربوطة بلغة صفحات الحسابات (unit / dept / office / exec) + الجهة نفسها
+function olEntityRef(l) {
+  if (!l || !l.linkKind || !l.linkId) return null;
+  if (l.linkKind === "unit") { const u = (S.units || []).find((x) => x.id === l.linkId); return u ? { type: u.role === "executive" ? "exec" : "unit", e: u } : null; }
+  const e = treeEntity(l.linkKind, l.linkId);
+  return e ? { type: l.linkKind, e } : null;
+}
+// يحدّث "يتبع" في حساب الجهة نفسه حسب أقرب جهة فوقها بالشجرة (وحدة ← قسم، قسم ← مكتب،
+// مكتب ← مكتب/إدارة عليا) — حتى تبقى صلاحيات الأقسام والمكاتب متوافقة مع الشجرة.
+// لا يمسح ربطًا موجودًا لو ما فيه جهة مناسبة فوقها.
+function olSyncEntityParent(levelId) {
+  const ref = olEntityRef(olFind(levelId)); if (!ref) return;
+  const ups = olPath(levelId).slice(0, -1).reverse().map(olEntityRef).filter(Boolean);
+  if (ref.type === "unit") { const d = ups.find((x) => x.type === "dept"); if (d && ref.e.departmentId !== d.e.id) treeSetEntity("unit", ref.e.id, { departmentId: d.e.id }); }
+  else if (ref.type === "dept") { const o = ups.find((x) => x.type === "office"); if (o && ref.e.officeId !== o.e.id) treeSetEntity("dept", ref.e.id, { officeId: o.e.id }); }
+  else if (ref.type === "office") { const o = ups.find((x) => x.type === "office" || x.type === "exec"); if (o && ref.e.parentOfficeId !== o.e.id) treeSetEntity("office", ref.e.id, { parentOfficeId: o.e.id }); }
+}
+function olSyncSubtree(levelId) { [levelId, ...olDescendantIds(levelId)].forEach(olSyncEntityParent); }
 // الصفحات اللي تشتغل لحساب مستوى (يرى عدة وحدات) — أي صفحة أخرى بالدور تُتجاهل له.
 const LEVEL_COMPATIBLE_PAGES = ["dashboard", "executive-dashboard", "custom-path-inbox", "all-reports", "executive-summary", "executive-final-report"];
 function levelRoleSummary(roleId) {
@@ -4253,7 +4165,7 @@ function olScopeUnitIds(levelId) {
     if (!l || !l.linkKind || !l.linkId) return;
     if (l.linkKind === "unit") { const u = (S.units || []).find((x) => x.id === l.linkId); if (isReal(u)) ids.add(u.id); }
     else if (l.linkKind === "dept") (S.units || []).filter((u) => u.departmentId === l.linkId && isReal(u)).forEach((u) => ids.add(u.id));
-    else if (l.linkKind === "office") officeUnits(l.linkId).filter(isReal).forEach((u) => ids.add(u.id));
+    else if (l.linkKind === "office") officeUnitsBase(l.linkId).filter(isReal).forEach((u) => ids.add(u.id));
   });
   return ids;
 }
@@ -4296,7 +4208,7 @@ function olParentOptionsHtml(selectedId, excludeId) {
 function olLinkEntityOptions(kind) {
   if (kind === "office") return (S.offices || []).filter((o) => o.status !== "disabled");
   if (kind === "dept") return (S.departments || []).filter((d) => d.status === "active");
-  if (kind === "unit") return (S.units || []).filter((u) => u.status === "active" && u.role !== "admin" && u.role !== "executive" && u.role !== "self_report");
+  if (kind === "unit") return (S.units || []).filter((u) => u.status === "active" && u.role !== "admin" && u.role !== "self_report").map((u) => (u.role === "executive" ? { ...u, name: u.name + " (إدارة عليا)" } : u.role === "center" ? { ...u, name: u.name + " (مركز)" } : u));
   return [];
 }
 function olFormHtml() {
@@ -4319,9 +4231,13 @@ function olFormHtml() {
     <div class="field"><label class="field-label" for="ol-f-parent">يتبع</label><select class="input" id="ol-f-parent">${olParentOptionsHtml(f.parentId, f.mode === "edit" ? f.id : null)}</select></div>
     <div class="field"><label class="field-label" for="ol-f-link-kind">ربطه بجهة موجودة؟</label>
       <select class="input" id="ol-f-link-kind" data-action="ol-form-refresh">${OL_LINK_KINDS.map((k) => `<option value="${k.id}" ${f.linkKind === k.id ? "selected" : ""}>${esc(k.label)}</option>`).join("")}</select>
-      ${f.linkKind ? `<select class="input" id="ol-f-link-id" style="margin-top:8px;" data-action="ol-form-refresh"><option value="">اختاري…</option>${ents.map((e) => `<option value="${esc(e.id)}" ${f.linkId === e.id ? "selected" : ""}>${esc(e.name)}</option>`).join("")}</select>
+      ${f.linkKind === "new" ? `<div style="background:${GRAY_BG};border-radius:12px;padding:10px 12px;margin-top:8px;display:flex;flex-direction:column;gap:8px;">
+          <select class="input" id="ol-f-new-kind" aria-label="نوع الحساب">${OL_NEW_KINDS.map((k) => `<option value="${k.id}" ${(f.newKind || "unit") === k.id ? "selected" : ""}>حساب ${esc(k.label)}</option>`).join("")}</select>
+          <div class="row-flex"><input class="input" id="ol-f-acc-pass" value="${esc(f.accPass || "")}" placeholder="كلمة سر الحساب" autocomplete="off" /><input class="input" id="ol-f-acc-email" type="email" value="${esc(f.accEmail || "")}" placeholder="الإيميل (اختياري)" /></div>
+          <div class="hint" style="margin:0;">اسم الدخول = اسم المستوى أعلاه. يُنشأ الحساب ويُربط بهذا المكان بالشجرة مباشرة.</div>
+        </div>` : f.linkKind ? `<select class="input" id="ol-f-link-id" style="margin-top:8px;" data-action="ol-form-refresh"><option value="">اختاري…</option>${ents.map((e) => `<option value="${esc(e.id)}" ${f.linkId === e.id ? "selected" : ""}>${esc(e.name)}</option>`).join("")}</select>
         <div class="hint">الجهة تبقى بحسابها وتقاريرها كما هي — الربط يضعها في مكانها بالشجرة فقط.</div>
-        ${usedBy ? `<div class="hint bad">هذه الجهة مربوطة أصلًا بـ "${esc(usedBy.name)}" — الحفظ ينقل الربط إلى هنا.</div>` : ""}` : `<div class="hint">مستوى جديد للتنظيم (مثل: مساعدة، مجلس، مديرة شؤون…).</div>`}
+        ${usedBy ? `<div class="hint bad">هذه الجهة مربوطة أصلًا بـ "${esc(usedBy.name)}" — الحفظ ينقل الربط إلى هنا.</div>` : ""}` : `<div class="hint">مستوى للتنظيم (مثل: مساعدة، مجلس) — يقدر يكون له دخول خاص من الأسفل.</div>`}
     </div>
     <div class="subhead">حساب دخول لهذا المستوى (اختياري)</div>
     <div class="row-flex">
@@ -4335,7 +4251,7 @@ function olFormHtml() {
       </select>
       ${(() => { const rs = levelRoleSummary(f.roleId); if (!rs) return `<div class="hint">ترى لوحة المعلومات وجميع التقارير والملخص والتقرير النهائي لوحدات ما تحتها — قراءة فقط.</div>`;
         const lbl = (id) => ((SIDEBAR_PAGES.find((x) => x.id === id) || {}).label || id);
-        return `<div class="hint">الصفحات: ${rs.pages.length ? rs.pages.map((x) => esc(lbl(x))).join("، ") : "لا توجد صفحات مناسبة بهذا الدور — ستُعرض صفحات الاطّلاع الافتراضية"}.<br>الاعتماد / الإعادة / التعديل: ${rs.inPaths ? `هذا الدور مرحلة في ${rs.inPaths} مسار اعتماد — تعتمد وتعيد وتعدّل حسب إعداد المرحلة، على تقارير وحدات ما تحتها فقط` : "هذا الدور غير موضوع في أي مسار اعتماد بعد — أضيفيه كمرحلة من «إدارة المسارات» ليقدر يعتمد أو يعيد أو يعدّل"}.<br>تعديل صفحات وأزرار الدور نفسه من «الهيكل والأشخاص ← إدارة الأدوار».</div>`; })()}
+        return `<div class="hint">الصفحات: ${rs.pages.length ? rs.pages.map((x) => esc(lbl(x))).join("، ") : "لا توجد صفحات مناسبة بهذا الدور — ستُعرض صفحات الاطّلاع الافتراضية"}.<br>الاعتماد / الإعادة / التعديل: ${rs.inPaths ? `هذا الدور مرحلة في ${rs.inPaths} مسار اعتماد — تعتمد وتعيد وتعدّل حسب إعداد المرحلة، على تقارير وحدات ما تحتها فقط` : "هذا الدور غير موضوع في أي مسار اعتماد بعد — أضيفيه كمرحلة من «كل المسارات» ليقدر يعتمد أو يعيد أو يعدّل"}.<br>تعديل صفحات وأزرار الدور نفسه من زر «الأدوار والصلاحيات» أعلى الصفحة.</div>`; })()}
     </div>
     <div style="display:flex;gap:8px;flex-wrap:wrap;">
       ${pillBtn("حفظ", { icon: iconCheck(14, "#fff"), action: "ol-save" })}
@@ -4354,10 +4270,7 @@ function olDetailsHtml(l) {
   const confirm = ui.confirmDelete === l.id;
   const box = (v, label) => `<div style="background:#f6f0f2;border-radius:12px;padding:10px;text-align:center;"><div style="font-size:20px;font-weight:900;color:${ROSE};">${v}</div><div style="font-size:11px;color:#6f5f66;">${label}</div></div>`;
   const kv = (k, v) => `<div style="display:flex;justify-content:space-between;gap:10px;font-size:12.5px;"><span style="color:#6f5f66;">${k}</span><span style="font-weight:700;text-align:left;">${v}</span></div>`;
-  return `<div class="card card-lg" style="display:flex;flex-direction:column;gap:12px;">
-    <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">${levelTypeChipHtml(l.type)}${linked ? `<span style="font-size:10.5px;font-weight:700;color:#2E7A5C;background:${GREEN_BG};padding:3px 9px;border-radius:999px;">${esc(linked.kind)} موجود</span>` : ""}</div>
-    <div style="font-size:17px;font-weight:900;line-height:1.5;">${esc(l.name)}</div>
-    <div style="font-size:11.5px;color:#6f5f66;line-height:1.9;">${path.map((p) => esc(p.name)).join("  ›  ")}</div>
+  return `<div style="display:flex;flex-direction:column;gap:12px;">
     <div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;">${box(kids.length, "تحته مباشرة")}${box(desc, "كل ما تحته")}${box(unitCount, "وحدة تصلها تقاريرها")}</div>
     <div style="border-top:1px solid ${BORDER};padding-top:10px;display:flex;flex-direction:column;gap:8px;">
       ${kv("يتبع", esc(parent))}
@@ -4365,8 +4278,6 @@ function olDetailsHtml(l) {
       ${kv("دخول خاص", l.loginId ? `اسم المستخدم: ${esc(l.loginId)}${l.status === "disabled" ? ` <span style="color:${DANGER};">(معطّل)</span>` : ""}` : "لا يوجد")}
       ${l.loginId ? kv("الصلاحيات", (() => { const rs = levelRoleSummary(l.roleId); return rs ? `حسب دور: ${esc(rs.name)}${rs.inPaths ? " — يعتمد في " + rs.inPaths + " مسار" : ""}` : "اطّلاع فقط"; })()) : ""}
     </div>
-    ${l.loginId ? entryLinkPanelHtml("level", l.id, "رابط دخول هذا المستوى") : ""}
-    ${linked && l.linkKind && l.linkId && linked.name !== "(جهة محذوفة)" ? entryLinkPanelHtml(l.linkKind, l.linkId, `رابط دخول ${linked.kind}: ${linked.name}`) : ""}
     ${confirm ? `<div style="background:${DANGER_BG};border-radius:12px;padding:12px;display:flex;flex-direction:column;gap:8px;">
         <div style="font-size:12.5px;font-weight:800;color:${DANGER};">حذف "${esc(l.name)}"؟</div>
         <div style="font-size:11.5px;color:#5c4f55;line-height:1.8;">يُحذف من الشجرة فقط${linked ? ` — ${esc(linked.kind)} "${esc(linked.name)}" يبقى بحسابه وتقاريره` : ""}.</div>
@@ -4383,6 +4294,77 @@ function olDetailsHtml(l) {
         ${pillBtn("حذف", { variant: "danger", icon: iconTrash(13, DANGER), action: "ol-confirm-delete", data: { id: l.id } })}
       </div>`}
   </div>`;
+}
+// تبويب "البيانات والحساب": حساب الجهة المربوطة (الاسم/الإيميل/كلمة السر/التفعيل/الحذف) + الدخول المباشر
+function olAccountHtml(l) {
+  const ref = olEntityRef(l);
+  if (!ref) return `<div style="border-top:1px solid ${BORDER};padding-top:12px;font-size:12px;color:#6f5f66;line-height:1.9;">${l.linkKind ? "الجهة المربوطة حُذفت — اربطيه بجهة أخرى أو أنشئي حسابًا من «تعديل / نقل»." : "هذا المستوى بدون حساب جهة. لإنشاء حساب له (وحدة/قسم/مكتب…): «تعديل / نقل» ← «+ إنشاء حساب جديد»."}</div>`;
+  const { type, e } = ref;
+  const key = type + ":" + e.id;
+  const on = e.status !== "disabled";
+  const confirming = S.ui.treeConfirmDel && S.ui.treeConfirmDel.type === type && S.ui.treeConfirmDel.id === e.id;
+  const reportsN = type === "unit" || type === "exec" ? ensureUnitReportsLoaded(e.id).length : 0;
+  return `<div style="border-top:1px solid ${BORDER};padding-top:12px;display:flex;flex-direction:column;gap:10px;">
+    <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;"><span style="font-size:13.5px;font-weight:800;">حساب الجهة</span>${structPanelTagHtml(type === "exec" ? "exec" : type, e)}
+      <span style="font-size:10.5px;font-weight:700;padding:3px 9px;border-radius:999px;color:${on ? "#2E7A5C" : DANGER};background:${on ? GREEN_BG : DANGER_BG};">${on ? "مفعّل" : "معطّل"}</span></div>
+    <div style="font-size:12.5px;line-height:1.9;"><span style="color:#6f5f66;">اسم الدخول:</span> <b>${esc(e.name)}</b>${e.email ? `<br><span style="color:#6f5f66;">الإيميل:</span> ${esc(e.email)}` : ""}</div>
+    ${treeEditFormHtml(type, e.id)}
+    ${confirming ? `<div style="background:${DANGER_BG};border-radius:12px;padding:10px 12px;display:flex;gap:6px;flex-wrap:wrap;align-items:center;">
+        <span style="font-size:12px;font-weight:800;color:${DANGER};">حذف حساب "${esc(e.name)}" نهائيًا${reportsN ? ` مع تقاريره (${reportsN})` : ""}؟ لا يمكن التراجع.</span>
+        ${pillBtn("حذف نهائي", { variant: "danger", action: "tree-delete", data: { type, id: e.id } })}${pillBtn("تراجع", { variant: "ghost", action: "tree-cancel-delete" })}</div>`
+      : `<div style="display:flex;gap:6px;flex-wrap:wrap;">
+        ${pillBtn("تعديل الحساب", { variant: "ghost", icon: iconPencil(13, INK), action: "tree-edit-start", data: { type, id: e.id } })}
+        ${pillBtn(on ? "تعطيل الحساب" : "تفعيل الحساب", { variant: on ? "ghost" : "soft", icon: iconPower(13, on ? INK : GREEN), action: "ol-entity-status", data: { type, id: e.id } })}
+        ${STRUCT_OWNER_KIND[type] ? pillBtn("نسخ الإعداد من جهة أخرى", { variant: "ghost", action: "struct-copy-open", data: { key } }) : ""}
+        ${pillBtn("حذف الحساب", { variant: "danger", icon: iconTrash(13, DANGER), action: "tree-confirm-delete", data: { type, id: e.id } })}
+      </div>`}
+    ${STRUCT_OWNER_KIND[type] ? structSimpleCopyHtml(type, e, key) : ""}
+    ${STRUCT_OWNER_KIND[type] ? `<div style="font-size:13px;font-weight:800;margin-top:4px;">أنواع الدخول المباشر لهذه الجهة</div>${structSimpleRoleCardsHtml(type, e)}` : ""}
+  </div>`;
+}
+const OL_TABS = [{ id: "info", label: "البيانات والحساب" }, { id: "people", label: "الأشخاص" }, { id: "paths", label: "المسارات" }, { id: "link", label: "رابط الدخول" }];
+function olSidePanelHtml(l) {
+  const ui = olUi();
+  const tab = OL_TABS.some((t) => t.id === ui.tab) ? ui.tab : "info";
+  const ref = olEntityRef(l);
+  const linked = olLinkedEntity(l);
+  const path = olPath(l.id);
+  const needEntity = (what) => `<div style="font-size:12.5px;color:#6f5f66;line-height:2;padding:6px 2px;">${what} تكون للجهات اللي لها حساب (وحدة، قسم، مكتب). هذا المستوى ${ref && ref.type === "exec" ? "حساب إدارة عليا" : "بدون حساب جهة"}.<br>${ref ? "" : "لإنشاء حساب له: تبويب «البيانات والحساب» ← «تعديل / نقل» ← «+ إنشاء حساب جديد»."}</div>`;
+  let body = "";
+  if (tab === "info") body = olDetailsHtml(l) + olAccountHtml(l);
+  else if (tab === "people") body = ref && STRUCT_OWNER_KIND[ref.type]
+    ? `${S.ui.structPersonAdd === ref.type + ":" + ref.e.id ? "" : `<div style="margin-bottom:10px;">${pillBtn("إضافة شخص", { icon: iconPlus(14, "#fff"), action: "struct-person-add-open", data: { key: ref.type + ":" + ref.e.id } })}</div>`}${structSimplePeopleHtml(ref.type, ref.e, ref.type + ":" + ref.e.id)}`
+    : needEntity("الأشخاص");
+  else if (tab === "paths") body = ref && STRUCT_OWNER_KIND[ref.type] ? structPanelPathTabHtml(ref.type, ref.e) : needEntity("مسارات الاعتماد");
+  else body = `${l.loginId ? entryLinkPanelHtml("level", l.id, "رابط دخول هذا المستوى") : ""}${linked && l.linkKind && l.linkId && linked.name !== "(جهة محذوفة)" ? entryLinkPanelHtml(l.linkKind, l.linkId, `رابط دخول ${linked.kind}: ${linked.name}`) : ""}${!l.loginId && !(linked && linked.name !== "(جهة محذوفة)") ? `<div style="font-size:12.5px;color:#6f5f66;">لا يوجد دخول لهذا المستوى بعد — أضيفي له حساب جهة أو دخولًا خاصًا من «تعديل / نقل».</div>` : ""}`;
+  return `<div class="card card-lg" style="display:flex;flex-direction:column;gap:14px;">
+    <div style="display:flex;align-items:center;gap:10px;">
+      ${entryIconHtml(l.loginId ? entryKey("level", l.id) : (l.linkKind && l.linkId ? entryKey(l.linkKind, l.linkId) : "level:" + l.id), 44)}
+      <div style="min-width:0;"><div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">${levelTypeChipHtml(l.type)}<span style="font-size:17px;font-weight:900;line-height:1.5;">${esc(l.name)}</span></div>
+      <div style="font-size:11.5px;color:#6f5f66;line-height:1.8;">${path.map((p) => esc(p.name)).join("  ›  ")}</div></div>
+    </div>
+    <div role="tablist" style="display:flex;gap:4px;background:${GRAY_BG};padding:4px;border-radius:12px;flex-wrap:wrap;">
+      ${OL_TABS.map((t) => `<button type="button" role="tab" data-action="ol-tab" data-tab="${t.id}" style="flex:1;min-width:80px;min-height:38px;border:none;border-radius:9px;font-family:inherit;font-size:12.5px;cursor:pointer;font-weight:${tab === t.id ? 800 : 600};background:${tab === t.id ? "#fff" : "transparent"};color:${tab === t.id ? ROSE : "#5c4f55"};box-shadow:${tab === t.id ? "0 1px 3px rgba(107,35,55,.12)" : "none"};">${t.label}</button>`).join("")}
+    </div>
+    ${body}
+  </div>`;
+}
+// الجهات اللي ما دخلت الشجرة بعد + حسابات مديرة النظام
+function olUnlinkedCardHtml() {
+  const ui = olUi();
+  const list = olUnlinkedEntities();
+  const admins = (S.units || []).filter((u) => u.role === "admin");
+  const adminRows = admins.map((u) => `<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:6px 0;">${structPanelTagHtml("admin", u)}<b style="font-size:13px;flex:1;">${esc(u.name)}</b>${S.ui.treeEditFor && S.ui.treeEditFor.id === u.id ? "" : pillBtn("تعديل", { variant: "ghost", icon: iconPencil(12, INK), action: "tree-edit-start", data: { type: "admin", id: u.id } })}</div>${treeEditFormHtml("admin", u.id)}`).join("");
+  return `${list.length ? `<div class="card card-lg" style="margin-top:14px;">
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-bottom:10px;">
+        <div><div style="font-size:14px;font-weight:800;">جهات لها حساب وغير موجودة في الشجرة (${list.length})</div>
+        <div style="font-size:11.5px;color:#6f5f66;margin-top:3px;">تعمل حساباتها عادي، لكن إدارتها من هنا تحتاج إضافتها للشجرة.</div></div>
+        ${ui.importEntitiesConfirm ? `<span style="display:inline-flex;gap:6px;align-items:center;flex-wrap:wrap;"><span style="font-size:12px;font-weight:700;">إضافة الكل بنفس ترتيبها الحالي (مكتب ← قسم ← وحدة)؟</span>${pillBtn("إضافة", { action: "ol-import-entities" })}${pillBtn("تراجع", { variant: "ghost", action: "ol-import-entities-cancel" })}</span>`
+          : pillBtn("إضافة الكل للشجرة تلقائيًا", { variant: "soft", icon: iconLayers(13, GREEN), action: "ol-import-entities-ask" })}
+      </div>
+      <div style="display:flex;gap:6px;flex-wrap:wrap;">${list.map((x) => `<button type="button" data-action="ol-add-entity" data-key="${esc(x.linkKind + ":" + x.id)}" title="إضافة للشجرة" style="display:inline-flex;align-items:center;gap:6px;min-height:36px;padding:0 12px;border-radius:999px;border:1px solid ${BORDER};background:#fff;font-family:inherit;font-size:12px;cursor:pointer;color:${INK};"><span style="color:#6f5f66;">${esc(x.kind)}</span><b>${esc(x.name)}</b>${iconPlus(12, ROSE)}</button>`).join("")}</div>
+    </div>` : ""}
+    ${admins.length ? `<div class="card card-lg" style="margin-top:14px;"><div style="font-size:14px;font-weight:800;margin-bottom:6px;">حسابات مديرة النظام</div>${adminRows}</div>` : ""}`;
 }
 function olTypesBarHtml() {
   const ui = olUi();
@@ -4416,12 +4398,13 @@ function renderOrgLevelsPage() {
   const sel = ui.selected ? olFind(ui.selected) : null;
   const chartNodes = currentOrgChart();
   const chartCount = (function cnt(ns) { return (ns || []).reduce((s, n) => s + 1 + cnt(n.children), 0); })(chartNodes);
-  const side = ui.form ? olFormHtml() : sel ? olDetailsHtml(sel)
+  const side = ui.form ? olFormHtml() : sel ? olSidePanelHtml(sel)
     : `<div class="card card-lg" style="color:${SUBTLE};font-size:12.5px;line-height:2;">اختاري مستوى من الشجرة لعرض تفاصيله، أو اضغطي "إضافة مستوى".<br>• الجهات الموجودة (مكاتب/أقسام/وحدات) تبقى بحساباتها وتقاريرها كما هي — تُربط بالشجرة فقط.<br>• كل مستوى له حساب دخول يرى ما تحته فقط.</div>`;
   return `
   <div class="page-wrap"><div class="page-inner" style="max-width:1180px;">
-    ${topBarHtml({ title: "المستخدمون", subtitle: USERS_HUB_SUBTITLE, icon: iconUser(18, ROSE), backAction: "nav-back-admin" })}
-    ${accountsHubTabBarHtml("org-levels")}
+    ${topBarHtml({ title: "المستخدمون", subtitle: "كل شيء في مكان واحد: الهيكل، الجهات وحساباتها، الأشخاص، الأدوار، والمسارات", icon: iconUser(18, ROSE), backAction: "nav-back-admin" })}
+    ${olSectionBarHtml()}
+    ${ui.section === "roles" ? renderRolesManage() : ui.section === "paths" ? renderApprovalPathsSetup() : ui.section === "people" ? structSimplePeopleViewHtml() : `
     ${ui.msg ? `<div class="card" style="background:${GREEN_BG};color:${GREEN};font-size:12.5px;font-weight:700;margin-bottom:14px;display:flex;justify-content:space-between;gap:10px;align-items:center;"><span>${esc(ui.msg)}</span><button type="button" class="icon-btn" style="background:transparent;" data-action="ol-clear-msg" aria-label="إغلاق">${iconX(13, GREEN)}</button></div>` : ""}
     ${olTypesBarHtml()}
     <div style="display:flex;flex-wrap:wrap;gap:16px;align-items:flex-start;">
@@ -4440,13 +4423,18 @@ function renderOrgLevelsPage() {
           ${chartCount ? (ui.importConfirm
             ? `<span style="font-size:12px;font-weight:700;">نقل ${chartCount} اسم من "المخطط الحر" إلى هنا (تُضاف بدون حذف شيء)؟</span>${pillBtn("نقل", { action: "ol-import-chart" })}${pillBtn("تراجع", { variant: "ghost", action: "ol-import-cancel" })}`
             : pillBtn(`نقل أسماء المخطط الحر (${chartCount})`, { variant: "ghost", icon: iconDownload(13, INK), action: "ol-import-start" })) : ""}
-          ${pillBtn(freeChartHidden() ? "إظهار تبويب المخطط الحر" : "إخفاء تبويب المخطط الحر", { variant: "ghost", action: "ol-toggle-free-chart" })}
           ${pillBtn(portalEnabled() ? `بوابة الدخول: مفعّلة (${portalEntries().length}) — إيقاف` : "تفعيل بوابة الدخول", { variant: portalEnabled() ? "ghost" : "soft", icon: iconHome(13, portalEnabled() ? INK : GREEN), action: "ol-toggle-portal" })}
         </div>
       </div>
       <div style="flex:1 1 340px;min-width:0;display:flex;flex-direction:column;gap:14px;">${side}</div>
     </div>
+    ${olUnlinkedCardHtml()}`}
   </div></div>`;
+}
+function olSectionBarHtml() {
+  const cur = olUi().section || "";
+  const b = (id, label) => `<button type="button" data-action="ol-section" data-section="${id}" style="min-height:42px;padding:0 16px;border-radius:12px;font-family:inherit;font-size:13px;cursor:pointer;font-weight:${cur === id ? 800 : 600};border:1px solid ${cur === id ? ROSE : BORDER};background:${cur === id ? "#fbf3f5" : "#fff"};color:${cur === id ? ROSE : INK};">${label}</button>`;
+  return `<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px;">${b("", "الهيكل")}${b("people", "كل الأشخاص")}${b("roles", "الأدوار والصلاحيات")}${b("paths", "كل المسارات")}</div>`;
 }
 function olReadForm() {
   const ui = olUi(); const f = ui.form; if (!f) return;
@@ -4460,9 +4448,82 @@ function olReadForm() {
   if (g("ol-f-parent") !== null) f.parentId = g("ol-f-parent");
   const lk = g("ol-f-link-kind");
   if (lk !== null) { if (lk !== f.linkKind) { f.linkKind = lk; f.linkId = ""; } else if (g("ol-f-link-id") !== null) f.linkId = g("ol-f-link-id"); }
+  if (g("ol-f-new-kind") !== null) f.newKind = g("ol-f-new-kind");
+  if (g("ol-f-acc-pass") !== null) f.accPass = g("ol-f-acc-pass");
+  if (g("ol-f-acc-email") !== null) f.accEmail = g("ol-f-acc-email");
   if (g("ol-f-login") !== null) f.loginId = g("ol-f-login");
   if (g("ol-f-pass") !== null) f.password = g("ol-f-pass");
   if (g("ol-f-role") !== null) f.roleId = g("ol-f-role");
+}
+// ينشئ حساب جهة جديد (بنفس بنية الحسابات الموجودة) ويرجع نوع الربط ومعرّفه
+function olCreateEntity(kind, name, password, email) {
+  const perms = resolveJobTitleForEntity(name);
+  const base = { name, password, email, status: "active", createdAt: Date.now(), allowedPages: perms.allowedPages, allowedActions: perms.allowedActions };
+  if (kind === "dept") { const id = uid("dept"); S.departments = [...S.departments, { ...base, id, officeId: "" }]; dataStore.saveDepartments(S.departments); return { linkKind: "dept", id }; }
+  if (kind === "office") { const id = uid("office"); S.offices = [...(S.offices || []), { ...base, id, parentOfficeId: "" }]; dataStore.saveOffices(S.offices); return { linkKind: "office", id }; }
+  const role = kind === "exec" ? "executive" : kind === "center" ? "center" : "unit";
+  const id = uid(kind === "exec" ? "exec" : "unit");
+  S.units = [...S.units, { ...base, id, role, departmentId: "" }]; dataStore.saveUnits(S.units);
+  return { linkKind: "unit", id };
+}
+// كل الجهات الموجودة غير المربوطة بالشجرة (بدون مديرة النظام وتقارير الجهات الذاتية)
+function olUnlinkedEntities() {
+  const linked = new Set(olActive().filter((l) => l.linkKind && l.linkId).map((l) => l.linkKind + ":" + l.linkId));
+  const out = [];
+  (S.units || []).filter((u) => u.role === "executive").forEach((u) => { if (!linked.has("unit:" + u.id)) out.push({ linkKind: "unit", id: u.id, name: u.name, kind: "إدارة عليا" }); });
+  (S.offices || []).forEach((o) => { if (!linked.has("office:" + o.id)) out.push({ linkKind: "office", id: o.id, name: o.name, kind: "مكتب" }); });
+  (S.departments || []).forEach((d) => { if (!linked.has("dept:" + d.id)) out.push({ linkKind: "dept", id: d.id, name: d.name, kind: "قسم" }); });
+  (S.units || []).filter((u) => u.role !== "admin" && u.role !== "executive" && u.role !== "self_report").forEach((u) => { if (!linked.has("unit:" + u.id)) out.push({ linkKind: "unit", id: u.id, name: u.name, kind: u.role === "center" ? "مركز" : "وحدة" }); });
+  return out;
+}
+// يضيف الجهات غير المربوطة للشجرة بنفس ترتيبها الحالي: إدارة عليا ← مكاتب ← أقسام ← وحدات.
+// كل جهة تُوضع تحت مستوى الجهة اللي تتبعها لو موجودة بالشجرة، وإلا بأعلى الهيكل.
+function olImportEntities(onlyKey) {
+  const list = currentOrgLevels().slice();
+  const levelOf = (kind, id) => list.find((l) => l.status !== "deleted" && l.linkKind === kind && l.linkId === id);
+  const types = levelTypesList();
+  const ensureType = (t) => { if (!types.includes(t)) types.push(t); return t; };
+  let n = 0;
+  const add = (kind, id, name, type, parentId) => {
+    if (levelOf(kind, id)) return;
+    list.push({ id: uid("lvl"), name, type: ensureType(type), parentId: parentId || "", linkKind: kind, linkId: id, loginId: "", password: "", roleId: "", status: "active", order: list.filter((x) => (x.parentId || "") === (parentId || "")).length, createdAt: Date.now() + n });
+    n++;
+  };
+  const want = (kind, id) => !onlyKey || onlyKey === kind + ":" + id;
+  (S.units || []).filter((u) => u.role === "executive").forEach((u) => { if (want("unit", u.id)) add("unit", u.id, u.name, "إدارة عليا", ""); });
+  const offices = (S.offices || []).slice();
+  let guard = 0;
+  while (offices.length && guard++ < 50) {
+    for (let i = 0; i < offices.length; i++) {
+      const o = offices[i];
+      const pOff = (S.offices || []).find((x) => x.id === o.parentOfficeId);
+      const pExec = (S.units || []).find((x) => x.id === o.parentOfficeId && x.role === "executive");
+      if (pOff && offices.includes(pOff) && !onlyKey) continue; // ننتظر الأب أولًا
+      const parent = pOff ? levelOf("office", pOff.id) : pExec ? levelOf("unit", pExec.id) : null;
+      if (want("office", o.id)) add("office", o.id, o.name, "مكتب", parent ? parent.id : "");
+      offices.splice(i, 1); i--;
+    }
+  }
+  (S.departments || []).forEach((d) => { const p = levelOf("office", d.officeId); if (want("dept", d.id)) add("dept", d.id, d.name, "قسم", p ? p.id : ""); });
+  (S.units || []).filter((u) => u.role !== "admin" && u.role !== "executive" && u.role !== "self_report").forEach((u) => { const p = levelOf("dept", u.departmentId); if (want("unit", u.id)) add("unit", u.id, u.name, u.role === "center" ? "مركز" : "وحدة", p ? p.id : ""); });
+  if (types.length !== levelTypesList().length) saveSiteTheme({ levelTypes: types });
+  saveOrgLevels(list);
+  return n;
+}
+// حذف حساب جهة نهائيًا (نفس منطق الحذف السابق) — يُستخدم من صفحة المستخدمين الموحّدة
+function treeDeleteEntity(type, id) {
+  if (type === "office") {
+    S.offices = (S.offices || []).filter((o) => o.id !== id).map((o) => o.parentOfficeId === id ? { ...o, parentOfficeId: "" } : o);
+    S.departments = S.departments.map((d) => d.officeId === id ? { ...d, officeId: "" } : d);
+    dataStore.saveOffices(S.offices); dataStore.saveDepartments(S.departments);
+  } else if (type === "dept") {
+    S.departments = S.departments.filter((d) => d.id !== id);
+    S.units = S.units.map((u) => u.departmentId === id ? { ...u, departmentId: "" } : u);
+    dataStore.saveDepartments(S.departments); dataStore.saveUnits(S.units);
+  } else {
+    S.units = S.units.filter((u) => u.id !== id); delete S.reports[id];
+    dataStore.saveUnits(S.units); dataStore.deleteReports(id);
+  }
 }
 function olImportChart() {
   const list = currentOrgLevels().slice();
@@ -4482,7 +4543,14 @@ function handleOrgLevelsAction(action, ds) {
   const ui = olUi();
   const levels = () => currentOrgLevels().slice();
   switch (action) {
-    case "ol-select": ui.selected = ds.id; ui.form = null; ui.confirmDelete = null; break;
+    case "ol-select": ui.selected = ds.id; ui.form = null; ui.confirmDelete = null; S.ui.treeEditFor = null; S.ui.treeConfirmDel = null; break;
+    case "ol-tab": ui.tab = ds.tab; break;
+    case "ol-section": ui.section = ds.section || ""; S.ui.apEdit = null; break;
+    case "ol-entity-status": { const e = treeEntity(ds.type === "exec" ? "unit" : ds.type, ds.id); if (e) treeSetEntity(ds.type === "exec" ? "unit" : ds.type, ds.id, { status: e.status === "disabled" ? "active" : "disabled" }); break; }
+    case "ol-import-entities-ask": ui.importEntitiesConfirm = true; break;
+    case "ol-import-entities-cancel": ui.importEntitiesConfirm = false; break;
+    case "ol-import-entities": { const n = olImportEntities(); ui.importEntitiesConfirm = false; ui.msg = n ? `أُضيفت ${n} جهة للشجرة بنفس ترتيبها — الحسابات والتقارير كما هي.` : "لا توجد جهات جديدة للإضافة."; break; }
+    case "ol-add-entity": { const n = olImportEntities(ds.key); const [k, ...r] = String(ds.key).split(":"); const lv = olActive().find((l) => l.linkKind === k && l.linkId === r.join(":")); if (lv) { ui.selected = lv.id; ui.tab = "info"; } ui.msg = n ? "أُضيفت للشجرة — انقليها لمكانها الصحيح من «تعديل / نقل» إن لزم." : ""; break; }
     case "ol-toggle": ui.collapsed = { ...ui.collapsed, [ds.id]: !ui.collapsed[ds.id] }; break;
     case "ol-expand-all": ui.collapsed = {}; break;
     case "ol-clear-msg": ui.msg = ""; break;
@@ -4496,7 +4564,13 @@ function handleOrgLevelsAction(action, ds) {
       let type = f.typeNewMode ? String(f.typeNew || "").trim() : String(f.type || "").trim();
       const loginId = String(f.loginId || "").trim(), password = String(f.password || "").trim();
       if (!name) { ui.formError = "اكتبي اسم المستوى."; break; }
-      if (f.linkKind && !f.linkId) { ui.formError = "اختاري الجهة الموجودة، أو اختاري \"بدون\"."; break; }
+      if (f.linkKind && f.linkKind !== "new" && !f.linkId) { ui.formError = "اختاري الجهة الموجودة، أو اختاري \"بدون حساب\"."; break; }
+      if (f.linkKind === "new") {
+        const taken = [...(S.units || []), ...(S.departments || []), ...(S.offices || [])].some((x) => String(x.name || "").trim() === name);
+        if (taken) { ui.formError = "يوجد حساب بنفس الاسم — الاسم هو اسم الدخول فلازم يكون مختلفًا."; break; }
+        const created = olCreateEntity(f.newKind || "unit", name, String(f.accPass || "").trim(), String(f.accEmail || "").trim());
+        f.linkKind = created.linkKind; f.linkId = created.id;
+      }
       if (loginId && !password) { ui.formError = "اكتبي كلمة سر لحساب الدخول."; break; }
       if (loginId && olActive().some((l) => l.id !== f.id && (l.loginId || "").trim() === loginId)) { ui.formError = "اسم المستخدم مستخدم لمستوى آخر — اختاري اسمًا مختلفًا."; break; }
       if (type && !levelTypesList().includes(type)) saveSiteTheme({ levelTypes: [...levelTypesList(), type] });
@@ -4513,6 +4587,7 @@ function handleOrgLevelsAction(action, ds) {
         if (f.parentId) ui.collapsed = { ...ui.collapsed, [f.parentId]: false };
       }
       saveOrgLevels(list);
+      olSyncSubtree(ui.selected);
       ui.form = null; ui.formError = "";
       break;
     }
@@ -4574,7 +4649,6 @@ function handleOrgLevelsAction(action, ds) {
     case "ol-import-start": ui.importConfirm = true; break;
     case "ol-import-cancel": ui.importConfirm = false; break;
     case "ol-import-chart": { const n = olImportChart(); ui.importConfirm = false; ui.msg = `تم نقل ${n} اسم من المخطط الحر — حدّدي أنواعها واربطيها بالجهات من "تعديل / نقل". المخطط الحر نفسه لم يتغير.`; break; }
-    case "ol-toggle-free-chart": saveSiteTheme({ hideFreeChart: !freeChartHidden() }); break;
     case "ol-toggle-portal": saveSiteTheme({ portalEnabled: !portalEnabled() }); ui.msg = portalEnabled() ? `بوابة الدخول مفعّلة — تظهر ${portalEntries().length} ${portalEntries().length > 2 && portalEntries().length < 11 ? "جهات" : "جهة"} مجمّعة حسب أنواع المستويات (الجهات اللي لها دخول، وروابطها غير معطّلة).` : "بوابة الدخول موقوفة — صفحة الدخول العادية فقط."; break;
     default: return false;
   }
@@ -4623,7 +4697,7 @@ function entryIconHtml(key, size) {
 // اسم الجهة واسم المستخدم المناسب لها — null لو الرابط لا يطابق شيئًا
 function entryInfo(kind, id) {
   if (kind === "level") { const l = olFind(id); return l && l.loginId ? { name: l.name, username: l.loginId, sub: l.type || "" } : null; }
-  if (kind === "unit") { const u = (S.units || []).find((x) => x.id === id); return u ? { name: u.name, username: u.name, sub: u.role === "center" ? "مركز" : "وحدة" } : null; }
+  if (kind === "unit") { const u = (S.units || []).find((x) => x.id === id); return u ? { name: u.name, username: u.name, sub: u.role === "center" ? "مركز" : u.role === "executive" ? "إدارة عليا" : "وحدة" } : null; }
   if (kind === "dept") { const d = (S.departments || []).find((x) => x.id === id); return d ? { name: d.name, username: d.name, sub: "قسم" } : null; }
   if (kind === "office") { const o = (S.offices || []).find((x) => x.id === id); return o ? { name: o.name, username: o.name, sub: "مكتب إشراف" } : null; }
   return null;
@@ -5587,7 +5661,17 @@ function collectAllReportsFlat() {
 // كل الوحدات (النشطة) التابعة لمكتب إشراف معيّن — عبر office.id <- department.officeId
 // <- department.id <- unit.departmentId، بنفس العلاقة المستخدمة أصلاً بصفحة "الأقسام"
 // الخاصة بمكتب الإشراف (renderDepartmentsPage).
+// وحدات المكتب = وحداته عبر أقسامه (كما كانت) + كل ما تحته بالهيكل المرن لو المكتب مربوط بالشجرة.
 function officeUnits(officeId) {
+  const base = officeUnitsBase(officeId);
+  const scope = officeScopeIds(officeId);
+  const extra = new Set();
+  olActive().filter((l) => l.linkKind === "office" && scope.includes(l.linkId)).forEach((l) => olScopeUnitIds(l.id).forEach((id) => extra.add(id)));
+  if (!extra.size) return base;
+  const have = new Set(base.map((u) => u.id));
+  return base.concat(S.units.filter((u) => extra.has(u.id) && !have.has(u.id)));
+}
+function officeUnitsBase(officeId) {
   const deptIds = S.departments.filter((d) => officeScopeIds(officeId).includes(d.officeId)).map((d) => d.id);
   // تشمل أيضًا "وحدة" تقرير المكتب الذاتي نفسه (role: self_report, officeId
   // مباشرة بلا قسم) — بهذا تظهر تلقائيًا بـ"جميع التقارير" لأي حساب أعلى من
@@ -6682,27 +6766,6 @@ function treeSetEntity(type, id, patch) {
   else if (type === "dept") { S.departments = S.departments.map((x) => x.id === id ? { ...x, ...patch } : x); dataStore.saveDepartments(S.departments); }
   else { S.units = S.units.map((x) => x.id === id ? { ...x, ...patch } : x); dataStore.saveUnits(S.units); }
 }
-function treeAddFormHtml(type, id) {
-  const f = S.ui.treeAddFor;
-  if (!f || f.type !== type || f.id !== id) return "";
-  const opts = type === "exec" ? [["child-office", "تحته"]]
-    : type === "office" ? [["child", "تحته"], ["parent-exec", "فوقه"]]
-    : type === "dept" ? [["child", "تحته"], ["parent", "فوقه"]]
-    : [["parent", "فوقه"]];
-  const kind = opts.some((o) => o[0] === S.ui.treeAddKind) ? S.ui.treeAddKind : opts[0][0];
-  return `<div class="card" style="margin:6px 0;background:${GRAY_BG};">
-    <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px;">
-      ${opts.length > 1 ? opts.map((o) => pillBtn(o[1], { variant: kind === o[0] ? "primary" : "ghost", action: "tree-add-kind", data: { kind: o[0] } })).join("") : ""}
-    </div>
-    <div style="display:flex;gap:6px;flex-wrap:wrap;">
-      ${entityJobTitleFieldHtml("tree-add-name")}
-      <input class="input" id="tree-add-email" style="flex:1;min-width:140px;" type="email" placeholder="الإيميل (اختياري)" />
-      <input class="input" id="tree-add-password" style="flex:1;min-width:110px;" placeholder="الرقم السري (اختياري)" />
-      ${pillBtn("حفظ", { action: "tree-add-save", data: { kind } })}
-      ${pillBtn("إلغاء", { variant: "ghost", action: "tree-add-cancel" })}
-    </div>
-  </div>`;
-}
 function treeEditFormHtml(type, id) {
   const f = S.ui.treeEditFor;
   if (!f || f.type !== type || f.id !== id) return "";
@@ -6718,8 +6781,7 @@ function treeEditFormHtml(type, id) {
   </div>`;
 }
 const STRUCT_OWNER_KIND = { unit: "unit", dept: "department", office: "office" };
-// ===== عرض «القائمة مع لوحة التفاصيل» لصفحة الهيكل والأشخاص =====
-// إضافة جديدة فقط: الشجرة القديمة (structureTreeHtml) تبقى كما هي وتُفتح من زر «العرض القديم».
+// ===== أجزاء مشتركة لصفحة "المستخدمون" (حسابات الجهات، الأشخاص، المسارات) =====
 // لا بيانات جديدة ولا أعمدة: تستخدم نفس الأشخاص والأدوار والمسارات ونفس الإجراءات الموجودة.
 const STRUCT_PANEL_TAGS = {
   admin: { label: "مديرة نظام", bg: "#f3e9ef", fg: "#6b2337" },
@@ -6758,38 +6820,6 @@ function structPanelMoveHtml(type, e) {
   }
   return "";
 }
-function structPanelListHtml(sel) {
-  const offices = S.offices || [];
-  const units = S.units.filter((u) => u.role !== "admin" && u.role !== "executive" && u.role !== "self_report");
-  const execs = S.units.filter((u) => u.role === "executive");
-  const admins = S.units.filter((u) => u.role === "admin");
-  const row = (e, type, depth) => {
-    const key = type + ":" + e.id;
-    const on = sel === key;
-    const n = structPanelPersonsCount(type, e);
-    return `<button type="button" data-action="struct-select" data-key="${esc(key)}" style="display:flex;align-items:center;gap:8px;width:100%;text-align:right;font-family:inherit;cursor:pointer;padding:9px 10px;margin:2px 0;border-radius:12px;border:${on ? `1.5px solid ${ROSE}` : "1.5px solid transparent"};background:${on ? "#f3e9ef" : "transparent"};margin-right:${depth * 16}px;width:calc(100% - ${depth * 16}px);">
-      ${structPanelTagHtml(type, e)}
-      <span style="flex:1;font-size:13px;font-weight:${on ? 800 : 700};color:${on ? ROSE : INK};">${esc(e.name)}</span>
-      ${n ? `<span style="font-size:11px;font-weight:800;color:${ROSE};">${n}</span>` : ""}
-    </button>`;
-  };
-  const unitRow = (u, d) => row(u, "unit", d);
-  const deptRow = (d, depth) => row(d, "dept", depth) + units.filter((u) => u.departmentId === d.id).map((u) => unitRow(u, depth + 1)).join("");
-  const officeRow = (o, depth, guard) => row(o, "office", depth)
-    + offices.filter((x) => x.parentOfficeId === o.id && guard.indexOf(x.id) === -1).map((x) => officeRow(x, depth + 1, guard.concat(o.id))).join("")
-    + S.departments.filter((d) => d.officeId === o.id).map((d) => deptRow(d, depth + 1)).join("");
-  const isRoot = (o) => !o.parentOfficeId || (!offices.some((x) => x.id === o.parentOfficeId) && !execs.some((x) => x.id === o.parentOfficeId));
-  const looseDepts = S.departments.filter((d) => !offices.some((o) => o.id === d.officeId));
-  const looseUnits = units.filter((u) => !S.departments.some((d) => d.id === u.departmentId));
-  const sep = `<div style="height:1px;background:${BORDER};margin:6px 8px;"></div>`;
-  const grp = (t) => `<div style="font-size:11.5px;font-weight:800;color:${SUBTLE};margin:8px 10px 2px;">${t}</div>`;
-  return `${admins.map((u) => row(u, "admin", 0)).join("")}
-    ${execs.map((u) => row(u, "exec", 0) + offices.filter((o) => o.parentOfficeId === u.id).map((o) => officeRow(o, 1, [])).join("")).join("")}
-    ${(admins.length || execs.length) && offices.filter(isRoot).length ? sep : ""}
-    ${offices.filter(isRoot).map((o) => officeRow(o, 0, [])).join("")}
-    ${looseDepts.length ? sep + grp("أقسام بلا مكتب") + looseDepts.map((d) => deptRow(d, 0)).join("") : ""}
-    ${looseUnits.length ? sep + grp("بلا قسم") + looseUnits.map((u) => unitRow(u, 0)).join("") : ""}`;
-}
 function structPanelPathTabHtml(type, e) {
   const list = approvalPathsList().filter((a) => a.ownerKind === type && a.ownerId === e.id);
   const ed = S.ui.apEdit;
@@ -6818,36 +6848,7 @@ function structPanelPathTabHtml(type, e) {
   return `<div class="hint" style="margin-bottom:10px;">المسار الجديد يُحفظ مسودة ولا يعمل قبل «تفعيل». لا يوجد مسار افتراضي.</div>
     ${edMine ? apEditorHtml() : otherEditing ? `<div class="card" style="color:${SUBTLE};font-size:12px;margin-bottom:10px;">يوجد مسار آخر قيد التعديل في صفحة «إعداد مسارات الاعتماد».</div>` : `<div style="margin-bottom:10px;">${pillBtn("مسار جديد لهذه الجهة", { icon: iconPlus(14, "#fff"), action: "struct-ap-new", data: { kind: type, id: e.id } })}</div>`}
     ${rows || (edMine ? "" : `<div class="card" style="text-align:center;color:${SUBTLE};padding:24px;border-style:dashed;font-size:12px;">لا توجد مسارات لهذه الجهة بعد.</div>`)}
-    ${type === "unit" && unitHasCustomPath(e) ? `<div class="hint" style="margin-top:8px;">لهذه الوحدة أيضًا مسار قديم محفوظ ضمن إعداداتها، ويبقى كما هو ويُعدَّل من «العرض القديم».</div>` : ""}`;
-}
-function structPanelDetailHtml(sel) {
-  const [type, ...rest] = String(sel || "").split(":");
-  const id = rest.join(":");
-  const e = sel ? treeEntity(type, id) : null;
-  if (!e) return `<div class="card" style="text-align:center;color:${SUBTLE};padding:40px 20px;border-style:dashed;font-size:13px;">اختاري جهة من القائمة لتظهر تفاصيلها وأشخاصها وصفحاتها ومسارها.</div>`;
-  const key = type + ":" + e.id;
-  const admins = S.units.filter((u) => u.role === "admin");
-  const confirming = S.ui.treeConfirmDel && S.ui.treeConfirmDel.type === type && S.ui.treeConfirmDel.id === e.id;
-  const parent = structPanelParentName(type, e);
-  const actions = confirming
-    ? (type === "admin" && admins.length <= 1
-      ? `<span style="font-size:12px;font-weight:700;color:${DANGER};">لا يمكن حذف آخر حساب لمديرة النظام — أضيفي حساباً آخر أولاً.</span>${pillBtn("حسناً", { variant: "ghost", action: "tree-cancel-delete" })}`
-      : `<span style="font-size:12px;font-weight:700;">حذف "${esc(e.name)}"؟</span>${pillBtn("حذف", { variant: "danger", action: "tree-delete", data: { type, id: e.id } })}${pillBtn("تراجع", { variant: "ghost", action: "tree-cancel-delete" })}`)
-    : `${type === "admin" ? "" : `<button class="icon-btn" style="width:32px;height:32px;border:1px solid ${BORDER}" data-action="tree-add-start" data-type="${type}" data-id="${esc(e.id)}" title="إضافة">${iconPlus(14, INK)}</button>`}
-       <button class="icon-btn" style="width:32px;height:32px;border:1px solid ${BORDER}" data-action="tree-edit-start" data-type="${type}" data-id="${esc(e.id)}" title="تعديل">${iconPencil(14, INK)}</button>
-       <button class="icon-btn" style="width:32px;height:32px;background:${DANGER_BG}" data-action="tree-confirm-delete" data-type="${type}" data-id="${esc(e.id)}" title="حذف">${iconTrash(14, DANGER)}</button>`;
-  return `<div class="card" style="padding:16px;">
-    <div style="display:flex;align-items:flex-start;gap:10px;flex-wrap:wrap;">
-      <div style="flex:1;min-width:180px;">
-        <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">${structPanelTagHtml(type, e)}<span style="font-size:17px;font-weight:800;">${esc(e.name)}</span></div>
-        ${e.email ? `<div style="font-size:11px;color:${SUBTLE};margin-top:3px;">${esc(e.email)}</div>` : ""}
-        ${parent ? `<div style="font-size:12px;color:${SUBTLE};margin-top:4px;">يتبع: ${esc(parent)}</div>` : ""}
-      </div>
-      <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;">${actions}</div>
-    </div>
-    ${structPanelMoveHtml(type, e) ? `<div style="display:flex;gap:8px;align-items:center;margin-top:10px;font-size:12px;font-weight:700;">يتبع ${structPanelMoveHtml(type, e)}</div>` : ""}
-    ${treeAddFormHtml(type, e.id)}${treeEditFormHtml(type, e.id)}
-  </div>`;
+    ${type === "unit" && unitHasCustomPath(e) ? `<div class="hint" style="margin-top:8px;">لهذه الوحدة أيضًا مسار قديم محفوظ ضمن إعداداتها ويبقى يعمل كما هو.</div>` : ""}`;
 }
 // ===== العرض المبسّط: أسئلة بسيطة (الأشخاص ← ماذا يرون ← المسار) + نسخ الإعداد + بطاقة الشخص =====
 // إضافة فقط: العرض السابق (ذو التبويبات) والشجرة القديمة يبقيان ويُفتحان من الأزرار أعلى الصفحة.
@@ -6898,7 +6899,7 @@ function structSimplePeopleHtml(type, e, key) {
       <input class="input" id="sp-pin-${esc(key)}" inputmode="numeric" placeholder="رمز (اختياري)" style="width:120px;" />
       ${pillBtn("إضافة", { icon: iconPlus(14, "#fff"), action: "struct-person-add", data: { kind, id: e.id, key } })}${pillBtn("إلغاء", { variant: "ghost", action: "struct-person-add-cancel" })}
     </div>${err}` : ""}
-    ${roles.length ? "" : `<div style="font-size:11px;color:${SUBTLE};margin-top:6px;">أنشئي دورًا أولًا من «إدارة الأدوار» أسفل الصفحة.</div>`}`;
+    ${roles.length ? "" : `<div style="font-size:11px;color:${SUBTLE};margin-top:6px;">أنشئي دورًا أولًا من زر «الأدوار والصلاحيات» أعلى الصفحة.</div>`}`;
 }
 function structSimpleRoleCardsHtml(type, e) {
   const kind = STRUCT_OWNER_KIND[type];
@@ -6911,7 +6912,7 @@ function structSimpleRoleCardsHtml(type, e) {
   };
   const none = `<button type="button" data-action="struct-set-base-role" data-kind="${esc(kind)}" data-id="${esc(e.id)}" data-role="" style="text-align:right;font-family:inherit;cursor:pointer;padding:12px 14px;border-radius:14px;border:${!baseRoleIdsRaw(e).length ? `2px solid ${ROSE}` : `1px dashed #d9c6cd`};background:${!baseRoleIdsRaw(e).length ? "#f3e9ef" : "#fff"};"><b style="font-size:14px;color:${INK};">بلا دور</b><div style="font-size:11.5px;color:${SUBTLE};margin-top:3px;">لا صفحات عند الدخول المباشر</div></button>`;
   return `<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:10px;">${roles.map(card).join("")}${none}</div>
-    <div style="font-size:11.5px;color:${SUBTLE};margin-top:8px;">لتغيير صفحات الدور أو أزراره نفسه: «إدارة الأدوار» أسفل الصفحة. هنا تختارين فقط.</div>`;
+    <div style="font-size:11.5px;color:${SUBTLE};margin-top:8px;">لتغيير صفحات الدور أو أزراره نفسه: زر «الأدوار والصلاحيات» أعلى الصفحة. هنا تختارين فقط.</div>`;
 }
 function structSimpleCopyHtml(type, e, key) {
   const c = S.ui.structCopy;
@@ -6928,37 +6929,6 @@ function structSimpleCopyHtml(type, e, key) {
     </div>
     ${from ? `<div style="font-size:11.5px;color:${SUBTLE};margin-top:8px;">سيُنسخ: الدور الأساسي${from.baseRoleId ? "" : " (بلا دور)"} + ${nPaths} مسار كمسودات (تحتاج تفعيلًا). لا تُنسخ أسماء الأشخاص، ولا يُحذف شيء من هذه الجهة. إن كان لها دور حاليًا فسيُستبدل.</div>` : ""}
   </div>`;
-}
-function structSimpleStepHead(n, title, extra) {
-  return `<div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;"><span style="width:26px;height:26px;border-radius:50%;background:${ROSE};color:#fff;font-size:13px;font-weight:800;display:flex;align-items:center;justify-content:center;">${n}</span><div style="flex:1;font-size:15px;font-weight:800;">${title}</div>${extra || ""}</div>`;
-}
-function structSimpleDetailHtml(sel) {
-  const [type, ...rest] = String(sel || "").split(":");
-  const id = rest.join(":");
-  const e = sel ? treeEntity(type, id) : null;
-  if (!e) return `<div class="card" style="text-align:center;color:${SUBTLE};padding:40px 20px;border-style:dashed;font-size:13px;">اختاري جهة من القائمة.</div>`;
-  const key = type + ":" + e.id;
-  if (!STRUCT_OWNER_KIND[type]) return structPanelDetailHtml(sel);
-  const confirming = S.ui.treeConfirmDel && S.ui.treeConfirmDel.type === type && S.ui.treeConfirmDel.id === e.id;
-  const menuOpen = S.ui.structMenu === key;
-  const parent = structPanelParentName(type, e);
-  const mv = structPanelMoveHtml(type, e);
-  const menu = menuOpen ? `<div class="card" style="background:${GRAY_BG};margin:10px 0 0;display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
-    ${confirming ? `<span style="font-size:12px;font-weight:700;">حذف "${esc(e.name)}"؟</span>${pillBtn("حذف", { variant: "danger", action: "tree-delete", data: { type, id: e.id } })}${pillBtn("تراجع", { variant: "ghost", action: "tree-cancel-delete" })}`
-      : `${pillBtn("تعديل", { variant: "ghost", action: "tree-edit-start", data: { type, id: e.id } })}${pillBtn("إضافة تحتها/فوقها", { variant: "ghost", action: "tree-add-start", data: { type, id: e.id } })}${type === "unit" ? pillBtn("المسار القديم (رئيسة / مراجعة إضافية)", { variant: "ghost", action: "start-unit-approval-edit", data: { id: e.id } }) : ""}${mv ? `<span style="font-size:12px;font-weight:700;">يتبع</span>${mv}` : ""}${pillBtn("حذف", { variant: "danger", action: "tree-confirm-delete", data: { type, id: e.id } })}`}
-  </div>` : "";
-  const card = (n, title, extra, body) => `<div class="card" style="padding:16px 18px;margin-bottom:12px;">${structSimpleStepHead(n, title, extra)}${body}</div>`;
-  return `<div style="display:flex;align-items:flex-start;gap:10px;flex-wrap:wrap;margin-bottom:12px;">
-      <div style="flex:1;min-width:180px;"><div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">${structPanelTagHtml(type, e)}<span style="font-size:19px;font-weight:800;">${esc(e.name)}</span></div>
-        ${parent ? `<div style="font-size:12px;color:${SUBTLE};margin-top:4px;">يتبع: ${esc(parent)}</div>` : ""}</div>
-      ${pillBtn("نسخ الإعداد من جهة أخرى", { variant: "ghost", action: "struct-copy-open", data: { key } })}
-      <button class="icon-btn" style="width:38px;height:38px;border:1px solid ${BORDER}" data-action="struct-menu" data-key="${esc(key)}" title="المزيد">⋯</button>
-    </div>
-    ${menu}${treeAddFormHtml(type, e.id)}${treeEditFormHtml(type, e.id)}${structSimpleCopyHtml(type, e, key)}
-    ${type === "unit" && S.ui.editingUnitApprovalId === e.id ? `<div style="margin:6px 0 12px;">${unitRowHtml(e)}</div>` : ""}
-    ${card(1, "من الأشخاص؟", S.ui.structPersonAdd === key ? "" : pillBtn("إضافة شخص", { icon: iconPlus(14, "#fff"), action: "struct-person-add-open", data: { key } }), structSimplePeopleHtml(type, e, key))}
-    ${card(2, "ما أنواع الدخول المباشر لهذه الجهة؟", "", structSimpleRoleCardsHtml(type, e))}
-    ${card(3, "من يعتمد تقاريرها؟", "", structPanelPathTabHtml(type, e))}`;
 }
 function structSimplePeopleViewHtml() {
   const roles = rolesList();
@@ -6999,48 +6969,9 @@ function structSimplePeopleViewHtml() {
   }).join("");
   return `<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px;">${chip("all", "الكل")}${roles.map((r) => chip(r.id, esc(r.name))).join("")}${chip("none", "بلا دور ⚠")}</div>
     <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:12px;">${cards || `<div class="card" style="text-align:center;color:${SUBTLE};padding:30px;border-style:dashed;grid-column:1/-1;">لا يوجد أشخاص بهذا الفلتر.</div>`}</div>
-    <div style="font-size:11.5px;color:${SUBTLE};margin-top:10px;">لإضافة شخص جديد: «حسب الجهة»، ثم اختاري الجهة.</div>`;
-}
-function structSimpleToggleHtml(section) {
-  const b = (id, l) => `<button type="button" data-action="struct-section" data-section="${id}" style="font-family:inherit;cursor:pointer;border:none;padding:8px 16px;border-radius:9px;font-size:13px;font-weight:700;background:${section === id ? ROSE : "transparent"};color:${section === id ? "#fff" : INK};">${l}</button>`;
-  return `<div style="display:flex;gap:4px;background:#fff;border:1px solid ${BORDER};padding:4px;border-radius:12px;">${b("struct", "حسب الجهة")}${b("people", "حسب الشخص")}</div>`;
-}
-function structSimpleHtml() {
-  const section = ["people", "roles", "paths"].indexOf(S.ui.structSection) !== -1 ? S.ui.structSection : "struct";
-  if (section === "roles" || section === "paths") {
-    return `<div style="margin-bottom:18px;">${pillBtn("‹ رجوع للهيكل والأشخاص", { variant: "ghost", action: "struct-section", data: { section: "struct" } })}<div style="height:10px;"></div>
-      ${section === "roles" ? renderRolesManage() : (S.isAdmin ? renderApprovalPathsSetup() : `<div class="card" style="text-align:center;padding:30px;">هذه الصفحة لمديرة النظام فقط.</div>`)}</div>`;
-  }
-  const sel = S.ui.structSel || "";
-  const empty = !(S.offices || []).length && !S.departments.length && !S.units.length;
-  const header = `<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-bottom:12px;">
-      <div style="font-size:15px;font-weight:800;display:flex;align-items:center;gap:8px;">${iconLayers(18, ROSE)} الهيكل والأشخاص</div>
-      <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;">${structSimpleToggleHtml(section)}${section === "struct" ? pillBtn("إضافة", { icon: iconPlus(14, "#fff"), action: "tree-add-root", data: { type: "office" } }) : ""}</div>
-    </div>
-    ${S.ui.treeAddRoot ? `<div class="card" style="margin-bottom:10px;background:${GRAY_BG};"><div style="display:flex;gap:6px;flex-wrap:wrap;">
-      ${entityJobTitleFieldHtml("tree-root-name")}
-      <input class="input" id="tree-root-email" style="flex:1;min-width:140px;" type="email" placeholder="الإيميل (اختياري)" />
-      <input class="input" id="tree-root-password" style="flex:1;min-width:110px;" placeholder="الرقم السري (اختياري)" />
-      ${pillBtn("حفظ", { action: "tree-root-save", data: { type: S.ui.treeAddRoot } })}${pillBtn("إلغاء", { variant: "ghost", action: "tree-root-cancel" })}
-    </div></div>` : ""}`;
-  const footer = `<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:14px;">
-      ${pillBtn("إدارة الأدوار ›", { variant: "ghost", action: "struct-section", data: { section: "roles" } })}${S.isAdmin ? pillBtn("إدارة المسارات ›", { variant: "ghost", action: "struct-section", data: { section: "paths" } }) : ""}
-    </div>`;
-  if (section === "people") return `<div style="margin-bottom:18px;">${header}${structSimplePeopleViewHtml()}${footer}</div>`;
-  return `<div style="margin-bottom:18px;">${header}${empty ? `<div class="card" style="text-align:center;color:${SUBTLE};padding:30px;border-style:dashed;">لا يوجد شيء بعد — اضغطي "إضافة" لبدء أول عنصر.</div>` : `<div style="display:flex;gap:14px;flex-wrap:wrap;align-items:flex-start;">
-      <div class="card" style="flex:1 1 250px;max-width:100%;padding:8px;">${structPanelListHtml(sel)}</div>
-      <div style="flex:2 1 380px;min-width:0;">${structSimpleDetailHtml(sel)}</div></div>`}${footer}</div>`;
+    <div style="font-size:11.5px;color:${SUBTLE};margin-top:10px;">لإضافة شخص جديد: «الهيكل»، ثم اختاري الجهة ← تبويب «الأشخاص».</div>`;
 }
 
-function renderDepartmentsManage() {
-  return `
-  <div class="page-wrap"><div class="page-inner">
-    ${topBarHtml({ title: "المستخدمون", subtitle: USERS_HUB_SUBTITLE, icon: iconUser(18, ROSE), backAction: "nav-back-admin" })}
-    ${accountsHubTabBarHtml("units-manage")}
-
-${structSimpleHtml()}
-  </div></div>`;
-}
 
 function unitRowHtml(u) {
   const isActive = u.status === "active";
@@ -7175,7 +7106,6 @@ const SENSITIVE_PAGE_IDS = [
   "site-settings",
   "admin-reports", "indicators-manage", "goals-manage", "sections-manage",
   "field-schemas-manage", "departments-list",
-  "org-chart",
 ];
 // أسماء عرض مخصّصة لمجموعات الصفحات بقائمة صلاحيات "حسابات إضافية" — فقط
 // حيث اسم المجموعة الأصلي (المستخدم بالشريط الجانبي الحقيقي) غير واضح هنا.
@@ -7442,27 +7372,6 @@ function jobTitleTemplateRowHtml(t) {
 // الصريح: أداة تخطيط حرة بدون حسابات دخول، غير هذي الأربعة).
 // ثلاثة تبويبات واضحة: الهيكل (من يوجد بالنظام) — الأشخاص (حسابات بمسميات) — الصلاحيات
 // (ماذا يرى كل حساب، ومعها القوالب الجاهزة كتبويب فرعي).
-const ACCOUNTS_HUB_TABS = [
-  { view: "units-manage", label: "الهيكل والأشخاص", icon: "layers" },
-  { view: "org-chart", label: "المخطط الحر", icon: "gauge" },
-  { view: "org-levels", label: "الهيكل المرن", icon: "layers" },
-];
-const USERS_HUB_SUBTITLE = "إدارة المستخدمين وصلاحياتهم في النظام مع إمكانية إضافة وحذف وتعديل بياناتهم";
-function usersHubIcon(name, active) {
-  const c = active ? ROSE : SUBTLE;
-  return name === "layers" ? iconLayers(16, c) : name === "user" ? iconUser(16, c) : name === "key" ? iconKey(16, c) : iconTarget(16, c);
-}
-function accountsHubTabBarHtml(activeView) {
-  return `<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:10px;margin-bottom:16px;">
-    ${ACCOUNTS_HUB_TABS.filter((t) => !(t.view === "org-chart" && freeChartHidden() && activeView !== "org-chart")).map((t) => {
-      const active = t.view === activeView || (t.also || []).indexOf(activeView) !== -1;
-      return `<button type="button" data-action="nav-to" data-view="${esc(t.view)}" style="display:flex;align-items:center;justify-content:space-between;gap:10px;padding:8px 12px;border-radius:12px;cursor:pointer;font-family:inherit;background:#fff;border:1px solid ${active ? ROSE : BORDER};box-shadow:${active ? "0 4px 14px rgba(120,30,50,.12)" : "0 2px 8px rgba(0,0,0,.04)"};">
-        <span style="font-size:12.5px;font-weight:800;color:${active ? ROSE : INK};">${esc(t.label)}</span>
-        <span style="width:30px;height:30px;border-radius:9px;background:${active ? DANGER_BG : GRAY_BG};display:flex;align-items:center;justify-content:center;flex-shrink:0;">${usersHubIcon(t.icon, active)}</span>
-      </button>`;
-    }).join("")}
-  </div>`;
-}
 
 // ---- المرحلة 2: صلاحيات الأدوار + استثناءات الأشخاص + سجل التغييرات ----
 // الصلاحيات تُخزَّن بـ roles.permissions = { pages:[], actions:[] }، واستثناء الشخص بـ
@@ -7804,7 +7713,7 @@ function renderRolesManage() {
       ${roleForm}${roleRows}
     </div>
     <div class="card" style="background:${BLUE_BG};border:1px solid #cfe0f5;">
-      <div style="font-size:12px;color:#3a5a85;">الأشخاص يُدارون من تبويب «الهيكل والأشخاص»: اضغطي أيقونة 👥 بجانب أي مكتب أو قسم أو وحدة أو مركز. (${personsList().length} شخص مسجّل حاليًا)</div>
+      <div style="font-size:12px;color:#3a5a85;">الأشخاص يُدارون من «الهيكل»: اختاري الجهة ← تبويب «الأشخاص». (${personsList().length} شخص مسجّل حاليًا)</div>
     </div>
     ${permLogCardHtml()}
   `;
@@ -10443,9 +10352,9 @@ function attachClickListener() {
           S.reportTabs = dataStore.getReportTabs(); S.ui.rtEdit = null; S.ui.rtMsg = ""; S.ui.rtDeleteId = null;
           if (dbConnected()) refreshReportTabsFromDb().then(() => { if (S.view === "report-tabs-manage") render(); });
         }
-        if (navView === "org-chart" && dbConnected()) refreshOrgChartFromDb().then(() => { if (S.view === "org-chart") render(); }).catch(() => {});
-        if (navView === "org-levels") { S.roles = dataStore.getRoles(); S.approvalPaths = dataStore.getApprovalPaths(); if (dbConnected()) Promise.all([refreshOrgLevelsFromDb(), refreshRolesPersonsFromDb(), refreshApprovalPathsFromDb(), refreshOrgChartFromDb()]).then(() => { if (S.view === "org-levels") render(); }).catch(() => {}); }
-        if (navView === "units-manage") { S.roles = dataStore.getRoles(); S.persons = dataStore.getPersons(); S.approvalPaths = dataStore.getApprovalPaths(); S.ui.apEdit = null; S.ui.rolePermEditId = null; }
+        if (navView === "org-levels" || navView === "org-chart") navView = "units-manage";
+        if (navView === "units-manage") { S.roles = dataStore.getRoles(); S.approvalPaths = dataStore.getApprovalPaths(); if (dbConnected()) Promise.all([refreshOrgLevelsFromDb(), refreshRolesPersonsFromDb(), refreshApprovalPathsFromDb(), refreshOrgChartFromDb()]).then(() => { if (S.view === "org-levels" || S.view === "units-manage") render(); }).catch(() => {}); }
+        if (navView === "units-manage") { S.persons = dataStore.getPersons(); S.ui.apEdit = null; S.ui.rolePermEditId = null; }
         if (navView === "platform-users-manage" || navView === "platform-permissions-manage" || navView === "job-title-templates") {
           S.platformUsers = dataStore.getPlatformUsers();
           S.jobTitleTemplates = dataStore.getJobTitleTemplates();
@@ -11110,73 +11019,6 @@ function attachClickListener() {
         if (S.isAdmin) { S.currentUnitEntryMode = ds.mode === "head" ? "head" : ds.mode === "extra" ? "extra" : "admin"; render(); }
         break;
       }
-      /* ===== مخطط الهيكل التنظيمي (تخطيط حر — راجع renderOrgChartPage) ===== */
-      case "org-chart-start-add-root": S.ui.orgChartAddingRoot = true; render(); break;
-      case "org-chart-cancel-add-root": S.ui.orgChartAddingRoot = false; render(); break;
-      case "org-chart-save-add-root": {
-        const el = document.getElementById("org-chart-new-root");
-        const title = (el && el.value || "").trim();
-        if (!title) break;
-        const nodes = currentOrgChart();
-        S.orgChart = [...nodes, { id: uid("node"), title, children: [] }];
-        dataStore.saveOrgChart(S.orgChart);
-        S.ui.orgChartAddingRoot = false;
-        render();
-        break;
-      }
-      case "org-chart-start-add-child": S.ui.orgChartAddingParentId = ds.id; render(); break;
-      case "org-chart-cancel-add-child": S.ui.orgChartAddingParentId = null; render(); break;
-      case "org-chart-save-add-child": {
-        const el = document.getElementById(`org-chart-new-child-${ds.id}`);
-        const title = (el && el.value || "").trim();
-        if (!title) break;
-        const parentNode = orgChartFindNode(currentOrgChart(), ds.id);
-        if (!parentNode) break;
-        parentNode.children = [...(parentNode.children || []), { id: uid("node"), title, children: [] }];
-        dataStore.saveOrgChart(S.orgChart);
-        S.ui.orgChartAddingParentId = null;
-        render();
-        break;
-      }
-      case "org-chart-start-edit": {
-        const node = orgChartFindNode(currentOrgChart(), ds.id);
-        if (!node) break;
-        S.ui.orgChartEditingId = ds.id; S.ui.orgChartEditValue = node.title; render();
-        break;
-      }
-      case "org-chart-cancel-edit": S.ui.orgChartEditingId = null; render(); break;
-      case "org-chart-save-edit": {
-        const el = document.getElementById(`org-chart-edit-${ds.id}`);
-        const title = (el && el.value || "").trim();
-        if (!title) break;
-        const node = orgChartFindNode(currentOrgChart(), ds.id);
-        if (!node) break;
-        node.title = title;
-        dataStore.saveOrgChart(S.orgChart);
-        S.ui.orgChartEditingId = null;
-        render();
-        break;
-      }
-      case "org-chart-confirm-delete": S.ui.orgChartConfirmDeleteId = ds.id; render(); break;
-      case "org-chart-cancel-delete": S.ui.orgChartConfirmDeleteId = null; render(); break;
-      case "org-chart-delete": {
-        const nodes = currentOrgChart();
-        const arr = orgChartFindParentArray(nodes, ds.id);
-        if (arr) {
-          const idx = arr.findIndex((n) => n.id === ds.id);
-          if (idx !== -1) arr.splice(idx, 1);
-        }
-        dataStore.saveOrgChart(S.orgChart);
-        S.ui.orgChartConfirmDeleteId = null;
-        render();
-        break;
-      }
-      case "org-chart-toggle-collapse": {
-        S.ui.orgChartCollapsed = S.ui.orgChartCollapsed || {};
-        S.ui.orgChartCollapsed[ds.id] = !S.ui.orgChartCollapsed[ds.id];
-        render();
-        break;
-      }
       case "open-department-preview": {
         // اطلاع مديرة النظام على واجهة "قسمي" الحقيقية لقسم معيّن — نفس الصفحة تمامًا.
         S.adminPreviewOrigin = "departments-list";
@@ -11439,12 +11281,18 @@ function attachClickListener() {
         else { S.units = S.units.map((u) => u.id === ds.id ? { ...u, baseRoleId: rid } : u); dataStore.saveUnits(S.units); }
         render(); break;
       }
-      case "struct-menu": S.ui.structMenu = S.ui.structMenu === ds.key ? null : ds.key; render(); break;
       case "struct-person-menu": S.ui.structPersonMenu = S.ui.structPersonMenu === ds.id ? null : ds.id; S.ui.personConfirmDeleteId = null; render(); break;
       case "struct-person-add-open": S.ui.structPersonAdd = ds.key; S.ui.structPersonError = null; render(); break;
       case "struct-person-add-cancel": S.ui.structPersonAdd = null; S.ui.structPersonError = null; render(); break;
       case "struct-people-filter": S.ui.structPeopleFilter = ds.f; render(); break;
-      case "struct-open-entity": S.ui.structSel = ds.key; S.ui.structSection = "struct"; render(); break;
+      case "struct-open-entity": {
+        // من "كل الأشخاص": يفتح جهة الشخص في الهيكل (تبويب الأشخاص)، ويضيفها للشجرة لو ما كانت فيها
+        const [k0, ...r0] = String(ds.key).split(":"); const k = k0 === "exec" ? "unit" : k0; const id = r0.join(":");
+        let lv = olActive().find((l) => l.linkKind === k && l.linkId === id);
+        if (!lv) { olImportEntities(k + ":" + id); lv = olActive().find((l) => l.linkKind === k && l.linkId === id); }
+        const ui = olUi(); ui.section = ""; ui.tab = "people"; if (lv) ui.selected = lv.id;
+        render(); break;
+      }
       case "struct-copy-open": S.ui.structCopy = { key: ds.key, from: "" }; render(); break;
       case "struct-copy-cancel": S.ui.structCopy = null; render(); break;
       case "struct-copy-confirm": {
@@ -11461,26 +11309,8 @@ function attachClickListener() {
         addPermLog("copy-config", toId, apOwnerName(type, toId), `نسخ إعداد من «${from.name}»: الدور الأساسي + ${clones.length} مسار (مسودات)`);
         S.ui.structCopy = null; render(); break;
       }
-      case "struct-select": S.ui.structSel = ds.key; S.ui.rolePermEditId = null; S.ui.personPermEditId = null; S.ui.rolePermForm = null; S.ui.apEdit = null; render(); break;
-      case "struct-section": {
-        S.ui.structSection = ds.section;
-        S.ui.apEdit = null; S.ui.rolePermEditId = null; S.ui.personPermEditId = null; S.ui.rolePermForm = null;
-        if (ds.section === "roles") {
-          S.roles = dataStore.getRoles(); S.persons = dataStore.getPersons();
-          if (dbConnected()) Promise.all([refreshRolesPersonsFromDb(), refreshPermLogFromDb()]).then(() => { if (S.ui.structSection === "roles") render(); });
-        }
-        if (ds.section === "paths") {
-          S.roles = dataStore.getRoles(); S.persons = dataStore.getPersons(); S.approvalPaths = dataStore.getApprovalPaths();
-          if (dbConnected()) Promise.all([refreshRolesPersonsFromDb(), refreshApprovalPathsFromDb()]).then(() => { if (S.ui.structSection === "paths") render(); });
-        }
-        render(); break;
-      }
       case "struct-ap-new": S.ui.apEdit = { id: null, error: "", draft: { name: "", ownerKind: ds.kind, ownerId: ds.id, periodType: "", authorRoleId: "", stages: [] } }; S.ui.apMsg = null; render(); break;
-      case "tree-add-start": S.ui.treeAddFor = { type: ds.type, id: ds.id }; S.ui.treeEditFor = null; S.ui.treeAddKind = null; render(); break;
-      case "tree-add-cancel": S.ui.treeAddFor = null; render(); break;
-      case "tree-add-kind": S.ui.treeAddKind = ds.kind; render(); break;
-      case "tree-toggle": { const c = { ...(S.ui.treeCollapsed || {}) }; c[ds.key] = !c[ds.key]; S.ui.treeCollapsed = c; render(); break; }
-      case "tree-edit-start": S.ui.treeEditFor = { type: ds.type, id: ds.id }; S.ui.treeAddFor = null; render(); break;
+      case "tree-edit-start": S.ui.treeEditFor = { type: ds.type, id: ds.id }; render(); break;
       case "tree-edit-cancel": S.ui.treeEditFor = null; render(); break;
       case "tree-edit-save": {
         const nm = (document.getElementById("tree-edit-name").value || "").trim();
@@ -11495,76 +11325,10 @@ function attachClickListener() {
       case "tree-confirm-delete": S.ui.treeConfirmDel = { type: ds.type, id: ds.id }; render(); break;
       case "tree-cancel-delete": S.ui.treeConfirmDel = null; render(); break;
       case "tree-delete": {
-        if (ds.type === "office") {
-          S.offices = (S.offices || []).filter((o) => o.id !== ds.id).map((o) => o.parentOfficeId === ds.id ? { ...o, parentOfficeId: "" } : o);
-          S.departments = S.departments.map((d) => d.officeId === ds.id ? { ...d, officeId: "" } : d);
-          dataStore.saveOffices(S.offices); dataStore.saveDepartments(S.departments);
-        } else if (ds.type === "dept") {
-          S.departments = S.departments.filter((d) => d.id !== ds.id);
-          S.units = S.units.map((u) => u.departmentId === ds.id ? { ...u, departmentId: "" } : u);
-          dataStore.saveDepartments(S.departments); dataStore.saveUnits(S.units);
-        } else {
-          S.units = S.units.filter((u) => u.id !== ds.id); delete S.reports[ds.id];
-          dataStore.saveUnits(S.units); dataStore.deleteReports(ds.id);
-        }
+        treeDeleteEntity(ds.type, ds.id);
+        // المستوى المربوط بالجهة المحذوفة يبقى بالشجرة لكن بدون ربط
+        if (currentOrgLevels().some((l) => l.linkId === ds.id)) saveOrgLevels(currentOrgLevels().map((l) => (l.linkId === ds.id ? { ...l, linkKind: "", linkId: "" } : l)));
         S.ui.treeConfirmDel = null; render();
-        break;
-      }
-      case "tree-add-root": S.ui.treeAddRoot = ds.type; render(); break;
-      case "tree-root-cancel": S.ui.treeAddRoot = null; render(); break;
-      case "tree-root-save": {
-        const nm = (document.getElementById("tree-root-name").value || "").trim();
-        if (!nm) break;
-        const perms0 = resolveJobTitleForEntity(nm);
-        const base = { password: (document.getElementById("tree-root-password").value || "").trim(), email: (document.getElementById("tree-root-email").value || "").trim(), status: "active", createdAt: Date.now(), allowedPages: perms0.allowedPages, allowedActions: perms0.allowedActions, name: nm };
-        if (ds.type === "exec") { S.units = [...S.units, { ...base, id: uid("exec"), role: "executive", departmentId: "" }]; dataStore.saveUnits(S.units); }
-        else if (ds.type === "dept") { S.departments = [...S.departments, { ...base, id: uid("dept"), officeId: "" }]; dataStore.saveDepartments(S.departments); }
-        else { S.offices = [...(S.offices || []), { ...base, id: uid("office"), parentOfficeId: "" }]; dataStore.saveOffices(S.offices); }
-        S.ui.treeAddRoot = null; render();
-        break;
-      }
-      case "tree-add-save": {
-        const f = S.ui.treeAddFor; const el = document.getElementById("tree-add-name");
-        const name = el ? (el.value || "").trim() : "";
-        if (!f || !name) break;
-        const perms1 = resolveJobTitleForEntity(name);
-        const base = { password: (document.getElementById("tree-add-password").value || "").trim(), email: (document.getElementById("tree-add-email").value || "").trim(), status: "active", createdAt: Date.now(), allowedPages: perms1.allowedPages, allowedActions: perms1.allowedActions };
-        if (f.type === "exec" && ds.kind === "child-office") {
-          S.offices = [...(S.offices || []), { ...base, id: uid("office"), name, parentOfficeId: f.id }];
-          dataStore.saveOffices(S.offices);
-        } else if (f.type === "office" && ds.kind === "parent-exec") {
-          const eid = uid("exec");
-          S.units = [...S.units, { ...base, id: eid, name, role: "executive", departmentId: "" }];
-          S.offices = (S.offices || []).map((o) => o.id === f.id ? { ...o, parentOfficeId: eid } : o);
-          dataStore.saveUnits(S.units); dataStore.saveOffices(S.offices);
-        } else if (f.type === "office" && ds.kind === "child") {
-          S.departments = [...S.departments, { ...base, id: uid("dept"), name, officeId: f.id }];
-          dataStore.saveDepartments(S.departments);
-        } else if (f.type === "office" && ds.kind === "child-office") {
-          S.offices = [...(S.offices || []), { ...base, id: uid("office"), name, parentOfficeId: f.id }];
-          dataStore.saveOffices(S.offices);
-        } else if (f.type === "office" && ds.kind === "parent") {
-          const o0 = (S.offices || []).find((o) => o.id === f.id);
-          const oid = uid("office");
-          S.offices = [...(S.offices || []).map((o) => o.id === f.id ? { ...o, parentOfficeId: oid } : o), { ...base, id: oid, name, parentOfficeId: o0 ? (o0.parentOfficeId || "") : "" }];
-          dataStore.saveOffices(S.offices);
-        } else if (f.type === "dept" && ds.kind === "child") {
-          S.units = [...S.units, { ...base, id: uid("unit"), name, role: "unit", departmentId: f.id }];
-          dataStore.saveUnits(S.units);
-        } else if (f.type === "dept" && ds.kind === "parent") {
-          const oid = uid("office");
-          S.offices = [...(S.offices || []), { ...base, id: oid, name, parentOfficeId: "" }];
-          S.departments = S.departments.map((d) => d.id === f.id ? { ...d, officeId: oid } : d);
-          dataStore.saveOffices(S.offices); dataStore.saveDepartments(S.departments);
-        } else if (f.type === "unit" && ds.kind === "parent") {
-          const u0 = S.units.find((u) => u.id === f.id);
-          const old = u0 && S.departments.find((d) => d.id === u0.departmentId);
-          const did = uid("dept");
-          S.departments = [...S.departments, { ...base, id: did, name, officeId: old ? (old.officeId || "") : "" }];
-          S.units = S.units.map((u) => u.id === f.id ? { ...u, departmentId: did } : u);
-          dataStore.saveDepartments(S.departments); dataStore.saveUnits(S.units);
-        }
-        S.ui.treeAddFor = null; render();
         break;
       }
       case "add-department": {
@@ -12611,7 +12375,7 @@ function boot() {
     if (S.entryLink || portalEnabled()) Promise.all([refreshUnitsAndDepartmentsFromDb(), refreshOrgLevelsFromDb()]).then(() => { applyEntryHomeScreen(); if (!S.currentUser) render(); }).catch(() => {});
   });
   if (dbConnected()) refreshDashboardConfigFromDb().then(() => render()).catch(() => {});
-  if (dbConnected()) refreshOrgLevelsFromDb().then(() => { if (S.view === "org-levels") render(); }).catch(() => {});
+  if (dbConnected()) refreshOrgLevelsFromDb().then(() => { if (S.view === "org-levels" || S.view === "units-manage") render(); }).catch(() => {});
 }
 
 document.addEventListener("DOMContentLoaded", boot);
