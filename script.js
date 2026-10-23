@@ -2022,9 +2022,18 @@ const appEl = document.getElementById("app");
 function render() {
   syncReportTabCatalog();
   let html = "";
+  // صفحة رئيسية غير ممنوحة بالدور: ننقل لأول صفحة مسموحة (لكل الحسابات اللي صفحاتها من الأدوار).
+  // مستثنى: محرر التقرير المفتوح من داخل صفحة، وصندوق "بانتظار مراجعتي" لمن هو مرحلة بمسار.
+  if (S.currentUser && S.platformUserAllowedPages && SIDEBAR_PAGE_VIEW_IDS().includes(S.view) && !pageAllowedForView(S.view)
+      && S.view !== "unit-report" && !(S.view === "custom-path-inbox" && !S.isAdmin && userInAnyCustomPath())) {
+    const pref = S.isAdmin && pageAllowedForView("units-manage") && !pageAllowedForView("dashboard") ? SIDEBAR_PAGES.find((p) => p.id === "units-manage") : null;
+    const first = pref || SIDEBAR_PAGES.find((p) => pageAllowedForView(p.id));
+    S.view = first ? (first.id === "dashboard" && S.isExecutive ? "executive-dashboard" : first.id) : "no-pages";
+    if (first && first.group === "unit-home" && typeof ensureUnitContextForNav === "function") ensureUnitContextForNav(first.id);
+  }
   if (S.view === "login" || !S.currentUser) {
     html = renderLogin();
-  } else if (!S.isAdmin && !S.isExecutive && !S.platformUserAllowedPages && S.view !== "unit-role-select" && S.view !== "platform-user-role-select" && !(userInAnyApStage() && ["custom-path-inbox", "full-report", "unit-report"].includes(S.view))) {
+  } else if (S.view === "no-pages" || (!S.isAdmin && !S.isExecutive && !S.platformUserAllowedPages && S.view !== "unit-role-select" && S.view !== "platform-user-role-select" && !(userInAnyApStage() && ["custom-path-inbox", "full-report", "unit-report"].includes(S.view)))) {
     html = shellWrap(`<div class="page-wrap"><div class="page-inner narrow"><div class="card" style="text-align:center;color:${SUBTLE};padding:44px 20px;">
       <div style="font-size:15px;font-weight:800;color:${INK};margin-bottom:8px;">لم تُحدَّد صلاحيات لهذا الحساب بعد</div>
       <div style="font-size:12.5px;">تواصلي مع مديرة النظام لتفعيل الصفحات المناسبة لك.</div></div></div></div>`);
@@ -2297,6 +2306,7 @@ function sidebarNavIcon(key, size, color) {
 // عليا/مديرة النظام). المعرّفات القديمة تُعتبر نفس الصفحة: تُدمج بـ"dashboard".
 const MERGED_PAGE_MAP = { "unit-dashboard": "dashboard", "office-dashboard": "dashboard", "executive-dashboard": "dashboard", "office-curation": "department-curation", "unit-overview": "dashboard", "department-overview": "dashboard", "admin-reports": "browse-structure" };
 const MERGED_DASHBOARD_IDS = Object.keys(MERGED_PAGE_MAP);
+function SIDEBAR_PAGE_VIEW_IDS() { return [...SIDEBAR_PAGES.map((p) => p.id), ...MERGED_DASHBOARD_IDS, "org-levels", "org-chart"]; }
 // "اعتماد أبرز النتائج والتوصيات" كذلك صفحة واحدة: القسم يشوف نتائج قسمه، والمكتب
 // نتائج وحداته، ومديرة النظام تبدّل بين قسم/مكتب من أعلى الصفحة.
 function normalizeDashboardPages(arr) {
@@ -2336,7 +2346,7 @@ function computeVisibleSidebarPagesRaw() {
     // "جميع التقارير") — فتختفي بقية الصفحات الممنوحة فعليًا من الشريط الجانبي
     // بالكامل. الدخول إليها بنفسه يتكفّل الآن بضبط الوحدة المناسبة تلقائيًا
     // (راجع ensureUnitContextForNav) بدل الاعتماد على وجودها مسبقًا.
-    return SIDEBAR_PAGES.filter((p) => (S.platformUserAllowedPages.includes(p.id) || (p.id === "custom-path-inbox" && userInAnyCustomPath())));
+    return SIDEBAR_PAGES.filter((p) => (S.platformUserAllowedPages.includes(p.id) || (p.id === "custom-path-inbox" && !S.isAdmin && userInAnyCustomPath())));
   }
   // قرار نجود: أي حساب (غير مديرة النظام والإدارة العليا) ما حُددت له صفحات = ما يظهر له شيء.
   if (!S.isAdmin && !S.isExecutive) return userInAnyApStage() ? SIDEBAR_PAGES.filter((p) => p.id === "custom-path-inbox") : [];
@@ -2352,9 +2362,9 @@ function computeVisibleSidebarPagesRaw() {
     // اشتراط مسبق بوحدة/قسم محدّد (ensureUnitContextForNav يتكفّل بضبط الوحدة
     // تلقائيًا عند الدخول المباشر — راجع case "nav-to").
     // "تصفّح الهيكل" يحل محل الصفحات الأربع (مكاتب الإشراف/الأقسام/الوحدات/المراكز) بالشريط — الصفحات نفسها باقية.
-    return SIDEBAR_PAGES.filter((p) => p.group !== "unit-extra" && !["departments-list", "admin-reports"].includes(p.id));
+    return SIDEBAR_PAGES.filter((p) => ADMIN_FIXED_PAGES.includes(p.id));
   } else if (S.isExecutive) {
-    return SIDEBAR_PAGES.filter((p) => p.group === "الإدارة العليا" || p.id === "executive-summary" || p.id === "executive-final-report" || p.id === "all-reports");
+    return [];
   }
   // لا توجد قوائم صفحات افتراضية ثابتة لأي حساب: الصفحات تأتي من الدور فقط (قرار نجود).
   return [];
@@ -3188,6 +3198,39 @@ function doLoginPlatformUser(pu) {
 // عبر doLoginPlatformUser) — تقييد الحساب الإضافي نفسه له الأولوية دائمًا؛ ولو
 // ما فيه، يرث القيود المضبوطة على الحساب الأساسي نفسه. أي حساب لم تُخصَّص له
 // صلاحيات بعد (القيمة الافتراضية: مصفوفة فاضية) يبقى بلا أي قيد تمامًا كالسابق.
+// ===== بدون صفحات افتراضية لمديرة النظام والإدارة العليا (قرار نجود) =====
+// كل حساب يأخذ صفحاته وأزراره من أدواره (اتحاد كل الأدوار المختارة له).
+// مديرة النظام لها دائمًا "المستخدمون" و"إعدادات الموقع" فقط، حتى لا يُقفل النظام.
+const ADMIN_FIXED_PAGES = ["units-manage", "site-settings"];
+function accountRolesPerms(entity) {
+  const out = { pages: [], actions: [], buttons: [], count: 0 };
+  baseRoleIdsOf(entity).forEach((id) => {
+    const role = rolesList().find((r) => r.id === id); if (!role) return;
+    const p = rolePermsOf(role); out.count++;
+    p.pages.forEach((x) => { if (!out.pages.includes(x)) out.pages.push(x); });
+    p.actions.forEach((x) => { if (!out.actions.includes(x)) out.actions.push(x); });
+    p.buttons.forEach((x) => { if (!out.buttons.includes(x)) out.buttons.push(x); });
+  });
+  return out;
+}
+function applyAdminOrExecRoles(entity, isAdminAccount) {
+  if (S.currentPlatformUserJobTitle) return; // حساب "مسمى وظيفي" له صفحاته الخاصة
+  const rp = accountRolesPerms(entity);
+  let pages = rp.pages;
+  if (!rp.count && !isAdminAccount && entity && Array.isArray(entity.allowedPages) && entity.allowedPages.length) pages = entity.allowedPages; // صفحات محفوظة سابقًا على الحساب نفسه
+  pages = normalizeDashboardPages(pages);
+  if (isAdminAccount) ADMIN_FIXED_PAGES.forEach((x) => { if (!pages.includes(x)) pages.push(x); });
+  S.platformUserAllowedPages = pages;
+  if (!isAdminAccount && rp.actions.length) S.platformUserAllowedActions = rp.actions;
+  const chips = rp.buttons.filter((b) => b.indexOf("notify:") !== 0);
+  if (!isAdminAccount && chips.length) S.platformUserAllowedButtons = chips;
+}
+function pageAllowedForView(view) {
+  const list = S.platformUserAllowedPages || [];
+  const alias = view === "org-levels" || view === "org-chart" ? "units-manage" : (MERGED_PAGE_MAP[view] || view);
+  return list.includes(view) || list.includes(alias);
+}
+function canManageUsers() { return !!S.currentUser && (S.isAdmin || pageAllowedForView("units-manage")); }
 function applyScopedAccountPermissions(entity) {
   if (!entity) return;
   // دور الحساب الأساسي (يُضبط من «المستخدمون ← الهيكل ← البيانات والحساب») له الأولوية على حقول الصفحات القديمة.
@@ -3226,7 +3269,9 @@ function doLogin(user) {
     const reports = {};
     S.units.forEach((u) => { reports[u.id] = dataStore.getReports(u.id); });
     S.reports = reports;
-    S.view = "dashboard";
+    const adminEnt = S.units.find((u) => u.id === user.id) || S.units.find((u) => u.role === "admin" && u.name === user.name);
+    applyAdminOrExecRoles(adminEnt, true);
+    S.view = S.platformUserAllowedPages && S.platformUserAllowedPages.includes("dashboard") ? "dashboard" : "units-manage";
   } else if (S.isDepartmentUser) {
     S.currentDepartmentId = user.departmentId;
     applyScopedAccountPermissions(S.departments.find((d) => d.id === S.currentDepartmentId));
@@ -3244,10 +3289,9 @@ function doLogin(user) {
     S.units.forEach((u) => { reports[u.id] = dataStore.getReports(u.id); });
     S.reports = reports;
     S.view = "executive-dashboard";
-    // إضافة: لو مديرة النظام حدّدت صفحات لحساب الإدارة العليا تُطبَّق عليه (مثل بقية
-    // الحسابات)؛ ولو ما حدّدت شيئًا يبقى على الوضع السابق تمامًا.
-    applyScopedAccountPermissions(S.units.find((u) => u.id === user.unitId));
-    if (S.platformUserAllowedPages && !S.platformUserAllowedPages.includes("dashboard")) S.view = S.platformUserAllowedPages[0];
+    // بدون صفحات افتراضية: صفحاتها من أدوارها فقط (حساب مستوى من الهيكل المرن تُضبط صفحاته بعدها).
+    applyAdminOrExecRoles(user.levelId ? null : (S.units.find((u) => u.id === user.unitId) || S.units.find((u) => u.role === "executive" && u.name === user.name)), false);
+    if (S.platformUserAllowedPages && !S.platformUserAllowedPages.includes("dashboard")) S.view = S.platformUserAllowedPages[0] || "executive-dashboard";
   } else if (S.isOfficeUser) {
     // اطلاع مكتب الإشراف: لوحة معلومات + أرشفة + تقارير + ملخص + اعتماد أبرز
     // النتائج، كلها مقتصرة على وحدات أقسامه التابعة فقط — بدون أي دخول لتقارير
@@ -4246,12 +4290,12 @@ function olFormHtml() {
     </div>
     <div class="field"><label class="field-label" for="ol-f-role">الصلاحيات</label>
       <select class="input" id="ol-f-role" data-action="ol-form-refresh">
-        <option value="" ${!f.roleId ? "selected" : ""}>اطّلاع فقط — بدون تعديل (الافتراضي)</option>
+        <option value="" ${!f.roleId ? "selected" : ""}>بدون دور — لا يرى أي صفحة</option>
         ${rolesList().filter((r) => r.status !== "disabled").map((r) => `<option value="${esc(r.id)}" ${f.roleId === r.id ? "selected" : ""}>حسب دور: ${esc(r.name)}</option>`).join("")}
       </select>
-      ${(() => { const rs = levelRoleSummary(f.roleId); if (!rs) return `<div class="hint">ترى لوحة المعلومات وجميع التقارير والملخص والتقرير النهائي لوحدات ما تحتها — قراءة فقط.</div>`;
+      ${(() => { const rs = levelRoleSummary(f.roleId); if (!rs) return `<div class="hint">لا توجد صفحات افتراضية — اختاري دورًا يحدد الصفحات (مثل لوحة المعلومات، جميع التقارير، الملخص، التقرير النهائي) وتظهر على وحدات ما تحته فقط.</div>`;
         const lbl = (id) => ((SIDEBAR_PAGES.find((x) => x.id === id) || {}).label || id);
-        return `<div class="hint">الصفحات: ${rs.pages.length ? rs.pages.map((x) => esc(lbl(x))).join("، ") : "لا توجد صفحات مناسبة بهذا الدور — ستُعرض صفحات الاطّلاع الافتراضية"}.<br>الاعتماد / الإعادة / التعديل: ${rs.inPaths ? `هذا الدور مرحلة في ${rs.inPaths} مسار اعتماد — تعتمد وتعيد وتعدّل حسب إعداد المرحلة، على تقارير وحدات ما تحتها فقط` : "هذا الدور غير موضوع في أي مسار اعتماد بعد — أضيفيه كمرحلة من «كل المسارات» ليقدر يعتمد أو يعيد أو يعدّل"}.<br>تعديل صفحات وأزرار الدور نفسه من زر «الأدوار والصلاحيات» أعلى الصفحة.</div>`; })()}
+        return `<div class="hint">الصفحات: ${rs.pages.length ? rs.pages.map((x) => esc(lbl(x))).join("، ") : "لا توجد صفحات مناسبة لحساب مستوى بهذا الدور — لن يرى شيئًا"}.<br>الاعتماد / الإعادة / التعديل: ${rs.inPaths ? `هذا الدور مرحلة في ${rs.inPaths} مسار اعتماد — تعتمد وتعيد وتعدّل حسب إعداد المرحلة، على تقارير وحدات ما تحتها فقط` : "هذا الدور غير موضوع في أي مسار اعتماد بعد — أضيفيه كمرحلة من «كل المسارات» ليقدر يعتمد أو يعيد أو يعدّل"}.<br>تعديل صفحات وأزرار الدور نفسه من زر «الأدوار والصلاحيات» أعلى الصفحة.</div>`; })()}
     </div>
     <div style="display:flex;gap:8px;flex-wrap:wrap;">
       ${pillBtn("حفظ", { icon: iconCheck(14, "#fff"), action: "ol-save" })}
@@ -4276,7 +4320,7 @@ function olDetailsHtml(l) {
       ${kv("يتبع", esc(parent))}
       ${kv("مربوط بـ", linked ? `${esc(linked.kind)}: ${esc(linked.name)}` : "مستوى جديد — بدون جهة سابقة")}
       ${kv("دخول خاص", l.loginId ? `اسم المستخدم: ${esc(l.loginId)}${l.status === "disabled" ? ` <span style="color:${DANGER};">(معطّل)</span>` : ""}` : "لا يوجد")}
-      ${l.loginId ? kv("الصلاحيات", (() => { const rs = levelRoleSummary(l.roleId); return rs ? `حسب دور: ${esc(rs.name)}${rs.inPaths ? " — يعتمد في " + rs.inPaths + " مسار" : ""}` : "اطّلاع فقط"; })()) : ""}
+      ${l.loginId ? kv("الصلاحيات", (() => { const rs = levelRoleSummary(l.roleId); return rs ? `حسب دور: ${esc(rs.name)}${rs.inPaths ? " — يعتمد في " + rs.inPaths + " مسار" : ""}` : "بدون دور — لا يرى شيئًا"; })()) : ""}
     </div>
     ${confirm ? `<div style="background:${DANGER_BG};border-radius:12px;padding:12px;display:flex;flex-direction:column;gap:8px;">
         <div style="font-size:12.5px;font-weight:800;color:${DANGER};">حذف "${esc(l.name)}"؟</div>
@@ -4320,6 +4364,7 @@ function olAccountHtml(l) {
       </div>`}
     ${STRUCT_OWNER_KIND[type] ? structSimpleCopyHtml(type, e, key) : ""}
     ${STRUCT_OWNER_KIND[type] ? `<div style="font-size:13px;font-weight:800;margin-top:4px;">أنواع الدخول المباشر لهذه الجهة</div>${structSimpleRoleCardsHtml(type, e)}` : ""}
+    ${type === "exec" ? `<div style="font-size:13px;font-weight:800;margin-top:4px;">صفحات هذا الحساب (من أدواره — بدون افتراضي)</div>${structSimpleRoleCardsHtml("unit", e)}${accountRolesPerms(e).count ? "" : `<div class="hint bad" style="margin:0;">بدون دور: هذا الحساب لا يرى أي صفحة.</div>`}` : ""}
   </div>`;
 }
 const OL_TABS = [{ id: "info", label: "البيانات والحساب" }, { id: "people", label: "الأشخاص" }, { id: "paths", label: "المسارات" }, { id: "link", label: "رابط الدخول" }];
@@ -4354,7 +4399,11 @@ function olUnlinkedCardHtml() {
   const ui = olUi();
   const list = olUnlinkedEntities();
   const admins = (S.units || []).filter((u) => u.role === "admin");
-  const adminRows = admins.map((u) => `<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:6px 0;">${structPanelTagHtml("admin", u)}<b style="font-size:13px;flex:1;">${esc(u.name)}</b>${S.ui.treeEditFor && S.ui.treeEditFor.id === u.id ? "" : pillBtn("تعديل", { variant: "ghost", icon: iconPencil(12, INK), action: "tree-edit-start", data: { type: "admin", id: u.id } })}</div>${treeEditFormHtml("admin", u.id)}`).join("");
+  const adminRows = admins.map((u) => `<div style="border-top:1px solid ${BORDER};padding:10px 0;display:flex;flex-direction:column;gap:8px;">
+      <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">${structPanelTagHtml("admin", u)}<b style="font-size:13px;flex:1;">${esc(u.name)}</b>${S.ui.treeEditFor && S.ui.treeEditFor.id === u.id ? "" : pillBtn("تعديل", { variant: "ghost", icon: iconPencil(12, INK), action: "tree-edit-start", data: { type: "admin", id: u.id } })}</div>
+      ${treeEditFormHtml("admin", u.id)}
+      <div style="font-size:12px;color:#6f5f66;">ثابت دائمًا: «المستخدمون» و«إعدادات الموقع». أي صفحة أخرى (لوحة المعلومات، التقارير، الملخص…) من الأدوار المختارة هنا:</div>
+      ${structSimpleRoleCardsHtml("unit", u)}</div>`).join("");
   return `${list.length ? `<div class="card card-lg" style="margin-top:14px;">
       <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-bottom:10px;">
         <div><div style="font-size:14px;font-weight:800;">جهات لها حساب وغير موجودة في الشجرة (${list.length})</div>
@@ -4364,7 +4413,12 @@ function olUnlinkedCardHtml() {
       </div>
       <div style="display:flex;gap:6px;flex-wrap:wrap;">${list.map((x) => `<button type="button" data-action="ol-add-entity" data-key="${esc(x.linkKind + ":" + x.id)}" title="إضافة للشجرة" style="display:inline-flex;align-items:center;gap:6px;min-height:36px;padding:0 12px;border-radius:999px;border:1px solid ${BORDER};background:#fff;font-family:inherit;font-size:12px;cursor:pointer;color:${INK};"><span style="color:#6f5f66;">${esc(x.kind)}</span><b>${esc(x.name)}</b>${iconPlus(12, ROSE)}</button>`).join("")}</div>
     </div>` : ""}
-    ${admins.length ? `<div class="card card-lg" style="margin-top:14px;"><div style="font-size:14px;font-weight:800;margin-bottom:6px;">حسابات مديرة النظام</div>${adminRows}</div>` : ""}`;
+    ${S.isAdmin && admins.length ? `<div class="card card-lg" style="margin-top:14px;"><div style="font-size:14px;font-weight:800;margin-bottom:6px;">حسابات مديرة النظام</div>${adminRows}</div>` : ""}
+    ${S.isAdmin ? `<div class="card card-lg" style="margin-top:14px;display:flex;flex-direction:column;gap:8px;">
+      <div style="font-size:14px;font-weight:800;">أدوار جاهزة (اختياري)</div>
+      <div style="font-size:12px;color:#6f5f66;line-height:1.9;">لا توجد صفحات افتراضية لأي حساب. لو تبين ترجعين لمديرة النظام أو الإدارة العليا صفحاتها السابقة بضغطة، هذي الأزرار تنشئ دورًا بنفس الصفحات السابقة وتعيّنه لكل حسابات هذا النوع — وبعدها تعدّلين الدور كما تبين.</div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;">${pillBtn("دور «مديرة النظام» بصفحاتها السابقة", { variant: "ghost", action: "ol-preset-role", data: { kind: "admin" } })}${pillBtn("دور «الإدارة العليا» بصفحاتها السابقة", { variant: "ghost", action: "ol-preset-role", data: { kind: "exec" } })}</div>
+    </div>` : ""}`;
 }
 function olTypesBarHtml() {
   const ui = olUi();
@@ -4391,7 +4445,7 @@ function olTypesBarHtml() {
   </div>`;
 }
 function renderOrgLevelsPage() {
-  if (!S.isAdmin) return `<div class="page-wrap"><div class="page-inner"><div class="card" style="text-align:center;color:${SUBTLE};padding:36px;">هذه الصفحة لمديرة النظام فقط.</div></div></div>`;
+  if (!canManageUsers()) return `<div class="page-wrap"><div class="page-inner"><div class="card" style="text-align:center;color:${SUBTLE};padding:36px;">هذه الصفحة غير ممنوحة لهذا الحساب.</div></div></div>`;
   const ui = olUi();
   const roots = olChildren("");
   if (ui.selected && !olFind(ui.selected)) ui.selected = null;
@@ -4548,6 +4602,21 @@ function handleOrgLevelsAction(action, ds) {
     case "ol-section": ui.section = ds.section || ""; S.ui.apEdit = null; break;
     case "ol-entity-status": { const e = treeEntity(ds.type === "exec" ? "unit" : ds.type, ds.id); if (e) treeSetEntity(ds.type === "exec" ? "unit" : ds.type, ds.id, { status: e.status === "disabled" ? "active" : "disabled" }); break; }
     case "ol-import-entities-ask": ui.importEntitiesConfirm = true; break;
+    case "ol-preset-role": {
+      if (!S.isAdmin) break;
+      const isA = ds.kind === "admin";
+      const pages = isA
+        ? SIDEBAR_PAGES.filter((p) => p.group !== "unit-extra" && !["departments-list", "admin-reports"].includes(p.id)).map((p) => p.id)
+        : SIDEBAR_PAGES.filter((p) => p.group === "الإدارة العليا" || ["executive-summary", "executive-final-report", "all-reports"].includes(p.id)).map((p) => p.id);
+      const name = isA ? "مديرة النظام — كل الصفحات" : "الإدارة العليا — الاطّلاع الشامل";
+      let role = rolesList().find((r) => r.name === name);
+      if (!role) { role = { id: uid("role"), name, mode: "admin", pin: "", description: "دور جاهز بنفس الصفحات السابقة", permissions: { pages, actions: [], buttons: [] }, status: "active", createdAt: Date.now() }; S.roles = [...rolesList(), role]; dataStore.saveRoles(S.roles); }
+      const targets = S.units.filter((u) => u.role === (isA ? "admin" : "executive"));
+      S.units = S.units.map((u) => targets.some((t) => t.id === u.id) ? { ...u, baseRoleId: [...new Set([...baseRoleIdsRaw(u), role.id])].join(",") } : u);
+      dataStore.saveUnits(S.units);
+      ui.msg = `أُنشئ دور «${name}» وعُيّن لـ ${targets.length} حساب — يُطبَّق عند الدخول القادم. عدّليه من «الأدوار والصلاحيات».`;
+      break;
+    }
     case "ol-import-entities-cancel": ui.importEntitiesConfirm = false; break;
     case "ol-import-entities": { const n = olImportEntities(); ui.importEntitiesConfirm = false; ui.msg = n ? `أُضيفت ${n} جهة للشجرة بنفس ترتيبها — الحسابات والتقارير كما هي.` : "لا توجد جهات جديدة للإضافة."; break; }
     case "ol-add-entity": { const n = olImportEntities(ds.key); const [k, ...r] = String(ds.key).split(":"); const lv = olActive().find((l) => l.linkKind === k && l.linkId === r.join(":")); if (lv) { ui.selected = lv.id; ui.tab = "info"; } ui.msg = n ? "أُضيفت للشجرة — انقليها لمكانها الصحيح من «تعديل / نقل» إن لزم." : ""; break; }
@@ -4667,7 +4736,7 @@ function doLoginLevel(level) {
   S.currentEntryRoleName = role.name;
   applyPersonPerms({ roleId: role.id, permsOverride: null });
   const pages = (S.platformUserAllowedPages || []).filter((p) => LEVEL_COMPATIBLE_PAGES.includes(p));
-  S.platformUserAllowedPages = pages.length ? pages : null; // بدون صفحات مناسبة = صفحات الاطّلاع الافتراضية
+  S.platformUserAllowedPages = pages; // بدون صفحات مناسبة = لا يرى شيئًا (لا يوجد افتراضي)
   if (S.platformUserAllowedPages && !S.platformUserAllowedPages.includes(S.view) && !(S.view === "executive-dashboard" && S.platformUserAllowedPages.includes("dashboard"))) {
     S.view = S.platformUserAllowedPages[0] === "dashboard" ? "executive-dashboard" : S.platformUserAllowedPages[0];
   }
@@ -4954,6 +5023,62 @@ function dashSettingsCardHtml() {
     <div>${pillBtn("إظهار كل العناصر للجميع", { variant: "ghost", icon: iconX(14, INK), action: "dash-reset", disabled: !anyHidden })}</div>
   </div>`;
 }
+/* ---- شكل التقرير الإداري النهائي (الخط/الألوان/نصوص الغلاف) — إعدادات شكل فقط بلا أي بيانات ---- */
+const REPORT_FONTS = ["Almarai", "IBM Plex Sans Arabic", "Cairo", "Tajawal", "Changa", "Noto Kufi Arabic", "Reem Kufi", "Amiri"];
+const REPORT_STYLE_DEFAULTS = {
+  fontBody: "Almarai", fontTitle: "Amiri", fontHeading: "Cairo",
+  mainColor: "#6b2337", chapterBg: "#f3e8dd", paper: "#FFFDF9",
+  assocName: "جمعية فرقان لتحفيظ القرآن الكريم بالطائف", coverTitle: "التقرير الإداري النهائي",
+  coverSub: "تقرير منتقى — أبرز ما يستحق قرار الإدارة، لا كل البيانات", preparedBy: "الإدارة العليا",
+};
+function reportStyle() { return { ...REPORT_STYLE_DEFAULTS, ...((((S.siteSettings || {}).theme) || {}).reportStyle || {}) }; }
+// متغيرات CSS تُطبَّق على غلاف التقرير النهائي فقط (لا تؤثر على تقارير الوحدات)
+function reportStyleVars() {
+  const r = reportStyle();
+  const safe = (v) => String(v || "").replace(/[;"<>{}]/g, "");
+  return `--rpt-burgundy:${safe(r.mainColor)};--rpt-burgundy-dark:${safe(mixHex(r.mainColor, "#000000", 0.25))};--rpt-paper:${safe(r.paper)};--rpt-chapter-bg:${safe(r.chapterBg)};--rpt-font-body:'${safe(r.fontBody)}';--rpt-font-title:'${safe(r.fontTitle)}';--rpt-font-heading:'${safe(r.fontHeading)}';`;
+}
+function reportStyleCardHtml() {
+  const r = reportStyle();
+  const sel = (id, val) => `<select class="input" id="${id}">${REPORT_FONTS.map((f) => `<option value="${esc(f)}" ${val === f ? "selected" : ""} style="font-family:'${esc(f)}'">${esc(f)}</option>`).join("")}</select>`;
+  const color = (id, val) => `<input type="color" id="${id}" value="${esc(val)}" style="width:52px;height:40px;border:1px solid ${BORDER};border-radius:8px;cursor:pointer;padding:2px;" />`;
+  const lbl = (t) => `<div style="font-size:12.5px;font-weight:800;margin-bottom:6px;">${esc(t)}</div>`;
+  const txt = (id, val) => `<input type="text" class="input" id="${id}" value="${esc(val)}" />`;
+  return `<div class="card" style="max-width:560px;margin-bottom:16px;">
+    <div class="subhead" style="margin-top:0;">شكل التقرير الإداري النهائي</div>
+    <div class="hint" style="margin:0 0 12px;">هنا تتحكمين بشكل التقرير فقط (الخط والألوان ونصوص الغلاف) — بدون الاطلاع على بياناته. التقرير نفسه يظهر لمن أعطيتِه صفحته بالدور.</div>
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin-bottom:14px;">
+      <div>${lbl("خط النصوص")}${sel("rs-font-body", r.fontBody)}</div>
+      <div>${lbl("خط عنوان الغلاف")}${sel("rs-font-title", r.fontTitle)}</div>
+      <div>${lbl("خط عناوين الفصول")}${sel("rs-font-heading", r.fontHeading)}</div>
+    </div>
+    <div style="display:flex;gap:16px;flex-wrap:wrap;margin-bottom:14px;">
+      <div>${lbl("اللون الرئيسي")}${color("rs-main", r.mainColor)}</div>
+      <div>${lbl("خلفية عناوين الفصول")}${color("rs-chapter", r.chapterBg)}</div>
+      <div>${lbl("لون الورقة")}${color("rs-paper", r.paper)}</div>
+    </div>
+    <div style="display:flex;flex-direction:column;gap:10px;margin-bottom:14px;">
+      <div>${lbl("اسم الجهة بالغلاف")}${txt("rs-assoc", r.assocName)}</div>
+      <div>${lbl("عنوان التقرير")}${txt("rs-title", r.coverTitle)}</div>
+      <div>${lbl("العنوان الفرعي")}${txt("rs-sub", r.coverSub)}</div>
+      <div>${lbl("إعداد")}${txt("rs-prep", r.preparedBy)}</div>
+    </div>
+    <div class="subhead">معاينة (نموذج بدون بيانات)</div>
+    <div style="${reportStyleVars()}background:var(--rpt-paper);border:1px solid #e7dccb;border-radius:12px;padding:16px;margin-bottom:14px;font-family:var(--rpt-font-body),sans-serif;color:#2c2622;">
+      <div style="text-align:center;font-size:12px;font-weight:700;color:var(--rpt-burgundy);">${esc(r.assocName)}</div>
+      <div style="width:50px;height:3px;background:var(--rpt-burgundy);margin:10px auto;border-radius:2px;"></div>
+      <div style="text-align:center;font-family:var(--rpt-font-title),serif;font-size:24px;font-weight:700;color:var(--rpt-burgundy);">${esc(r.coverTitle)}</div>
+      <div style="text-align:center;font-size:12px;margin:4px 0 14px;">${esc(r.coverSub)}</div>
+      <div style="display:flex;align-items:center;gap:10px;background:var(--rpt-chapter-bg);border:1px solid #e7dccb;border-radius:10px;padding:10px 12px;">
+        <span style="width:26px;height:26px;border-radius:7px;background:var(--rpt-burgundy);"></span>
+        <span style="font-family:var(--rpt-font-heading),sans-serif;font-size:15px;font-weight:800;color:var(--rpt-burgundy);">عنوان فصل (نموذج)</span>
+      </div>
+      <div style="font-size:12px;line-height:2;margin-top:10px;">نص تجريبي لعرض شكل الخط داخل فقرات التقرير.</div>
+    </div>
+    ${S.ui.reportStyleSaved ? `<div class="hint" style="color:${GREEN};margin:0 0 10px;">تم حفظ شكل التقرير ✓</div>` : ""}
+    <div style="display:flex;gap:8px;flex-wrap:wrap;">${pillBtn("حفظ شكل التقرير", { icon: iconCheckCircle(15, "#fff"), action: "save-report-style" })}${pillBtn("استعادة الشكل الافتراضي", { variant: "ghost", icon: iconX(14, INK), action: "reset-report-style" })}</div>
+  </div>`;
+}
 function renderSiteSettings() {
   const current = S.siteSettings || dataStore.getSiteSettings();
   const theme = themeOf(current);
@@ -5152,6 +5277,8 @@ function renderSiteSettings() {
         ${imgPreviewBlock(current.sidebarTaglineImage || "", "عبارة الشريط الجانبي", `width:90px;height:60px;`, "site-tagline-image-file", "remove-site-tagline-image", !!current.sidebarTaglineImage)}
       </div>
     </div>
+
+    ${reportStyleCardHtml()}
 
     ${dashSettingsCardHtml()}
 
@@ -6396,18 +6523,18 @@ function renderExecutiveFinalReport() {
   <section class="a4-page rpt-cover">
     <div class="rpt-cover-inner">
       <img src="${ASSOCIATION_LOGO}" class="rpt-cover-logo" alt="شعار الجمعية" />
-      <div class="rpt-cover-assoc">جمعية فرقان لتحفيظ القرآن الكريم بالطائف</div>
-      <div class="rpt-cover-unit">الإدارة العليا</div>
+      <div class="rpt-cover-assoc">${esc(reportStyle().assocName)}</div>
+      <div class="rpt-cover-unit">${esc(reportStyle().preparedBy)}</div>
       <div class="rpt-cover-divider"></div>
-      <h1 class="rpt-cover-title">التقرير الإداري النهائي</h1>
-      <div class="rpt-cover-sub">تقرير منتقى — أبرز ما يستحق قرار الإدارة، لا كل البيانات</div>
+      <h1 class="rpt-cover-title">${esc(reportStyle().coverTitle)}</h1>
+      <div class="rpt-cover-sub">${esc(reportStyle().coverSub)}</div>
       <div class="rpt-cover-meta">
         <div><span>عدد الأقسام:</span> ${activeDepartments.length}</div>
         <div><span>عدد الوحدات:</span> ${activeUnits.length}</div>
         <div><span>عدد التقارير:</span> ${total}</div>
         ${startDates.length ? `<div><span>الفترة:</span> ${esc(startDates[0])} — ${esc(endDates[endDates.length - 1] || "—")}</div>` : ""}
       </div>
-      <div class="rpt-cover-prepared"><div>إعداد: الإدارة العليا</div></div>
+      <div class="rpt-cover-prepared"><div>إعداد: ${esc(reportStyle().preparedBy)}</div></div>
     </div>
   </section>`;
 
@@ -6442,7 +6569,7 @@ function renderExecutiveFinalReport() {
 
   const closing = `
     <div class="rpt-approval-grid">
-      <div class="rpt-approval-box"><div class="rpt-approval-role">إعداد</div><div class="rpt-approval-line">الإدارة العليا</div></div>
+      <div class="rpt-approval-box"><div class="rpt-approval-role">إعداد</div><div class="rpt-approval-line">${esc(reportStyle().preparedBy)}</div></div>
       <div class="rpt-approval-box"><div class="rpt-approval-role">المراجعة</div><div class="rpt-approval-line">&nbsp;</div></div>
       <div class="rpt-approval-box"><div class="rpt-approval-role">الاعتماد</div><div class="rpt-approval-line">&nbsp;</div></div>
     </div>`;
@@ -6467,7 +6594,7 @@ function renderExecutiveFinalReport() {
   return `
   <div class="page-wrap"><div class="page-inner report">
     <div class="no-print">${topBarHtml({ title: "التقرير الإداري النهائي", subtitle: `${total} تقرير عبر ${activeUnits.length} وحدة`, right: pillBtn("تحميل / طباعة", { icon: iconDownload(15, "#fff"), action: "print-page" }) })}</div>
-    <div class="rpt-wrap">${body}</div>
+    <div class="rpt-wrap" style="${reportStyleVars()}">${body}</div>
   </div></div>`;
 }
 
@@ -7105,7 +7232,7 @@ function permDropdownChecklistHtml({ action, selected, total, emptyLabel, render
 const SENSITIVE_PAGE_IDS = [
   "site-settings",
   "admin-reports", "indicators-manage", "goals-manage", "sections-manage",
-  "field-schemas-manage", "departments-list",
+  "field-schemas-manage", "departments-list", "units-manage",
 ];
 // أسماء عرض مخصّصة لمجموعات الصفحات بقائمة صلاحيات "حسابات إضافية" — فقط
 // حيث اسم المجموعة الأصلي (المستخدم بالشريط الجانبي الحقيقي) غير واضح هنا.
@@ -10311,8 +10438,8 @@ function attachClickListener() {
     if (buttonBlockedEl(btn)) return;
     if (adminReportsReadOnly() && ADMIN_READONLY_BLOCKED.includes(action)) { alert("حساب مديرة النظام للاطلاع فقط — لا يمكن تعديل التقارير أو اعتمادها من هنا."); return; }
     if (!S.currentUser && action.indexOf("portal-") === 0 && handlePortalAction(action, ds)) return;
-    if ((action === "entry-clear" || (S.isAdmin && action.indexOf("entry-") === 0)) && handleEntryAction(action, ds)) return;
-    if (S.isAdmin && action !== "ol-form-refresh" && handleOrgLevelsAction(action, ds)) return;
+    if ((action === "entry-clear" || (canManageUsers() && action.indexOf("entry-") === 0)) && handleEntryAction(action, ds)) return;
+    if (canManageUsers() && action !== "ol-form-refresh" && handleOrgLevelsAction(action, ds)) return;
 
     try {
     switch (action) {
@@ -10423,8 +10550,21 @@ function attachClickListener() {
         render();
         break;
       }
+      case "save-report-style": {
+        const g = (id) => { const el = document.getElementById(id); return el ? el.value : ""; };
+        const rs = { fontBody: g("rs-font-body"), fontTitle: g("rs-font-title"), fontHeading: g("rs-font-heading"), mainColor: g("rs-main"), chapterBg: g("rs-chapter"), paper: g("rs-paper"),
+          assocName: g("rs-assoc").trim(), coverTitle: g("rs-title").trim(), coverSub: g("rs-sub").trim(), preparedBy: g("rs-prep").trim() };
+        Object.keys(rs).forEach((k) => { if (!rs[k]) delete rs[k]; });
+        saveSiteTheme({ reportStyle: rs });
+        S.ui.reportStyleSaved = true; render(); break;
+      }
+      case "reset-report-style": saveSiteTheme({ reportStyle: {} }); S.ui.reportStyleSaved = true; render(); break;
       case "restore-theme-defaults": {
-        S.siteSettings = { ...(S.siteSettings || dataStore.getSiteSettings()), theme: {} };
+        // نرجّع الألوان فقط — ونحفظ إعدادات غير الألوان المخزّنة بنفس المكان (الفترات، أنواع المستويات،
+        // أيقونات الجهات وروابطها، بوابة الدخول، شكل التقرير النهائي)
+        const th0 = ((S.siteSettings || dataStore.getSiteSettings()).theme) || {};
+        const keep = {}; ["periodTypes", "levelTypes", "entityIcons", "portalEnabled", "reportStyle"].forEach((k) => { if (k in th0) keep[k] = th0[k]; });
+        S.siteSettings = { ...(S.siteSettings || dataStore.getSiteSettings()), theme: keep };
         applySiteColors(S.siteSettings);
         dataStore.saveSiteSettings(S.siteSettings);
         S.ui.siteSettingsSaved = true;
