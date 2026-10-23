@@ -1525,7 +1525,29 @@ function apRefOf(key) {
 function apPathById(id) { return approvalPathsList().find((p) => p.id === id) || null; }
 // المراحل المعطّلة مؤقتًا (st.disabled) تُتخطّى تلقائيًا بالإرسال والاعتماد — كأنها غير موجودة،
 // وترجع تعمل بمجرد تفعيلها من جديد (بدون تعديل المسار أو إرجاعه مسودة).
-function apStageList(path) { return ((path && path.stages) || []).filter((st) => !st.disabled).map((st) => ({ ...st, key: AP_PREFIX + path.id + ":" + st.id })); }
+// مراحل المسار الفعّالة. مع unit: تُتخطّى مرحلة «دور من نفس وحدة التقرير» إن لم يكن في الوحدة أحد بهذا الدور
+function apStageList(path, unit) { return ((path && path.stages) || []).filter((st) => !st.disabled && (!unit || apStageApplies(st, unit))).map((st) => ({ ...st, key: AP_PREFIX + path.id + ":" + st.id })); }
+function apPersonInUnit(p, unit) {
+  if (!p || !unit) return false;
+  const kind = p.ownerKind === "department" ? "dept" : (p.ownerKind || "unit");
+  return [{ kind: "unit", id: unit.id }, ...apOwnerCandidatesForUnit(unit)].some((c) => c.kind === kind && c.id === p.ownerId);
+}
+function apStageApplies(st, unit) {
+  if (!st || !st.sameUnit || !unit) return true;
+  const a = String(st.approver || "");
+  if (a.indexOf("role:") !== 0) return true;
+  const rid = a.slice(5);
+  return personsList().some((p) => p.status !== "disabled" && p.roleId === rid && apPersonInUnit(p, unit));
+}
+// نطاق المسار: جهة محددة (الأقوى) ← مستوى من الهيكل وما تحته ← نوع الجهة ← كل الوحدات والمراكز
+function apPathOwnerScore(p, unit) {
+  if (!unit || unit.role === "admin" || unit.role === "executive") return -1;
+  if (apOwnerCandidatesForUnit(unit).some((o) => o.kind === p.ownerKind && o.id === p.ownerId)) return 8;
+  if (p.ownerKind === "olevel") return olFind(p.ownerId) && olScopeUnitIds(p.ownerId).has(unit.id) ? 4 : -1;
+  if (p.ownerKind === "etype") return (unit.role || "unit") === p.ownerId ? 2 : -1;
+  if (p.ownerKind === "all") return 1;
+  return -1;
+}
 function apReportsAtStage(pathId, stageId) {
   const key = AP_PREFIX + pathId + ":" + stageId, out = [];
   (S.units || []).forEach((u) => ensureUnitReportsLoaded(u.id).forEach((r) => { if (r.status === "custom_pending" && r.customStageId === key) out.push({ unit: u, report: r }); }));
@@ -1551,11 +1573,11 @@ function apStageRowsHtml(a) {
 function apSkipReportsAtStage(path, stageId) {
   const all = path.stages || [];
   const idx = all.findIndex((x) => x.id === stageId);
-  const nextSt = all.slice(idx + 1).find((x) => !x.disabled);
   const stName = (all[idx] || {}).name || "مرحلة";
   // إجراء هيكلي من مديرة النظام (تعطيل مرحلة) — يُسمح له بتحريك التقارير رغم وضع "الاطلاع فقط"
   const prevAllow = S.__adminAllowWrite; S.__adminAllowWrite = true;
   try { apReportsAtStage(path.id, stageId).forEach(({ unit, report }) => {
+    const nextSt = all.slice(idx + 1).find((x) => !x.disabled && apStageApplies(x, unit));
     const log = [...(report.customLog || [])];
     if (nextSt) {
       const nk = AP_PREFIX + path.id + ":" + nextSt.id;
@@ -1593,27 +1615,35 @@ function currentAuthorRoleId() { const p = currentPersonObj(); return p ? (p.rol
 // أنسب مسار مفعّل لهذا التقرير: الأكثر تحديدًا (فترة محددة / دور محدد) يفوز
 function matchApprovalPath(unit, report) { return matchingApprovalPaths(unit, report)[0] || null; }
 function matchingApprovalPaths(unit, report) {
-  const owners = apOwnerCandidatesForUnit(unit);
-  if (!owners.length) return [];
+  if (!unit) return [];
   const period = (report && report.shared && report.shared.periodType) || (report && report.sections && report.sections.basic && report.sections.basic.data && report.sections.basic.data.periodType) || "";
   const role = currentAuthorRoleId();
   const out = [];
   approvalPathsList().forEach((p) => {
     if (p.status !== "active" || !(p.stages || []).length) return;
-    if (!owners.some((o) => o.kind === p.ownerKind && o.id === p.ownerId)) return;
+    const os = apPathOwnerScore(p, unit);
+    if (os < 0) return;
     if (p.periodType && p.periodType !== period) return;
     if (p.authorRoleId && p.authorRoleId !== role) return;
-    out.push({ p, score: (p.periodType ? 1 : 0) + (p.authorRoleId ? 1 : 0) });
+    out.push({ p, os, score: os * 10 + (p.periodType ? 1 : 0) + (p.authorRoleId ? 1 : 0) });
   });
-  return out.sort((a, b) => b.score - a.score).map((x) => x.p);
+  // المسار الأخص بالوحدة يُقدَّم ويُخفي الأعم (جهة ← مستوى ← نوع ← الكل)
+  const top = out.reduce((m, x) => Math.max(m, x.os), -1);
+  return out.filter((x) => x.os === top).sort((a, b) => b.score - a.score).map((x) => x.p);
 }
 // هل الجلسة الحالية هي صاحبة هذه المرحلة؟ (مديرة النظام للاطلاع فقط فلا تُعدّ صاحبة مرحلة)
-function userHoldsApStage(stage) {
+// unit (اختياري): وحدة التقرير — لمرحلة «دور من نفس وحدة التقرير»
+function userHoldsApStage(stage, unit) {
   if (!stage || !stage.approver || S.isAdmin) return false;
   const s = String(stage.approver); const i = s.indexOf(":");
   const k = s.slice(0, i), id = s.slice(i + 1);
   if (k === "person") return S.currentPersonId === id;
-  if (k === "role") { if (S.levelScope) return S.levelScope.roleId === id; const p = currentPersonObj(); return !!p && p.roleId === id; }
+  if (k === "role") {
+    if (S.levelScope) return S.levelScope.roleId === id && (!stage.sameUnit || !unit || S.levelScope.unitIds.has(unit.id));
+    const p = currentPersonObj();
+    if (!p || p.roleId !== id) return false;
+    return !stage.sameUnit || !unit || apPersonInUnit(p, unit);
+  }
   if (k === "level") {
     if (S.levelScope) return S.levelScope.levelId === id;
     // مستوى مربوط بقسم/مكتب موجود: حساب تلك الجهة نفسه يقوم بالمرحلة أيضًا
@@ -1635,9 +1665,9 @@ function apPendingForMe() {
       if (r.status !== "custom_pending") return;
       const ref = apRefOf(r.customStageId); if (!ref) return;
       const p = apPathById(ref.pathId); if (!p) return;
-      const stages = apStageList(p);
-      const stage = stages.find((s) => s.key === r.customStageId);
-      if (stage && userHoldsApStage(stage)) out.push({ unit: u, report: r, stage, path: stages, ap: true });
+      const stages = apStageList(p, u);
+      const stage = apStageList(p).find((s) => s.key === r.customStageId);
+      if (stage && userHoldsApStage(stage, u)) out.push({ unit: u, report: r, stage, path: stages, ap: true });
     });
   });
   return out;
@@ -1651,7 +1681,8 @@ function canViewReportViaApPath(unitId) {
   return ensureUnitReportsLoaded(unitId).some((r) => {
     const ref = apRefOf(r.customStageId); if (!ref) return false;
     const p = apPathById(ref.pathId);
-    return !!p && apStageList(p).some((st) => userHoldsApStage(st));
+    const unit = (S.units || []).find((u) => u.id === unitId);
+    return !!p && apStageList(p, unit).some((st) => userHoldsApStage(st, unit));
   });
 }
 function apLogEntry(kind, from, to, text) { return { at: Date.now(), kind, from, to, text, by: S.currentPersonName || (S.currentUser && S.currentUser.name) || "" }; }
@@ -1661,9 +1692,9 @@ function apSendReport(unitId, entry, pathId, notes) {
   const path = matchingApprovalPaths(unit, entry).find((x) => x.id === pathId);
   if (!path) return false;
   const noteTxt = notes ? " — " + notes : "";
-  const stages = apStageList(path);
+  const stages = apStageList(path, unit);
   let i = 0;
-  while (i < stages.length && userHoldsApStage(stages[i]) && apStageIsPassThrough(stages[i])) i++;
+  while (i < stages.length && userHoldsApStage(stages[i], unit) && apStageIsPassThrough(stages[i])) i++;
   const log = [...(entry.customLog || [])];
   const cleanSections = {};
   Object.entries(entry.sections || {}).forEach(([k, v]) => { if (v && v.reviewNote) { const { reviewNote, ...rest } = v; cleanSections[k] = rest; } else cleanSections[k] = v; });
@@ -1685,10 +1716,13 @@ function apAdvanceOrReturn(unitId, reportId, isReturn, notes, opts) {
   if (!entry || entry.status !== "custom_pending") return "غير متاح";
   const ref = apRefOf(entry.customStageId); if (!ref) return "غير متاح";
   const path = apPathById(ref.pathId); if (!path) return "المسار محذوف";
-  const stages = apStageList(path);
-  const idx = stages.findIndex((s) => s.key === entry.customStageId);
-  const cur = stages[idx];
-  if (!cur || !userHoldsApStage(cur)) return "ليست مرحلتك";
+  const unit = (S.units || []).find((u) => u.id === unitId);
+  const all = apStageList(path);
+  const cur = all.find((s) => s.key === entry.customStageId);
+  if (!cur || !userHoldsApStage(cur, unit)) return "ليست مرحلتك";
+  // المراحل التالية المطبّقة على هذه الوحدة (تُتخطّى مرحلة دورٍ لا يوجد في الوحدة)
+  const stages = [cur, ...all.slice(all.indexOf(cur) + 1).filter((st) => apStageApplies(st, unit))];
+  const idx = 0;
   const log = [...(entry.customLog || [])];
   if (isReturn) {
     if (!cur.canReturn) return "هذه المرحلة لا تملك الإعادة";
@@ -1722,7 +1756,7 @@ function apSendPickerHtml(unit, report) {
     <div style="font-size:13px;font-weight:800;margin-bottom:10px;">إرسال التقرير — إلى من؟</div>
     <select class="input" id="ap-send-path" style="width:100%;margin-bottom:10px;">
       <option value="">اختاري الجهة...</option>
-      ${paths.map((p) => `<option value="${esc(p.id)}" ${picked === p.id ? "selected" : ""}>${esc(p.name || apOwnerName(p.ownerKind, p.ownerId))} — ${esc(apStageList(p).map((st) => st.name).join(" ← "))}</option>`).join("")}
+      ${paths.map((p) => `<option value="${esc(p.id)}" ${picked === p.id ? "selected" : ""}>${esc(p.name || apOwnerName(p.ownerKind, p.ownerId))} — ${esc(apStageList(p, unit).map((st) => st.name).join(" ← "))}</option>`).join("")}
     </select>
     <textarea id="ap-send-notes" class="input" style="width:100%;min-height:56px;margin-bottom:10px;" placeholder="ملاحظات (اختياري)..."></textarea>
     <div style="display:flex;gap:8px;">
@@ -1808,7 +1842,7 @@ function computeApprovalPathState(unit, entry) {
   const apPath = apId ? apPathById(apId) : null;
   if (apPath) {
     const log = entry.customLog || [];
-    return apStageList(apPath).map((st) => {
+    return apStageList(apPath, unit).map((st) => {
       const acted = log.filter((l) => l.from === st.key);
       const last = acted[acted.length - 1];
       let state = "pending";
@@ -4899,10 +4933,12 @@ function handleEntryAction(action, ds) {
 // يبني مراحل مقترحة: من الجهة صاحبة التقرير صعودًا عبر مستوياتها بالشجرة. يُضمَّن
 // فقط المستوى اللي يقدر أحد يدخل به (له دخول خاص، أو مربوط بقسم/مكتب له حسابه).
 function apSuggestStagesFromTree(ownerKind, ownerId) {
+  if (ownerKind === "all" || ownerKind === "etype") return { error: "الاقتراح من الهيكل يحتاج جهة أو مستوى محددًا. أضيفي المراحل يدويًا (مثل: دور المساعدة ثم الرئيسة «من نفس وحدة التقرير»)." };
   const lk = ownerKind === "unit" ? "unit" : ownerKind === "dept" ? "dept" : ownerKind === "office" ? "office" : "";
-  const self = olActive().find((l) => l.linkKind === lk && l.linkId === ownerId);
+  const self = ownerKind === "olevel" ? olFind(ownerId) : olActive().find((l) => l.linkKind === lk && l.linkId === ownerId);
   if (!self) return { error: "هذه الجهة غير مربوطة بالهيكل المرن بعد — اربطيها بمستوى من «المستخدمون ← الهيكل المرن» أولًا." };
-  const ups = olPath(self.id).slice(0, -1).reverse();
+  // مسار مستوى: المراحل من المستوى نفسه صعودًا؛ مسار جهة: مما فوقها
+  const ups = (ownerKind === "olevel" ? olPath(self.id) : olPath(self.id).slice(0, -1)).reverse();
   const stages = [];
   ups.forEach((l) => {
     let approver = "";
@@ -8471,7 +8507,12 @@ function apOwnerOptions() {
   const offices = (S.offices || []).map((o) => ["office", o]);
   const depts = (S.departments || []).map((d) => ["dept", d]);
   const real = (S.units || []).filter((u) => u.role !== "admin" && u.role !== "executive" && u.role !== "self_report");
+  const levels = [];
+  const walk = (pid, depth) => olChildren(pid).forEach((l) => { levels.push(["olevel", { id: l.id, name: "— ".repeat(depth) + l.name + " وما تحته" }]); walk(l.id, depth + 1); });
+  walk("", 0);
   return [
+    ["مسار عام (كل وحدة تمشي فيه بأشخاصها)", [["all", { id: "*", name: "كل الوحدات والمراكز" }], ["etype", { id: "unit", name: "كل الوحدات (بدون المراكز)" }], ["etype", { id: "center", name: "كل المراكز" }]]],
+    ["مستوى من الهيكل المرن وما تحته", levels],
     ["مكاتب الإشراف", offices],
     ["الأقسام", depts],
     ["الوحدات", real.filter((u) => u.role !== "center").map((u) => ["unit", u])],
@@ -8479,6 +8520,9 @@ function apOwnerOptions() {
   ].filter((g) => g[1].length);
 }
 function apOwnerName(kind, id) {
+  if (kind === "all") return "كل الوحدات والمراكز";
+  if (kind === "etype") return id === "center" ? "كل المراكز" : "كل الوحدات";
+  if (kind === "olevel") { const l = olFind(id); return l ? l.name + " وما تحته" : "(مستوى محذوف)"; }
   const list = kind === "office" ? (S.offices || []) : kind === "dept" ? (S.departments || []) : (S.units || []);
   const e = list.find((x) => x.id === id);
   return e ? e.name : "(جهة محذوفة)";
@@ -8516,6 +8560,7 @@ function apCaptureForm() {
     canReturn: c("ap-s-rt-" + i) !== null ? c("ap-s-rt-" + i) : st.canReturn,
     canEdit: c("ap-s-ed-" + i) !== null ? c("ap-s-ed-" + i) : st.canEdit,
     noteRequired: c("ap-s-nr-" + i) !== null ? c("ap-s-nr-" + i) : !!st.noteRequired,
+    sameUnit: c("ap-s-su-" + i) !== null ? c("ap-s-su-" + i) : !!st.sameUnit,
   }));
 }
 function apEditorHtml() {
@@ -8541,7 +8586,9 @@ function apEditorHtml() {
         <label style="display:flex;gap:6px;align-items:center;cursor:pointer;"><input type="checkbox" id="ap-s-rt-${i}" ${st.canReturn ? "checked" : ""} /> يعيد للتعديل</label>
         <label style="display:flex;gap:6px;align-items:center;cursor:pointer;"><input type="checkbox" id="ap-s-ed-${i}" ${st.canEdit ? "checked" : ""} /> يعدّل التقرير</label>
         <label style="display:flex;gap:6px;align-items:center;cursor:pointer;"><input type="checkbox" id="ap-s-nr-${i}" ${st.noteRequired ? "checked" : ""} /> ملاحظة إلزامية عند الاعتماد</label>
+        <label style="display:flex;gap:6px;align-items:center;cursor:pointer;color:${ROSE};font-weight:700;"><input type="checkbox" id="ap-s-su-${i}" ${st.sameUnit ? "checked" : ""} /> من نفس وحدة التقرير (عند اختيار دور)</label>
       </div>
+      ${String(st.approver || "").indexOf("role:") === 0 ? `<div style="font-size:11px;color:${SUBTLE};margin-top:6px;">${st.sameUnit ? "يصل التقرير فقط لصاحبة هذا الدور داخل وحدة التقرير، ولو الوحدة ما فيها أحد بهذا الدور تُتخطّى المرحلة تلقائيًا." : "أي شخص بهذا الدور (في أي جهة) يرى التقرير — فعّلي «من نفس وحدة التقرير» لأدوار الوحدة مثل المساعدة والرئيسة."}</div>` : ""}
     </div>`).join("");
   return `<div class="card" style="margin-bottom:14px;border:1.5px solid ${ROSE};">
     <div style="font-size:14px;font-weight:800;margin-bottom:10px;">${ed.id ? "تعديل المسار" : "مسار جديد"} <span style="font-size:11px;color:${SUBTLE};font-weight:600;">(يُحفظ كمسودة ولا يعمل قبل التفعيل)</span></div>
@@ -9375,7 +9422,7 @@ function reportLockReason(entry, unit) {
     if (ref) {
       const p = apPathById(ref.pathId);
       const st = p && apStageList(p).find((x) => x.key === entry.customStageId);
-      if (st && st.canEdit && userHoldsApStage(st)) return "";
+      if (st && st.canEdit && userHoldsApStage(st, unit)) return "";
       return "بانتظار مرحلة «" + (st ? st.name : "المسار") + "»";
     }
     return writerSide ? "قيد المراجعة في المسار الحر" : "";
@@ -11357,7 +11404,7 @@ function attachClickListener() {
         // بدل أن تبقى الصفحة فارغة/معطّلة.
         ensureUnitContextForNav(navView);
         if (navView === "custom-path-inbox" && dbConnected()) {
-          Promise.all((S.units || []).filter((u) => unitHasCustomPath(u) || apOwnerCandidatesForUnit(u).some((o) => approvalPathsList().some((p) => p.status === "active" && p.ownerKind === o.kind && p.ownerId === o.id))).map((u) => refreshReportsFromDb(u.id))).then(() => { if (S.currentUser && S.view === "custom-path-inbox") render(); });
+          Promise.all((S.units || []).filter((u) => unitHasCustomPath(u) || apOwnerCandidatesForUnit(u).some((o) => approvalPathsList().some((p) => p.status === "active" && apPathOwnerScore(p, u) >= 0))).map((u) => refreshReportsFromDb(u.id))).then(() => { if (S.currentUser && S.view === "custom-path-inbox") render(); });
         }
         if (navView === "report-tabs-manage") {
           S.reportTabs = dataStore.getReportTabs(); S.ui.rtEdit = null; S.ui.rtMsg = ""; S.ui.rtDeleteId = null;
@@ -12148,7 +12195,7 @@ function attachClickListener() {
         const ref = entry && apRefOf(entry.customStageId);
         const path = ref && apPathById(ref.pathId);
         const st = path && apStageList(path).find((x) => x.key === entry.customStageId);
-        if (!st || !st.canEdit || !userHoldsApStage(st)) break;
+        if (!st || !st.canEdit || !userHoldsApStage(st, (S.units || []).find((u) => u.id === ds.unitId))) break;
         S.currentUnitId = ds.unitId; S.currentReportId = ds.reportId; S.view = "unit-report"; S.openPhaseId = null; S.activeSectionId = null;
         render();
         break;
