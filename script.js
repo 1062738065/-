@@ -5,6 +5,12 @@
    React version used, so any data saved there before is preserved.
    ============================================================================= */
 
+/* ---- مكتبة رمز QR (qrcode-generator 1.4.4، Kazuhiko Arase، رخصة MIT) — مضمّنة لرابط دخول الجهات ---- */
+// Copyright (c) 2009 Kazuhiko Arase
+// Licensed under the MIT license:
+var qrcode=function(){var t=function(t,r){var e=t,n=g[r],o=null,i=0,a=null,u=[],f={},c=function(t,r){o=function(t){for(var r=new Array(t),e=0;e<t;e+=1){r[e]=new Array(t);for(var n=0;n<t;n+=1)r[e][n]=null}return r}(i=4*e+17),l(0,0),l(i-7,0),l(0,i-7),s(),h(),d(t,r),e>=7&&v(t),null==a&&(a=p(e,n,u)),w(a,r)},l=function(t,r){for(var e=-1;e<=7;e+=1)if(!(t+e<=-1||i<=t+e))for(var n=-1;n<=7;n+=1)r+n<=-1||i<=r+n||(o[t+e][r+n]=0<=e&&e<=6&&(0==n||6==n)||0<=n&&n<=6&&(0==e||6==e)||2<=e&&e<=4&&2<=n&&n<=4)},h=function(){for(var t=8;t<i-8;t+=1)null==o[t][6]&&(o[t][6]=t%2==0);for(var r=8;r<i-8;r+=1)null==o[6][r]&&(o[6][r]=r%2==0)},s=function(){for(var t=B.getPatternPosition(e),r=0;r<t.length;r+=1)for(var n=0;n<t.length;n+=1){var i=t[r],a=t[n];if(null==o[i][a])for(var u=-2;u<=2;u+=1)for(var f=-2;f<=2;f+=1)o[i+u][a+f]=-2==u||2==u||-2==f||2==f||0==u&&0==f}},v=function(t){for(var r=B.getBCHTypeNumber(e),n=0;n<18;n+=1){var a=!t&&1==(r>>n&1);o[Math.floor(n/3)][n%3+i-8-3]=a}for(n=0;n<18;n+=1){a=!t&&1==(r>>n&1);o[n%3+i-8-3][Math.floor(n/3)]=a}},d=function(t,r){for(var e=n<<3|r,a=B.getBCHTypeInfo(e),u=0;u<15;u+=1){var f=!t&&1==(a>>u&1);u<6?o[u][8]=f:u<8?o[u+1][8]=f:o[i-15+u][8]=f}for(u=0;u<15;u+=1){f=!t&&1==(a>>u&1);u<8?o[8][i-u-1]=f:u<9?o[8][15-u-1+1]=f:o[8][15-u-1]=f}o[i-8][8]=!t},w=function(t,r){for(var e=-1,n=i-1,a=7,u=0,f=B.getMaskFunction(r),c=i-1;c>0;c-=2)for(6==c&&(c-=1);;){for(var g=0;g<2;g+=1)if(null==o[n][c-g]){var l=!1;u<t.length&&(l=1==(t[u]>>>a&1)),f(n,c-g)&&(l=!l),o[n][c-g]=l,-1==(a-=1)&&(u+=1,a=7)}if((n+=e)<0||i<=n){n-=e,e=-e;break}}},p=function(t,r,e){for(var n=A.getRSBlocks(t,r),o=b(),i=0;i<e.length;i+=1){var a=e[i];o.put(a.getMode(),4),o.put(a.getLength(),B.getLengthInBits(a.getMode(),t)),a.write(o)}var u=0;for(i=0;i<n.length;i+=1)u+=n[i].dataCount;if(o.getLengthInBits()>8*u)throw"code length overflow. ("+o.getLengthInBits()+">"+8*u+")";for(o.getLengthInBits()+4<=8*u&&o.put(0,4);o.getLengthInBits()%8!=0;)o.putBit(!1);for(;!(o.getLengthInBits()>=8*u||(o.put(236,8),o.getLengthInBits()>=8*u));)o.put(17,8);return function(t,r){for(var e=0,n=0,o=0,i=new Array(r.length),a=new Array(r.length),u=0;u<r.length;u+=1){var f=r[u].dataCount,c=r[u].totalCount-f;n=Math.max(n,f),o=Math.max(o,c),i[u]=new Array(f);for(var g=0;g<i[u].length;g+=1)i[u][g]=255&t.getBuffer()[g+e];e+=f;var l=B.getErrorCorrectPolynomial(c),h=k(i[u],l.getLength()-1).mod(l);for(a[u]=new Array(l.getLength()-1),g=0;g<a[u].length;g+=1){var s=g+h.getLength()-a[u].length;a[u][g]=s>=0?h.getAt(s):0}}var v=0;for(g=0;g<r.length;g+=1)v+=r[g].totalCount;var d=new Array(v),w=0;for(g=0;g<n;g+=1)for(u=0;u<r.length;u+=1)g<i[u].length&&(d[w]=i[u][g],w+=1);for(g=0;g<o;g+=1)for(u=0;u<r.length;u+=1)g<a[u].length&&(d[w]=a[u][g],w+=1);return d}(o,n)};f.addData=function(t,r){var e=null;switch(r=r||"Byte"){case"Numeric":e=M(t);break;case"Alphanumeric":e=x(t);break;case"Byte":e=m(t);break;case"Kanji":e=L(t);break;default:throw"mode:"+r}u.push(e),a=null},f.isDark=function(t,r){if(t<0||i<=t||r<0||i<=r)throw t+","+r;return o[t][r]},f.getModuleCount=function(){return i},f.make=function(){if(e<1){for(var t=1;t<40;t++){for(var r=A.getRSBlocks(t,n),o=b(),i=0;i<u.length;i++){var a=u[i];o.put(a.getMode(),4),o.put(a.getLength(),B.getLengthInBits(a.getMode(),t)),a.write(o)}var g=0;for(i=0;i<r.length;i++)g+=r[i].dataCount;if(o.getLengthInBits()<=8*g)break}e=t}c(!1,function(){for(var t=0,r=0,e=0;e<8;e+=1){c(!0,e);var n=B.getLostPoint(f);(0==e||t>n)&&(t=n,r=e)}return r}())},f.createTableTag=function(t,r){t=t||2;var e="";e+='<table style="',e+=" border-width: 0px; border-style: none;",e+=" border-collapse: collapse;",e+=" padding: 0px; margin: "+(r=void 0===r?4*t:r)+"px;",e+='">',e+="<tbody>";for(var n=0;n<f.getModuleCount();n+=1){e+="<tr>";for(var o=0;o<f.getModuleCount();o+=1)e+='<td style="',e+=" border-width: 0px; border-style: none;",e+=" border-collapse: collapse;",e+=" padding: 0px; margin: 0px;",e+=" width: "+t+"px;",e+=" height: "+t+"px;",e+=" background-color: ",e+=f.isDark(n,o)?"#000000":"#ffffff",e+=";",e+='"/>';e+="</tr>"}return e+="</tbody>",e+="</table>"},f.createSvgTag=function(t,r,e,n){var o={};"object"==typeof arguments[0]&&(t=(o=arguments[0]).cellSize,r=o.margin,e=o.alt,n=o.title),t=t||2,r=void 0===r?4*t:r,(e="string"==typeof e?{text:e}:e||{}).text=e.text||null,e.id=e.text?e.id||"qrcode-description":null,(n="string"==typeof n?{text:n}:n||{}).text=n.text||null,n.id=n.text?n.id||"qrcode-title":null;var i,a,u,c,g=f.getModuleCount()*t+2*r,l="";for(c="l"+t+",0 0,"+t+" -"+t+",0 0,-"+t+"z ",l+='<svg version="1.1" xmlns="http://www.w3.org/2000/svg"',l+=o.scalable?"":' width="'+g+'px" height="'+g+'px"',l+=' viewBox="0 0 '+g+" "+g+'" ',l+=' preserveAspectRatio="xMinYMin meet"',l+=n.text||e.text?' role="img" aria-labelledby="'+y([n.id,e.id].join(" ").trim())+'"':"",l+=">",l+=n.text?'<title id="'+y(n.id)+'">'+y(n.text)+"</title>":"",l+=e.text?'<description id="'+y(e.id)+'">'+y(e.text)+"</description>":"",l+='<rect width="100%" height="100%" fill="white" cx="0" cy="0"/>',l+='<path d="',a=0;a<f.getModuleCount();a+=1)for(u=a*t+r,i=0;i<f.getModuleCount();i+=1)f.isDark(a,i)&&(l+="M"+(i*t+r)+","+u+c);return l+='" stroke="transparent" fill="black"/>',l+="</svg>"},f.createDataURL=function(t,r){t=t||2,r=void 0===r?4*t:r;var e=f.getModuleCount()*t+2*r,n=r,o=e-r;return I(e,e,(function(r,e){if(n<=r&&r<o&&n<=e&&e<o){var i=Math.floor((r-n)/t),a=Math.floor((e-n)/t);return f.isDark(a,i)?0:1}return 1}))},f.createImgTag=function(t,r,e){t=t||2,r=void 0===r?4*t:r;var n=f.getModuleCount()*t+2*r,o="";return o+="<img",o+=' src="',o+=f.createDataURL(t,r),o+='"',o+=' width="',o+=n,o+='"',o+=' height="',o+=n,o+='"',e&&(o+=' alt="',o+=y(e),o+='"'),o+="/>"};var y=function(t){for(var r="",e=0;e<t.length;e+=1){var n=t.charAt(e);switch(n){case"<":r+="&lt;";break;case">":r+="&gt;";break;case"&":r+="&amp;";break;case'"':r+="&quot;";break;default:r+=n}}return r};return f.createASCII=function(t,r){if((t=t||1)<2)return function(t){t=void 0===t?2:t;var r,e,n,o,i,a=1*f.getModuleCount()+2*t,u=t,c=a-t,g={"██":"█","█ ":"▀"," █":"▄","  ":" "},l={"██":"▀","█ ":"▀"," █":" ","  ":" "},h="";for(r=0;r<a;r+=2){for(n=Math.floor((r-u)/1),o=Math.floor((r+1-u)/1),e=0;e<a;e+=1)i="█",u<=e&&e<c&&u<=r&&r<c&&f.isDark(n,Math.floor((e-u)/1))&&(i=" "),u<=e&&e<c&&u<=r+1&&r+1<c&&f.isDark(o,Math.floor((e-u)/1))?i+=" ":i+="█",h+=t<1&&r+1>=c?l[i]:g[i];h+="\n"}return a%2&&t>0?h.substring(0,h.length-a-1)+Array(a+1).join("▀"):h.substring(0,h.length-1)}(r);t-=1,r=void 0===r?2*t:r;var e,n,o,i,a=f.getModuleCount()*t+2*r,u=r,c=a-r,g=Array(t+1).join("██"),l=Array(t+1).join("  "),h="",s="";for(e=0;e<a;e+=1){for(o=Math.floor((e-u)/t),s="",n=0;n<a;n+=1)i=1,u<=n&&n<c&&u<=e&&e<c&&f.isDark(o,Math.floor((n-u)/t))&&(i=0),s+=i?g:l;for(o=0;o<t;o+=1)h+=s+"\n"}return h.substring(0,h.length-1)},f.renderTo2dContext=function(t,r){r=r||2;for(var e=f.getModuleCount(),n=0;n<e;n++)for(var o=0;o<e;o++)t.fillStyle=f.isDark(n,o)?"black":"white",t.fillRect(n*r,o*r,r,r)},f};t.stringToBytes=(t.stringToBytesFuncs={default:function(t){for(var r=[],e=0;e<t.length;e+=1){var n=t.charCodeAt(e);r.push(255&n)}return r}}).default,t.createStringToBytes=function(t,r){var e=function(){for(var e=S(t),n=function(){var t=e.read();if(-1==t)throw"eof";return t},o=0,i={};;){var a=e.read();if(-1==a)break;var u=n(),f=n()<<8|n();i[String.fromCharCode(a<<8|u)]=f,o+=1}if(o!=r)throw o+" != "+r;return i}(),n="?".charCodeAt(0);return function(t){for(var r=[],o=0;o<t.length;o+=1){var i=t.charCodeAt(o);if(i<128)r.push(i);else{var a=e[t.charAt(o)];"number"==typeof a?(255&a)==a?r.push(a):(r.push(a>>>8),r.push(255&a)):r.push(n)}}return r}};var r,e,n,o,i,a=1,u=2,f=4,c=8,g={L:1,M:0,Q:3,H:2},l=0,h=1,s=2,v=3,d=4,w=5,p=6,y=7,B=(r=[[],[6,18],[6,22],[6,26],[6,30],[6,34],[6,22,38],[6,24,42],[6,26,46],[6,28,50],[6,30,54],[6,32,58],[6,34,62],[6,26,46,66],[6,26,48,70],[6,26,50,74],[6,30,54,78],[6,30,56,82],[6,30,58,86],[6,34,62,90],[6,28,50,72,94],[6,26,50,74,98],[6,30,54,78,102],[6,28,54,80,106],[6,32,58,84,110],[6,30,58,86,114],[6,34,62,90,118],[6,26,50,74,98,122],[6,30,54,78,102,126],[6,26,52,78,104,130],[6,30,56,82,108,134],[6,34,60,86,112,138],[6,30,58,86,114,142],[6,34,62,90,118,146],[6,30,54,78,102,126,150],[6,24,50,76,102,128,154],[6,28,54,80,106,132,158],[6,32,58,84,110,136,162],[6,26,54,82,110,138,166],[6,30,58,86,114,142,170]],e=1335,n=7973,i=function(t){for(var r=0;0!=t;)r+=1,t>>>=1;return r},(o={}).getBCHTypeInfo=function(t){for(var r=t<<10;i(r)-i(e)>=0;)r^=e<<i(r)-i(e);return 21522^(t<<10|r)},o.getBCHTypeNumber=function(t){for(var r=t<<12;i(r)-i(n)>=0;)r^=n<<i(r)-i(n);return t<<12|r},o.getPatternPosition=function(t){return r[t-1]},o.getMaskFunction=function(t){switch(t){case l:return function(t,r){return(t+r)%2==0};case h:return function(t,r){return t%2==0};case s:return function(t,r){return r%3==0};case v:return function(t,r){return(t+r)%3==0};case d:return function(t,r){return(Math.floor(t/2)+Math.floor(r/3))%2==0};case w:return function(t,r){return t*r%2+t*r%3==0};case p:return function(t,r){return(t*r%2+t*r%3)%2==0};case y:return function(t,r){return(t*r%3+(t+r)%2)%2==0};default:throw"bad maskPattern:"+t}},o.getErrorCorrectPolynomial=function(t){for(var r=k([1],0),e=0;e<t;e+=1)r=r.multiply(k([1,C.gexp(e)],0));return r},o.getLengthInBits=function(t,r){if(1<=r&&r<10)switch(t){case a:return 10;case u:return 9;case f:case c:return 8;default:throw"mode:"+t}else if(r<27)switch(t){case a:return 12;case u:return 11;case f:return 16;case c:return 10;default:throw"mode:"+t}else{if(!(r<41))throw"type:"+r;switch(t){case a:return 14;case u:return 13;case f:return 16;case c:return 12;default:throw"mode:"+t}}},o.getLostPoint=function(t){for(var r=t.getModuleCount(),e=0,n=0;n<r;n+=1)for(var o=0;o<r;o+=1){for(var i=0,a=t.isDark(n,o),u=-1;u<=1;u+=1)if(!(n+u<0||r<=n+u))for(var f=-1;f<=1;f+=1)o+f<0||r<=o+f||0==u&&0==f||a==t.isDark(n+u,o+f)&&(i+=1);i>5&&(e+=3+i-5)}for(n=0;n<r-1;n+=1)for(o=0;o<r-1;o+=1){var c=0;t.isDark(n,o)&&(c+=1),t.isDark(n+1,o)&&(c+=1),t.isDark(n,o+1)&&(c+=1),t.isDark(n+1,o+1)&&(c+=1),0!=c&&4!=c||(e+=3)}for(n=0;n<r;n+=1)for(o=0;o<r-6;o+=1)t.isDark(n,o)&&!t.isDark(n,o+1)&&t.isDark(n,o+2)&&t.isDark(n,o+3)&&t.isDark(n,o+4)&&!t.isDark(n,o+5)&&t.isDark(n,o+6)&&(e+=40);for(o=0;o<r;o+=1)for(n=0;n<r-6;n+=1)t.isDark(n,o)&&!t.isDark(n+1,o)&&t.isDark(n+2,o)&&t.isDark(n+3,o)&&t.isDark(n+4,o)&&!t.isDark(n+5,o)&&t.isDark(n+6,o)&&(e+=40);var g=0;for(o=0;o<r;o+=1)for(n=0;n<r;n+=1)t.isDark(n,o)&&(g+=1);return e+=Math.abs(100*g/r/r-50)/5*10},o),C=function(){for(var t=new Array(256),r=new Array(256),e=0;e<8;e+=1)t[e]=1<<e;for(e=8;e<256;e+=1)t[e]=t[e-4]^t[e-5]^t[e-6]^t[e-8];for(e=0;e<255;e+=1)r[t[e]]=e;var n={glog:function(t){if(t<1)throw"glog("+t+")";return r[t]},gexp:function(r){for(;r<0;)r+=255;for(;r>=256;)r-=255;return t[r]}};return n}();function k(t,r){if(void 0===t.length)throw t.length+"/"+r;var e=function(){for(var e=0;e<t.length&&0==t[e];)e+=1;for(var n=new Array(t.length-e+r),o=0;o<t.length-e;o+=1)n[o]=t[o+e];return n}(),n={getAt:function(t){return e[t]},getLength:function(){return e.length},multiply:function(t){for(var r=new Array(n.getLength()+t.getLength()-1),e=0;e<n.getLength();e+=1)for(var o=0;o<t.getLength();o+=1)r[e+o]^=C.gexp(C.glog(n.getAt(e))+C.glog(t.getAt(o)));return k(r,0)},mod:function(t){if(n.getLength()-t.getLength()<0)return n;for(var r=C.glog(n.getAt(0))-C.glog(t.getAt(0)),e=new Array(n.getLength()),o=0;o<n.getLength();o+=1)e[o]=n.getAt(o);for(o=0;o<t.getLength();o+=1)e[o]^=C.gexp(C.glog(t.getAt(o))+r);return k(e,0).mod(t)}};return n}var A=function(){var t=[[1,26,19],[1,26,16],[1,26,13],[1,26,9],[1,44,34],[1,44,28],[1,44,22],[1,44,16],[1,70,55],[1,70,44],[2,35,17],[2,35,13],[1,100,80],[2,50,32],[2,50,24],[4,25,9],[1,134,108],[2,67,43],[2,33,15,2,34,16],[2,33,11,2,34,12],[2,86,68],[4,43,27],[4,43,19],[4,43,15],[2,98,78],[4,49,31],[2,32,14,4,33,15],[4,39,13,1,40,14],[2,121,97],[2,60,38,2,61,39],[4,40,18,2,41,19],[4,40,14,2,41,15],[2,146,116],[3,58,36,2,59,37],[4,36,16,4,37,17],[4,36,12,4,37,13],[2,86,68,2,87,69],[4,69,43,1,70,44],[6,43,19,2,44,20],[6,43,15,2,44,16],[4,101,81],[1,80,50,4,81,51],[4,50,22,4,51,23],[3,36,12,8,37,13],[2,116,92,2,117,93],[6,58,36,2,59,37],[4,46,20,6,47,21],[7,42,14,4,43,15],[4,133,107],[8,59,37,1,60,38],[8,44,20,4,45,21],[12,33,11,4,34,12],[3,145,115,1,146,116],[4,64,40,5,65,41],[11,36,16,5,37,17],[11,36,12,5,37,13],[5,109,87,1,110,88],[5,65,41,5,66,42],[5,54,24,7,55,25],[11,36,12,7,37,13],[5,122,98,1,123,99],[7,73,45,3,74,46],[15,43,19,2,44,20],[3,45,15,13,46,16],[1,135,107,5,136,108],[10,74,46,1,75,47],[1,50,22,15,51,23],[2,42,14,17,43,15],[5,150,120,1,151,121],[9,69,43,4,70,44],[17,50,22,1,51,23],[2,42,14,19,43,15],[3,141,113,4,142,114],[3,70,44,11,71,45],[17,47,21,4,48,22],[9,39,13,16,40,14],[3,135,107,5,136,108],[3,67,41,13,68,42],[15,54,24,5,55,25],[15,43,15,10,44,16],[4,144,116,4,145,117],[17,68,42],[17,50,22,6,51,23],[19,46,16,6,47,17],[2,139,111,7,140,112],[17,74,46],[7,54,24,16,55,25],[34,37,13],[4,151,121,5,152,122],[4,75,47,14,76,48],[11,54,24,14,55,25],[16,45,15,14,46,16],[6,147,117,4,148,118],[6,73,45,14,74,46],[11,54,24,16,55,25],[30,46,16,2,47,17],[8,132,106,4,133,107],[8,75,47,13,76,48],[7,54,24,22,55,25],[22,45,15,13,46,16],[10,142,114,2,143,115],[19,74,46,4,75,47],[28,50,22,6,51,23],[33,46,16,4,47,17],[8,152,122,4,153,123],[22,73,45,3,74,46],[8,53,23,26,54,24],[12,45,15,28,46,16],[3,147,117,10,148,118],[3,73,45,23,74,46],[4,54,24,31,55,25],[11,45,15,31,46,16],[7,146,116,7,147,117],[21,73,45,7,74,46],[1,53,23,37,54,24],[19,45,15,26,46,16],[5,145,115,10,146,116],[19,75,47,10,76,48],[15,54,24,25,55,25],[23,45,15,25,46,16],[13,145,115,3,146,116],[2,74,46,29,75,47],[42,54,24,1,55,25],[23,45,15,28,46,16],[17,145,115],[10,74,46,23,75,47],[10,54,24,35,55,25],[19,45,15,35,46,16],[17,145,115,1,146,116],[14,74,46,21,75,47],[29,54,24,19,55,25],[11,45,15,46,46,16],[13,145,115,6,146,116],[14,74,46,23,75,47],[44,54,24,7,55,25],[59,46,16,1,47,17],[12,151,121,7,152,122],[12,75,47,26,76,48],[39,54,24,14,55,25],[22,45,15,41,46,16],[6,151,121,14,152,122],[6,75,47,34,76,48],[46,54,24,10,55,25],[2,45,15,64,46,16],[17,152,122,4,153,123],[29,74,46,14,75,47],[49,54,24,10,55,25],[24,45,15,46,46,16],[4,152,122,18,153,123],[13,74,46,32,75,47],[48,54,24,14,55,25],[42,45,15,32,46,16],[20,147,117,4,148,118],[40,75,47,7,76,48],[43,54,24,22,55,25],[10,45,15,67,46,16],[19,148,118,6,149,119],[18,75,47,31,76,48],[34,54,24,34,55,25],[20,45,15,61,46,16]],r=function(t,r){var e={};return e.totalCount=t,e.dataCount=r,e},e={};return e.getRSBlocks=function(e,n){var o=function(r,e){switch(e){case g.L:return t[4*(r-1)+0];case g.M:return t[4*(r-1)+1];case g.Q:return t[4*(r-1)+2];case g.H:return t[4*(r-1)+3];default:return}}(e,n);if(void 0===o)throw"bad rs block @ typeNumber:"+e+"/errorCorrectionLevel:"+n;for(var i=o.length/3,a=[],u=0;u<i;u+=1)for(var f=o[3*u+0],c=o[3*u+1],l=o[3*u+2],h=0;h<f;h+=1)a.push(r(c,l));return a},e}(),b=function(){var t=[],r=0,e={getBuffer:function(){return t},getAt:function(r){var e=Math.floor(r/8);return 1==(t[e]>>>7-r%8&1)},put:function(t,r){for(var n=0;n<r;n+=1)e.putBit(1==(t>>>r-n-1&1))},getLengthInBits:function(){return r},putBit:function(e){var n=Math.floor(r/8);t.length<=n&&t.push(0),e&&(t[n]|=128>>>r%8),r+=1}};return e},M=function(t){var r=a,e=t,n={getMode:function(){return r},getLength:function(t){return e.length},write:function(t){for(var r=e,n=0;n+2<r.length;)t.put(o(r.substring(n,n+3)),10),n+=3;n<r.length&&(r.length-n==1?t.put(o(r.substring(n,n+1)),4):r.length-n==2&&t.put(o(r.substring(n,n+2)),7))}},o=function(t){for(var r=0,e=0;e<t.length;e+=1)r=10*r+i(t.charAt(e));return r},i=function(t){if("0"<=t&&t<="9")return t.charCodeAt(0)-"0".charCodeAt(0);throw"illegal char :"+t};return n},x=function(t){var r=u,e=t,n={getMode:function(){return r},getLength:function(t){return e.length},write:function(t){for(var r=e,n=0;n+1<r.length;)t.put(45*o(r.charAt(n))+o(r.charAt(n+1)),11),n+=2;n<r.length&&t.put(o(r.charAt(n)),6)}},o=function(t){if("0"<=t&&t<="9")return t.charCodeAt(0)-"0".charCodeAt(0);if("A"<=t&&t<="Z")return t.charCodeAt(0)-"A".charCodeAt(0)+10;switch(t){case" ":return 36;case"$":return 37;case"%":return 38;case"*":return 39;case"+":return 40;case"-":return 41;case".":return 42;case"/":return 43;case":":return 44;default:throw"illegal char :"+t}};return n},m=function(r){var e=f,n=t.stringToBytes(r),o={getMode:function(){return e},getLength:function(t){return n.length},write:function(t){for(var r=0;r<n.length;r+=1)t.put(n[r],8)}};return o},L=function(r){var e=c,n=t.stringToBytesFuncs.SJIS;if(!n)throw"sjis not supported.";!function(t,r){var e=n("友");if(2!=e.length||38726!=(e[0]<<8|e[1]))throw"sjis not supported."}();var o=n(r),i={getMode:function(){return e},getLength:function(t){return~~(o.length/2)},write:function(t){for(var r=o,e=0;e+1<r.length;){var n=(255&r[e])<<8|255&r[e+1];if(33088<=n&&n<=40956)n-=33088;else{if(!(57408<=n&&n<=60351))throw"illegal char at "+(e+1)+"/"+n;n-=49472}n=192*(n>>>8&255)+(255&n),t.put(n,13),e+=2}if(e<r.length)throw"illegal char at "+(e+1)}};return i},D=function(){var t=[],r={writeByte:function(r){t.push(255&r)},writeShort:function(t){r.writeByte(t),r.writeByte(t>>>8)},writeBytes:function(t,e,n){e=e||0,n=n||t.length;for(var o=0;o<n;o+=1)r.writeByte(t[o+e])},writeString:function(t){for(var e=0;e<t.length;e+=1)r.writeByte(t.charCodeAt(e))},toByteArray:function(){return t},toString:function(){var r="";r+="[";for(var e=0;e<t.length;e+=1)e>0&&(r+=","),r+=t[e];return r+="]"}};return r},S=function(t){var r=t,e=0,n=0,o=0,i={read:function(){for(;o<8;){if(e>=r.length){if(0==o)return-1;throw"unexpected end of file./"+o}var t=r.charAt(e);if(e+=1,"="==t)return o=0,-1;t.match(/^\s$/)||(n=n<<6|a(t.charCodeAt(0)),o+=6)}var i=n>>>o-8&255;return o-=8,i}},a=function(t){if(65<=t&&t<=90)return t-65;if(97<=t&&t<=122)return t-97+26;if(48<=t&&t<=57)return t-48+52;if(43==t)return 62;if(47==t)return 63;throw"c:"+t};return i},I=function(t,r,e){for(var n=function(t,r){var e=t,n=r,o=new Array(t*r),i={setPixel:function(t,r,n){o[r*e+t]=n},write:function(t){t.writeString("GIF87a"),t.writeShort(e),t.writeShort(n),t.writeByte(128),t.writeByte(0),t.writeByte(0),t.writeByte(0),t.writeByte(0),t.writeByte(0),t.writeByte(255),t.writeByte(255),t.writeByte(255),t.writeString(","),t.writeShort(0),t.writeShort(0),t.writeShort(e),t.writeShort(n),t.writeByte(0);var r=a(2);t.writeByte(2);for(var o=0;r.length-o>255;)t.writeByte(255),t.writeBytes(r,o,255),o+=255;t.writeByte(r.length-o),t.writeBytes(r,o,r.length-o),t.writeByte(0),t.writeString(";")}},a=function(t){for(var r=1<<t,e=1+(1<<t),n=t+1,i=u(),a=0;a<r;a+=1)i.add(String.fromCharCode(a));i.add(String.fromCharCode(r)),i.add(String.fromCharCode(e));var f,c,g,l=D(),h=(f=l,c=0,g=0,{write:function(t,r){if(t>>>r!=0)throw"length over";for(;c+r>=8;)f.writeByte(255&(t<<c|g)),r-=8-c,t>>>=8-c,g=0,c=0;g|=t<<c,c+=r},flush:function(){c>0&&f.writeByte(g)}});h.write(r,n);var s=0,v=String.fromCharCode(o[s]);for(s+=1;s<o.length;){var d=String.fromCharCode(o[s]);s+=1,i.contains(v+d)?v+=d:(h.write(i.indexOf(v),n),i.size()<4095&&(i.size()==1<<n&&(n+=1),i.add(v+d)),v=d)}return h.write(i.indexOf(v),n),h.write(e,n),h.flush(),l.toByteArray()},u=function(){var t={},r=0,e={add:function(n){if(e.contains(n))throw"dup key:"+n;t[n]=r,r+=1},size:function(){return r},indexOf:function(r){return t[r]},contains:function(r){return void 0!==t[r]}};return e};return i}(t,r),o=0;o<r;o+=1)for(var i=0;i<t;i+=1)n.setPixel(i,o,e(i,o));var a=D();n.write(a);for(var u=function(){var t=0,r=0,e=0,n="",o={},i=function(t){n+=String.fromCharCode(a(63&t))},a=function(t){if(t<0);else{if(t<26)return 65+t;if(t<52)return t-26+97;if(t<62)return t-52+48;if(62==t)return 43;if(63==t)return 47}throw"n:"+t};return o.writeByte=function(n){for(t=t<<8|255&n,r+=8,e+=1;r>=6;)i(t>>>r-6),r-=6},o.flush=function(){if(r>0&&(i(t<<6-r),t=0,r=0),e%3!=0)for(var o=3-e%3,a=0;a<o;a+=1)n+="="},o.toString=function(){return n},o}(),f=a.toByteArray(),c=0;c<f.length;c+=1)u.writeByte(f[c]);return u.flush(),"data:image/gif;base64,"+u};return t}();qrcode.stringToBytesFuncs["UTF-8"]=function(t){return function(t){for(var r=[],e=0;e<t.length;e++){var n=t.charCodeAt(e);n<128?r.push(n):n<2048?r.push(192|n>>6,128|63&n):n<55296||n>=57344?r.push(224|n>>12,128|n>>6&63,128|63&n):(e++,n=65536+((1023&n)<<10|1023&t.charCodeAt(e)),r.push(240|n>>18,128|n>>12&63,128|n>>6&63,128|63&n))}return r}(t)},function(t){"function"==typeof define&&define.amd?define([],t):"object"==typeof exports&&(module.exports=t())}((function(){return qrcode}));
+
+
 /* =============================== Design tokens (JS mirror of CSS vars) ===== */
 /* Brand palette — keep in sync with the CSS custom properties in style.css */
 let ROSE = "#6b2337", ROSE_DARK = "#521a2a";
@@ -1400,6 +1406,7 @@ function getCurrentReportEntry() {
 // تحقق فعلي على مستوى البيانات (مو بس إخفاء الأزرار) — تمنع أي محاولة لعرض
 // تقرير وحدة/مركز خارج نطاق صلاحية المستخدمة الحالية، حتى لو تلاعبت بالطلب.
 function isUnitInUserScope(unitId) {
+  if (S.levelScope) return S.levelScope.unitIds.has(unitId);
   if (S.isAdmin || S.isExecutive) return true;
   const unit = S.units.find((u) => u.id === unitId);
   if (!unit) return false;
@@ -1518,7 +1525,50 @@ function apRefOf(key) {
   return i < 0 ? null : { pathId: rest.slice(0, i), stageId: rest.slice(i + 1) };
 }
 function apPathById(id) { return approvalPathsList().find((p) => p.id === id) || null; }
-function apStageList(path) { return ((path && path.stages) || []).map((st) => ({ ...st, key: AP_PREFIX + path.id + ":" + st.id })); }
+// المراحل المعطّلة مؤقتًا (st.disabled) تُتخطّى تلقائيًا بالإرسال والاعتماد — كأنها غير موجودة،
+// وترجع تعمل بمجرد تفعيلها من جديد (بدون تعديل المسار أو إرجاعه مسودة).
+function apStageList(path) { return ((path && path.stages) || []).filter((st) => !st.disabled).map((st) => ({ ...st, key: AP_PREFIX + path.id + ":" + st.id })); }
+function apReportsAtStage(pathId, stageId) {
+  const key = AP_PREFIX + pathId + ":" + stageId, out = [];
+  (S.units || []).forEach((u) => ensureUnitReportsLoaded(u.id).forEach((r) => { if (r.status === "custom_pending" && r.customStageId === key) out.push({ unit: u, report: r }); }));
+  return out;
+}
+function apStageRowsHtml(a) {
+  const pend = S.ui.apStageDisableAsk;
+  return (a.stages || []).map((st, i) => {
+    const off = !!st.disabled;
+    const asking = pend && pend.pathId === a.id && pend.stageId === st.id;
+    const waiting = asking ? apReportsAtStage(a.id, st.id).length : 0;
+    return `<div style="display:flex;gap:8px;align-items:center;font-size:12px;margin-bottom:4px;flex-wrap:wrap;${off ? "opacity:.65;" : ""}">
+      <span style="width:22px;height:22px;border-radius:50%;background:${off ? SUBTLE : ROSE};color:#fff;font-size:11px;font-weight:800;display:flex;align-items:center;justify-content:center;flex-shrink:0;">${i + 1}</span>
+      <span style="font-weight:700;${off ? "text-decoration:line-through;" : ""}">${esc(st.name || "مرحلة")}</span><span style="color:${SUBTLE};">← ${esc(apApproverLabel(st.approver))}</span>
+      ${off ? badgeHtml("معطّلة مؤقتًا — تُتخطّى", "#7a4d16", GOLD_BG) : ""}
+      ${asking
+        ? `<span style="display:inline-flex;gap:6px;align-items:center;flex-wrap:wrap;background:${GOLD_BG};padding:4px 8px;border-radius:10px;"><span style="font-weight:700;">تعطيل هذه المرحلة؟${waiting ? ` ${waiting} تقرير واقف عندها الآن سينتقل للمرحلة التالية.` : ""}</span>${pillBtn("تعطيل", { variant: "danger", action: "ap-stage-disable", data: { id: a.id, sid: st.id } })}${pillBtn("تراجع", { variant: "ghost", action: "ap-stage-disable-cancel" })}</span>`
+        : `<button type="button" class="pill-btn pill-ghost" style="padding:3px 10px;font-size:11px;" data-action="${off ? "ap-stage-enable" : "ap-stage-disable-ask"}" data-id="${esc(a.id)}" data-sid="${esc(st.id)}">${off ? "تفعيل المرحلة" : "تعطيل مؤقت"}</button>`}
+    </div>`;
+  }).join("");
+}
+// ينقل التقارير الواقفة عند مرحلة صارت معطّلة إلى المرحلة المفعّلة التالية (أو ينهيها لو ما بعدها شيء)
+function apSkipReportsAtStage(path, stageId) {
+  const all = path.stages || [];
+  const idx = all.findIndex((x) => x.id === stageId);
+  const nextSt = all.slice(idx + 1).find((x) => !x.disabled);
+  const stName = (all[idx] || {}).name || "مرحلة";
+  // إجراء هيكلي من مديرة النظام (تعطيل مرحلة) — يُسمح له بتحريك التقارير رغم وضع "الاطلاع فقط"
+  const prevAllow = S.__adminAllowWrite; S.__adminAllowWrite = true;
+  try { apReportsAtStage(path.id, stageId).forEach(({ unit, report }) => {
+    const log = [...(report.customLog || [])];
+    if (nextSt) {
+      const nk = AP_PREFIX + path.id + ":" + nextSt.id;
+      log.push(apLogEntry("send", AP_PREFIX + path.id + ":" + stageId, nk, "تخطّى مرحلة «" + stName + "» (معطّلة مؤقتًا) إلى " + nextSt.name));
+      saveReportEntry(unit.id, { ...report, customStageId: nk, customLog: log, updatedAt: Date.now() });
+    } else {
+      log.push(apLogEntry("final", AP_PREFIX + path.id + ":" + stageId, "final", "انتهى المسار — مرحلة «" + stName + "» معطّلة مؤقتًا"));
+      saveReportEntry(unit.id, { ...report, status: "completed", customStageId: null, customLog: log, updatedAt: Date.now() });
+    }
+  }); } finally { S.__adminAllowWrite = prevAllow; }
+}
 // المسار المثبَّت على التقرير (من المرحلة الحالية أو من آخر حركة بالسجل)
 function reportApPathId(report) {
   if (!report) return null;
@@ -1565,7 +1615,15 @@ function userHoldsApStage(stage) {
   const s = String(stage.approver); const i = s.indexOf(":");
   const k = s.slice(0, i), id = s.slice(i + 1);
   if (k === "person") return S.currentPersonId === id;
-  if (k === "role") { const p = currentPersonObj(); return !!p && p.roleId === id; }
+  if (k === "role") { if (S.levelScope) return S.levelScope.roleId === id; const p = currentPersonObj(); return !!p && p.roleId === id; }
+  if (k === "level") {
+    if (S.levelScope) return S.levelScope.levelId === id;
+    // مستوى مربوط بقسم/مكتب موجود: حساب تلك الجهة نفسه يقوم بالمرحلة أيضًا
+    const l = olFind(id); if (!l || S.currentPersonId) return false;
+    if (l.linkKind === "dept") return !!S.isDepartmentUser && S.currentDepartmentId === l.linkId;
+    if (l.linkKind === "office") return !!S.isOfficeUser && S.currentOfficeId === l.linkId;
+    return false;
+  }
   if (k === "dept") return !!S.isDepartmentUser && !S.currentPersonId && S.currentDepartmentId === id;
   if (k === "office") return !!S.isOfficeUser && !S.currentPersonId && S.currentOfficeId === id;
   return false;
@@ -1574,6 +1632,7 @@ function apStageIsPassThrough(st) { return !st.canApprove && !st.canReturn && !s
 function apPendingForMe() {
   const out = [];
   (S.units || []).forEach((u) => {
+    if (S.levelScope && !S.levelScope.unitIds.has(u.id)) return;
     ensureUnitReportsLoaded(u.id).forEach((r) => {
       if (r.status !== "custom_pending") return;
       const ref = apRefOf(r.customStageId); if (!ref) return;
@@ -1590,6 +1649,7 @@ function userInAnyApStage() {
   return approvalPathsList().some((p) => apStageList(p).some((st) => userHoldsApStage(st)));
 }
 function canViewReportViaApPath(unitId) {
+  if (S.levelScope && !S.levelScope.unitIds.has(unitId)) return false;
   return ensureUnitReportsLoaded(unitId).some((r) => {
     const ref = apRefOf(r.customStageId); if (!ref) return false;
     const p = apPathById(ref.pathId);
@@ -1612,7 +1672,7 @@ function apSendReport(unitId, entry, pathId, notes) {
   entry = { ...entry, sections: cleanSections };
   if (i >= stages.length) {
     const last = stages[stages.length - 1];
-    const status = last.canApprove ? "approved" : "completed";
+    const status = last && last.canApprove ? "approved" : "completed";
     log.push(apLogEntry("final", "unit", "final", "أُرسل وانتهى المسار (" + path.name + ")" + noteTxt));
     saveReportEntry(unitId, { ...entry, status, customStageId: null, customLog: log, internalSentAt: Date.now(), updatedAt: Date.now() });
   } else {
@@ -1982,6 +2042,8 @@ function render() {
     html = shellWrap(renderDepartmentsPage());
   } else if (S.view === "org-chart") {
     html = shellWrap(renderOrgChartPage());
+  } else if (S.view === "org-levels") {
+    html = shellWrap(renderOrgLevelsPage());
   } else if (S.view === "department-curation") {
     html = shellWrap(renderCurationUnified());
   } else if (S.view === "executive-dashboard") {
@@ -2418,7 +2480,7 @@ function renderMainSidebar(mobile) {
   const sbPersonRole = sbPerson ? rolesList().find((r) => r.id === sbPerson.roleId) : null;
   const sbName = sbPerson ? sbPerson.name : (S.currentUser ? S.currentUser.name : "");
   const initial = (sbName ? String(sbName).trim()[0] : "؟");
-  const roleLabel = S.isAdmin ? "مديرة النظام" : S.isDepartmentUser ? "مديرة قسم" : S.isExecutive ? "الإدارة العليا" : S.isOfficeUser ? "مكتب إشراف" : S.currentUnitEntryMode === "head" ? "رئيسة الوحدة" : S.currentUnitEntryMode === "extra" ? (((S.units.find((u) => u.id === S.currentUnitId) || {}).extraReviewerTitle) || "مراجعة إضافية") : "مسؤولة الوحدة";
+  const roleLabel = S.isAdmin ? "مديرة النظام" : S.isDepartmentUser ? "مديرة قسم" : S.isExecutive ? (S.levelScope ? (S.levelScope.type || "مستوى") : "الإدارة العليا") : S.isOfficeUser ? "مكتب إشراف" : S.currentUnitEntryMode === "head" ? "رئيسة الوحدة" : S.currentUnitEntryMode === "extra" ? (((S.units.find((u) => u.id === S.currentUnitId) || {}).extraReviewerTitle) || "مراجعة إضافية") : "مسؤولة الوحدة";
   const site = currentSiteSettings();
   const taglineHtml = S.isAdmin ? "" : sidebarTaglineBlockHtml(site);
 
@@ -2766,15 +2828,18 @@ function renderLogin() {
   const err = S.ui.loginError || "";
   const showPw = !!S.ui.loginShowPw;
   const busy = !!S.ui.loginBusy;
+  const en = currentEntry();
+  if (!en && !S.ui.portalSkip && portalActive()) return renderPortalPage();
+  if (en && !S.ui.loginUsernameVal) S.ui.loginUsernameVal = en.username;
   return `
   <div class="login-wrap">
     <div class="login-box">
       <div class="login-card">
-        <div style="text-align:center;margin-bottom:26px;">
+        ${en ? entryLoginHeaderHtml(en) : `<div style="text-align:center;margin-bottom:26px;">
           <img class="login-logo" src="${esc(siteLogoSrc(currentSiteSettings()))}" alt="جمعية فرقان" />
           <div class="prs-title" style="font-size:21px;font-weight:900;color:#000">نظام توثيق الأداء</div>
           <div style="font-size:11.5px;color:${SUBTLE};margin-top:4px;">جمعية فرقان لتحفيظ القرآن الكريم بالطائف</div>
-        </div>
+        </div>`}
         <form id="login-form">
           ${fieldWrap("اسم المستخدم", true, `
             <div class="input-icon-wrap">
@@ -2789,6 +2854,8 @@ function renderLogin() {
           ${err ? `<div class="error-box">${esc(err)}</div>` : ""}
           <button type="submit" class="submit-btn" ${busy ? "disabled" : ""}>${iconLogin(17, "#fff")} ${busy ? "جارٍ تسجيل الدخول..." : "تسجيل الدخول"}</button>
         </form>
+        ${en ? `<button type="button" data-action="entry-clear" style="display:block;margin:14px auto 0;background:none;border:none;color:${SUBTLE};font-size:11.5px;cursor:pointer;text-decoration:underline;font-family:inherit;">${portalEnabled() ? "رجوع" : "الدخول بحساب آخر"}</button>` : ""}
+        ${!en && S.ui.portalSkip && portalEnabled() ? `<button type="button" data-action="portal-return" style="display:block;margin:14px auto 0;background:none;border:none;color:${SUBTLE};font-size:11.5px;cursor:pointer;text-decoration:underline;font-family:inherit;">رجوع لبوابة الدخول</button>` : ""}
       </div>
       ${sheetsConfigured()
         ? `<div class="login-hint" style="color:${GREEN}">مربوط بقاعدة البيانات ✓ — سجّلي بالاسم وكلمة المرور المسجّلة بها</div>`
@@ -2810,6 +2877,7 @@ async function handleLoginSubmit() {
         try { await refreshRolesPersonsFromSheet(); } catch (e) { /* نكمل بالنسخة المحلية */ }
       }
       try { await refreshReportTabsFromSheet(); } catch (e) { /* نكمل بالنسخة المحلية */ }
+      try { await refreshOrgLevelsFromSheet(); } catch (e) { /* نكمل بالنسخة المحلية */ }
       if (result.user && result.user.role !== "admin" && result.user.unitId) {
         // نحتاج الأشخاص (platform_users) والقوالب قبل شاشة "كيف تريدين الدخول؟"
         try { await refreshPlatformUsersFromSheet(); await refreshJobTitleTemplatesFromSheet(); await refreshRolesPersonsFromSheet(); } catch (e) { /* نكمل بالنسخة المحلية */ }
@@ -2827,6 +2895,16 @@ async function handleLoginSubmit() {
       startPlatformUserLogin(puRes.data.map(rowToPlatformUser));
       return;
     }
+    // حساب "مستوى" من الهيكل المرن (org_levels)
+    const lvRes = await supabaseRequest(`org_levels?login_id=eq.${encodeURIComponent(username)}&password=eq.${encodeURIComponent(password)}&status=eq.active&select=*&limit=1`);
+    if (lvRes.ok && Array.isArray(lvRes.data) && lvRes.data.length) {
+      S.ui.loginBusy = true; render();
+      try { await refreshUnitsAndDepartmentsFromSheet(); await refreshOrgLevelsFromSheet(); await refreshRolesPersonsFromSheet(); await refreshApprovalPathsFromSheet(); } catch (e) { /* نكمل بالنسخة المحلية */ }
+      S.ui.loginBusy = false; S.ui.loginError = "";
+      const lv = olFind(lvRes.data[0].id) || rowToOrgLevel(lvRes.data[0]);
+      doLoginLevel(lv);
+      return;
+    }
     S.ui.loginError = result.error || "تعذر تسجيل الدخول";
     render();
     return;
@@ -2837,6 +2915,8 @@ async function handleLoginSubmit() {
   if (match) { S.ui.loginError = ""; doLogin(match); return; }
   const localMatches = dataStore.getPlatformUsers().filter((u) => u.loginId === username && u.password === password && u.status !== "disabled");
   if (localMatches.length) { S.ui.loginError = ""; startPlatformUserLogin(localMatches); return; }
+  const lvLocal = findLevelLogin(username, password);
+  if (lvLocal) { S.ui.loginError = ""; doLoginLevel(lvLocal); return; }
   S.ui.loginError = "اسم المستخدم أو كلمة السر غير صحيحة"; render();
 }
 
@@ -3146,6 +3226,8 @@ function doLogin(user) {
   S.units = dataStore.getUnits();
   S.departments = dataStore.getDepartments();
   S.offices = dataStore.getOffices();
+  // حساب مستوى من الهيكل المرن: اطّلاع كالإدارة العليا لكن على وحدات ما تحته فقط
+  S.levelScope = user.levelId ? { levelId: user.levelId, type: user.levelType || "", unitIds: olScopeUnitIds(user.levelId) } : null;
   S.indicatorDefinitions = dataStore.getIndicatorDefinitions();
   S.goalsDefinitions = dataStore.getGoalsDefinitions();
   applyReportSectionDefs(dataStore.getReportSectionDefs());
@@ -3214,7 +3296,7 @@ function doLogin(user) {
   render();
   if (sheetsConfigured()) {
     if (S.isAdmin || S.isExecutive) {
-      Promise.all(S.units.map((u) => refreshReportsFromSheet(u.id))).then(() => { if (S.currentUser) render(); });
+      Promise.all(scopeUnitsFilter(S.units).map((u) => refreshReportsFromSheet(u.id))).then(() => { if (S.currentUser) render(); });
     } else if (S.isDepartmentUser) {
       Promise.all(S.units.filter((u) => u.departmentId === S.currentDepartmentId).map((u) => refreshReportsFromSheet(u.id))).then(() => { if (S.currentUser) render(); });
     } else if (S.isOfficeUser) {
@@ -3226,6 +3308,8 @@ function doLogin(user) {
 }
 
 function doLogout() {
+  S.levelScope = null;
+  S.entryLink = parseEntryParam(); S.ui.portalType = ""; S.ui.portalSkip = false; S.ui.portalFromType = "";
   S.currentUser = null; S.currentPersonId = null; S.currentPersonName = ""; S.currentEntryRoleName = ""; S.currentUnitId = null; S.currentDepartmentId = null; S.currentOfficeId = null; S.isAdmin = false; S.isDepartmentUser = false; S.isExecutive = false; S.isOfficeUser = false; S.cameFromAllReports = false; S.adminPreviewOrigin = null; S.pendingUnitLoginId = null; S.pendingEntityLogin = null; S.currentUnitEntryMode = null; S.platformUserAllowedPages = null; S.platformUserAllowedActions = null; S.platformUserAllowedButtons = null; S.personNotifyTabs = null; S.currentPlatformUserTemplateId = ""; S.currentPlatformUserJobTitle = null; S.pendingPlatformUserMatches = null; S.view = "login"; S.ui = {};
   render();
 }
@@ -4069,6 +4153,708 @@ function renderOrgChartPage() {
   </div></div>`;
 }
 
+/* =============================== الهيكل المرن (org_levels) ====================
+   شجرة مستويات بلا حد للعمق فوق النظام الحالي — لا تمس جداول الوحدات/الأقسام/
+   المكاتب ولا حساباتها ولا تقاريرها:
+   - كل مستوى: اسم + نوع (تكتبه مديرة النظام، والأنواع نفسها قائمة قابلة للتعديل)
+     + أب (parent_id) + ربط اختياري بجهة موجودة (وحدة/قسم/مكتب) + دخول اختياري.
+   - من تدخل بحساب مستوى ترى (اطّلاع فقط، بنفس صفحات الإدارة العليا) كل الوحدات
+     تحت هذا المستوى مهما كان العمق: الوحدة المربوطة، ووحدات القسم المربوط، ووحدات
+     المكتب المربوط.
+   - البيانات بجدول org_levels المستقل؛ أنواع المستويات وإخفاء "المخطط الحر"
+     ضمن theme بإعدادات الموقع (بدون أعمدة جديدة). */
+const ORG_LEVELS_KEY = "prs:org-levels";
+const DEFAULT_LEVEL_TYPES = ["مساعدة", "قسم", "مكتب", "مديرة", "مجلس", "وحدة", "مركز"];
+const LEVEL_TYPE_PALETTE = [["#6b2337", "#f6e6eb"], ["#7a4d16", "#fbf0e1"], ["#24527a", "#e6eff7"], ["#5b3a73", "#efe7f5"], ["#2E6B52", "#e7f5ee"], ["#4d5a66", "#eaeef2"], ["#8a3350", "#fbeaf0"], ["#6b5a12", "#f7f1d9"]];
+const OL_LINK_KINDS = [{ id: "", label: "بدون — مستوى جديد" }, { id: "office", label: "مكتب موجود" }, { id: "dept", label: "قسم موجود" }, { id: "unit", label: "وحدة / مركز موجود" }];
+
+function orgLevelToRow(l) {
+  return { id: l.id, name: l.name || "", level_type: l.type || "", parent_id: l.parentId || "", link_kind: l.linkKind || "", link_id: l.linkId || "",
+    login_id: l.loginId || "", password: l.password || "", role_id: l.roleId || "", status: l.status || "active", order_index: Number(l.order) || 0, created_at: l.createdAt || Date.now() };
+}
+function rowToOrgLevel(r) {
+  return { id: r.id, name: r.name || "", type: r.level_type || "", parentId: r.parent_id || "", linkKind: r.link_kind || "", linkId: r.link_id || "",
+    loginId: r.login_id || "", password: r.password || "", roleId: r.role_id || "", status: r.status || "active", order: Number(r.order_index) || 0, createdAt: Number(r.created_at) || 0 };
+}
+function getOrgLevelsLocal() { try { const v = lsGet(ORG_LEVELS_KEY); return v ? JSON.parse(v) : []; } catch (e) { return []; } }
+function currentOrgLevels() { return S.orgLevels || (S.orgLevels = getOrgLevelsLocal()); }
+function saveOrgLevels(list) {
+  const gone = removedIdsFor(ORG_LEVELS_KEY, list.map((x) => x.id), idsOfList);
+  S.orgLevels = list;
+  lsSet(ORG_LEVELS_KEY, JSON.stringify(list));
+  if (sheetsConfigured()) queueSupabaseReplaceTable("org_levels", list.map(orgLevelToRow), "id", gone).catch(() => {});
+}
+async function refreshOrgLevelsFromSheet() {
+  if (!sheetsConfigured()) return;
+  await pendingSupabaseWrite("org_levels");
+  const res = await supabaseRequest("org_levels?select=*");
+  if (res.ok && Array.isArray(res.data)) {
+    S.orgLevels = res.data.map(rowToOrgLevel);
+    lsSet(ORG_LEVELS_KEY, JSON.stringify(S.orgLevels));
+  }
+}
+function levelTypesList() {
+  const th = ((S.siteSettings || {}).theme) || {};
+  return Array.isArray(th.levelTypes) ? th.levelTypes.slice() : DEFAULT_LEVEL_TYPES.slice();
+}
+function saveSiteTheme(patch) {
+  S.siteSettings = S.siteSettings || dataStore.getSiteSettings();
+  S.siteSettings = { ...S.siteSettings, theme: { ...(S.siteSettings.theme || {}), ...patch } };
+  dataStore.saveSiteSettings(S.siteSettings);
+}
+function freeChartHidden() { return !!((((S.siteSettings || {}).theme) || {}).hideFreeChart); }
+function levelTypeChipHtml(type) {
+  if (!type) return `<span style="font-size:10.5px;font-weight:700;padding:3px 9px;border-radius:999px;white-space:nowrap;color:#5c4f55;background:${GRAY_BG};">بدون نوع</span>`;
+  const types = levelTypesList();
+  let i = types.indexOf(type);
+  if (i === -1) { i = 0; for (let k = 0; k < type.length; k++) i = (i + type.charCodeAt(k)) % LEVEL_TYPE_PALETTE.length; }
+  const c = LEVEL_TYPE_PALETTE[i % LEVEL_TYPE_PALETTE.length];
+  return `<span style="font-size:10.5px;font-weight:700;padding:3px 9px;border-radius:999px;white-space:nowrap;color:${c[0]};background:${c[1]};">${esc(type)}</span>`;
+}
+function olActive() { return currentOrgLevels().filter((l) => l.status !== "deleted"); }
+function olChildren(parentId) {
+  return olActive().filter((l) => (l.parentId || "") === (parentId || "")).sort((a, b) => (a.order - b.order) || (a.createdAt - b.createdAt));
+}
+function olFind(id) { return olActive().find((l) => l.id === id) || null; }
+function olDescendantIds(id) {
+  const out = [];
+  const walk = (pid) => olChildren(pid).forEach((c) => { out.push(c.id); walk(c.id); });
+  walk(id);
+  return out;
+}
+function olPath(id) {
+  const path = []; let cur = olFind(id); const seen = new Set();
+  while (cur && !seen.has(cur.id)) { seen.add(cur.id); path.unshift(cur); cur = cur.parentId ? olFind(cur.parentId) : null; }
+  return path;
+}
+function olLinkedEntity(l) {
+  if (!l || !l.linkKind || !l.linkId) return null;
+  if (l.linkKind === "office") { const o = (S.offices || []).find((x) => x.id === l.linkId); return o ? { name: o.name, kind: "مكتب" } : { name: "(جهة محذوفة)", kind: "مكتب" }; }
+  if (l.linkKind === "dept") { const d = (S.departments || []).find((x) => x.id === l.linkId); return d ? { name: d.name, kind: "قسم" } : { name: "(جهة محذوفة)", kind: "قسم" }; }
+  const u = (S.units || []).find((x) => x.id === l.linkId); return u ? { name: u.name, kind: u.role === "center" ? "مركز" : "وحدة" } : { name: "(جهة محذوفة)", kind: "وحدة" };
+}
+// الصفحات اللي تشتغل لحساب مستوى (يرى عدة وحدات) — أي صفحة أخرى بالدور تُتجاهل له.
+const LEVEL_COMPATIBLE_PAGES = ["dashboard", "executive-dashboard", "custom-path-inbox", "all-reports", "executive-summary", "executive-final-report"];
+function levelRoleSummary(roleId) {
+  if (!roleId) return null;
+  const role = rolesList().find((r) => r.id === roleId);
+  if (!role) return { name: "(دور محذوف)", pages: [], inPaths: 0 };
+  const pages = normalizeDashboardPages(rolePermsOf(role).pages).filter((p) => LEVEL_COMPATIBLE_PAGES.includes(p));
+  const inPaths = approvalPathsList().filter((ap) => (ap.stages || []).some((st) => String(st.approver || "") === "role:" + role.id)).length;
+  return { name: role.name, pages, inPaths };
+}
+// كل الوحدات (النشطة، الحقيقية) تحت مستوى معيّن — يشمل المستوى نفسه وكل ما تحته.
+function olScopeUnitIds(levelId) {
+  const ids = new Set();
+  const isReal = (u) => u && u.status === "active" && u.role !== "admin" && u.role !== "executive";
+  [levelId, ...olDescendantIds(levelId)].forEach((id) => {
+    const l = olFind(id);
+    if (!l || !l.linkKind || !l.linkId) return;
+    if (l.linkKind === "unit") { const u = (S.units || []).find((x) => x.id === l.linkId); if (isReal(u)) ids.add(u.id); }
+    else if (l.linkKind === "dept") (S.units || []).filter((u) => u.departmentId === l.linkId && isReal(u)).forEach((u) => ids.add(u.id));
+    else if (l.linkKind === "office") officeUnits(l.linkId).filter(isReal).forEach((u) => ids.add(u.id));
+  });
+  return ids;
+}
+// نطاق حساب المستوى الحالي (null لكل الحسابات الأخرى = بلا أي تغيير)
+function scopeUnitsFilter(list) { return S.levelScope ? (list || []).filter((u) => S.levelScope.unitIds.has(u.id)) : list; }
+function scopeDeptsFilter(list) {
+  if (!S.levelScope) return list;
+  const d = new Set((S.units || []).filter((u) => S.levelScope.unitIds.has(u.id)).map((u) => u.departmentId));
+  return (list || []).filter((x) => d.has(x.id));
+}
+
+/* ---- الصفحة ---- */
+function olUi() { return S.ui.ol || (S.ui.ol = { selected: null, collapsed: {}, form: null, confirmDelete: null, typeEdit: null, typeDelete: null, msg: "" }); }
+function olRowHtml(l, depth) {
+  const ui = olUi();
+  const kids = olChildren(l.id);
+  const open = !ui.collapsed[l.id];
+  const sel = ui.selected === l.id;
+  const linked = olLinkedEntity(l);
+  const desc = olDescendantIds(l.id).length;
+  return `<div style="display:flex;align-items:center;gap:4px;border-radius:10px;padding:2px 4px;padding-right:${4 + depth * 24}px;background:${sel ? "#f6e6eb" : "transparent"};box-shadow:${sel ? `inset -3px 0 0 ${ROSE}` : "none"};">
+      ${kids.length ? `<button type="button" class="icon-btn" style="width:30px;height:30px;background:transparent;" data-action="ol-toggle" data-id="${esc(l.id)}" aria-label="فتح أو إغلاق ما تحته"><span style="display:inline-flex;transition:transform .15s;transform:rotate(${open ? 0 : 90}deg);">${iconChevronDown(13, SUBTLE)}</span></button>` : `<span style="width:30px;flex-shrink:0;text-align:center;color:#d6c3ca;">•</span>`}
+      <button type="button" data-action="ol-select" data-id="${esc(l.id)}" style="flex:1;min-width:0;min-height:40px;display:flex;align-items:center;gap:8px;border:none;background:transparent;text-align:right;cursor:pointer;padding:0 4px;font-family:inherit;color:${INK};">
+        ${levelTypeChipHtml(l.type)}
+        <span style="font-size:13px;font-weight:${kids.length || depth < 1 ? 800 : 600};overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(l.name)}</span>
+        ${linked ? `<span style="font-size:10px;font-weight:700;color:#2E7A5C;background:${GREEN_BG};padding:2px 8px;border-radius:999px;white-space:nowrap;">${esc(linked.kind)} موجود</span>` : ""}
+        ${l.loginId ? (l.status === "disabled" ? `<span style="font-size:10px;font-weight:700;color:${DANGER};background:${DANGER_BG};padding:2px 8px;border-radius:999px;white-space:nowrap;">الدخول معطّل</span>` : `<span title="له حساب دخول" style="display:inline-flex;">${iconKey(13, SUBTLE)}</span>`) : ""}
+        <span style="margin-right:auto;font-size:11px;color:#7a6870;white-space:nowrap;">${desc ? desc + " تحته" : ""}</span>
+      </button>
+    </div>
+    ${kids.length && open ? kids.map((c) => olRowHtml(c, depth + 1)).join("") : ""}`;
+}
+function olParentOptionsHtml(selectedId, excludeId) {
+  const banned = excludeId ? new Set([excludeId, ...olDescendantIds(excludeId)]) : new Set();
+  const opts = [];
+  const walk = (pid, depth) => olChildren(pid).forEach((l) => { if (banned.has(l.id)) return; opts.push(`<option value="${esc(l.id)}" ${l.id === selectedId ? "selected" : ""}>${"— ".repeat(depth)}${esc(l.name)}${l.type ? " (" + esc(l.type) + ")" : ""}</option>`); walk(l.id, depth + 1); });
+  walk("", 0);
+  return `<option value="" ${!selectedId ? "selected" : ""}>— أعلى الهيكل (بدون أب)</option>${opts.join("")}`;
+}
+function olLinkEntityOptions(kind) {
+  if (kind === "office") return (S.offices || []).filter((o) => o.status !== "disabled");
+  if (kind === "dept") return (S.departments || []).filter((d) => d.status === "active");
+  if (kind === "unit") return (S.units || []).filter((u) => u.status === "active" && u.role !== "admin" && u.role !== "executive" && u.role !== "self_report");
+  return [];
+}
+function olFormHtml() {
+  const ui = olUi(); const f = ui.form;
+  const types = levelTypesList();
+  const ents = olLinkEntityOptions(f.linkKind);
+  const usedBy = (f.linkKind && f.linkId) ? olActive().find((l) => l.id !== f.id && l.linkKind === f.linkKind && l.linkId === f.linkId) : null;
+  return `<div class="card card-lg">
+    <div class="prs-title" style="font-size:15px;font-weight:800;margin-bottom:14px;">${f.mode === "edit" ? "تعديل مستوى" : "إضافة مستوى"}</div>
+    ${ui.formError ? `<div class="error-box">${esc(ui.formError)}</div>` : ""}
+    <div class="field"><label class="field-label" for="ol-f-name">الاسم <span class="req-star">*</span></label><input class="input" id="ol-f-name" value="${esc(f.name || "")}" placeholder="مثال: مديرة الشؤون التعليمية" /></div>
+    <div class="field"><label class="field-label" for="ol-f-type">النوع</label>
+      <select class="input" id="ol-f-type" data-action="ol-form-refresh">
+        <option value="" ${!f.typeNewMode && !f.type ? "selected" : ""}>بدون نوع</option>
+        ${types.map((t) => `<option value="${esc(t)}" ${!f.typeNewMode && f.type === t ? "selected" : ""}>${esc(t)}</option>`).join("")}
+        <option value="__new" ${f.typeNewMode ? "selected" : ""}>+ نوع جديد…</option>
+      </select>
+      ${f.typeNewMode ? `<input class="input" id="ol-f-type-new" style="margin-top:8px;" value="${esc(f.typeNew || "")}" placeholder="اكتبي النوع الجديد (يُضاف لقائمة الأنواع)" />` : ""}
+    </div>
+    <div class="field"><label class="field-label" for="ol-f-parent">يتبع</label><select class="input" id="ol-f-parent">${olParentOptionsHtml(f.parentId, f.mode === "edit" ? f.id : null)}</select></div>
+    <div class="field"><label class="field-label" for="ol-f-link-kind">ربطه بجهة موجودة؟</label>
+      <select class="input" id="ol-f-link-kind" data-action="ol-form-refresh">${OL_LINK_KINDS.map((k) => `<option value="${k.id}" ${f.linkKind === k.id ? "selected" : ""}>${esc(k.label)}</option>`).join("")}</select>
+      ${f.linkKind ? `<select class="input" id="ol-f-link-id" style="margin-top:8px;" data-action="ol-form-refresh"><option value="">اختاري…</option>${ents.map((e) => `<option value="${esc(e.id)}" ${f.linkId === e.id ? "selected" : ""}>${esc(e.name)}</option>`).join("")}</select>
+        <div class="hint">الجهة تبقى بحسابها وتقاريرها كما هي — الربط يضعها في مكانها بالشجرة فقط.</div>
+        ${usedBy ? `<div class="hint bad">هذه الجهة مربوطة أصلًا بـ "${esc(usedBy.name)}" — الحفظ ينقل الربط إلى هنا.</div>` : ""}` : `<div class="hint">مستوى جديد للتنظيم (مثل: مساعدة، مجلس، مديرة شؤون…).</div>`}
+    </div>
+    <div class="subhead">حساب دخول لهذا المستوى (اختياري)</div>
+    <div class="row-flex">
+      <div class="field"><label class="field-label" for="ol-f-login">اسم المستخدم</label><input class="input" id="ol-f-login" value="${esc(f.loginId || "")}" placeholder="فارغ = بدون دخول" autocomplete="off" /></div>
+      <div class="field"><label class="field-label" for="ol-f-pass">كلمة السر</label><input class="input" id="ol-f-pass" value="${esc(f.password || "")}" autocomplete="off" /></div>
+    </div>
+    <div class="field"><label class="field-label" for="ol-f-role">الصلاحيات</label>
+      <select class="input" id="ol-f-role" data-action="ol-form-refresh">
+        <option value="" ${!f.roleId ? "selected" : ""}>اطّلاع فقط — بدون تعديل (الافتراضي)</option>
+        ${rolesList().filter((r) => r.status !== "disabled").map((r) => `<option value="${esc(r.id)}" ${f.roleId === r.id ? "selected" : ""}>حسب دور: ${esc(r.name)}</option>`).join("")}
+      </select>
+      ${(() => { const rs = levelRoleSummary(f.roleId); if (!rs) return `<div class="hint">ترى لوحة المعلومات وجميع التقارير والملخص والتقرير النهائي لوحدات ما تحتها — قراءة فقط.</div>`;
+        const lbl = (id) => ((SIDEBAR_PAGES.find((x) => x.id === id) || {}).label || id);
+        return `<div class="hint">الصفحات: ${rs.pages.length ? rs.pages.map((x) => esc(lbl(x))).join("، ") : "لا توجد صفحات مناسبة بهذا الدور — ستُعرض صفحات الاطّلاع الافتراضية"}.<br>الاعتماد / الإعادة / التعديل: ${rs.inPaths ? `هذا الدور مرحلة في ${rs.inPaths} مسار اعتماد — تعتمد وتعيد وتعدّل حسب إعداد المرحلة، على تقارير وحدات ما تحتها فقط` : "هذا الدور غير موضوع في أي مسار اعتماد بعد — أضيفيه كمرحلة من «إدارة المسارات» ليقدر يعتمد أو يعيد أو يعدّل"}.<br>تعديل صفحات وأزرار الدور نفسه من «الهيكل والأشخاص ← إدارة الأدوار».</div>`; })()}
+    </div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;">
+      ${pillBtn("حفظ", { icon: iconCheck(14, "#fff"), action: "ol-save" })}
+      ${pillBtn("إلغاء", { variant: "ghost", action: "ol-cancel-form" })}
+    </div>
+  </div>`;
+}
+function olDetailsHtml(l) {
+  const ui = olUi();
+  const path = olPath(l.id);
+  const parent = path.length > 1 ? path[path.length - 2].name : "— (أعلى الهيكل)";
+  const linked = olLinkedEntity(l);
+  const kids = olChildren(l.id);
+  const desc = olDescendantIds(l.id).length;
+  const unitCount = olScopeUnitIds(l.id).size;
+  const confirm = ui.confirmDelete === l.id;
+  const box = (v, label) => `<div style="background:#f6f0f2;border-radius:12px;padding:10px;text-align:center;"><div style="font-size:20px;font-weight:900;color:${ROSE};">${v}</div><div style="font-size:11px;color:#6f5f66;">${label}</div></div>`;
+  const kv = (k, v) => `<div style="display:flex;justify-content:space-between;gap:10px;font-size:12.5px;"><span style="color:#6f5f66;">${k}</span><span style="font-weight:700;text-align:left;">${v}</span></div>`;
+  return `<div class="card card-lg" style="display:flex;flex-direction:column;gap:12px;">
+    <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">${levelTypeChipHtml(l.type)}${linked ? `<span style="font-size:10.5px;font-weight:700;color:#2E7A5C;background:${GREEN_BG};padding:3px 9px;border-radius:999px;">${esc(linked.kind)} موجود</span>` : ""}</div>
+    <div style="font-size:17px;font-weight:900;line-height:1.5;">${esc(l.name)}</div>
+    <div style="font-size:11.5px;color:#6f5f66;line-height:1.9;">${path.map((p) => esc(p.name)).join("  ›  ")}</div>
+    <div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;">${box(kids.length, "تحته مباشرة")}${box(desc, "كل ما تحته")}${box(unitCount, "وحدة تصلها تقاريرها")}</div>
+    <div style="border-top:1px solid ${BORDER};padding-top:10px;display:flex;flex-direction:column;gap:8px;">
+      ${kv("يتبع", esc(parent))}
+      ${kv("مربوط بـ", linked ? `${esc(linked.kind)}: ${esc(linked.name)}` : "مستوى جديد — بدون جهة سابقة")}
+      ${kv("دخول خاص", l.loginId ? `اسم المستخدم: ${esc(l.loginId)}${l.status === "disabled" ? ` <span style="color:${DANGER};">(معطّل)</span>` : ""}` : "لا يوجد")}
+      ${l.loginId ? kv("الصلاحيات", (() => { const rs = levelRoleSummary(l.roleId); return rs ? `حسب دور: ${esc(rs.name)}${rs.inPaths ? " — يعتمد في " + rs.inPaths + " مسار" : ""}` : "اطّلاع فقط"; })()) : ""}
+    </div>
+    ${l.loginId ? entryLinkPanelHtml("level", l.id, "رابط دخول هذا المستوى") : ""}
+    ${linked && l.linkKind && l.linkId && linked.name !== "(جهة محذوفة)" ? entryLinkPanelHtml(l.linkKind, l.linkId, `رابط دخول ${linked.kind}: ${linked.name}`) : ""}
+    ${confirm ? `<div style="background:${DANGER_BG};border-radius:12px;padding:12px;display:flex;flex-direction:column;gap:8px;">
+        <div style="font-size:12.5px;font-weight:800;color:${DANGER};">حذف "${esc(l.name)}"؟</div>
+        <div style="font-size:11.5px;color:#5c4f55;line-height:1.8;">يُحذف من الشجرة فقط${linked ? ` — ${esc(linked.kind)} "${esc(linked.name)}" يبقى بحسابه وتقاريره` : ""}.</div>
+        <div style="display:flex;gap:6px;flex-wrap:wrap;">
+          ${kids.length ? pillBtn("حذف ونقل ما تحته للأعلى", { variant: "danger", action: "ol-delete", data: { id: l.id, mode: "lift" } }) + pillBtn(`حذف مع كل ما تحته (${desc})`, { variant: "danger", action: "ol-delete", data: { id: l.id, mode: "all" } }) : pillBtn("حذف", { variant: "danger", action: "ol-delete", data: { id: l.id, mode: "all" } })}
+          ${pillBtn("تراجع", { variant: "ghost", action: "ol-cancel-delete" })}
+        </div>
+      </div>` : `<div style="display:flex;gap:8px;flex-wrap:wrap;">
+        ${pillBtn("مستوى تحته", { icon: iconPlus(14, "#fff"), action: "ol-start-add", data: { parent: l.id } })}
+        ${pillBtn("تعديل / نقل", { variant: "ghost", icon: iconPencil(13, INK), action: "ol-start-edit", data: { id: l.id } })}
+        ${pillBtn("↑", { variant: "ghost", action: "ol-move-order", data: { id: l.id, dir: "-1" } })}
+        ${pillBtn("↓", { variant: "ghost", action: "ol-move-order", data: { id: l.id, dir: "1" } })}
+        ${l.loginId ? pillBtn(l.status === "disabled" ? "تفعيل الدخول" : "تعطيل الدخول", { variant: l.status === "disabled" ? "soft" : "ghost", icon: iconPower(13, l.status === "disabled" ? GREEN : INK), action: "ol-toggle-login", data: { id: l.id } }) : ""}
+        ${pillBtn("حذف", { variant: "danger", icon: iconTrash(13, DANGER), action: "ol-confirm-delete", data: { id: l.id } })}
+      </div>`}
+  </div>`;
+}
+function olTypesBarHtml() {
+  const ui = olUi();
+  const types = levelTypesList();
+  const used = (t) => olActive().filter((l) => l.type === t).length;
+  const chips = types.map((t, i) => {
+    if (ui.typeEdit === t) return `<span style="display:inline-flex;gap:4px;align-items:center;"><input class="input" id="ol-type-edit" value="${esc(t)}" style="width:130px;padding:6px 8px;font-size:12px;" />${pillBtn("حفظ", { action: "ol-type-save", data: { old: t } })}${pillBtn("إلغاء", { variant: "ghost", action: "ol-type-cancel" })}</span>`;
+    if (ui.typeDelete === t) {
+      const n = used(t);
+      return `<span style="display:inline-flex;gap:6px;align-items:center;flex-wrap:wrap;background:${DANGER_BG};padding:6px 8px;border-radius:12px;">
+        <span style="font-size:12px;font-weight:700;color:${DANGER};">حذف نوع "${esc(t)}"${n ? ` — مستخدم في ${n} مستوى، اختاري بديلًا:` : "؟"}</span>
+        ${n ? `<select class="input" id="ol-type-replace" style="width:auto;padding:5px 8px;font-size:12px;"><option value="">بدون نوع</option>${types.filter((x) => x !== t).map((x) => `<option value="${esc(x)}">${esc(x)}</option>`).join("")}</select>` : ""}
+        ${pillBtn("حذف", { variant: "danger", action: "ol-type-delete", data: { old: t } })}${pillBtn("تراجع", { variant: "ghost", action: "ol-type-cancel" })}
+      </span>`;
+    }
+    return `<span style="display:inline-flex;align-items:center;gap:2px;">${levelTypeChipHtml(t)}
+      <button type="button" class="icon-btn" style="width:24px;height:24px;background:transparent;" data-action="ol-type-start-edit" data-old="${esc(t)}" aria-label="تعديل النوع">${iconPencil(11, SUBTLE)}</button>
+      <button type="button" class="icon-btn" style="width:24px;height:24px;background:transparent;" data-action="ol-type-start-delete" data-old="${esc(t)}" aria-label="حذف النوع">${iconX(11, SUBTLE)}</button></span>`;
+  }).join("");
+  return `<div class="card" style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:14px;">
+    <span style="font-size:13px;font-weight:800;">أنواع المستويات</span>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;flex:1;align-items:center;">${chips || `<span class="hint" style="margin:0;">لا توجد أنواع — أضيفي أول نوع.</span>`}</div>
+    <span style="display:inline-flex;gap:6px;align-items:center;"><input class="input" id="ol-type-new" placeholder="نوع جديد…" style="width:130px;padding:6px 8px;font-size:12px;" />${pillBtn("إضافة", { variant: "ghost", icon: iconPlus(13, INK), action: "ol-type-add" })}</span>
+  </div>`;
+}
+function renderOrgLevelsPage() {
+  if (!S.isAdmin) return `<div class="page-wrap"><div class="page-inner"><div class="card" style="text-align:center;color:${SUBTLE};padding:36px;">هذه الصفحة لمديرة النظام فقط.</div></div></div>`;
+  const ui = olUi();
+  const roots = olChildren("");
+  if (ui.selected && !olFind(ui.selected)) ui.selected = null;
+  const sel = ui.selected ? olFind(ui.selected) : null;
+  const chartNodes = currentOrgChart();
+  const chartCount = (function cnt(ns) { return (ns || []).reduce((s, n) => s + 1 + cnt(n.children), 0); })(chartNodes);
+  const side = ui.form ? olFormHtml() : sel ? olDetailsHtml(sel)
+    : `<div class="card card-lg" style="color:${SUBTLE};font-size:12.5px;line-height:2;">اختاري مستوى من الشجرة لعرض تفاصيله، أو اضغطي "إضافة مستوى".<br>• الجهات الموجودة (مكاتب/أقسام/وحدات) تبقى بحساباتها وتقاريرها كما هي — تُربط بالشجرة فقط.<br>• كل مستوى له حساب دخول يرى ما تحته فقط.</div>`;
+  return `
+  <div class="page-wrap"><div class="page-inner" style="max-width:1180px;">
+    ${topBarHtml({ title: "المستخدمون", subtitle: USERS_HUB_SUBTITLE, icon: iconUser(18, ROSE), backAction: "nav-back-admin" })}
+    ${accountsHubTabBarHtml("org-levels")}
+    ${ui.msg ? `<div class="card" style="background:${GREEN_BG};color:${GREEN};font-size:12.5px;font-weight:700;margin-bottom:14px;display:flex;justify-content:space-between;gap:10px;align-items:center;"><span>${esc(ui.msg)}</span><button type="button" class="icon-btn" style="background:transparent;" data-action="ol-clear-msg" aria-label="إغلاق">${iconX(13, GREEN)}</button></div>` : ""}
+    ${olTypesBarHtml()}
+    <div style="display:flex;flex-wrap:wrap;gap:16px;align-items:flex-start;">
+      <div class="card card-lg" style="flex:999 1 520px;min-width:0;">
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-bottom:10px;">
+          <div><div class="prs-title" style="font-size:15px;font-weight:800;display:flex;align-items:center;gap:8px;">${iconLayers(17, ROSE)} الهيكل المرن</div>
+          <div style="font-size:11.5px;color:#6f5f66;margin-top:3px;">مستويات بلا حد — اضغطي أي مستوى لعرض تفاصيله</div></div>
+          <div style="display:flex;gap:6px;flex-wrap:wrap;">
+            ${roots.length ? pillBtn("فتح الكل", { variant: "ghost", action: "ol-expand-all" }) : ""}
+            ${pillBtn("إضافة مستوى", { icon: iconPlus(14, "#fff"), action: "ol-start-add", data: { parent: "" } })}
+          </div>
+        </div>
+        ${roots.length ? `<div style="display:flex;flex-direction:column;gap:2px;">${roots.map((r) => olRowHtml(r, 0)).join("")}</div>`
+          : `<div style="text-align:center;color:${SUBTLE};padding:30px 10px;font-size:13px;line-height:2;">الشجرة فاضية — ابدئي بـ"إضافة مستوى"${chartCount ? `، أو انقلي أسماء "المخطط الحر" (${chartCount}) من الأسفل` : ""}.</div>`}
+        <div style="border-top:1px solid ${BORDER};margin-top:14px;padding-top:12px;display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
+          ${chartCount ? (ui.importConfirm
+            ? `<span style="font-size:12px;font-weight:700;">نقل ${chartCount} اسم من "المخطط الحر" إلى هنا (تُضاف بدون حذف شيء)؟</span>${pillBtn("نقل", { action: "ol-import-chart" })}${pillBtn("تراجع", { variant: "ghost", action: "ol-import-cancel" })}`
+            : pillBtn(`نقل أسماء المخطط الحر (${chartCount})`, { variant: "ghost", icon: iconDownload(13, INK), action: "ol-import-start" })) : ""}
+          ${pillBtn(freeChartHidden() ? "إظهار تبويب المخطط الحر" : "إخفاء تبويب المخطط الحر", { variant: "ghost", action: "ol-toggle-free-chart" })}
+          ${pillBtn(portalEnabled() ? `بوابة الدخول: مفعّلة (${portalEntries().length}) — إيقاف` : "تفعيل بوابة الدخول", { variant: portalEnabled() ? "ghost" : "soft", icon: iconHome(13, portalEnabled() ? INK : GREEN), action: "ol-toggle-portal" })}
+        </div>
+      </div>
+      <div style="flex:1 1 340px;min-width:0;display:flex;flex-direction:column;gap:14px;">${side}</div>
+    </div>
+  </div></div>`;
+}
+function olReadForm() {
+  const ui = olUi(); const f = ui.form; if (!f) return;
+  const g = (id) => { const el = document.getElementById(id); return el ? el.value : null; };
+  if (g("ol-f-name") !== null) f.name = g("ol-f-name");
+  const tSel = g("ol-f-type");
+  if (tSel !== null) {
+    if (tSel === "__new") { f.typeNewMode = true; const tn = g("ol-f-type-new"); if (tn !== null) f.typeNew = tn; }
+    else { f.typeNewMode = false; f.type = tSel; }
+  }
+  if (g("ol-f-parent") !== null) f.parentId = g("ol-f-parent");
+  const lk = g("ol-f-link-kind");
+  if (lk !== null) { if (lk !== f.linkKind) { f.linkKind = lk; f.linkId = ""; } else if (g("ol-f-link-id") !== null) f.linkId = g("ol-f-link-id"); }
+  if (g("ol-f-login") !== null) f.loginId = g("ol-f-login");
+  if (g("ol-f-pass") !== null) f.password = g("ol-f-pass");
+  if (g("ol-f-role") !== null) f.roleId = g("ol-f-role");
+}
+function olImportChart() {
+  const list = currentOrgLevels().slice();
+  let n = 0, ord = olChildren("").length;
+  const add = (nodes, parentId) => (nodes || []).forEach((node, i) => {
+    const id = uid("lvl");
+    list.push({ id, name: String(node.title || "").trim() || "بدون اسم", type: "", parentId, linkKind: "", linkId: "", loginId: "", password: "", status: "active", order: parentId ? i : ord++, createdAt: Date.now() + n });
+    n++;
+    add(node.children, id);
+  });
+  add(currentOrgChart(), "");
+  saveOrgLevels(list);
+  return n;
+}
+function handleOrgLevelsAction(action, ds) {
+  if (!action || action.indexOf("ol-") !== 0) return false;
+  const ui = olUi();
+  const levels = () => currentOrgLevels().slice();
+  switch (action) {
+    case "ol-select": ui.selected = ds.id; ui.form = null; ui.confirmDelete = null; break;
+    case "ol-toggle": ui.collapsed = { ...ui.collapsed, [ds.id]: !ui.collapsed[ds.id] }; break;
+    case "ol-expand-all": ui.collapsed = {}; break;
+    case "ol-clear-msg": ui.msg = ""; break;
+    case "ol-start-add": ui.form = { mode: "add", name: "", type: "", parentId: ds.parent || "", linkKind: "", linkId: "", loginId: "", password: "", roleId: "" }; ui.formError = ""; ui.confirmDelete = null; break;
+    case "ol-start-edit": { const l = olFind(ds.id); if (!l) break; const custom = !!(l.type && !levelTypesList().includes(l.type)); ui.form = { mode: "edit", id: l.id, name: l.name, type: custom ? "" : l.type, typeNewMode: custom, typeNew: custom ? l.type : "", parentId: l.parentId, linkKind: l.linkKind, linkId: l.linkId, loginId: l.loginId, password: l.password, roleId: l.roleId || "" }; ui.formError = ""; break; }
+    case "ol-cancel-form": ui.form = null; ui.formError = ""; break;
+    case "ol-save": {
+      olReadForm();
+      const f = ui.form; if (!f) break;
+      const name = String(f.name || "").trim();
+      let type = f.typeNewMode ? String(f.typeNew || "").trim() : String(f.type || "").trim();
+      const loginId = String(f.loginId || "").trim(), password = String(f.password || "").trim();
+      if (!name) { ui.formError = "اكتبي اسم المستوى."; break; }
+      if (f.linkKind && !f.linkId) { ui.formError = "اختاري الجهة الموجودة، أو اختاري \"بدون\"."; break; }
+      if (loginId && !password) { ui.formError = "اكتبي كلمة سر لحساب الدخول."; break; }
+      if (loginId && olActive().some((l) => l.id !== f.id && (l.loginId || "").trim() === loginId)) { ui.formError = "اسم المستخدم مستخدم لمستوى آخر — اختاري اسمًا مختلفًا."; break; }
+      if (type && !levelTypesList().includes(type)) saveSiteTheme({ levelTypes: [...levelTypesList(), type] });
+      let list = levels();
+      // جهة موجودة تُربط بمستوى واحد فقط — ننقل الربط لو كانت مربوطة بغيره
+      if (f.linkKind && f.linkId) list = list.map((l) => (l.id !== f.id && l.linkKind === f.linkKind && l.linkId === f.linkId) ? { ...l, linkKind: "", linkId: "" } : l);
+      if (f.mode === "edit") {
+        list = list.map((l) => l.id === f.id ? { ...l, name, type, parentId: f.parentId || "", linkKind: f.linkKind || "", linkId: f.linkKind ? f.linkId : "", loginId, password: loginId ? password : "", roleId: f.roleId || "" } : l);
+        ui.selected = f.id;
+      } else {
+        const id = uid("lvl");
+        list.push({ id, name, type, parentId: f.parentId || "", linkKind: f.linkKind || "", linkId: f.linkKind ? f.linkId : "", loginId, password: loginId ? password : "", roleId: f.roleId || "", status: "active", order: olChildren(f.parentId || "").length, createdAt: Date.now() });
+        ui.selected = id;
+        if (f.parentId) ui.collapsed = { ...ui.collapsed, [f.parentId]: false };
+      }
+      saveOrgLevels(list);
+      ui.form = null; ui.formError = "";
+      break;
+    }
+    case "ol-toggle-login": saveOrgLevels(levels().map((l) => (l.id === ds.id ? { ...l, status: l.status === "disabled" ? "active" : "disabled" } : l))); break;
+    case "ol-confirm-delete": ui.confirmDelete = ds.id; break;
+    case "ol-cancel-delete": ui.confirmDelete = null; break;
+    case "ol-delete": {
+      const l = olFind(ds.id); if (!l) break;
+      let list = levels();
+      if (ds.mode === "lift") {
+        list = list.filter((x) => x.id !== l.id).map((x) => x.parentId === l.id ? { ...x, parentId: l.parentId || "" } : x);
+      } else {
+        const gone = new Set([l.id, ...olDescendantIds(l.id)]);
+        list = list.filter((x) => !gone.has(x.id));
+      }
+      saveOrgLevels(list);
+      ui.confirmDelete = null; ui.selected = l.parentId || null;
+      break;
+    }
+    case "ol-move-order": {
+      const l = olFind(ds.id); if (!l) break;
+      const sibs = olChildren(l.parentId);
+      const i = sibs.findIndex((x) => x.id === l.id), j = i + Number(ds.dir);
+      if (j < 0 || j >= sibs.length) break;
+      const ordered = sibs.slice(); const t = ordered[i]; ordered[i] = ordered[j]; ordered[j] = t;
+      const pos = {}; ordered.forEach((x, k) => { pos[x.id] = k; });
+      saveOrgLevels(levels().map((x) => (x.id in pos ? { ...x, order: pos[x.id] } : x)));
+      break;
+    }
+    case "ol-type-add": {
+      const el = document.getElementById("ol-type-new");
+      const v = (el && el.value || "").trim();
+      if (!v) break;
+      if (!levelTypesList().includes(v)) saveSiteTheme({ levelTypes: [...levelTypesList(), v] });
+      break;
+    }
+    case "ol-type-start-edit": ui.typeEdit = ds.old; ui.typeDelete = null; break;
+    case "ol-type-start-delete": ui.typeDelete = ds.old; ui.typeEdit = null; break;
+    case "ol-type-cancel": ui.typeEdit = null; ui.typeDelete = null; break;
+    case "ol-type-save": {
+      const el = document.getElementById("ol-type-edit");
+      const v = (el && el.value || "").trim(), old = ds.old;
+      if (!v || v === old) { ui.typeEdit = null; break; }
+      const types = levelTypesList();
+      saveSiteTheme({ levelTypes: types.includes(v) ? types.filter((t) => t !== old) : types.map((t) => (t === old ? v : t)) });
+      saveOrgLevels(levels().map((l) => (l.type === old ? { ...l, type: v } : l)));
+      ui.typeEdit = null;
+      break;
+    }
+    case "ol-type-delete": {
+      const old = ds.old;
+      const el = document.getElementById("ol-type-replace");
+      const rep = el ? el.value : "";
+      saveSiteTheme({ levelTypes: levelTypesList().filter((t) => t !== old) });
+      if (olActive().some((l) => l.type === old)) saveOrgLevels(levels().map((l) => (l.type === old ? { ...l, type: rep } : l)));
+      ui.typeDelete = null;
+      break;
+    }
+    case "ol-import-start": ui.importConfirm = true; break;
+    case "ol-import-cancel": ui.importConfirm = false; break;
+    case "ol-import-chart": { const n = olImportChart(); ui.importConfirm = false; ui.msg = `تم نقل ${n} اسم من المخطط الحر — حدّدي أنواعها واربطيها بالجهات من "تعديل / نقل". المخطط الحر نفسه لم يتغير.`; break; }
+    case "ol-toggle-free-chart": saveSiteTheme({ hideFreeChart: !freeChartHidden() }); break;
+    case "ol-toggle-portal": saveSiteTheme({ portalEnabled: !portalEnabled() }); ui.msg = portalEnabled() ? `بوابة الدخول مفعّلة — تظهر ${portalEntries().length} ${portalEntries().length > 2 && portalEntries().length < 11 ? "جهات" : "جهة"} مجمّعة حسب أنواع المستويات (الجهات اللي لها دخول، وروابطها غير معطّلة).` : "بوابة الدخول موقوفة — صفحة الدخول العادية فقط."; break;
+    default: return false;
+  }
+  render();
+  return true;
+}
+// دخول بحساب مستوى: اطّلاع بنفس صفحات الإدارة العليا، مقيّد بوحدات ما تحته فقط.
+function findLevelLogin(loginId, password) {
+  return olActive().find((l) => l.status !== "disabled" && l.loginId && l.loginId.trim() === loginId && l.password === password) || null;
+}
+function doLoginLevel(level) {
+  doLogin({ id: level.id, name: level.name, role: "executive", levelId: level.id, levelType: level.type || "" });
+  const role = level.roleId ? rolesList().find((r) => r.id === level.roleId) : null;
+  if (!role || !S.levelScope) return;
+  S.levelScope.roleId = role.id;
+  S.currentEntryRoleName = role.name;
+  applyPersonPerms({ roleId: role.id, permsOverride: null });
+  const pages = (S.platformUserAllowedPages || []).filter((p) => LEVEL_COMPATIBLE_PAGES.includes(p));
+  S.platformUserAllowedPages = pages.length ? pages : null; // بدون صفحات مناسبة = صفحات الاطّلاع الافتراضية
+  if (S.platformUserAllowedPages && !S.platformUserAllowedPages.includes(S.view) && !(S.view === "executive-dashboard" && S.platformUserAllowedPages.includes("dashboard"))) {
+    S.view = S.platformUserAllowedPages[0] === "dashboard" ? "executive-dashboard" : S.platformUserAllowedPages[0];
+  }
+  render();
+}
+
+/* =============================== رابط دخول وأيقونة لكل جهة ==================
+   لكل مستوى بالهيكل المرن له دخول، ولكل جهة موجودة مربوطة بالشجرة (وحدة/قسم/مكتب)،
+   رابط خاص: index.html?e=<نوع>:<معرّف>. يفتح صفحة الدخول بأيقونة الجهة واسمها،
+   واسم المستخدم مكتوب مسبقًا. عند "إضافة إلى الشاشة الرئيسية" من الآيباد/الجوال يظهر
+   باسم الجهة وأيقونتها. الأيقونات تُحفظ بإعدادات الموقع (theme.entityIcons) — بدون SQL. */
+const ENTRY_ICON_SET = {
+  building: (s, c) => iconBuilding(c, s), book: iconBook, cap: iconGraduationCap, heart: iconHeart, target: iconTarget,
+  layers: iconLayers, user: iconUser, home: iconHome, sparkles: iconSparkles, document: iconDocument, archive: iconArchive, calendar: iconCalendarSmall,
+};
+const ENTRY_ICON_COLORS = ["#6b2337", "#8B4A73", "#24527a", "#2E6B52", "#7a4d16", "#4d5a66", "#b4532a", "#5b3a73"];
+function entryKey(kind, id) { return kind + ":" + id; }
+function entryIconOf(key) {
+  const m = ((((S.siteSettings || {}).theme) || {}).entityIcons || {})[key] || {};
+  return { icon: ENTRY_ICON_SET[m.icon] ? m.icon : "building", color: ENTRY_ICON_COLORS.includes(m.color) ? m.color : ENTRY_ICON_COLORS[0], linkOff: !!m.linkOff };
+}
+function entryIconHtml(key, size) {
+  const ic = entryIconOf(key);
+  const box = size || 72;
+  return `<div style="width:${box}px;height:${box}px;border-radius:${Math.round(box * 0.26)}px;background:${ic.color};display:flex;align-items:center;justify-content:center;flex-shrink:0;box-shadow:0 8px 20px rgba(46,36,42,.18);">${ENTRY_ICON_SET[ic.icon](Math.round(box * 0.5), "#fff")}</div>`;
+}
+// اسم الجهة واسم المستخدم المناسب لها — null لو الرابط لا يطابق شيئًا
+function entryInfo(kind, id) {
+  if (kind === "level") { const l = olFind(id); return l && l.loginId ? { name: l.name, username: l.loginId, sub: l.type || "" } : null; }
+  if (kind === "unit") { const u = (S.units || []).find((x) => x.id === id); return u ? { name: u.name, username: u.name, sub: u.role === "center" ? "مركز" : "وحدة" } : null; }
+  if (kind === "dept") { const d = (S.departments || []).find((x) => x.id === id); return d ? { name: d.name, username: d.name, sub: "قسم" } : null; }
+  if (kind === "office") { const o = (S.offices || []).find((x) => x.id === id); return o ? { name: o.name, username: o.name, sub: "مكتب إشراف" } : null; }
+  return null;
+}
+function entryLinkUrl(kind, id) {
+  let base = "";
+  try { base = location.origin && location.origin !== "null" ? location.origin + location.pathname : location.href.split("?")[0]; } catch (e) { base = ""; }
+  return base + "?e=" + encodeURIComponent(entryKey(kind, id));
+}
+function parseEntryParam() {
+  try {
+    const v = new URLSearchParams(location.search).get("e");
+    if (!v) return null;
+    const i = v.indexOf(":");
+    if (i < 1) return null;
+    const kind = v.slice(0, i), id = v.slice(i + 1);
+    return ["level", "unit", "dept", "office"].includes(kind) && id ? { kind, id } : null;
+  } catch (e) { return null; }
+}
+function currentEntry() {
+  if (!S.entryLink) return null;
+  // رابط معطّل = صفحة الدخول العادية تمامًا (بدون أيقونة الجهة ولا اسم مستخدم مكتوب مسبقًا)
+  if (entryIconOf(entryKey(S.entryLink.kind, S.entryLink.id)).linkOff) return null;
+  const info = entryInfo(S.entryLink.kind, S.entryLink.id);
+  return info ? { ...S.entryLink, ...info, key: entryKey(S.entryLink.kind, S.entryLink.id) } : null;
+}
+// أيقونة الشاشة الرئيسية (apple-touch-icon) + اسمها، تُرسم من أيقونة الجهة نفسها
+function applyEntryHomeScreen() {
+  const en = currentEntry();
+  if (!en) return;
+  try {
+    document.title = en.name;
+    const setMeta = (name, content) => { let m = document.querySelector(`meta[name="${name}"]`); if (!m) { m = document.createElement("meta"); m.setAttribute("name", name); document.head.appendChild(m); } m.setAttribute("content", content); };
+    setMeta("apple-mobile-web-app-title", en.name);
+    setMeta("apple-mobile-web-app-capable", "yes");
+    const ic = entryIconOf(en.key);
+    const svg = ENTRY_ICON_SET[ic.icon](96, "#ffffff");
+    const img = new Image();
+    img.onload = () => {
+      const c = document.createElement("canvas"); c.width = 180; c.height = 180;
+      const g = c.getContext("2d");
+      g.fillStyle = ic.color; g.fillRect(0, 0, 180, 180);
+      g.drawImage(img, 42, 42, 96, 96);
+      const url = c.toDataURL("image/png");
+      ["apple-touch-icon", "icon"].forEach((rel) => { let l = document.querySelector(`link[rel="${rel}"]`); if (!l) { l = document.createElement("link"); l.setAttribute("rel", rel); document.head.appendChild(l); } l.setAttribute("href", url); });
+    };
+    img.src = "data:image/svg+xml;charset=utf-8," + encodeURIComponent(svg.replace("<svg ", '<svg xmlns="http://www.w3.org/2000/svg" '));
+  } catch (e) { /* الأيقونة تحسين فقط */ }
+}
+function entryLoginHeaderHtml(en) {
+  return `<div style="text-align:center;margin-bottom:24px;display:flex;flex-direction:column;align-items:center;gap:12px;">
+    ${entryIconHtml(en.key, 76)}
+    <div>
+      <div class="prs-title" style="font-size:20px;font-weight:900;color:#000;line-height:1.5;">${esc(en.name)}</div>
+      <div style="font-size:11.5px;color:${SUBTLE};margin-top:2px;">${esc(en.sub ? en.sub + " — " : "")}${esc(currentSiteSettings().platformName || "منصة التقارير")}</div>
+    </div>
+  </div>`;
+}
+// قسم "رابط الدخول" داخل تفاصيل المستوى بالهيكل المرن
+function entryLinkPanelHtml(kind, id, title) {
+  const key = entryKey(kind, id);
+  const ic = entryIconOf(key);
+  const url = entryLinkUrl(kind, id);
+  const showQr = (S.ui.entryQrKey || "") === key;
+  let qr = "";
+  if (showQr) {
+    try { const q = qrcode(0, "M"); q.addData(url); q.make(); qr = q.createSvgTag({ cellSize: 5, margin: 2, scalable: true }); } catch (e) { qr = `<div class="hint bad">تعذر إنشاء رمز QR.</div>`; }
+  }
+  return `<div style="border-top:1px solid ${BORDER};padding-top:12px;display:flex;flex-direction:column;gap:10px;">
+    <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">${entryIconHtml(key, 40)}<div style="font-size:13px;font-weight:800;">${esc(title)}</div>
+      ${ic.linkOff ? `<span style="font-size:10.5px;font-weight:700;color:${DANGER};background:${DANGER_BG};padding:3px 9px;border-radius:999px;">الرابط معطّل</span>` : `<span style="font-size:10.5px;font-weight:700;color:#2E7A5C;background:${GREEN_BG};padding:3px 9px;border-radius:999px;">الرابط يعمل</span>`}
+      <span style="margin-right:auto;">${pillBtn(ic.linkOff ? "تفعيل الرابط" : "تعطيل الرابط", { variant: ic.linkOff ? "soft" : "ghost", icon: iconPower(13, ic.linkOff ? GREEN : INK), action: "entry-link-toggle", data: { key } })}</span></div>
+    ${ic.linkOff ? `<div class="hint" style="margin:0;">الرابط معطّل: من يفتحه تظهر له صفحة الدخول العادية (بدون أيقونة الجهة ولا اسم المستخدم)، والجهة تقدر تدخل منها عادي.</div>` : ""}
+    <div style="display:flex;gap:6px;flex-wrap:wrap;">${Object.keys(ENTRY_ICON_SET).map((name) => `<button type="button" data-action="entry-icon" data-key="${esc(key)}" data-icon="${name}" aria-label="أيقونة" style="width:36px;height:36px;border-radius:10px;border:${ic.icon === name ? `2px solid ${ROSE}` : `1px solid ${BORDER}`};background:#fff;display:flex;align-items:center;justify-content:center;cursor:pointer;">${ENTRY_ICON_SET[name](17, ic.icon === name ? ROSE : INK)}</button>`).join("")}</div>
+    <div style="display:flex;gap:6px;flex-wrap:wrap;">${ENTRY_ICON_COLORS.map((c) => `<button type="button" data-action="entry-color" data-key="${esc(key)}" data-color="${c}" aria-label="لون" style="width:28px;height:28px;border-radius:50%;background:${c};border:${ic.color === c ? `3px solid ${INK}` : "2px solid #fff"};box-shadow:0 0 0 1px ${BORDER};cursor:pointer;"></button>`).join("")}</div>
+    <div style="display:flex;gap:6px;align-items:center;">
+      <input class="input" readonly value="${esc(url)}" id="entry-url-${esc(key)}" style="direction:ltr;text-align:left;font-size:11px;flex:1;min-width:0;" />
+      ${pillBtn(S.ui.entryCopied === key ? "تم النسخ ✓" : "نسخ", { variant: "ghost", action: "entry-copy", data: { key } })}
+      ${pillBtn(showQr ? "إخفاء QR" : "QR", { variant: "ghost", action: "entry-qr", data: { key } })}
+    </div>
+    ${showQr ? `<div style="display:flex;flex-direction:column;align-items:center;gap:8px;"><div style="width:180px;height:180px;background:#fff;padding:6px;border:1px solid ${BORDER};border-radius:12px;">${qr}</div><div class="hint" style="margin:0;text-align:center;">صوّريه أو اطبعيه — يفتح صفحة دخول هذه الجهة مباشرة.</div></div>` : ""}
+    <div class="hint" style="margin:0;">من الآيباد أو الجوال: افتحي الرابط ثم "مشاركة ← إضافة إلى الشاشة الرئيسية" ليظهر كتطبيق باسم الجهة وأيقونتها.</div>
+  </div>`;
+}
+function handleEntryAction(action, ds) {
+  if (action === "entry-icon" || action === "entry-color") {
+    const th = (S.siteSettings || {}).theme || {};
+    const all = { ...(th.entityIcons || {}) };
+    all[ds.key] = { ...entryIconOf(ds.key), ...(action === "entry-icon" ? { icon: ds.icon } : { color: ds.color }) };
+    saveSiteTheme({ entityIcons: all });
+    render(); return true;
+  }
+  if (action === "entry-link-toggle") {
+    const th = (S.siteSettings || {}).theme || {};
+    const all = { ...(th.entityIcons || {}) };
+    const cur = entryIconOf(ds.key);
+    all[ds.key] = { icon: cur.icon, color: cur.color, linkOff: !cur.linkOff };
+    saveSiteTheme({ entityIcons: all });
+    render(); return true;
+  }
+  if (action === "entry-qr") { S.ui.entryQrKey = S.ui.entryQrKey === ds.key ? "" : ds.key; render(); return true; }
+  if (action === "entry-copy") {
+    const el = document.getElementById("entry-url-" + ds.key);
+    const val = el ? el.value : "";
+    const done = () => { S.ui.entryCopied = ds.key; render(); setTimeout(() => { if (S.ui.entryCopied === ds.key) { S.ui.entryCopied = ""; render(); } }, 1800); };
+    try {
+      if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(val).then(done, () => { if (el) { el.select(); document.execCommand("copy"); } done(); });
+      else { if (el) { el.select(); document.execCommand("copy"); } done(); }
+    } catch (e) { done(); }
+    return true;
+  }
+  if (action === "entry-clear") {
+    S.entryLink = null;
+    S.ui.portalType = S.ui.portalFromType || ""; S.ui.portalFromType = "";
+    try { history.replaceState(null, "", location.pathname); } catch (e) { /* ignore */ }
+    S.ui.loginUsernameVal = ""; render(); return true;
+  }
+  return false;
+}
+
+/* ---- مسار الاعتماد من الهيكل المرن ---- */
+// يبني مراحل مقترحة: من الجهة صاحبة التقرير صعودًا عبر مستوياتها بالشجرة. يُضمَّن
+// فقط المستوى اللي يقدر أحد يدخل به (له دخول خاص، أو مربوط بقسم/مكتب له حسابه).
+function apSuggestStagesFromTree(ownerKind, ownerId) {
+  const lk = ownerKind === "unit" ? "unit" : ownerKind === "dept" ? "dept" : ownerKind === "office" ? "office" : "";
+  const self = olActive().find((l) => l.linkKind === lk && l.linkId === ownerId);
+  if (!self) return { error: "هذه الجهة غير مربوطة بالهيكل المرن بعد — اربطيها بمستوى من «المستخدمون ← الهيكل المرن» أولًا." };
+  const ups = olPath(self.id).slice(0, -1).reverse();
+  const stages = [];
+  ups.forEach((l) => {
+    let approver = "";
+    if (l.loginId && l.status !== "disabled") approver = "level:" + l.id;
+    else if (l.linkKind === "dept" || l.linkKind === "office") approver = l.linkKind + ":" + l.linkId;
+    if (!approver) return;
+    stages.push({ id: uid("stg"), name: l.name, approver, canApprove: true, canReturn: true, canEdit: false, noteRequired: false });
+  });
+  if (!stages.length) return { error: "لا يوجد فوق هذه الجهة مستوى يقدر يدخل (بحساب دخول خاص، أو مربوط بقسم/مكتب) — أضيفي حساب دخول لمستوى أعلى أولًا." };
+  return { stages };
+}
+
+/* =============================== بوابة الدخول (اختيارية) ======================
+   صفحة أولى بدل نموذج الدخول: أنواع الجهات (من أنواع الهيكل المرن) ← جهات النوع
+   ← صفحة دخول الجهة باسم مستخدم مكتوب مسبقًا. تُشغَّل وتُطفأ من "الهيكل المرن"
+   (theme.portalEnabled). الجهات المعروضة: كل مستوى له دخول مفعّل، وإلا الجهة
+   الموجودة المربوطة به — وأي رابط معطّل لا تظهر بطاقته. الدخول نفسه يمر بنفس
+   مسار الدخول المعتاد تمامًا (نفس الحساب والأدوار والمسارات). */
+function portalEnabled() { return !!((((S.siteSettings || {}).theme) || {}).portalEnabled); }
+function portalEntries() {
+  const out = [];
+  olActive().forEach((l) => {
+    let kind = "", id = "";
+    if (l.loginId && l.status !== "disabled") { kind = "level"; id = l.id; }
+    else if (l.linkKind && l.linkId) { kind = l.linkKind; id = l.linkId; }
+    if (!kind) return;
+    const key = entryKey(kind, id);
+    if (entryIconOf(key).linkOff) return;
+    const info = entryInfo(kind, id);
+    if (!info) return;
+    if (out.some((x) => x.key === key)) return;
+    out.push({ kind, id, key, name: info.name, type: l.type || "أخرى" });
+  });
+  return out;
+}
+function portalGroups() {
+  const entries = portalEntries();
+  const order = levelTypesList();
+  const map = {};
+  entries.forEach((e) => { (map[e.type] = map[e.type] || []).push(e); });
+  return Object.keys(map).sort((a, b) => {
+    const ia = order.indexOf(a), ib = order.indexOf(b);
+    return (ia === -1 ? 999 : ia) - (ib === -1 ? 999 : ib);
+  }).map((t) => ({ type: t, items: map[t] }));
+}
+function portalActive() { return portalEnabled() && !S.currentUser && portalEntries().length > 0; }
+function renderPortalPage() {
+  const groups = portalGroups();
+  const sel = S.ui.portalType ? groups.find((g) => g.type === S.ui.portalType) : null;
+  const site = currentSiteSettings();
+  const card = (inner, action, data, minH) => `<button type="button" data-action="${action}" ${Object.entries(data).map(([k, v]) => `data-${k}="${esc(v)}"`).join(" ")} style="flex:0 1 230px;min-width:150px;min-height:${minH}px;border:1px solid #fff;border-radius:20px;background:#fff;box-shadow:0 1px 2px rgba(107,35,55,.05),0 8px 22px rgba(107,35,55,.07);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;padding:18px 14px;cursor:pointer;color:${INK};font-family:inherit;">${inner}</button>`;
+  // أيقونة النوع = أيقونة أول جهة فيه (بلونها)
+  const typeCards = groups.map((g) => card(`${entryIconHtml(g.items[0].key, 58)}<span style="font-size:16px;font-weight:800;">${esc(g.type)}</span><span style="font-size:12px;color:#6f5f66;margin-top:-6px;">${g.items.length === 1 ? "جهة واحدة" : g.items.length === 2 ? "جهتان" : g.items.length + (g.items.length < 11 ? " جهات" : " جهة")}</span>`, "portal-type", { type: g.type }, 160)).join("");
+  const itemCards = sel ? sel.items.map((e) => card(`${entryIconHtml(e.key, 46)}<span style="font-size:14.5px;font-weight:800;line-height:1.5;">${esc(e.name)}</span>`, "portal-pick", { kind: e.kind, id: e.id }, 120)).join("") : "";
+  return `
+  <div class="login-wrap" style="align-items:flex-start;">
+    <div style="width:100%;max-width:1040px;margin:0 auto;padding:28px 4px;display:flex;flex-direction:column;gap:24px;">
+      <div style="display:flex;flex-direction:column;align-items:center;gap:8px;text-align:center;">
+        <img class="login-logo" src="${esc(siteLogoSrc(site))}" alt="جمعية فرقان" style="margin-bottom:4px;" />
+        <div class="prs-title" style="font-size:24px;font-weight:900;color:#000;">${esc(site.platformName || "منصة التقارير")}</div>
+        <div style="font-size:13px;color:#6f5f66;">${sel ? "اختاري جهتك" : "جمعية فرقان لتحفيظ القرآن الكريم بالطائف — اختاري نوع جهتك"}</div>
+      </div>
+      ${sel ? `<div style="display:flex;gap:8px;justify-content:center;align-items:center;font-size:13px;flex-wrap:wrap;">
+        <button type="button" data-action="portal-back" style="min-height:40px;padding:0 14px;border-radius:999px;border:1px solid ${BORDER};background:#fff;color:${ROSE};font-weight:800;cursor:pointer;font-family:inherit;">كل الأنواع</button>
+        <span style="color:#9c8b92;">‹</span><b>${esc(sel.type)}</b></div>` : ""}
+      <div class="portal-grid" style="display:flex;flex-wrap:wrap;justify-content:center;gap:${sel ? 14 : 16}px;">${sel ? itemCards : typeCards}</div>
+      <div style="text-align:center;"><button type="button" data-action="portal-skip" style="min-height:44px;padding:0 18px;border:none;background:transparent;color:#6f5f66;font-size:13px;text-decoration:underline;cursor:pointer;font-family:inherit;">ليس لك بطاقة؟ الدخول العادي</button></div>
+    </div>
+  </div>`;
+}
+function handlePortalAction(action, ds) {
+  switch (action) {
+    case "portal-type": {
+      const g = portalGroups().find((x) => x.type === ds.type);
+      if (g && g.items.length === 1) { S.entryLink = { kind: g.items[0].kind, id: g.items[0].id }; S.ui.portalType = ""; S.ui.portalFromType = ds.type; }
+      else S.ui.portalType = ds.type;
+      S.ui.loginUsernameVal = ""; S.ui.loginError = "";
+      break;
+    }
+    case "portal-pick": S.ui.portalFromType = S.ui.portalType; S.entryLink = { kind: ds.kind, id: ds.id }; S.ui.loginUsernameVal = ""; S.ui.loginError = ""; break;
+    case "portal-back": S.ui.portalType = ""; break;
+    case "portal-skip": S.ui.portalSkip = true; S.entryLink = null; S.ui.loginUsernameVal = ""; break;
+    case "portal-return": S.ui.portalSkip = false; S.entryLink = null; S.ui.loginUsernameVal = ""; S.ui.loginError = ""; break;
+    default: return false;
+  }
+  render();
+  return true;
+}
+// تحميل أسماء الجهات والهيكل قبل الدخول (لعرض البوابة)
+function portalPreload() {
+  // مع قاعدة البيانات: نقرأ النسخة المحفوظة محليًا فقط (بدون زرع بيانات تجريبية أو أي كتابة)،
+  // ثم تُحدَّث من القاعدة بالخلفية. بدون قاعدة: نفس مصدر البيانات المحلي المعتاد.
+  const cached = (k) => { try { const v = lsGet(k); return v ? JSON.parse(v) : []; } catch (e) { return []; } };
+  if (sheetsConfigured()) {
+    if (!(S.units && S.units.length)) S.units = cached(UNITS_KEY);
+    if (!(S.departments && S.departments.length)) S.departments = cached(DEPARTMENTS_KEY);
+    if (!(S.offices && S.offices.length)) S.offices = cached(OFFICES_KEY);
+  } else {
+    S.units = S.units && S.units.length ? S.units : dataStore.getUnits();
+    S.departments = S.departments && S.departments.length ? S.departments : dataStore.getDepartments();
+    S.offices = S.offices && S.offices.length ? S.offices : dataStore.getOffices();
+  }
+}
+
 /* =============================== Site settings (admin) ======================= */
 function dashSettingsCardHtml() {
   const group = (title, blocks, kindIds) => {
@@ -4795,7 +5581,7 @@ function collectReportsFlatForUnits(units) {
   return flat;
 }
 function collectAllReportsFlat() {
-  return collectReportsFlatForUnits(S.units.filter((u) => u.status === "active"));
+  return collectReportsFlatForUnits(scopeUnitsFilter(S.units.filter((u) => u.status === "active")));
 }
 // كل الوحدات (النشطة) التابعة لمكتب إشراف معيّن — عبر office.id <- department.officeId
 // <- department.id <- unit.departmentId، بنفس العلاقة المستخدمة أصلاً بصفحة "الأقسام"
@@ -5252,8 +6038,8 @@ function yearCompareReportChapterBody(units) {
 function renderExecutiveDashboard(scopeUnits, scopeDepartments, opts) {
   opts = opts || {};
   const xk = opts.kind || "executive";
-  const units = scopeUnits || S.units.filter((u) => u.status === "active" && u.role !== "admin" && u.role !== "executive" && u.role !== "self_report");
-  const activeDepartments = scopeDepartments || S.departments.filter((d) => d.status === "active");
+  const units = scopeUnits || scopeUnitsFilter(S.units.filter((u) => u.status === "active" && u.role !== "admin" && u.role !== "executive" && u.role !== "self_report"));
+  const activeDepartments = scopeDepartments || scopeDeptsFilter(S.departments.filter((d) => d.status === "active"));
   const flat = scopeUnits ? collectReportsFlatForUnits(units) : collectAllReportsFlat();
   const total = flat.length;
   const completed = flat.filter((x) => x.report.status === "completed").length;
@@ -5284,7 +6070,7 @@ function renderExecutiveDashboard(scopeUnits, scopeDepartments, opts) {
 
   return `
   <div class="page-wrap"><div class="page-inner">
-    ${topBarHtml({ title: "لوحة المعلومات", subtitle: opts.subtitle || "نظرة إشرافية شاملة على كل الأقسام والوحدات",
+    ${topBarHtml({ title: "لوحة المعلومات", subtitle: opts.subtitle || (S.levelScope ? `نظرة على ${units.length} وحدة تحت هذا المستوى` : "نظرة إشرافية شاملة على كل الأقسام والوحدات"),
       right: pillBtn("خروج", { variant: "danger", icon: iconLogout(15, DANGER), action: "logout" }) })}
     ${opts.extraTop || ""}
     ${dashBlock(xk, "exStats", `<div class="stat-grid" style="margin-bottom:18px;">
@@ -5364,7 +6150,7 @@ async function generateAiSummaryAsync() {
 // لدعم نسخة مكتب الإشراف المقتصرة على وحداته فقط.
 function renderExecutiveSummary(scopeUnits, scopeDepartments, opts) {
   opts = opts || {};
-  const activeDepartments = scopeDepartments || S.departments.filter((d) => d.status === "active");
+  const activeDepartments = scopeDepartments || scopeDeptsFilter(S.departments.filter((d) => d.status === "active"));
   const flat = scopeUnits ? collectReportsFlatForUnits(scopeUnits) : collectAllReportsFlat();
   const sortCurated = (arr) => [...arr].sort((a, b) => (b.curated ? 1 : 0) - (a.curated ? 1 : 0));
   const achievementsAll = [];
@@ -5475,8 +6261,8 @@ function renderExecutiveFinalReport() {
   const total = flat.length;
   const completed = flat.filter((x) => x.report.status === "completed").length;
   const completionPct = total ? Math.round((completed / total) * 100) : 0;
-  const activeDepartments = S.departments.filter((d) => d.status === "active");
-  const activeUnits = S.units.filter((u) => u.status === "active");
+  const activeDepartments = scopeDeptsFilter(S.departments.filter((d) => d.status === "active"));
+  const activeUnits = scopeUnitsFilter(S.units.filter((u) => u.status === "active"));
   const finalReportUnits = activeUnits.filter((u) => u.role !== "admin" && u.role !== "executive" && u.role !== "self_report");
   const sortCurated = (arr) => [...arr].sort((a, b) => (b.curated ? 1 : 0) - (a.curated ? 1 : 0));
   const starTd = (curated) => curated ? `<span style="color:${GOLD};">⭐</span>` : "";
@@ -5551,7 +6337,7 @@ function renderExecutiveFinalReport() {
     <div class="hint">⭐ = عنصر اعتمدته مديرة القسم كأبرز نتيجة تستحق وصول الإدارة العليا.</div>`;
 
   const deptRows = activeDepartments.map((dept) => {
-    const deptUnits = S.units.filter((u) => u.departmentId === dept.id && u.status === "active");
+    const deptUnits = scopeUnitsFilter(S.units.filter((u) => u.departmentId === dept.id && u.status === "active"));
     const pcts = deptUnits.map((u) => computeProgress(latestReportForUnit(u.id)).percent);
     const avg = pcts.length ? Math.round(pcts.reduce((s, v) => s + v, 0) / pcts.length) : 0;
     return [esc(dept.name), deptUnits.length, avg + "٪"];
@@ -5610,7 +6396,7 @@ function renderAllReports() {
 
   let scopeUnits;
   if (S.isAdmin || S.isExecutive) {
-    scopeUnits = S.units.filter((u) => u.status === "active" && u.role !== "admin" && u.role !== "executive");
+    scopeUnits = scopeUnitsFilter(S.units.filter((u) => u.status === "active" && u.role !== "admin" && u.role !== "executive"));
   } else if (S.isDepartmentUser) {
     scopeUnits = S.units.filter((u) => u.status === "active" && u.departmentId === S.currentDepartmentId);
   } else if (S.isOfficeUser) {
@@ -5656,7 +6442,7 @@ function renderAllReports() {
     </tr>`;
   }).join("");
 
-  const scopeDeptOptions = S.isAdmin || S.isExecutive ? S.departments.filter((d) => d.status === "active")
+  const scopeDeptOptions = S.isAdmin || S.isExecutive ? scopeDeptsFilter(S.departments.filter((d) => d.status === "active"))
     : S.isOfficeUser ? S.departments.filter((d) => d.status === "active" && officeScopeIds(S.currentOfficeId).includes(d.officeId))
     : [];
   const scopeUnitOptions = canSeeMultipleEntities ? scopeUnits : [];
@@ -6016,7 +6802,7 @@ function structPanelPathTabHtml(type, e) {
         <div style="min-width:0;flex:1;">
           <div style="font-size:13.5px;font-weight:800;">${esc(a.name || apOwnerName(a.ownerKind, a.ownerId))} ${badgeHtml(active ? "مفعّل" : "مسودة", active ? GREEN : SUBTLE, active ? GREEN_BG : GRAY_BG)}</div>
           <div style="font-size:11px;color:${SUBTLE};margin-top:3px;">${esc(a.periodType || "كل الفترات")} • ${roleName ? "تقرير " + esc(roleName) : "أي صاحب تقرير"} • ${(a.stages || []).length} مرحلة</div>
-          <div style="margin-top:8px;">${(a.stages || []).map((st, i) => `<div style="display:flex;gap:8px;align-items:center;font-size:12px;margin-bottom:4px;"><span style="width:22px;height:22px;border-radius:50%;background:${ROSE};color:#fff;font-size:11px;font-weight:800;display:flex;align-items:center;justify-content:center;flex-shrink:0;">${i + 1}</span><span style="font-weight:700;">${esc(st.name || "مرحلة")}</span><span style="color:${SUBTLE};">← ${esc(apApproverLabel(st.approver))}</span></div>`).join("")}</div>
+          <div style="margin-top:8px;">${apStageRowsHtml(a)}</div>
         </div>
         <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;">${confirming
           ? `${pillBtn("تأكيد الحذف", { variant: "danger", action: "ap-delete", data: { id: a.id } })}${pillBtn("تراجع", { variant: "ghost", action: "ap-delete-cancel" })}`
@@ -6658,6 +7444,7 @@ function jobTitleTemplateRowHtml(t) {
 const ACCOUNTS_HUB_TABS = [
   { view: "units-manage", label: "الهيكل والأشخاص", icon: "layers" },
   { view: "org-chart", label: "المخطط الحر", icon: "gauge" },
+  { view: "org-levels", label: "الهيكل المرن", icon: "layers" },
 ];
 const USERS_HUB_SUBTITLE = "إدارة المستخدمين وصلاحياتهم في النظام مع إمكانية إضافة وحذف وتعديل بياناتهم";
 function usersHubIcon(name, active) {
@@ -6666,7 +7453,7 @@ function usersHubIcon(name, active) {
 }
 function accountsHubTabBarHtml(activeView) {
   return `<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:10px;margin-bottom:16px;">
-    ${ACCOUNTS_HUB_TABS.map((t) => {
+    ${ACCOUNTS_HUB_TABS.filter((t) => !(t.view === "org-chart" && freeChartHidden() && activeView !== "org-chart")).map((t) => {
       const active = t.view === activeView || (t.also || []).indexOf(activeView) !== -1;
       return `<button type="button" data-action="nav-to" data-view="${esc(t.view)}" style="display:flex;align-items:center;justify-content:space-between;gap:10px;padding:8px 12px;border-radius:12px;cursor:pointer;font-family:inherit;background:#fff;border:1px solid ${active ? ROSE : BORDER};box-shadow:${active ? "0 4px 14px rgba(120,30,50,.12)" : "0 2px 8px rgba(0,0,0,.04)"};">
         <span style="font-size:12.5px;font-weight:800;color:${active ? ROSE : INK};">${esc(t.label)}</span>
@@ -6844,13 +7631,15 @@ function apApproverOptions(cur) {
   return `<option value="">— من يقوم بالمرحلة —</option>
     ${roles.length ? `<optgroup label="أدوار">${roles.map((r) => opt("role:" + r.id, r.name)).join("")}</optgroup>` : ""}
     ${persons.length ? `<optgroup label="أشخاص">${persons.map((p) => opt("person:" + p.id, p.name + " — " + apOwnerName(p.ownerKind === "department" ? "dept" : p.ownerKind, p.ownerId))).join("")}</optgroup>` : ""}
-    <optgroup label="حسابات الجهات">${[...(S.departments || []).map((d) => opt("dept:" + d.id, d.name + " (قسم)")), ...(S.offices || []).map((o) => opt("office:" + o.id, o.name + " (مكتب)"))].join("")}</optgroup>`;
+    <optgroup label="حسابات الجهات">${[...(S.departments || []).map((d) => opt("dept:" + d.id, d.name + " (قسم)")), ...(S.offices || []).map((o) => opt("office:" + o.id, o.name + " (مكتب)"))].join("")}</optgroup>
+    ${(() => { const lv = []; const walk = (pid, depth) => olChildren(pid).forEach((l) => { if (l.loginId || l.linkKind === "dept" || l.linkKind === "office") lv.push(opt("level:" + l.id, "— ".repeat(depth) + l.name + (l.type ? " (" + l.type + ")" : "") + (l.loginId ? "" : " — بحساب الجهة المربوطة"))); walk(l.id, depth + 1); }); walk("", 0); return lv.length ? `<optgroup label="الهيكل المرن">${lv.join("")}</optgroup>` : ""; })()}`;
 }
 function apApproverLabel(v) {
   if (!v) return "—";
   const [k, id] = v.split(":");
   if (k === "role") { const r = rolesList().find((x) => x.id === id); return r ? "دور: " + r.name : "(دور محذوف)"; }
   if (k === "person") { const p = personsList().find((x) => x.id === id); return p ? p.name : "(شخص محذوف)"; }
+  if (k === "level") { const l = olFind(id); return l ? l.name + (l.type ? " (" + l.type + ")" : "") : "(مستوى محذوف)"; }
   return apOwnerName(k, id);
 }
 function apCaptureForm() {
@@ -6878,7 +7667,7 @@ function apEditorHtml() {
   const stagesHtml = (d.stages || []).map((st, i) => `
     <div class="card" style="background:${GRAY_BG};margin-bottom:8px;padding:10px 12px;">
       <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:8px;">
-        <div style="font-size:12px;font-weight:800;color:${ROSE};">المرحلة ${i + 1}</div>
+        <div style="font-size:12px;font-weight:800;color:${ROSE};">المرحلة ${i + 1}${st.disabled ? ` <span style="color:#7a4d16;font-weight:700;">(معطّلة مؤقتًا)</span>` : ""}</div>
         <div style="display:flex;gap:5px;">
           <button class="icon-btn" style="width:28px;height:28px;border:1px solid ${BORDER}" data-action="ap-stage-move" data-idx="${i}" data-dir="up" title="تحريك لأعلى">${iconChevronDown ? `<span style="display:inline-flex;transform:rotate(180deg);">${iconChevronDown(13, INK)}</span>` : "▲"}</button>
           <button class="icon-btn" style="width:28px;height:28px;border:1px solid ${BORDER}" data-action="ap-stage-move" data-idx="${i}" data-dir="down" title="تحريك لأسفل">${iconChevronDown ? iconChevronDown(13, INK) : "▼"}</button>
@@ -6910,7 +7699,8 @@ function apEditorHtml() {
     </div>
     <div style="font-size:12.5px;font-weight:800;margin-bottom:6px;">المراحل (بالترتيب)</div>
     ${stagesHtml || `<div style="font-size:12px;color:${SUBTLE};margin-bottom:8px;">لا توجد مراحل بعد. أضيفي المرحلة الأولى.</div>`}
-    ${pillBtn("إضافة مرحلة", { variant: "ghost", icon: iconPlus(14, INK), action: "ap-stage-add" })}
+    <div style="display:flex;gap:6px;flex-wrap:wrap;">${pillBtn("إضافة مرحلة", { variant: "ghost", icon: iconPlus(14, INK), action: "ap-stage-add" })}${pillBtn("اقتراح المراحل من الهيكل المرن", { variant: "soft", icon: iconLayers(14, GREEN), action: "ap-suggest-tree" })}</div>
+    ${ed.suggestMsg ? `<div class="hint ${ed.suggestOk ? "good" : "bad"}" style="font-weight:700;">${esc(ed.suggestMsg)}</div>` : ""}
     ${ed.error ? `<div style="color:${DANGER};font-size:11.5px;font-weight:700;margin-top:8px;">${esc(ed.error)}</div>` : ""}
     <div style="display:flex;gap:6px;margin-top:12px;">${pillBtn("حفظ كمسودة", { action: "ap-save" })}${pillBtn("إلغاء", { variant: "ghost", action: "ap-cancel" })}</div>
   </div>`;
@@ -6927,7 +7717,7 @@ function renderApprovalPathsSetup() {
         <div style="min-width:0;">
           <div style="font-size:13.5px;font-weight:800;">${esc(a.name || apOwnerName(a.ownerKind, a.ownerId))} ${badgeHtml(active ? "مفعّل" : "مسودة", active ? GREEN : SUBTLE, active ? GREEN_BG : GRAY_BG)}</div>
           <div style="font-size:11px;color:${SUBTLE};margin-top:3px;">${esc(apOwnerName(a.ownerKind, a.ownerId))} • ${esc(a.periodType || "كل الفترات")} • ${roleName ? "تقرير " + esc(roleName) : "أي صاحب تقرير"} • ${(a.stages || []).length} مرحلة</div>
-          <div style="font-size:11.5px;margin-top:6px;">${(a.stages || []).map((st, i) => `<span style="display:inline-block;background:${GRAY_BG};border-radius:8px;padding:2px 8px;margin:2px 0 2px 4px;">${i + 1}. ${esc(st.name || "مرحلة")} ← ${esc(apApproverLabel(st.approver))}</span>`).join("")}</div>
+          <div style="margin-top:8px;">${apStageRowsHtml(a)}</div>
         </div>
         <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;">${confirming
           ? `${pillBtn("تأكيد الحذف", { variant: "danger", action: "ap-delete", data: { id: a.id } })}${pillBtn("تراجع", { variant: "ghost", action: "ap-delete-cancel" })}`
@@ -9418,6 +10208,7 @@ function attachFormListeners() {
       reader.readAsDataURL(file);
       return;
     }
+    if (el.dataset && el.dataset.action === "ol-form-refresh") { olReadForm(); render(); return; }
     if (el.dataset && el.dataset.action === "dash-prog-year") { S.ui.dashProgYear = el.value; render(); return; }
     if (el.dataset && el.dataset.action === "filter-all-reports-dept") { S.ui.allReportsDept = el.value; render(); return; }
     if (el.dataset && el.dataset.action === "filter-unit-reports-type") { S.ui.unitReportsTypeFilter = el.value; render(); return; }
@@ -9610,6 +10401,9 @@ function attachClickListener() {
     const ds = btn.dataset;
     if (buttonBlockedEl(btn)) return;
     if (adminReportsReadOnly() && ADMIN_READONLY_BLOCKED.includes(action)) { alert("حساب مديرة النظام للاطلاع فقط — لا يمكن تعديل التقارير أو اعتمادها من هنا."); return; }
+    if (!S.currentUser && action.indexOf("portal-") === 0 && handlePortalAction(action, ds)) return;
+    if ((action === "entry-clear" || (S.isAdmin && action.indexOf("entry-") === 0)) && handleEntryAction(action, ds)) return;
+    if (S.isAdmin && action !== "ol-form-refresh" && handleOrgLevelsAction(action, ds)) return;
 
     try {
     switch (action) {
@@ -9649,6 +10443,7 @@ function attachClickListener() {
           S.reportTabs = dataStore.getReportTabs(); S.ui.rtEdit = null; S.ui.rtMsg = ""; S.ui.rtDeleteId = null;
           if (sheetsConfigured()) refreshReportTabsFromSheet().then(() => { if (S.view === "report-tabs-manage") render(); });
         }
+        if (navView === "org-levels") { S.roles = dataStore.getRoles(); S.approvalPaths = dataStore.getApprovalPaths(); if (sheetsConfigured()) Promise.all([refreshOrgLevelsFromSheet(), refreshRolesPersonsFromSheet(), refreshApprovalPathsFromSheet()]).then(() => { if (S.view === "org-levels") render(); }).catch(() => {}); }
         if (navView === "units-manage") { S.roles = dataStore.getRoles(); S.persons = dataStore.getPersons(); S.approvalPaths = dataStore.getApprovalPaths(); S.ui.apEdit = null; S.ui.rolePermEditId = null; }
         if (navView === "platform-users-manage" || navView === "platform-permissions-manage" || navView === "job-title-templates") {
           S.platformUsers = dataStore.getPlatformUsers();
@@ -10042,6 +10837,31 @@ function attachClickListener() {
         applySiteColors(S.siteSettings);
         dataStore.saveSiteSettings(S.siteSettings);
         if (S.ui.apEdit) S.ui.apEdit.draft.periodType = nv;
+        render(); break;
+      }
+      case "ap-suggest-tree": {
+        apCaptureForm();
+        const ed = S.ui.apEdit; if (!ed) break; const d = ed.draft;
+        if (!d.ownerKind || !d.ownerId) { ed.suggestOk = false; ed.suggestMsg = "اختاري الجهة صاحبة التقرير أولًا."; render(); break; }
+        const res = apSuggestStagesFromTree(d.ownerKind, d.ownerId);
+        if (res.error) { ed.suggestOk = false; ed.suggestMsg = res.error; render(); break; }
+        d.stages = res.stages; ed.suggestOk = true;
+        ed.suggestMsg = `تم اقتراح ${res.stages.length} مرحلة من الهيكل المرن — راجعيها وعدّلي الصلاحيات ثم احفظي.`;
+        render(); break;
+      }
+      case "ap-stage-disable-ask": S.ui.apStageDisableAsk = { pathId: ds.id, stageId: ds.sid }; render(); break;
+      case "ap-stage-disable-cancel": S.ui.apStageDisableAsk = null; render(); break;
+      case "ap-stage-disable":
+      case "ap-stage-enable": {
+        const off = action === "ap-stage-disable";
+        const list = approvalPathsList(); const a = list.find((x) => x.id === ds.id); if (!a) break;
+        const st = (a.stages || []).find((x) => x.id === ds.sid); if (!st) break;
+        const updated = { ...a, stages: a.stages.map((x) => x.id === ds.sid ? { ...x, disabled: off } : x) };
+        S.approvalPaths = list.map((x) => x.id === a.id ? updated : x);
+        dataStore.saveApprovalPaths(S.approvalPaths);
+        if (off) apSkipReportsAtStage(updated, ds.sid);
+        addPermLog("approval-path", a.id, a.name || apOwnerName(a.ownerKind, a.ownerId), (off ? "تعطيل مؤقت لمرحلة «" : "تفعيل مرحلة «") + (st.name || "مرحلة") + "»");
+        S.ui.apStageDisableAsk = null;
         render(); break;
       }
       case "ap-save": {
@@ -11779,9 +12599,18 @@ function boot() {
   applySiteColors(S.siteSettings);
   attachFormListeners();
   attachClickListener();
+  // رابط دخول خاص بجهة (?e=نوع:معرّف) — نحمّل أسماء الجهات قبل الدخول لعرض اسمها وأيقونتها
+  S.entryLink = parseEntryParam();
+  portalPreload();
+  if (S.entryLink) applyEntryHomeScreen();
   render();
-  if (sheetsConfigured()) refreshSiteSettingsFromSheet().then(() => render());
+  if (sheetsConfigured()) refreshSiteSettingsFromSheet().then(() => {
+    applyEntryHomeScreen(); render();
+    // رابط جهة أو بوابة دخول مفعّلة: نحدّث أسماء الجهات والهيكل من القاعدة قبل الدخول
+    if (S.entryLink || portalEnabled()) Promise.all([refreshUnitsAndDepartmentsFromSheet(), refreshOrgLevelsFromSheet()]).then(() => { applyEntryHomeScreen(); if (!S.currentUser) render(); }).catch(() => {});
+  });
   if (sheetsConfigured()) refreshDashboardConfigFromSheet().then(() => render()).catch(() => {});
+  if (sheetsConfigured()) refreshOrgLevelsFromSheet().then(() => { if (S.view === "org-levels") render(); }).catch(() => {});
 }
 
 document.addEventListener("DOMContentLoaded", boot);
