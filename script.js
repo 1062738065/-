@@ -10364,7 +10364,7 @@ function sectionBodyOnly(section, saved, report) {
         const def = S.indicatorDefinitions.find((x) => x.name === row.name);
         const resolved = resolveIndicatorRow(row, def);
         const status = def ? computeIndicatorStatus(resolved) : { emoji: "⚪", label: "—", color: SUBTLE, ratio: null };
-        return { label: row.name, value: Math.round(Math.min(1, resolved.ratio || 0) * 100), color: status.color, row, def, status };
+        return { label: row.name, value: Math.round(Math.min(1, Math.max(0, status.ratio || 0)) * 100), color: status.color, row, def, status };
       });
       body = rptChart("u-kpi", barData, { height: 190 }) +
         reportTable(["المؤشر", "المستهدف", "المتحقق", "الحالة"], barData.map((b) => [
