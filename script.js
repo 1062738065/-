@@ -1025,8 +1025,8 @@ function dashboardConfigToRow(cfg) { return { id: "main", config: cfg || {} }; }
 function rowToDashboardConfig(r) { return (r && r.config && typeof r.config === "object") ? r.config : {}; }
 function indDefToRow(d) { return { id: d.id, name: d.name, category: d.category || "", direction: d.direction || "", nature: d.nature || "", frequency: d.frequency || "", unit: d.unit || "", target: String(d.target ?? ""), data_source: d.dataSource || "", calculation_method: d.calculationMethod || "" }; }
 function rowToIndDef(r) { return { id: r.id, name: r.name, category: r.category || "", direction: r.direction || "", nature: r.nature || "", frequency: r.frequency || "", unit: r.unit || "", target: r.target || "", dataSource: r.data_source || "", calculationMethod: r.calculation_method || "" }; }
-function goalToRow(g, kind) { return { id: g.id, name: g.name, kind }; }
-function rowToGoal(r) { return { id: r.id, name: r.name }; }
+function goalToRow(g, kind) { return { id: g.id, name: g.name, kind, parent_id: kind === "operational" ? (g.parentId || null) : null }; }
+function rowToGoal(r) { return { id: r.id, name: r.name, parentId: r.parent_id || "" }; }
 function sectionDefToRow(s, i) { return { id: s.id, label: s.label, order_index: s.order ?? i, enabled: s.enabled !== false }; }
 function rowToSectionDef(r) { return { id: r.id, label: r.label, order: Number(r.order_index) || 0, enabled: r.enabled !== false }; }
 // خريطة حقول قسم واحد (section_id -> قائمة تعريفات الحقول) تُخزَّن كصف واحد لكل قسم،
@@ -8777,6 +8777,20 @@ function indicatorDefRowHtml(def) {
 }
 
 /* =============================== Goals management ============================= */
+function goalParentOptionsHtml(cur) {
+  return `<option value="">— يتبع للهدف الاستراتيجي —</option>${(S.goalsDefinitions.strategic || []).map((x) => `<option value="${esc(x.id)}" ${cur === x.id ? "selected" : ""}>${esc(x.name)}</option>`).join("")}`;
+}
+// الأهداف التشغيلية مجمّعة تحت أهدافها الاستراتيجية؛ غير المربوطة آخرًا (تظهر عند التعبئة تحت كل الأهداف)
+function goalsGroupedHtml(strategic, operational) {
+  const valid = new Set(strategic.map((x) => x.id));
+  const groups = strategic.map((sg) => [sg.name, operational.filter((o) => o.parentId === sg.id)]).filter(([, l]) => l.length);
+  const loose = operational.filter((o) => !o.parentId || !valid.has(o.parentId));
+  if (loose.length) groups.push(["غير مربوطة بهدف استراتيجي (تظهر تحت كل الأهداف)", loose]);
+  return groups.map(([title, list]) => `<div>
+    <div style="font-size:12px;font-weight:800;color:${INK};margin-bottom:6px;">${esc(title)}</div>
+    <div style="display:flex;flex-direction:column;gap:8px;padding-inline-start:12px;border-inline-start:2px solid ${BORDER};">${list.map((g) => goalsListRowHtml("Operational", g)).join("")}</div>
+  </div>`).join("");
+}
 function goalsListRowHtml(kind, g) {
   const editing = S.ui[`editing${kind}Id`] === g.id;
   const confirming = S.ui[`confirm${kind}DeleteId`] === g.id;
@@ -8793,8 +8807,9 @@ function goalsListRowHtml(kind, g) {
       <button data-action="cancel-${kind}-goal-edit" style="background:${DANGER_BG};border:none;border-radius:8px;padding:0 10px;cursor:pointer;">${iconX(16, DANGER)}</button>
     </div>`;
   }
-  return `<div class="card" style="display:flex;align-items:center;justify-content:space-between;gap:10px;">
-    <div style="font-size:13.5px;font-weight:700;">${esc(g.name)}</div>
+  return `<div class="card" style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;">
+    <div style="font-size:13.5px;font-weight:700;flex:1;min-width:160px;">${esc(g.name)}</div>
+    ${kind === "Operational" ? `<select class="input" data-action="goal-parent-set" data-id="${esc(g.id)}" style="width:auto;min-width:170px;max-width:260px;padding:6px 10px;font-size:12px;">${goalParentOptionsHtml(g.parentId || "")}</select>` : ""}
     <div style="display:flex;gap:6px;">
       <button class="icon-btn" style="width:32px;height:32px;border:1px solid ${BORDER}" data-action="start-${kind}-goal-edit" data-id="${esc(g.id)}" data-name="${esc(g.name)}" title="تعديل">${iconPencil(14, INK)}</button>
       <button class="icon-btn" style="width:32px;height:32px;border:1px solid ${BORDER}" data-action="confirm-delete-${kind}-goal" data-id="${esc(g.id)}" title="حذف">${iconTrash(14, DANGER)}</button>
@@ -8826,12 +8841,13 @@ function renderGoalsManage() {
     </div>
 
     <div style="font-size:13px;font-weight:800;color:${ROSE};margin:6px 0 10px;">الأهداف التشغيلية</div>
-    <div class="card" style="margin-bottom:14px;"><div style="display:flex;gap:8px;">
-      <input class="input" id="new-operational-goal" style="flex:1;" placeholder="نص الهدف التشغيلي" />
+    <div class="card" style="margin-bottom:14px;"><div style="display:flex;gap:8px;flex-wrap:wrap;">
+      <input class="input" id="new-operational-goal" style="flex:2;min-width:200px;" placeholder="نص الهدف التشغيلي" />
+      <select class="input" id="new-operational-parent" style="flex:1;min-width:180px;">${goalParentOptionsHtml(S.ui.newOpParent || "")}</select>
       ${pillBtn("إضافة", { icon: iconPlus(15, "#fff"), action: "add-operational-goal" })}
     </div></div>
-    <div style="display:flex;flex-direction:column;gap:8px;">
-      ${operational.length === 0 ? `<div style="font-size:12px;color:${SUBTLE}">لا توجد أهداف تشغيلية بعد.</div>` : operational.map((g) => goalsListRowHtml("Operational", g)).join("")}
+    <div style="display:flex;flex-direction:column;gap:14px;">
+      ${operational.length === 0 ? `<div style="font-size:12px;color:${SUBTLE}">لا توجد أهداف تشغيلية بعد.</div>` : goalsGroupedHtml(strategic, operational)}
     </div>
   </div></div>`;
 }
@@ -9802,7 +9818,7 @@ function goalOverallAchieved(g) {
 function goalsSectionHtml(d) {
   const goals = d.goals || [];
   const strategicOptions = (S.goalsDefinitions.strategic && S.goalsDefinitions.strategic.length ? S.goalsDefinitions.strategic.map((g) => g.name) : STRATEGIC_GOALS_FALLBACK);
-  const operationalOptions = (S.goalsDefinitions.operational && S.goalsDefinitions.operational.length ? S.goalsDefinitions.operational.map((g) => g.name) : OPERATIONAL_GOALS_FALLBACK);
+  const operationalAll = (S.goalsDefinitions.operational && S.goalsDefinitions.operational.length ? null : OPERATIONAL_GOALS_FALLBACK);
   // نفس أسلوب الطيّ التلقائي المستخدم بالأقسام الأخرى (البرامج والتوصيات...):
   // بعد إضافة هدف جديد تنطوي الأهداف السابقة تلقائيًا وتبيّن عنوانها فقط، وتقدرين
   // ترجعين لأي واحد وتفتحينه للتعديل بالضغط عليه.
@@ -9830,7 +9846,7 @@ function goalsSectionHtml(d) {
     return `<div class="repeat-item">
       ${head}
       ${fieldWrap("الهدف المرتبط بالخطة الاستراتيجية", true, sel("goals", g.id, "strategicGoal", g.strategicGoal, strategicOptions, "اختاري الهدف الاستراتيجي") + goalAddInlineHtml(g.id, "strategic"))}
-      ${fieldWrap("الهدف التشغيلي للوحدة", true, multiSelectDropdownHtml(`goal-og-${g.id}`, operationalOptions, (g.operationalGoals || []).map((og) => og.name), "اختاري هدفًا أو أكثر") + goalAddInlineHtml(g.id, "operational"))}
+      ${fieldWrap("الهدف التشغيلي للوحدة", true, multiSelectDropdownHtml(`goal-og-${g.id}`, operationalAll || operationalGoalsFor(g.strategicGoal), (g.operationalGoals || []).map((og) => og.name), "اختاري هدفًا أو أكثر") + goalAddInlineHtml(g.id, "operational"))}
       ${ogHtml}
     </div>`;
   }).join("");
@@ -9841,6 +9857,14 @@ function goalsSectionHtml(d) {
     ${notesFieldHtml(d)}`;
 }
 
+// الأهداف التشغيلية التابعة للهدف الاستراتيجي المختار (+ غير المربوطة بأي هدف).
+// قبل اختيار الهدف الاستراتيجي تظهر كلها.
+function strategicGoalIdByName(name) { const g = (S.goalsDefinitions.strategic || []).find((x) => x.name === name); return g ? g.id : ""; }
+function operationalGoalsFor(strategicName) {
+  const sid = strategicGoalIdByName(strategicName);
+  const valid = new Set((S.goalsDefinitions.strategic || []).map((x) => x.id));
+  return (S.goalsDefinitions.operational || []).filter((o) => !sid || !o.parentId || !valid.has(o.parentId) || o.parentId === sid).map((o) => o.name);
+}
 // «＋ هدف غير موجود في القائمة»: يضيف الهدف للقائمة العامة (إدارة الأهداف) ويختاره مباشرة.
 // مديرة النظام تقدر توقفه من «إدارة الأهداف والمستهدفات».
 function goalAddFromReportOn() { const th = ((S.siteSettings || {}).theme) || {}; return th.goalAddFromReport !== false; }
@@ -11002,6 +11026,10 @@ function attachFormListeners() {
       return;
     }
     if (el.dataset && el.dataset.action === "filter-unit-reports-period") { S.ui.unitReportsPeriodFilter = el.value; render(); return; }
+    if (el.dataset && el.dataset.action === "goal-parent-set") {
+      S.goalsDefinitions = { ...S.goalsDefinitions, operational: (S.goalsDefinitions.operational || []).map((g) => g.id === el.dataset.id ? { ...g, parentId: el.value } : g) };
+      dataStore.saveGoalsDefinitions(S.goalsDefinitions); render(); return;
+    }
     if (el.dataset && el.dataset.action === "filter-all-reports-unit") { S.ui.allReportsUnit = el.value; render(); return; }
     if (el.dataset && el.dataset.action === "filter-all-reports-date-from") { S.ui.allReportsDateFrom = el.value; render(); return; }
     if (el.dataset && el.dataset.action === "filter-all-reports-date-to") { S.ui.allReportsDateTo = el.value; render(); return; }
@@ -11012,6 +11040,11 @@ function attachFormListeners() {
         const item = findById(list, el.dataset.id);
         const sub = item && findById(item[el.dataset.subarr] || [], el.dataset.subid);
         if (sub) sub.percentage = GOAL_LEVEL_PERCENTAGE[el.value] ?? "";
+      }
+      if (el.dataset.field === "strategicGoal" && el.dataset.arr === "goals" && (S.goalsDefinitions.operational || []).length) {
+        const item = findById(getItemList("goals"), el.dataset.id);
+        const allowed = operationalGoalsFor(el.value);
+        if (item) item.operationalGoals = (item.operationalGoals || []).filter((og) => allowed.includes(og.name));
       }
       if (el.dataset.field === "evidenceType" && el.dataset.subarr === "operationalGoals") {
         const list = getItemList(el.dataset.arr);
@@ -12609,7 +12642,9 @@ function attachClickListener() {
         if (!name) break;
         const list = S.goalsDefinitions[kind] || [];
         if (!list.some((g) => g.name === name)) {
-          S.goalsDefinitions = { ...S.goalsDefinitions, [kind]: [...list, { id: uid(kind[0] + "g"), name }] };
+          const ng = { id: uid(kind[0] + "g"), name };
+          if (kind === "operational") { const pe = document.getElementById("new-operational-parent"); ng.parentId = (pe && pe.value) || ""; S.ui.newOpParent = ng.parentId; }
+          S.goalsDefinitions = { ...S.goalsDefinitions, [kind]: [...list, ng] };
           dataStore.saveGoalsDefinitions(S.goalsDefinitions);
         }
         render();
@@ -12624,12 +12659,17 @@ function attachClickListener() {
         if (!name) { S.ui.goalAddErr = "اكتبي نص الهدف"; render(); break; }
         if (!goalAddFromReportOn()) break;
         const kind = ds.kind === "strategic" ? "strategic" : "operational", gid = ds.gid;
+        const goalItem = findById(getItemList("goals"), gid);
+        const parentName = kind === "operational" ? ((goalItem && goalItem.strategicGoal) || "") : "";
+        if (kind === "operational" && !parentName) { S.ui.goalAddErr = "اختاري الهدف الاستراتيجي أولًا، عشان يرتبط الهدف التشغيلي به"; render(); break; }
         // نجيب آخر قائمة من القاعدة قبل الإضافة عشان ما نرجّع تعديلات مديرة النظام
         refreshGoalsDefinitionsFromDb().catch(() => {}).then(() => {
           const list = S.goalsDefinitions[kind] || [];
           const found = list.find((g) => g.name.trim() === name);
           if (!found) {
-            S.goalsDefinitions = { ...S.goalsDefinitions, [kind]: [...list, { id: uid(kind[0] + "g"), name }] };
+            const ng = { id: uid(kind[0] + "g"), name };
+            if (kind === "operational") ng.parentId = strategicGoalIdByName(parentName);
+            S.goalsDefinitions = { ...S.goalsDefinitions, [kind]: [...list, ng] };
             dataStore.saveGoalsDefinitions(S.goalsDefinitions);
           }
           const goal = findById(getItemList("goals"), gid);
