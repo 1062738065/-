@@ -8808,6 +8808,14 @@ function renderGoalsManage() {
   <div class="page-wrap"><div class="page-inner narrow">
     ${topBarHtml({ title: "إدارة الأهداف والمستهدفات", subtitle: "عرّفي الأهداف الاستراتيجية والتشغيلية المعتمدة", backAction: "nav-back-admin" })}
 
+    <div class="card" style="margin-bottom:16px;display:flex;align-items:center;gap:12px;flex-wrap:wrap;">
+      <div style="flex:1;min-width:220px;">
+        <div style="font-size:13px;font-weight:800;">إضافة أهداف من صفحة تعبئة التقرير</div>
+        <div class="hint" style="margin:2px 0 0;">${goalAddFromReportOn() ? "مفعّلة: الموظفة تقدر تضيف هدفًا غير موجود وهي تعبّي «الأهداف والمستهدفات»، ويُضاف هنا للقائمة العامة." : "متوقفة: الأهداف تُضاف من هذه الصفحة فقط."}</div>
+      </div>
+      ${pillBtn(goalAddFromReportOn() ? "إيقاف" : "تفعيل", { variant: goalAddFromReportOn() ? "ghost" : "primary", action: "goal-add-toggle" })}
+    </div>
+
     <div style="font-size:13px;font-weight:800;color:${ROSE};margin:6px 0 10px;">الأهداف الاستراتيجية</div>
     <div class="card" style="margin-bottom:14px;"><div style="display:flex;gap:8px;">
       <input class="input" id="new-strategic-goal" style="flex:1;" placeholder="نص الهدف الاستراتيجي" />
@@ -9821,8 +9829,8 @@ function goalsSectionHtml(d) {
       </div>`).join("");
     return `<div class="repeat-item">
       ${head}
-      ${fieldWrap("الهدف المرتبط بالخطة الاستراتيجية", true, sel("goals", g.id, "strategicGoal", g.strategicGoal, strategicOptions, "اختاري الهدف الاستراتيجي"))}
-      ${fieldWrap("الهدف التشغيلي للوحدة", true, multiSelectDropdownHtml(`goal-og-${g.id}`, operationalOptions, (g.operationalGoals || []).map((og) => og.name), "اختاري هدفًا أو أكثر"))}
+      ${fieldWrap("الهدف المرتبط بالخطة الاستراتيجية", true, sel("goals", g.id, "strategicGoal", g.strategicGoal, strategicOptions, "اختاري الهدف الاستراتيجي") + goalAddInlineHtml(g.id, "strategic"))}
+      ${fieldWrap("الهدف التشغيلي للوحدة", true, multiSelectDropdownHtml(`goal-og-${g.id}`, operationalOptions, (g.operationalGoals || []).map((og) => og.name), "اختاري هدفًا أو أكثر") + goalAddInlineHtml(g.id, "operational"))}
       ${ogHtml}
     </div>`;
   }).join("");
@@ -9831,6 +9839,22 @@ function goalsSectionHtml(d) {
     ${goalsHtml}
     ${pillBtn("إضافة هدف", { variant: "ghost", icon: iconPlus(15, ROSE), action: "add-goal" })}
     ${notesFieldHtml(d)}`;
+}
+
+// «＋ هدف غير موجود في القائمة»: يضيف الهدف للقائمة العامة (إدارة الأهداف) ويختاره مباشرة.
+// مديرة النظام تقدر توقفه من «إدارة الأهداف والمستهدفات».
+function goalAddFromReportOn() { const th = ((S.siteSettings || {}).theme) || {}; return th.goalAddFromReport !== false; }
+function goalAddInlineHtml(goalId, kind) {
+  if (!goalAddFromReportOn()) return "";
+  const key = goalId + ":" + kind;
+  const label = kind === "strategic" ? "هدف استراتيجي" : "هدف تشغيلي";
+  if (S.ui.goalAddOpen !== key) return `<button type="button" data-action="goal-add-open" data-key="${esc(key)}" style="background:none;border:none;cursor:pointer;color:${ROSE};font-size:12px;font-weight:700;padding:6px 0 0;font-family:inherit;">＋ ${label} غير موجود في القائمة</button>`;
+  return `<div style="display:flex;gap:6px;margin-top:8px;flex-wrap:wrap;">
+    <input class="input" id="goal-add-input" style="flex:1;min-width:200px;" placeholder="اكتبي نص ${label} الجديد" />
+    ${pillBtn("إضافة", { icon: iconPlus(14, "#fff"), action: "goal-add-save", data: { gid: goalId, kind } })}
+    ${pillBtn("إلغاء", { variant: "ghost", action: "goal-add-cancel" })}
+  </div>
+  ${S.ui.goalAddErr ? `<div style="color:${DANGER};font-size:11.5px;font-weight:700;margin-top:4px;">${esc(S.ui.goalAddErr)}</div>` : `<div style="font-size:11px;color:${SUBTLE};margin-top:4px;">يُضاف للقائمة العامة ويظهر لكل الوحدات.</div>`}`;
 }
 
 /* ---- الأعمال والبرامج ---- */
@@ -12589,6 +12613,32 @@ function attachClickListener() {
           dataStore.saveGoalsDefinitions(S.goalsDefinitions);
         }
         render();
+        break;
+      }
+      case "goal-add-toggle": saveSiteTheme({ goalAddFromReport: !goalAddFromReportOn() }); render(); break;
+      case "goal-add-open": S.ui.goalAddOpen = ds.key; S.ui.goalAddErr = ""; render(); setTimeout(() => { const el = document.getElementById("goal-add-input"); if (el) el.focus(); }, 30); break;
+      case "goal-add-cancel": S.ui.goalAddOpen = null; S.ui.goalAddErr = ""; render(); break;
+      case "goal-add-save": {
+        const el = document.getElementById("goal-add-input");
+        const name = String((el && el.value) || "").trim().replace(/\s+/g, " ");
+        if (!name) { S.ui.goalAddErr = "اكتبي نص الهدف"; render(); break; }
+        if (!goalAddFromReportOn()) break;
+        const kind = ds.kind === "strategic" ? "strategic" : "operational", gid = ds.gid;
+        // نجيب آخر قائمة من القاعدة قبل الإضافة عشان ما نرجّع تعديلات مديرة النظام
+        refreshGoalsDefinitionsFromDb().catch(() => {}).then(() => {
+          const list = S.goalsDefinitions[kind] || [];
+          const found = list.find((g) => g.name.trim() === name);
+          if (!found) {
+            S.goalsDefinitions = { ...S.goalsDefinitions, [kind]: [...list, { id: uid(kind[0] + "g"), name }] };
+            dataStore.saveGoalsDefinitions(S.goalsDefinitions);
+          }
+          const goal = findById(getItemList("goals"), gid);
+          if (goal) {
+            if (kind === "strategic") goal.strategicGoal = name;
+            else if (!(goal.operationalGoals || []).some((og) => og.name === name)) goal.operationalGoals = [...(goal.operationalGoals || []), { id: uid("og"), name, level: "", percentage: "", evidenceType: "", evidenceAnswer: "", explanation: "" }];
+          }
+          S.ui.goalAddOpen = null; S.ui.goalAddErr = ""; render();
+        });
         break;
       }
       case "add-report-section": {
