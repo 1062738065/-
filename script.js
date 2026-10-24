@@ -2944,14 +2944,15 @@ const DASH_STD_BLOCKS = [
   { key: "goalMatrix", label: "جدول الأهداف عبر الفترات" },
   { key: "followUp", label: "يحتاج متابعة" },
   { key: "highlights", label: "أبرز ما يُعرض" },
-  { key: "opsCounts", label: "متابعة التشغيل: أعداد التقارير حسب الحالة", not: ["office", "dept", "unit"] },
-  { key: "opsStuck", label: "متابعة التشغيل: تقارير واقفة في المسار", not: ["office", "dept", "unit"] },
-  { key: "opsMissing", label: "متابعة التشغيل: ما رفعت تقرير الفترة الحالية", not: ["office", "dept", "unit"] },
-  { key: "opsReturned", label: "متابعة التشغيل: تقارير معادة ما انعدّلت", not: ["office", "dept", "unit"] },
-  { key: "opsSetup", label: "متابعة التشغيل: جهات ناقصة الإعداد", not: ["office", "dept", "unit"] },
-  { key: "opsActivity", label: "متابعة التشغيل: آخر الحركات", not: ["office", "dept", "unit"] },
 ];
-const DASH_STD_KINDS = ["admin", "office", "dept", "unit"];
+const DASH_STD_KINDS = ["office", "dept", "unit"];
+// لوحة مديرة النظام: متابعة تشغيل الموقع فقط
+const DASH_ADMIN_BLOCKS = [
+  { key: "banner", label: "البانر والبحث" }, { key: "periodFilter", label: "فلتر نوع الفترة (لـ«ما رفعت تقرير الفترة الحالية»)" },
+  { key: "opsCounts", label: "أعداد التقارير حسب الحالة" }, { key: "opsStuck", label: "تقارير واقفة في المسار" },
+  { key: "opsMissing", label: "ما رفعت تقرير الفترة الحالية" }, { key: "opsReturned", label: "تقارير معادة ما انعدّلت" },
+  { key: "opsSetup", label: "جهات ناقصة الإعداد" }, { key: "opsActivity", label: "آخر الحركات" },
+];
 // لوحة الإشراف (الإدارة العليا، وصفحة لوحة المكتب القديمة)
 const DASH_EX_BLOCKS = [
   { key: "exStats", label: "بطاقات الأرقام الأربع" }, { key: "exCompletion", label: "نسبة إنجاز التقارير إجمالًا" },
@@ -3064,8 +3065,11 @@ function dashFiltersHtml(kind, series) {
   if (dashHidden(kind, "periodFilter")) return "";
   const years = [...new Set(series.units.flatMap((u) => ensureUnitReportsLoaded(u.id).filter(reportHasContent).map((r) => reportHijriYearNum(r)).filter(Boolean)))].sort();
   const pill = (label, on, action, v) => `<button type="button" class="pill-btn ${on ? "pill-primary" : "pill-ghost"}" data-action="${action}" data-v="${esc(v)}">${esc(label)}</button>`;
+  // عدد التقارير اللي فيها بيانات لكل نوع فترة — يوضح وين البيانات
+  const per = {};
+  series.units.forEach((u) => ensureUnitReportsLoaded(u.id).forEach((r) => { if (reportHasContent(r)) { const p = reportPeriodType(r); if (p) per[p] = (per[p] || 0) + 1; } }));
   return `<div class="card" style="margin-bottom:18px;display:flex;gap:18px;flex-wrap:wrap;align-items:center;">
-    <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;"><span style="font-size:12.5px;font-weight:800;">نوع الفترة</span>${PERIOD_TYPES.map((p) => pill(p, series.period === p, "dash-period", p)).join("")}</div>
+    <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;"><span style="font-size:12.5px;font-weight:800;">نوع الفترة</span>${PERIOD_TYPES.map((p) => pill(p + (per[p] ? ` (${per[p]})` : ""), series.period === p, "dash-period", p)).join("")}</div>
     <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;"><span style="font-size:12.5px;font-weight:800;">السنة</span>${pill("كل السنوات", series.year === "all", "dash-year", "all")}${years.map((y) => pill(hijriYearLabel(y), series.year === String(y), "dash-year", String(y))).join("")}</div>
     <div class="hint" style="margin:0;">${series.cols.length} ${series.cols.length === 1 ? "فترة" : "فترات"} · التقارير الفاضية لا تُحسب</div>
   </div>`;
@@ -3387,7 +3391,10 @@ function opsBlocksHtml(kind, units) {
       if (!paths.length) issues.push([u.name, "لا يوجد مسار اعتماد يمر بها (أو هي خارج الهيكل في مسار يمشي على الهيكل)", "ربط مسار"]);
       paths.forEach((p) => (p.stages || []).forEach((st) => { if (!st.disabled && st.sameUnit && String(st.approver || "").indexOf("role:") === 0 && !apStageApplies(st, u)) issues.push([u.name, "لا يوجد أحد بـ«" + apApproverLabel(st.approver).replace("دور: ", "") + "» — مرحلة «" + st.name + "» تُتخطّى", "إضافة شخص"]); }));
     });
-    setupH = dashCard("جهات ناقصة الإعداد", "تمنع الدخول أو الإرسال أو تتخطّى مراحل", issues.length ? issues.slice(0, 15).map(([n, i, f]) => `<div style="display:flex;justify-content:space-between;align-items:center;gap:10px;padding:9px 0;border-top:1px solid ${BORDER};"><div><div style="font-size:13px;font-weight:700;">${esc(n)}</div><div style="font-size:11.5px;color:${SUBTLE};">${esc(i)}</div></div>${pillBtn(f, { variant: "ghost", action: "nav-to", data: { view: "units-manage" } })}</div>`).join("") + (issues.length > 15 ? `<div class="hint">و${issues.length - 15} غيرها.</div>` : "") : emptyHint("كل الجهات مضبوطة."));
+    const byUnit = new Map();
+    issues.forEach(([n, i]) => { if (!byUnit.has(n)) byUnit.set(n, []); byUnit.get(n).push(i); });
+    const rowsU = [...byUnit.entries()];
+    setupH = dashCard("جهات ناقصة الإعداد", "تمنع الدخول أو الإرسال أو تتخطّى مراحل", rowsU.length ? rowsU.slice(0, 12).map(([n, list]) => `<div style="display:flex;justify-content:space-between;align-items:center;gap:10px;padding:9px 0;border-top:1px solid ${BORDER};"><div style="min-width:0;"><div style="font-size:13px;font-weight:700;">${esc(n)}</div>${list.map((i) => `<div style="font-size:11.5px;color:${SUBTLE};line-height:1.7;">• ${esc(i)}</div>`).join("")}</div>${pillBtn("ضبط", { variant: "ghost", action: "nav-to", data: { view: "units-manage" } })}</div>`).join("") + (rowsU.length > 12 ? `<div class="hint">و${rowsU.length - 12} جهات غيرها.</div>` : "") : emptyHint("كل الجهات مضبوطة."));
   }
   if (!dashHidden(kind, "opsActivity")) {
     const log = [];
@@ -3551,8 +3558,6 @@ function renderDashboardBody(activeUnits, opts) {
   <div class="page-wrap"><div class="page-inner">
     ${topBarHtml({ title: opts.title || "لوحة المعلومات", subtitle: opts.subtitle || `مرحبًا ${esc(S.currentUser.name)} — نظرة شاملة على كل الوحدات`, right: opts.topBarRight })}
     ${opts.extraTop || ""}
-    ${dashFiltersHtml(dkind, series)}
-    ${dkind === "admin" ? opsBlocksHtml(dkind, activeUnits) : ""}
 
     ${dashBlock(dkind, "banner", `<div class="hero-banner">
       <img class="hero-banner-bg" src="${esc(siteBannerSrc(site))}" alt="" />
@@ -3566,6 +3571,9 @@ function renderDashboardBody(activeUnits, opts) {
         <input id="dashboard-search" class="search-input" placeholder="ابحث عن تقرير، قسم أو موظف..." />
       </div>
     </div>`)}
+    ${dashFiltersHtml(dkind, series)}
+    ${dkind === "admin" ? opsBlocksHtml(dkind, activeUnits) : ""}
+    ${dkind === "admin" ? "" : `
 
     ${dashBlock(dkind, "stats", `<div class="stat-grid">
       ${statIconCardHtml("تقارير هذا الأسبوع", reportsThisWeek, iconCalendarSmall(18, ROSE), GREEN_BG)}
@@ -3616,6 +3624,7 @@ function renderDashboardBody(activeUnits, opts) {
     </div>`)}
     <div style="margin-top:18px;">${dashPeriodBlocksHtml(dkind, series)}</div>
     ${dashHidden(dkind, "programs") ? "" : `<div style="margin-top:18px;">${programsCardHtml(activeUnits)}</div>`}
+    `}
     ${opts.extraBottom || ""}
   </div></div>`;
 }
@@ -3695,7 +3704,6 @@ function renderUnitDashboard() {
   <div class="page-wrap"><div class="page-inner">
     ${topBarHtml({ title: "لوحة المعلومات", subtitle: `مرحبًا ${esc(S.currentUser.name)} — نظرة عامة على تقارير ${esc(unit.name)}` })}
     ${scopedUnitSwitcherHtml()}
-    ${dashFiltersHtml("unit", series)}
 
     ${dashBlock("unit", "banner", `<div class="hero-banner">
       <img class="hero-banner-bg" src="${esc(siteBannerSrc(site))}" alt="" />
@@ -3709,6 +3717,7 @@ function renderUnitDashboard() {
         <input id="dashboard-search" class="search-input" placeholder="ابحثي عن تقرير..." />
       </div>
     </div>`)}
+    ${dashFiltersHtml("unit", series)}
 
     ${dashBlock("unit", "stats", `<div class="stat-grid">
       ${statIconCardHtml("تقارير هذا الأسبوع", reportsThisWeek, iconCalendarSmall(18, ROSE), GREEN_BG)}
@@ -5013,7 +5022,8 @@ function dashSettingsCardHtml() {
   return `<div class="card" style="max-width:760px;margin-bottom:16px;">
     <div class="subhead" style="margin-top:0;">ما يظهر في لوحة المعلومات</div>
     <div class="hint" style="margin-bottom:14px;">✓ يظهر · ✗ مخفي. الاختيار لنوع الجهة كله (كل الأقسام ترى الشكل نفسه). يُحفظ فورًا. الأصل أن كل شيء ظاهر.</div>
-    ${group("اللوحة العامة", DASH_STD_BLOCKS, DASH_STD_KINDS)}
+    ${group("لوحة مديرة النظام (متابعة التشغيل)", DASH_ADMIN_BLOCKS, ["admin"])}
+    ${group("لوحة الوحدة والقسم والمكتب", DASH_STD_BLOCKS, DASH_STD_KINDS)}
     ${group("لوحة الإشراف (الإدارة العليا، وصفحة لوحة المكتب القديمة)", DASH_EX_BLOCKS, DASH_EX_KINDS)}
     <div>${pillBtn("إظهار كل العناصر للجميع", { variant: "ghost", icon: iconX(14, INK), action: "dash-reset", disabled: !anyHidden })}</div>
   </div>`;
