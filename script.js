@@ -1472,19 +1472,53 @@ function apPathById(id) { return approvalPathsList().find((p) => p.id === id) ||
 // المراحل المعطّلة مؤقتًا (st.disabled) تُتخطّى تلقائيًا بالإرسال والاعتماد — كأنها غير موجودة،
 // وترجع تعمل بمجرد تفعيلها من جديد (بدون تعديل المسار أو إرجاعه مسودة).
 // مراحل المسار الفعّالة. مع unit: تُتخطّى مرحلة «دور من نفس وحدة التقرير» إن لم يكن في الوحدة أحد بهذا الدور
-function apStageList(path, unit) { return ((path && path.stages) || []).filter((st) => !st.disabled && (!unit || apStageApplies(st, unit))).map((st) => ({ ...st, key: AP_PREFIX + path.id + ":" + st.id })); }
+// authorId (اختياري): كاتبة التقرير — المراحل اللي هي صاحبتها تُتخطّى (ما تراجع تقريرها بنفسها)
+function apStageList(path, unit, authorId) { return ((path && path.stages) || []).filter((st) => !st.disabled && (!unit || apStageApplies(st, unit, { pathId: path.id, authorId }))).map((st) => ({ ...st, key: AP_PREFIX + path.id + ":" + st.id })); }
 function apPersonInUnit(p, unit) {
   if (!p || !unit) return false;
   const kind = p.ownerKind === "department" ? "dept" : (p.ownerKind || "unit");
   return [{ kind: "unit", id: unit.id }, ...apOwnerCandidatesForUnit(unit)].some((c) => c.kind === kind && c.id === p.ownerId);
 }
-function apStageApplies(st, unit) {
-  if (!st || !st.sameUnit || !unit) return true;
+// هل تمرّ هذه المرحلة على تقارير هذه الوحدة؟ تُتخطّى إذا:
+// - «دور من نفس وحدة التقرير» والوحدة ما فيها أحد بهذا الدور
+// - «مديرة قسم الوحدة» والوحدة غير مربوطة بقسم
+// - صاحبة المرحلة فعّلت تخطّيها لهذه الوحدة من «الإعدادات» (والمرحلة تسمح بالتخطّي)
+// - كاتبة التقرير هي نفسها صاحبة المرحلة
+function apStageApplies(st, unit, ctx) {
+  if (!st || !unit) return true;
   const a = String(st.approver || "");
-  if (a.indexOf("role:") !== 0) return true;
-  const rid = a.slice(5);
-  return personsList().some((p) => p.status !== "disabled" && p.roleId === rid && apPersonInUnit(p, unit));
+  if (a.indexOf(AP_UNIT_DEPT) === 0 && !unit.departmentId) return false;
+  if (st.sameUnit && a.indexOf("role:") === 0) {
+    const rid = a.slice(5);
+    if (!personsList().some((p) => p.status !== "disabled" && p.roleId === rid && apPersonInUnit(p, unit))) return false;
+  }
+  if (ctx && ctx.pathId && st.allowSkip && apUnitSkipList(unit.id).includes(ctx.pathId + ":" + st.id)) return false;
+  if (ctx && ctx.authorId && apStageHeldByPerson(st, unit, ctx.authorId)) return false;
+  return true;
 }
+// معتمد ديناميكي: حساب القسم اللي تتبع له وحدة التقرير (كل تقرير يروح لقسم وحدته فقط)
+const AP_UNIT_DEPT = "unitdept:own";
+function apStageHeldByPerson(st, unit, personId) {
+  if (!personId || !st) return false;
+  const a = String(st.approver || ""); const i = a.indexOf(":");
+  const k = a.slice(0, i), id = a.slice(i + 1);
+  if (k === "person") return personId === id;
+  if (k !== "role") return false;
+  const p = personsList().find((x) => x.id === personId);
+  return !!p && p.roleId === id && (!st.sameUnit || !unit || apPersonInUnit(p, unit));
+}
+/* إعدادات كل جهة (صفحة «الإعدادات»): تُحفظ في site_settings.theme_json.entityPrefs["unit:<id>"]
+   { skip: ["<pathId>:<stageId>"], sectionsOff: { "<نوع الفترة>": ["<sectionId>"] } } */
+function entityPrefs(key) { const th = ((S.siteSettings || {}).theme) || {}; return (th.entityPrefs && th.entityPrefs[key]) || {}; }
+async function saveEntityPrefs(key, patch) {
+  // نجيب آخر نسخة من الإعدادات قبل الحفظ عشان ما نمسح تعديلات مديرة النظام أو جهة ثانية
+  try { await refreshSiteSettingsFromDb(); } catch (e) {}
+  const th = ((S.siteSettings || {}).theme) || {};
+  const all = { ...(th.entityPrefs || {}) };
+  all[key] = { ...(all[key] || {}), ...patch };
+  saveSiteTheme({ entityPrefs: all });
+}
+function apUnitSkipList(unitId) { return entityPrefs("unit:" + unitId).skip || []; }
 // نطاق المسار: جهة محددة (الأقوى) ← مستوى من الهيكل وما تحته ← نوع الجهة ← كل الوحدات والمراكز
 function apPathOwnerScore(p, unit) {
   if (!unit || unit.role === "admin" || unit.role === "executive") return -1;
@@ -1509,6 +1543,7 @@ function apStageRowsHtml(a) {
       <span style="width:22px;height:22px;border-radius:50%;background:${off ? SUBTLE : ROSE};color:#fff;font-size:11px;font-weight:800;display:flex;align-items:center;justify-content:center;flex-shrink:0;">${i + 1}</span>
       <span style="font-weight:700;${off ? "text-decoration:line-through;" : ""}">${esc(st.name || "مرحلة")}</span><span style="color:${SUBTLE};">← ${esc(apApproverLabel(st.approver))}</span>
       ${off ? badgeHtml("معطّلة مؤقتًا — تُتخطّى", "#7a4d16", GOLD_BG) : ""}
+      ${st.allowSkip && !off ? badgeHtml("يُسمح بتخطّيها", SUBTLE, GRAY_BG) : ""}
       ${asking
         ? `<span style="display:inline-flex;gap:6px;align-items:center;flex-wrap:wrap;background:${GOLD_BG};padding:4px 8px;border-radius:10px;"><span style="font-weight:700;">تعطيل هذه المرحلة؟${waiting ? ` ${waiting} تقرير واقف عندها الآن سينتقل للمرحلة التالية.` : ""}</span>${pillBtn("تعطيل", { variant: "danger", action: "ap-stage-disable", data: { id: a.id, sid: st.id } })}${pillBtn("تراجع", { variant: "ghost", action: "ap-stage-disable-cancel" })}</span>`
         : `<button type="button" class="pill-btn pill-ghost" style="padding:3px 10px;font-size:11px;" data-action="${off ? "ap-stage-enable" : "ap-stage-disable-ask"}" data-id="${esc(a.id)}" data-sid="${esc(st.id)}">${off ? "تفعيل المرحلة" : "تعطيل مؤقت"}</button>`}
@@ -1516,21 +1551,23 @@ function apStageRowsHtml(a) {
   }).join("");
 }
 // ينقل التقارير الواقفة عند مرحلة صارت معطّلة إلى المرحلة المفعّلة التالية (أو ينهيها لو ما بعدها شيء)
-function apSkipReportsAtStage(path, stageId) {
+function apSkipReportsAtStage(path, stageId, onlyUnitId, why) {
   const all = path.stages || [];
   const idx = all.findIndex((x) => x.id === stageId);
   const stName = (all[idx] || {}).name || "مرحلة";
+  why = why || "معطّلة مؤقتًا";
   // إجراء هيكلي من مديرة النظام (تعطيل مرحلة) — يُسمح له بتحريك التقارير رغم وضع "الاطلاع فقط"
   const prevAllow = S.__adminAllowWrite; S.__adminAllowWrite = true;
   try { apReportsAtStage(path.id, stageId).forEach(({ unit, report }) => {
-    const nextSt = all.slice(idx + 1).find((x) => !x.disabled && apStageApplies(x, unit));
+    if (onlyUnitId && unit.id !== onlyUnitId) return;
+    const nextSt = all.slice(idx + 1).find((x) => !x.disabled && apStageApplies(x, unit, { pathId: path.id, authorId: report.internalSentBy }));
     const log = [...(report.customLog || [])];
     if (nextSt) {
       const nk = AP_PREFIX + path.id + ":" + nextSt.id;
-      log.push(apLogEntry("send", AP_PREFIX + path.id + ":" + stageId, nk, "تخطّى مرحلة «" + stName + "» (معطّلة مؤقتًا) إلى " + nextSt.name));
+      log.push(apLogEntry("send", AP_PREFIX + path.id + ":" + stageId, nk, "تخطّى مرحلة «" + stName + "» (" + why + ") إلى " + nextSt.name));
       saveReportEntry(unit.id, { ...report, customStageId: nk, customLog: log, updatedAt: Date.now() });
     } else {
-      log.push(apLogEntry("final", AP_PREFIX + path.id + ":" + stageId, "final", "انتهى المسار — مرحلة «" + stName + "» معطّلة مؤقتًا"));
+      log.push(apLogEntry("final", AP_PREFIX + path.id + ":" + stageId, "final", "انتهى المسار — تخطّى مرحلة «" + stName + "» (" + why + ")"));
       saveReportEntry(unit.id, { ...report, status: "completed", customStageId: null, customLog: log, updatedAt: Date.now() });
     }
   }); } finally { S.__adminAllowWrite = prevAllow; }
@@ -1599,6 +1636,7 @@ function userHoldsApStage(stage, unit) {
     return false;
   }
   if (k === "dept") return !!S.isDepartmentUser && !S.currentPersonId && S.currentDepartmentId === id;
+  if (k === "unitdept") return !!S.isDepartmentUser && !S.currentPersonId && (!unit || unit.departmentId === S.currentDepartmentId);
   if (k === "office") return !!S.isOfficeUser && !S.currentPersonId && S.currentOfficeId === id;
   return false;
 }
@@ -1611,7 +1649,7 @@ function apPendingForMe() {
       if (r.status !== "custom_pending") return;
       const ref = apRefOf(r.customStageId); if (!ref) return;
       const p = apPathById(ref.pathId); if (!p) return;
-      const stages = apStageList(p, u);
+      const stages = apStageList(p, u, r.internalSentBy);
       const stage = apStageList(p).find((s) => s.key === r.customStageId);
       if (stage && userHoldsApStage(stage, u)) out.push({ unit: u, report: r, stage, path: stages, ap: true });
     });
@@ -1638,7 +1676,8 @@ function apSendReport(unitId, entry, pathId, notes) {
   const path = matchingApprovalPaths(unit, entry).find((x) => x.id === pathId);
   if (!path) return false;
   const noteTxt = notes ? " — " + notes : "";
-  const stages = apStageList(path, unit);
+  // مراحل الكاتبة نفسها تُتخطّى (apStageList مع authorId)، ومراحل التمرير اللي تملكها الجلسة كذلك
+  const stages = apStageList(path, unit, S.currentPersonId);
   let i = 0;
   while (i < stages.length && userHoldsApStage(stages[i], unit) && apStageIsPassThrough(stages[i])) i++;
   const log = [...(entry.customLog || [])];
@@ -1649,10 +1688,10 @@ function apSendReport(unitId, entry, pathId, notes) {
     const last = stages[stages.length - 1];
     const status = last && last.canApprove ? "approved" : "completed";
     log.push(apLogEntry("final", "unit", "final", "أُرسل وانتهى المسار (" + path.name + ")" + noteTxt));
-    saveReportEntry(unitId, { ...entry, status, customStageId: null, customLog: log, internalSentAt: Date.now(), updatedAt: Date.now() });
+    saveReportEntry(unitId, { ...entry, status, customStageId: null, customLog: log, internalSentAt: Date.now(), internalSentBy: S.currentPersonId || null, updatedAt: Date.now() });
   } else {
     log.push(apLogEntry("send", "unit", stages[i].key, "أُرسل إلى " + stages[i].name + " (" + path.name + ")" + noteTxt));
-    saveReportEntry(unitId, { ...entry, status: "custom_pending", customStageId: stages[i].key, customLog: log, internalSentAt: Date.now(), updatedAt: Date.now() });
+    saveReportEntry(unitId, { ...entry, status: "custom_pending", customStageId: stages[i].key, customLog: log, internalSentAt: Date.now(), internalSentBy: S.currentPersonId || null, updatedAt: Date.now() });
   }
   return true;
 }
@@ -1667,7 +1706,7 @@ function apAdvanceOrReturn(unitId, reportId, isReturn, notes, opts) {
   const cur = all.find((s) => s.key === entry.customStageId);
   if (!cur || !userHoldsApStage(cur, unit)) return "ليست مرحلتك";
   // المراحل التالية المطبّقة على هذه الوحدة (تُتخطّى مرحلة دورٍ لا يوجد في الوحدة)
-  const stages = [cur, ...all.slice(all.indexOf(cur) + 1).filter((st) => apStageApplies(st, unit))];
+  const stages = [cur, ...all.slice(all.indexOf(cur) + 1).filter((st) => apStageApplies(st, unit, { pathId: path.id, authorId: entry.internalSentBy }))];
   const idx = 0;
   const log = [...(entry.customLog || [])];
   if (isReturn) {
@@ -1702,7 +1741,7 @@ function apSendPickerHtml(unit, report) {
     <div style="font-size:13px;font-weight:800;margin-bottom:10px;">إرسال التقرير — إلى من؟</div>
     <select class="input" id="ap-send-path" style="width:100%;margin-bottom:10px;">
       <option value="">اختاري الجهة...</option>
-      ${paths.map((p) => `<option value="${esc(p.id)}" ${picked === p.id ? "selected" : ""}>${esc(p.name || apOwnerName(p.ownerKind, p.ownerId))} — ${esc(apStageList(p, unit).map((st) => st.name).join(" ← "))}</option>`).join("")}
+      ${paths.map((p) => `<option value="${esc(p.id)}" ${picked === p.id ? "selected" : ""}>${esc(p.name || apOwnerName(p.ownerKind, p.ownerId))} — ${esc(apStageList(p, unit, S.currentPersonId).map((st) => st.name).join(" ← "))}</option>`).join("")}
     </select>
     <textarea id="ap-send-notes" class="input" style="width:100%;min-height:56px;margin-bottom:10px;" placeholder="ملاحظات (اختياري)..."></textarea>
     <div style="display:flex;gap:8px;">
@@ -1731,7 +1770,7 @@ function apInboxCardHtml(item) {
     </div>
     <textarea id="cp-notes-${esc(key)}" class="input" style="width:100%;min-height:56px;margin-bottom:10px;" placeholder="ملاحظات عامة (${stage.noteRequired ? "إلزامية عند الاعتماد" : "اختياري"}${stage.canReturn ? "، وتلزم عند الإعادة إن لم تكتبي ملاحظة على قسم" : ""})...">${esc(apDraftGet(key, "__gen"))}</textarea>
     ${stage.canReturn ? `<details style="margin-bottom:10px;"><summary style="font-size:12px;font-weight:700;color:${ROSE};cursor:pointer;">ملاحظات على أقسام محددة (تظهر داخل القسم نفسه عند الإعادة)</summary>
-      <div style="display:flex;flex-direction:column;gap:6px;margin-top:8px;">${SECTIONS.map((sc) => `<textarea id="cp-sec-${esc(key)}-${esc(sc.id)}" class="input" style="width:100%;min-height:40px;" placeholder="ملاحظة على: ${esc(sc.label)}">${esc(apDraftGet(key, sc.id))}</textarea>`).join("")}</div></details>
+      <div style="display:flex;flex-direction:column;gap:6px;margin-top:8px;">${reportSections(report, unit.id).map((sc) => `<textarea id="cp-sec-${esc(key)}-${esc(sc.id)}" class="input" style="width:100%;min-height:40px;" placeholder="ملاحظة على: ${esc(sc.label)}">${esc(apDraftGet(key, sc.id))}</textarea>`).join("")}</div></details>
     <select class="input" id="cp-rtype-${esc(key)}" style="width:100%;margin-bottom:10px;"><option value="returned">عند الإعادة: بحاجة إلى تعديل</option><option value="needs_completion">عند الإعادة: بحاجة إلى استكمال</option></select>` : ""}
     <div style="display:flex;gap:8px;flex-wrap:wrap;">
       ${pillBtn(advLabel, { icon: iconCheckCircle(14, "#fff"), action: "ap-advance", data: { unitId: unit.id, reportId: report.id } })}
@@ -1771,7 +1810,7 @@ function computeApprovalPathState(unit, entry) {
   const apPath = apId ? apPathById(apId) : null;
   if (apPath) {
     const log = entry.customLog || [];
-    return apStageList(apPath, unit).map((st) => {
+    return apStageList(apPath, unit, entry.status === "draft" ? S.currentPersonId : entry.internalSentBy).map((st) => {
       const acted = log.filter((l) => l.from === st.key);
       const last = acted[acted.length - 1];
       let state = "pending";
@@ -1847,10 +1886,27 @@ function reportTypeIconHtml(typeId, size, color) {
 }
 
 /* =============================== Helpers ==================================== */
-function computeProgress(report) {
-  const total = SECTIONS.length;
-  const completed = SECTIONS.filter((s) => report?.sections?.[s.id]?.status === "completed").length;
-  const drafted = SECTIONS.filter((s) => report?.sections?.[s.id]?.status === "draft").length;
+// أقسام هذا التقرير: كل وحدة تختار من «الإعدادات» الأقسام اللي تطلع لكل نوع فترة
+// (entityPrefs["unit:<id>"].sectionsOff[نوع الفترة]). «البيانات الأساسية» دائمًا (فيها اختيار الفترة).
+// قبل اختيار الفترة تظهر كل الأقسام.
+const SECTIONS_ALWAYS = ["basic"];
+function reportPeriodType(report) { return (report && report.shared && report.shared.periodType) || (report && report.sections && report.sections.basic && report.sections.basic.data && report.sections.basic.data.periodType) || ""; }
+function reportUnitIdOf(report) {
+  if (!report || !report.id) return null;
+  return Object.keys(S.reports || {}).find((uid) => (S.reports[uid] || []).some((r) => r.id === report.id)) || null;
+}
+function unitSectionsOff(unitId, periodType) { return (((entityPrefs("unit:" + unitId).sectionsOff) || {})[periodType]) || []; }
+function reportSections(report, unitId) {
+  const u = unitId || reportUnitIdOf(report), pt = reportPeriodType(report);
+  const off = u && pt ? unitSectionsOff(u, pt) : [];
+  return off.length ? SECTIONS.filter((sc) => SECTIONS_ALWAYS.includes(sc.id) || !off.includes(sc.id)) : SECTIONS;
+}
+function activeReportSections() { return reportSections(getReportEntry(S.currentUnitId, S.currentReportId), S.currentUnitId); }
+function computeProgress(report, unitId) {
+  const list = reportSections(report, unitId);
+  const total = list.length;
+  const completed = list.filter((s) => report?.sections?.[s.id]?.status === "completed").length;
+  const drafted = list.filter((s) => report?.sections?.[s.id]?.status === "draft").length;
   return { completed, drafted, total, percent: total ? Math.round((completed / total) * 100) : 0 };
 }
 function statusMeta(status) {
@@ -3688,18 +3744,85 @@ function renderUnitDashboard() {
   </div></div>`;
 }
 
-/* =============================== Unit settings (stub) ========================= */
+/* =============================== Unit settings ================================ */
+// صفحة «الإعدادات» للجهة: (١) الأقسام اللي تطلع في تقاريرها لكل نوع فترة، (٢) تخطّي مراحل المسار —
+// صاحبة المرحلة نفسها تتخطّى مرحلتها (لو مديرة النظام سمحت بتخطّيها في محرّر المسار).
+function usPathsForUnit(unit) {
+  const ps = approvalPathsList().filter((p) => p.status === "active" && (p.stages || []).length && apPathOwnerScore(p, unit) >= 0);
+  const top = ps.reduce((m, p) => Math.max(m, apPathOwnerScore(p, unit)), -1);
+  return ps.filter((p) => apPathOwnerScore(p, unit) === top);
+}
+function usSkipUnitsFor(path, st) {
+  return (S.units || []).filter((u) => u.status === "active" && apPathOwnerScore(path, u) >= 0 && usPathsForUnit(u).some((p) => p.id === path.id) && userHoldsApStage({ ...st, key: AP_PREFIX + path.id + ":" + st.id }, u));
+}
+function usLevelUnitSwitcherHtml() {
+  const list = (S.units || []).filter((u) => u.status === "active" && S.levelScope.unitIds.has(u.id));
+  if (list.length < 2) return "";
+  return `<div class="card" style="margin-bottom:14px;display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+    <span style="font-size:11.5px;font-weight:700;color:${SUBTLE};white-space:nowrap;">اختيار الوحدة:</span>
+    <select class="input" style="flex:1;min-width:200px;" data-action="scoped-switch-unit"><option value="">— اختاري —</option>${list.map((u) => `<option value="${esc(u.id)}" ${S.currentUnitId === u.id ? "selected" : ""}>${esc(u.name)}</option>`).join("")}</select>
+  </div>`;
+}
 function renderUnitSettings() {
+  const unit = (S.units || []).find((u) => u.id === S.currentUnitId);
+  const body = !unit ? `<div class="card" style="text-align:center;color:${SUBTLE};padding:36px;">اختاري الوحدة أولًا.</div>` : `${usSectionsCardHtml(unit)}${usSkipCardHtml(unit)}`;
   return `
-  <div class="page-wrap"><div class="page-inner">
-    ${topBarHtml({ title: "الإعدادات" })}
-    ${scopedUnitSwitcherHtml()}
-    <div class="card" style="text-align:center;color:${SUBTLE};padding:48px 20px;">
-      ${iconGauge(SUBTLE, 32)}
-      <div style="font-size:14px;font-weight:700;margin-top:12px;color:${INK}">قريبًا</div>
-      <div style="font-size:12px;margin-top:6px;">هذي الصفحة قيد الإعداد.</div>
-    </div>
+  <div class="page-wrap"><div class="page-inner narrow">
+    ${topBarHtml({ title: "الإعدادات", subtitle: unit ? unit.name : "" })}
+    ${S.levelScope ? usLevelUnitSwitcherHtml() : scopedUnitSwitcherHtml()}
+    ${S.ui.usMsg ? `<div class="hint good" style="font-weight:700;margin-bottom:10px;">${esc(S.ui.usMsg)}</div>` : ""}
+    ${body}
   </div></div>`;
+}
+function usSectionsCardHtml(unit) {
+  const pt = PERIOD_TYPES.includes(S.ui.usPeriod) ? S.ui.usPeriod : PERIOD_TYPES[0];
+  const off = unitSectionsOff(unit.id, pt);
+  const shown = SECTIONS.filter((sc) => SECTIONS_ALWAYS.includes(sc.id) || !off.includes(sc.id)).length;
+  return `<div class="card" style="margin-bottom:14px;">
+    <div style="font-size:14px;font-weight:800;margin-bottom:4px;">أقسام التقرير حسب نوع الفترة</div>
+    <div class="hint" style="margin-bottom:10px;">اختاري الفترة، ثم حددي الأقسام اللي تطلع في تقاريرها. القسم المطفي ما يطلع عند التعبئة ولا في التقرير الكامل. تقارير الفترات الثانية ما تتأثر.</div>
+    <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px;">${PERIOD_TYPES.map((x) => {
+      const n = unitSectionsOff(unit.id, x).filter((id) => !SECTIONS_ALWAYS.includes(id) && SECTIONS.some((sc) => sc.id === id)).length;
+      return pillBtn(x + (n ? " (" + n + " مخفي)" : ""), { variant: x === pt ? "primary" : "ghost", action: "us-period", data: { pt: x } });
+    }).join("")}</div>
+    <div style="font-size:12px;color:${SUBTLE};margin-bottom:8px;">تقرير «${esc(pt)}»: ${shown} من ${SECTIONS.length} أقسام</div>
+    <div style="display:flex;flex-direction:column;gap:6px;">${SECTIONS.map((sc) => {
+      const locked = SECTIONS_ALWAYS.includes(sc.id), on = locked || !off.includes(sc.id);
+      return `<button type="button" data-action="us-sec-toggle" data-sid="${esc(sc.id)}" data-pt="${esc(pt)}" ${locked ? "disabled" : ""} style="display:flex;align-items:center;gap:10px;min-height:44px;padding:8px 12px;border-radius:12px;border:1px solid ${on ? ROSE : BORDER};background:${on ? "#fff" : GRAY_BG};cursor:${locked ? "default" : "pointer"};font-family:inherit;text-align:start;">
+        <span style="width:20px;height:20px;border-radius:6px;flex-shrink:0;display:flex;align-items:center;justify-content:center;background:${on ? ROSE : "#fff"};border:1.5px solid ${on ? ROSE : BORDER};">${on ? iconCheck(12, "#fff") : ""}</span>
+        <span style="flex:1;font-size:13px;font-weight:700;color:${on ? INK : SUBTLE};${on ? "" : "text-decoration:line-through;"}">${esc(sc.label)}</span>
+        ${locked ? `<span style="font-size:10.5px;color:${SUBTLE};">دائمًا (فيه اختيار الفترة)</span>` : ""}
+      </button>`;
+    }).join("")}</div>
+    <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:12px;">${pillBtn("تطبيق هذا الاختيار على كل الفترات", { variant: "soft", action: "us-sec-copy-all", data: { pt } })}${off.length ? pillBtn("إظهار كل الأقسام لهذه الفترة", { variant: "ghost", action: "us-sec-reset", data: { pt } }) : ""}</div>
+  </div>`;
+}
+function usSkipCardHtml(unit) {
+  const skips = apUnitSkipList(unit.id);
+  const paths = usPathsForUnit(unit);
+  const rows = [];
+  paths.forEach((p) => (p.stages || []).forEach((st) => {
+    if (!st.allowSkip || st.disabled) return;
+    const k = p.id + ":" + st.id, on = skips.includes(k);
+    const mine = userHoldsApStage({ ...st, key: AP_PREFIX + k }, unit);
+    const many = mine && (S.isDepartmentUser || S.isOfficeUser || S.levelScope) ? usSkipUnitsFor(p, st).length : 0;
+    rows.push(`<div style="border:1px solid ${BORDER};border-radius:12px;padding:10px 12px;display:flex;flex-direction:column;gap:8px;${on ? "background:" + GRAY_BG + ";" : ""}">
+      <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+        <span style="font-size:13px;font-weight:800;${on ? "text-decoration:line-through;color:" + SUBTLE + ";" : ""}">${esc(st.name || "مرحلة")}</span>
+        <span style="font-size:11.5px;color:${SUBTLE};">← ${esc(apApproverLabel(st.approver))}${paths.length > 1 ? " · " + esc(p.name || apOwnerName(p.ownerKind, p.ownerId)) : ""}</span>
+        ${on ? badgeHtml("متخطّاة لتقارير هذه الوحدة", "#7a4d16", GOLD_BG) : ""}
+      </div>
+      ${mine ? `<div style="display:flex;gap:6px;flex-wrap:wrap;">
+        ${pillBtn(on ? "إرجاع المرحلة" : "تخطّي مرحلتي لهذه الوحدة", { variant: on ? "ghost" : "primary", action: "us-skip-toggle", data: { path: p.id, sid: st.id } })}
+        ${many > 1 ? pillBtn((on ? "إرجاعها" : "تخطّيها") + " لكل وحداتي (" + many + ")", { variant: "soft", action: "us-skip-toggle", data: { path: p.id, sid: st.id, all: "1", on: on ? "0" : "1" } }) : ""}
+      </div>` : `<div style="font-size:11.5px;color:${SUBTLE};">يتحكم فيها صاحب المرحلة فقط.</div>`}
+    </div>`);
+  }));
+  return `<div class="card" style="margin-bottom:14px;">
+    <div style="font-size:14px;font-weight:800;margin-bottom:4px;">تخطّي مراحل المسار</div>
+    <div class="hint" style="margin-bottom:10px;">صاحب المرحلة يقدر يتخطّى مرحلته لتقارير هذه الوحدة، فيروح التقرير للمرحلة اللي بعدها مباشرة. التقارير الواقفة عند المرحلة الآن تنتقل فورًا، ويُكتب ذلك في سجل التقرير. وتقدر ترجع المرحلة متى ما بغت.</div>
+    ${rows.length ? `<div style="display:flex;flex-direction:column;gap:8px;">${rows.join("")}</div>` : `<div style="font-size:12px;color:${SUBTLE};">${paths.length ? "ما فيه مراحل يُسمح بتخطّيها في مسار هذه الوحدة. تحددها مديرة النظام في محرّر المسار بخيار «تقدر صاحبة المرحلة تتخطّاها من الإعدادات»." : "لا يوجد مسار اعتماد مفعّل لهذه الوحدة."}</div>`}
+  </div>`;
 }
 
 /* =============================== Units overview (admin) ====================== */
@@ -4950,10 +5073,10 @@ const AGG_CHAPTERS = [
 // فصول "عرض التقرير كاملًا" (تقرير الوحدة) = أقسام التعبئة نفسها (إدارة أقسام التقرير) بنفس الأسماء والترتيب،
 // + «ملخص التقرير» أولًا و«الإغلاق والاعتماد» آخرًا. أي قسم جديد يظهر تلقائيًا.
 const UNIT_SECTION_ICONS = { basic: "document", goals: "target", kpi: "gauge", programs: "layers", tools: "layers", analysis: "check", strengths: "check", challenges: "bell", improvement: "pencil", initiatives: "sparkles", impact: "sparkles", recommendations: "pencil", nextplan: "calendar", evidence: "save", review: "check" };
-function unitChapterDefs() {
+function unitChapterDefs(report, unitId) {
   return [
     { key: "summary", title: "ملخص التقرير", icon: "sparkles", special: "summary" },
-    ...SECTIONS.map((sc) => ({ key: sc.id, title: sc.label, icon: UNIT_SECTION_ICONS[sc.id] || "document", sections: [sc.id] })),
+    ...(report ? reportSections(report, unitId) : SECTIONS).map((sc) => ({ key: sc.id, title: sc.label, icon: UNIT_SECTION_ICONS[sc.id] || "document", sections: [sc.id] })),
     { key: "approval", title: "الإغلاق والاعتماد", icon: "check", special: "approval" },
   ];
 }
@@ -8253,6 +8376,7 @@ function apApproverOptions(cur) {
   return `<option value="">— من يقوم بالمرحلة —</option>
     ${roles.length ? `<optgroup label="أدوار">${roles.map((r) => opt("role:" + r.id, r.name)).join("")}</optgroup>` : ""}
     ${persons.length ? `<optgroup label="أشخاص">${persons.map((p) => opt("person:" + p.id, p.name + " — " + apOwnerName(p.ownerKind === "department" ? "dept" : p.ownerKind, p.ownerId))).join("")}</optgroup>` : ""}
+    <optgroup label="حسب وحدة التقرير">${opt(AP_UNIT_DEPT, "مديرة قسم الوحدة صاحبة التقرير")}</optgroup>
     <optgroup label="حسابات الجهات">${[...(S.departments || []).map((d) => opt("dept:" + d.id, d.name + " (قسم)")), ...(S.offices || []).map((o) => opt("office:" + o.id, o.name + " (مكتب)"))].join("")}</optgroup>
     ${(() => { const lv = []; const walk = (pid, depth) => olChildren(pid).forEach((l) => { if (l.loginId || l.linkKind === "dept" || l.linkKind === "office") lv.push(opt("level:" + l.id, "— ".repeat(depth) + l.name + (l.type ? " (" + l.type + ")" : "") + (l.loginId ? "" : " — بحساب الجهة المربوطة"))); walk(l.id, depth + 1); }); walk("", 0); return lv.length ? `<optgroup label="الهيكل المرن">${lv.join("")}</optgroup>` : ""; })()}`;
 }
@@ -8262,6 +8386,7 @@ function apApproverLabel(v) {
   if (k === "role") { const r = rolesList().find((x) => x.id === id); return r ? "دور: " + r.name : "(دور محذوف)"; }
   if (k === "person") { const p = personsList().find((x) => x.id === id); return p ? p.name : "(شخص محذوف)"; }
   if (k === "level") { const l = olFind(id); return l ? l.name + (l.type ? " (" + l.type + ")" : "") : "(مستوى محذوف)"; }
+  if (v === AP_UNIT_DEPT) return "قسم الوحدة صاحبة التقرير";
   return apOwnerName(k, id);
 }
 function apCaptureForm() {
@@ -8281,6 +8406,7 @@ function apCaptureForm() {
     canEdit: c("ap-s-ed-" + i) !== null ? c("ap-s-ed-" + i) : st.canEdit,
     noteRequired: c("ap-s-nr-" + i) !== null ? c("ap-s-nr-" + i) : !!st.noteRequired,
     sameUnit: c("ap-s-su-" + i) !== null ? c("ap-s-su-" + i) : !!st.sameUnit,
+    allowSkip: c("ap-s-sk-" + i) !== null ? c("ap-s-sk-" + i) : !!st.allowSkip,
   }));
 }
 function apEditorHtml() {
@@ -8307,7 +8433,9 @@ function apEditorHtml() {
         <label style="display:flex;gap:6px;align-items:center;cursor:pointer;"><input type="checkbox" id="ap-s-ed-${i}" ${st.canEdit ? "checked" : ""} /> يعدّل التقرير</label>
         <label style="display:flex;gap:6px;align-items:center;cursor:pointer;"><input type="checkbox" id="ap-s-nr-${i}" ${st.noteRequired ? "checked" : ""} /> ملاحظة إلزامية عند الاعتماد</label>
         <label style="display:flex;gap:6px;align-items:center;cursor:pointer;color:${ROSE};font-weight:700;"><input type="checkbox" id="ap-s-su-${i}" ${st.sameUnit ? "checked" : ""} /> من نفس وحدة التقرير (عند اختيار دور)</label>
+        <label style="display:flex;gap:6px;align-items:center;cursor:pointer;"><input type="checkbox" id="ap-s-sk-${i}" ${st.allowSkip ? "checked" : ""} /> تقدر صاحبة المرحلة تتخطّاها من «الإعدادات»</label>
       </div>
+      ${st.approver === AP_UNIT_DEPT ? `<div style="font-size:11px;color:${SUBTLE};margin-top:6px;">كل تقرير يروح لحساب القسم اللي تتبع له وحدته فقط — الأقسام الثانية ما تشوفه. الوحدة غير المربوطة بقسم تُتخطّى عندها المرحلة.</div>` : ""}
       ${String(st.approver || "").indexOf("role:") === 0 ? `<div style="font-size:11px;color:${SUBTLE};margin-top:6px;">${st.sameUnit ? "يصل التقرير فقط لصاحبة هذا الدور داخل وحدة التقرير، ولو الوحدة ما فيها أحد بهذا الدور تُتخطّى المرحلة تلقائيًا." : "أي شخص بهذا الدور (في أي جهة) يرى التقرير — فعّلي «من نفس وحدة التقرير» لأدوار الوحدة مثل المساعدة والرئيسة."}</div>` : ""}
     </div>`).join("");
   return `<div class="card" style="margin-bottom:14px;border:1.5px solid ${ROSE};">
@@ -9100,7 +9228,7 @@ function multiSelectDropdownHtml(fieldKey, options, values, placeholder) {
 /* =============================== Report layout: phases sidebar =============== */
 function phaseSidebarHtml(report) {
   const collapsed = S.phaseCollapsed;
-  const rows = SECTIONS.map((section, i) => {
+  const rows = reportSections(report, S.currentUnitId).map((section, i) => {
     const status = sectionStatus(report, section.id);
     const meta = statusMeta(status);
     const isActive = S.activeSectionId === section.id;
@@ -9259,13 +9387,14 @@ function renderUnitReport() {
   if (!unit) return `<div class="page-wrap">تعذر إيجاد الوحدة.</div>`;
   const entry = getCurrentReportEntry();
   if (!entry) return `<div class="page-wrap">تعذر إيجاد هذا التقرير — ارجعي إلى "تقاريري" واختاري تقريرًا.</div>`;
-  const progress = computeProgress(entry);
+  const progress = computeProgress(entry, unit.id);
   const meta = reportStatusMeta(entry.status);
+  const secList = reportSections(entry, unit.id);
 
   // No more phase-overview landing screen: entering a report always opens a
   // section directly — default to the first one if none is active yet.
-  if (!S.activeSectionId) {
-    const resumeId = entry.lastSectionId && SECTIONS.some((s) => s.id === entry.lastSectionId) ? entry.lastSectionId : SECTIONS[0].id;
+  if (!S.activeSectionId || !secList.some((s) => s.id === S.activeSectionId)) {
+    const resumeId = entry.lastSectionId && secList.some((s) => s.id === entry.lastSectionId) ? entry.lastSectionId : secList[0].id;
     loadSectionIntoDraft(resumeId);
   }
   const lockReason = reportLockReason(entry, unit);
@@ -9398,8 +9527,9 @@ function persistSection(sectionId, data, status) {
 }
 
 function sectionEditorHtml(unit, report) {
-  const sectionIndex = SECTIONS.findIndex((s) => s.id === S.activeSectionId);
-  const section = SECTIONS[sectionIndex];
+  const secList = reportSections(report, unit.id);
+  const sectionIndex = secList.findIndex((s) => s.id === S.activeSectionId);
+  const section = secList[sectionIndex];
   const color = PALETTE[sectionIndex % PALETTE.length];
   const d = S.sectionDraft || {};
   const shared = report.shared || {};
@@ -9417,7 +9547,7 @@ function sectionEditorHtml(unit, report) {
   <div class="card card-lg">
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;">
       <button data-action="close-section" style="display:flex;align-items:center;gap:5px;background:none;border:none;color:${ROSE};font-size:12px;font-weight:700;cursor:pointer;padding:0;">${iconArrowRight(14, ROSE)} رجوع إلى تقاريري</button>
-      <span style="font-size:11px;color:${SUBTLE}">القسم ${sectionIndex + 1} من ${SECTIONS.length}</span>
+      <span style="font-size:11px;color:${SUBTLE}">القسم ${sectionIndex + 1} من ${secList.length}</span>
     </div>
     <div style="display:flex;align-items:center;justify-content:space-between;margin:14px 0 18px;">
       <div style="display:flex;align-items:center;gap:12px;">
@@ -9436,7 +9566,7 @@ function sectionEditorHtml(unit, report) {
     <div class="section-editor-nav">
       ${pillBtn("السابق", { variant: "ghost", action: "section-prev", disabled: sectionIndex <= 0 })}
       <div style="flex:1;">${platformActionAllowed("section-save-draft") ? pillBtn(S.sectionSaveStatus || "حفظ كمسودة", { variant: "soft", icon: iconSave(15, GREEN), action: "section-save-draft" }) : ""}</div>
-      ${sectionIndex >= SECTIONS.length - 1
+      ${sectionIndex >= secList.length - 1
         ? (report.status === "draft" || report.status === "returned" || report.status === "needs_completion"
             ? (matchApprovalPath(unit, report)
                 ? pillBtn("إرسال للمراجعة", { icon: iconCheckCircle(15, "#fff"), action: "ap-send" })
@@ -10500,7 +10630,7 @@ function fullReportOrPreviewBody(unit, report, afterPage, opts) {
   const s = opts.settings || rptSettings("unit");
   const review = !!afterPage;
   const dept = S.departments.find((x) => x.id === unit.departmentId);
-  const chapters = rptOrdered(unitChapterDefs(), s).filter((c) => review || (!s.hidden[c.key] &&
+  const chapters = rptOrdered(unitChapterDefs(opts.capture ? null : report, unit.id), s).filter((c) => review || (!s.hidden[c.key] &&
     (s.showEmpty || opts.capture || c.special || c.sections.some((sid) => sectionHasData(report, sid)))));
   return rptWithCtx({ ...rptChartCtx(s), hiddenCols: review ? null : s.hiddenCols, colsShow: s.colsShow, capture: opts.capture || null }, () => {
     // «ملخص التقرير» بصفحة مستقلة، ثم الأقسام (عدد محدد بكل صفحة، 0 = متتابعة)، و«الإغلاق والاعتماد» مع آخر صفحة
@@ -10907,7 +11037,7 @@ function attachFormListeners() {
     }
     if (el.dataset && el.dataset.action === "scoped-switch-unit") {
       if (isUnitInUserScope(el.value)) {
-        S.currentUnitId = el.value; S.currentReportId = null; S.view = "unit-reports";
+        S.currentUnitId = el.value; S.currentReportId = null; if (S.view !== "unit-settings") S.view = "unit-reports";
         ensureUnitReportsLoaded(S.currentUnitId);
       }
       render();
@@ -11357,6 +11487,38 @@ function attachClickListener() {
         d.stages = res.stages; ed.suggestOk = true;
         ed.suggestMsg = `تم اقتراح ${res.stages.length} مرحلة من الهيكل المرن — راجعيها وعدّلي الصلاحيات ثم احفظي.`;
         render(); break;
+      }
+      case "us-period": S.ui.usPeriod = ds.pt; S.ui.usMsg = ""; render(); break;
+      case "us-sec-toggle": case "us-sec-copy-all": case "us-sec-reset": {
+        const unit = (S.units || []).find((u) => u.id === S.currentUnitId); if (!unit) break;
+        const all = { ...(entityPrefs("unit:" + unit.id).sectionsOff || {}) };
+        const cur = (all[ds.pt] || []).slice();
+        if (action === "us-sec-toggle") { const i = cur.indexOf(ds.sid); if (i >= 0) cur.splice(i, 1); else cur.push(ds.sid); all[ds.pt] = cur; S.ui.usMsg = ""; }
+        else if (action === "us-sec-reset") { delete all[ds.pt]; S.ui.usMsg = "تظهر كل الأقسام في تقارير «" + ds.pt + "»."; }
+        else { PERIOD_TYPES.forEach((x) => { if (cur.length) all[x] = cur.slice(); else delete all[x]; }); S.ui.usMsg = "طُبّق اختيار «" + ds.pt + "» على كل الفترات."; }
+        saveEntityPrefs("unit:" + unit.id, { sectionsOff: all }).then(render);
+        render(); break;
+      }
+      case "us-skip-toggle": {
+        const unit = (S.units || []).find((u) => u.id === S.currentUnitId);
+        const path = apPathById(ds.path); const st = path && (path.stages || []).find((x) => x.id === ds.sid);
+        if (!unit || !st || !st.allowSkip) break;
+        const k = path.id + ":" + st.id;
+        const targets = ds.all ? usSkipUnitsFor(path, st) : (userHoldsApStage({ ...st, key: AP_PREFIX + k }, unit) ? [unit] : []);
+        if (!targets.length) break;
+        const turnOn = ds.all ? ds.on === "1" : !apUnitSkipList(unit.id).includes(k);
+        (async () => {
+          for (const u of targets) {
+            const cur = apUnitSkipList(u.id).filter((x) => x !== k);
+            if (turnOn) cur.push(k);
+            await saveEntityPrefs("unit:" + u.id, { skip: cur });
+            if (turnOn) apSkipReportsAtStage(path, st.id, u.id, "تخطّتها صاحبة المرحلة");
+          }
+          addPermLog("unit-settings", targets.length > 1 ? "multi" : unit.id, targets.length > 1 ? targets.length + " وحدات" : unit.name, (turnOn ? "تخطّي مرحلة «" : "إرجاع مرحلة «") + (st.name || "مرحلة") + "»");
+          S.ui.usMsg = (turnOn ? "تم تخطّي «" : "رجعت مرحلة «") + (st.name || "مرحلة") + "» " + (targets.length > 1 ? "لـ " + targets.length + " وحدات." : "لهذه الوحدة.");
+          render();
+        })();
+        break;
       }
       case "ap-stage-disable-ask": S.ui.apStageDisableAsk = { pathId: ds.id, stageId: ds.sid }; render(); break;
       case "ap-stage-disable-cancel": S.ui.apStageDisableAsk = null; render(); break;
@@ -12670,14 +12832,14 @@ function handleReportEditorAction(action, ds) {
     }
     case "section-prev": {
       if (!trySaveSectionWithStatus(S.sectionCompleted ? "completed" : "draft")) { render(); return true; }
-      const idx = SECTIONS.findIndex((s) => s.id === S.activeSectionId);
-      if (idx > 0) openSection(SECTIONS[idx - 1].id);
+      const list = activeReportSections(), idx = list.findIndex((s) => s.id === S.activeSectionId);
+      if (idx > 0) openSection(list[idx - 1].id);
       return true;
     }
     case "section-next": {
       if (!trySaveSectionWithStatus(S.sectionCompleted ? "completed" : "draft")) { render(); return true; }
-      const idx = SECTIONS.findIndex((s) => s.id === S.activeSectionId);
-      if (idx < SECTIONS.length - 1) openSection(SECTIONS[idx + 1].id);
+      const list = activeReportSections(), idx = list.findIndex((s) => s.id === S.activeSectionId);
+      if (idx < list.length - 1) openSection(list[idx + 1].id);
       return true;
     }
 
