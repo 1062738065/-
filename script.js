@@ -1282,6 +1282,7 @@ function apStageApplies(st, unit, ctx) {
   if (!st || !unit) return true;
   const a = String(st.approver || "");
   if (a.indexOf(AP_UNIT_DEPT) === 0 && !unit.departmentId) return false;
+  if (a.indexOf(AP_TREE_UP) === 0 && !apTreeUpLevel(unit, a)) return false;
   if (st.sameUnit && a.indexOf("role:") === 0) {
     const rid = a.slice(5);
     if (!personsList().some((p) => p.status !== "disabled" && p.roleId === rid && apPersonInUnit(p, unit))) return false;
@@ -1292,6 +1293,30 @@ function apStageApplies(st, unit, ctx) {
 }
 // معتمد ديناميكي: حساب القسم اللي تتبع له وحدة التقرير (كل تقرير يروح لقسم وحدته فقط)
 const AP_UNIT_DEPT = "unitdept:own";
+// معتمد ديناميكي من «الهيكل المرن»: "treeup:<n>" = المستوى رقم n فوق وحدة التقرير، من المستويات
+// اللي لها حساب فقط (دخول خاص مفعّل، أو مربوطة بقسم/مكتب). مستويات التنظيم بدون حساب تُتجاوز.
+const AP_TREE_UP = "treeup:";
+const AP_TREE_UP_MAX = 4;
+function apTreeUpLabel(n) { return ["", "المستوى الأعلى من الوحدة في الهيكل", "المستوى الثاني فوق الوحدة", "المستوى الثالث فوق الوحدة", "المستوى الرابع فوق الوحدة"][n] || ("المستوى " + n + " فوق الوحدة"); }
+function olLevelHasAccount(l) { return !!l && ((l.loginId && l.status !== "disabled") || ((l.linkKind === "dept" || l.linkKind === "office") && l.linkId)); }
+function apTreeUpLevel(unit, approver) {
+  if (!unit) return null;
+  const n = Number(String(approver).slice(AP_TREE_UP.length)) || 1;
+  let l = olActive().find((x) => x.linkKind === "unit" && x.linkId === unit.id);
+  if (!l) return null;
+  let found = 0, guard = 0;
+  while ((l = olFind(l.parentId)) && guard++ < 50) { if (olLevelHasAccount(l) && ++found === n) return l; }
+  return null;
+}
+// هل الجلسة الحالية هي حساب هذا المستوى؟ (دخول المستوى نفسه، أو حساب القسم/المكتب المربوط به)
+function sessionIsLevel(l) {
+  if (!l) return false;
+  if (S.levelScope) return S.levelScope.levelId === l.id;
+  if (S.currentPersonId) return false;
+  if (l.linkKind === "dept") return !!S.isDepartmentUser && S.currentDepartmentId === l.linkId;
+  if (l.linkKind === "office") return !!S.isOfficeUser && S.currentOfficeId === l.linkId;
+  return false;
+}
 function apStageHeldByPerson(st, unit, personId) {
   if (!personId || !st) return false;
   const a = String(st.approver || ""); const i = a.indexOf(":");
@@ -1397,7 +1422,8 @@ function matchingApprovalPaths(unit, report) {
   const role = currentAuthorRoleId();
   const out = [];
   approvalPathsList().forEach((p) => {
-    if (p.status !== "active" || !(p.stages || []).length) return;
+    // مسار كل مراحله تُتخطّى لهذه الوحدة (مثلًا وحدة خارج الهيكل في مسار يمشي على الهيكل) لا يُعتبر مسارًا لها
+    if (p.status !== "active" || !apStageList(p, unit).length) return;
     const os = apPathOwnerScore(p, unit);
     if (os < 0) return;
     if (p.periodType && p.periodType !== period) return;
@@ -1431,6 +1457,7 @@ function userHoldsApStage(stage, unit) {
   }
   if (k === "dept") return !!S.isDepartmentUser && !S.currentPersonId && S.currentDepartmentId === id;
   if (k === "unitdept") return !!S.isDepartmentUser && !S.currentPersonId && (!unit || unit.departmentId === S.currentDepartmentId);
+  if (k === "treeup") return unit ? sessionIsLevel(apTreeUpLevel(unit, s)) : olActive().some((l) => olLevelHasAccount(l) && sessionIsLevel(l));
   if (k === "office") return !!S.isOfficeUser && !S.currentPersonId && S.currentOfficeId === id;
   return false;
 }
@@ -3335,7 +3362,8 @@ function opsBlocksHtml(kind, units) {
     const rows = flat.filter((x) => x.report.status === "custom_pending").map((x) => {
       const log = x.report.customLog || []; const last = log[log.length - 1];
       const ref = apRefOf(x.report.customStageId); const p = ref && apPathById(ref.pathId); const st = p && (p.stages || []).find((s) => s.id === ref.stageId);
-      return { ...x, days: opsDays(last ? last.at : x.report.updatedAt), stage: st ? st.name : "—", who: st ? apApproverLabel(st.approver) : "—" };
+      const lvl = st && String(st.approver || "").indexOf(AP_TREE_UP) === 0 ? apTreeUpLevel(x.unit, st.approver) : null;
+      return { ...x, days: opsDays(last ? last.at : x.report.updatedAt), stage: st ? st.name : "—", who: lvl ? lvl.name : st ? apApproverLabel(st.approver) : "—" };
     }).filter((x) => x.days >= OPS_STUCK_DAYS).sort((a, b) => b.days - a.days);
     stuckH = dashCard("تقارير واقفة في المسار", `أكثر من ${OPS_STUCK_DAYS} أيام في نفس المرحلة`, rows.length ? `<div class="table-wrap"><table class="prs-table"><thead><tr style="background:${GRAY_BG}"><th>الوحدة</th><th>التقرير</th><th>المرحلة</th><th>صاحب المرحلة</th><th style="text-align:center">منذ</th></tr></thead><tbody>${rows.map((x) => `<tr><td style="font-weight:700">${esc(x.unit.name)}</td><td>${esc(x.report.label || "")}</td><td>${esc(x.stage)}</td><td style="color:${SUBTLE}">${esc(x.who)}</td><td style="text-align:center;font-weight:800;color:${x.days >= 10 ? DANGER : "#c9863a"}">${x.days} يوم</td></tr>`).join("")}</tbody></table></div>` : emptyHint("لا توجد تقارير واقفة."));
   }
@@ -3355,8 +3383,8 @@ function opsBlocksHtml(kind, units) {
     units.forEach((u) => {
       if (!baseRoleIdsOf(u).length && !unitActivePersons(u.id).length) issues.push([u.name, "بدون دور ولا أشخاص — يطلع لها «لم تُحدَّد صلاحيات»", "إعطاء دور"]);
       if (!u.departmentId) issues.push([u.name, "غير مربوطة بقسم", "ربطها في الهيكل"]);
-      const paths = approvalPathsList().filter((p) => p.status === "active" && (p.stages || []).length && apPathOwnerScore(p, u) >= 0);
-      if (!paths.length) issues.push([u.name, "لا يوجد مسار اعتماد مفعّل", "ربط مسار"]);
+      const paths = approvalPathsList().filter((p) => p.status === "active" && apStageList(p, u).length && apPathOwnerScore(p, u) >= 0);
+      if (!paths.length) issues.push([u.name, "لا يوجد مسار اعتماد يمر بها (أو هي خارج الهيكل في مسار يمشي على الهيكل)", "ربط مسار"]);
       paths.forEach((p) => (p.stages || []).forEach((st) => { if (!st.disabled && st.sameUnit && String(st.approver || "").indexOf("role:") === 0 && !apStageApplies(st, u)) issues.push([u.name, "لا يوجد أحد بـ«" + apApproverLabel(st.approver).replace("دور: ", "") + "» — مرحلة «" + st.name + "» تُتخطّى", "إضافة شخص"]); }));
     });
     setupH = dashCard("جهات ناقصة الإعداد", "تمنع الدخول أو الإرسال أو تتخطّى مراحل", issues.length ? issues.slice(0, 15).map(([n, i, f]) => `<div style="display:flex;justify-content:space-between;align-items:center;gap:10px;padding:9px 0;border-top:1px solid ${BORDER};"><div><div style="font-size:13px;font-weight:700;">${esc(n)}</div><div style="font-size:11.5px;color:${SUBTLE};">${esc(i)}</div></div>${pillBtn(f, { variant: "ghost", action: "nav-to", data: { view: "units-manage" } })}</div>`).join("") + (issues.length > 15 ? `<div class="hint">و${issues.length - 15} غيرها.</div>` : "") : emptyHint("كل الجهات مضبوطة."));
@@ -7927,7 +7955,7 @@ function apApproverOptions(cur) {
   return `<option value="">— من يقوم بالمرحلة —</option>
     ${roles.length ? `<optgroup label="أدوار">${roles.map((r) => opt("role:" + r.id, r.name)).join("")}</optgroup>` : ""}
     ${persons.length ? `<optgroup label="أشخاص">${persons.map((p) => opt("person:" + p.id, p.name + " — " + apOwnerName(p.ownerKind === "department" ? "dept" : p.ownerKind, p.ownerId))).join("")}</optgroup>` : ""}
-    <optgroup label="حسب وحدة التقرير">${opt(AP_UNIT_DEPT, "مديرة قسم الوحدة صاحبة التقرير")}</optgroup>
+    <optgroup label="حسب وحدة التقرير">${opt(AP_UNIT_DEPT, "مديرة قسم الوحدة صاحبة التقرير")}${Array.from({ length: AP_TREE_UP_MAX }, (_, i) => opt(AP_TREE_UP + (i + 1), apTreeUpLabel(i + 1))).join("")}</optgroup>
     <optgroup label="حسابات الجهات">${[...(S.departments || []).map((d) => opt("dept:" + d.id, d.name + " (قسم)")), ...(S.offices || []).map((o) => opt("office:" + o.id, o.name + " (مكتب)"))].join("")}</optgroup>
     ${(() => { const lv = []; const walk = (pid, depth) => olChildren(pid).forEach((l) => { if (l.loginId || l.linkKind === "dept" || l.linkKind === "office") lv.push(opt("level:" + l.id, "— ".repeat(depth) + l.name + (l.type ? " (" + l.type + ")" : "") + (l.loginId ? "" : " — بحساب الجهة المربوطة"))); walk(l.id, depth + 1); }); walk("", 0); return lv.length ? `<optgroup label="الهيكل المرن">${lv.join("")}</optgroup>` : ""; })()}`;
 }
@@ -7938,6 +7966,7 @@ function apApproverLabel(v) {
   if (k === "person") { const p = personsList().find((x) => x.id === id); return p ? p.name : "(شخص محذوف)"; }
   if (k === "level") { const l = olFind(id); return l ? l.name + (l.type ? " (" + l.type + ")" : "") : "(مستوى محذوف)"; }
   if (v === AP_UNIT_DEPT) return "قسم الوحدة صاحبة التقرير";
+  if (v.indexOf(AP_TREE_UP) === 0) return apTreeUpLabel(Number(v.slice(AP_TREE_UP.length)) || 1);
   return apOwnerName(k, id);
 }
 function apCaptureForm() {
@@ -7986,6 +8015,7 @@ function apEditorHtml() {
         <label style="display:flex;gap:6px;align-items:center;cursor:pointer;color:${ROSE};font-weight:700;"><input type="checkbox" id="ap-s-su-${i}" ${st.sameUnit ? "checked" : ""} /> من نفس وحدة التقرير (عند اختيار دور)</label>
         <label style="display:flex;gap:6px;align-items:center;cursor:pointer;"><input type="checkbox" id="ap-s-sk-${i}" ${st.allowSkip ? "checked" : ""} /> تقدر صاحبة المرحلة تتخطّاها من «الإعدادات»</label>
       </div>
+      ${String(st.approver || "").indexOf(AP_TREE_UP) === 0 ? `<div style="font-size:11px;color:${SUBTLE};margin-top:6px;">يمشي على «الهيكل المرن»: كل تقرير يصعد في فرع وحدته، ويُحسب فقط المستويات اللي لها حساب (دخول خاص أو مربوطة بقسم/مكتب). وحدة غير موجودة في الهيكل، أو ما فوقها مستوى بهذا الترتيب، تُتخطّى عندها المرحلة.</div>` : ""}
       ${st.approver === AP_UNIT_DEPT ? `<div style="font-size:11px;color:${SUBTLE};margin-top:6px;">كل تقرير يروح لحساب القسم اللي تتبع له وحدته فقط — الأقسام الثانية ما تشوفه. الوحدة غير المربوطة بقسم تُتخطّى عندها المرحلة.</div>` : ""}
       ${String(st.approver || "").indexOf("role:") === 0 ? `<div style="font-size:11px;color:${SUBTLE};margin-top:6px;">${st.sameUnit ? "يصل التقرير فقط لصاحبة هذا الدور داخل وحدة التقرير، ولو الوحدة ما فيها أحد بهذا الدور تُتخطّى المرحلة تلقائيًا." : "أي شخص بهذا الدور (في أي جهة) يرى التقرير — فعّلي «من نفس وحدة التقرير» لأدوار الوحدة مثل المساعدة والرئيسة."}</div>` : ""}
     </div>`).join("");
