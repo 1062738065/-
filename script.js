@@ -80,7 +80,9 @@ function periodOptionsFor(reports) {
   (reports || []).forEach((r) => { const v = r && r.sections && r.sections.basic && r.sections.basic.data && r.sections.basic.data.periodType; if (v && !PERIOD_TYPES.includes(v) && !extra.includes(v)) extra.push(v); });
   return PERIOD_TYPES.concat(extra);
 }
-const HIJRI_YEARS = Array.from({ length: 41 }, (_, i) => `${1420 + i}هـ`);
+// السنوات تبدأ من 1448هـ (بداية المنصة) — التقارير القديمة بسنة قبلها تحتفظ بقيمتها
+const FIRST_HIJRI_YEAR = 1448;
+const HIJRI_YEARS = Array.from({ length: 23 }, (_, i) => `${FIRST_HIJRI_YEAR + i}هـ`);
 const MONTHS = ["محرم", "صفر", "ربيع الأول", "ربيع الآخر", "جمادى الأولى", "جمادى الآخرة", "رجب", "شعبان", "رمضان", "شوال", "ذو القعدة", "ذو الحجة"];
 
 const STRATEGIC_GOALS_FALLBACK = ["تحسين جودة الاختبارات وموثوقيتها", "رفع كفاءة إجراءات القياس والتقويم", "تعزيز الحوكمة والامتثال في العمليات"];
@@ -1247,10 +1249,10 @@ function buildSampleKPIRows() {
 function buildSampleIndicatorHistory() {
   const t = Date.now() - 5000000;
   return {
-    "نسبة إنجاز الاختبارات": [{ value: 88, period: "شهري · 1446هـ", savedAt: t }],
-    "رضا المستفيدات عن الخدمة": [{ value: 85, period: "ربع سنوي · 1446هـ", savedAt: t }],
-    "زمن الاستجابة لطلبات الدعم": [{ value: 30, period: "أسبوعي · 1446هـ", savedAt: t }],
-    "معدل استكمال البرامج التدريبية": [{ value: 72, period: "فصلي · 1446هـ", savedAt: t }],
+    "نسبة إنجاز الاختبارات": [{ value: 88, period: "شهري · 1448هـ", savedAt: t }],
+    "رضا المستفيدات عن الخدمة": [{ value: 85, period: "ربع سنوي · 1448هـ", savedAt: t }],
+    "زمن الاستجابة لطلبات الدعم": [{ value: 30, period: "أسبوعي · 1448هـ", savedAt: t }],
+    "معدل استكمال البرامج التدريبية": [{ value: 72, period: "فصلي · 1448هـ", savedAt: t }],
   };
 }
 
@@ -5454,7 +5456,7 @@ function aggFakeData(s) {
     recs: rows(Math.min(lim, 12), (i, u) => ({ unitName: u, text: "توصية نموذجية " + arabicDigits(i + 1), priority: pr[i % 4], curated: i < 1 })),
     initiatives: rows(Math.min(lim, 6), (i, u) => ({ unitName: u, name: "مبادرة نموذجية " + arabicDigits(i + 1), scalability: "قابلة للتعميم" })),
     nextTasks: rows(Math.min(lim * 2, 6), (i, u) => ({ unitName: u, name: "عمل قادم " + arabicDigits(i + 1), expectedDate: "١٤٤٨/٠٩/٠١" })),
-    yearCompareHtml: () => reportTable(["البند", "1446هـ", "1447هـ", "1448هـ"], [["متوسط تحقق المؤشرات", "71٪", "78٪", "84٪"], ["متوسط تحقق الأهداف التشغيلية", "65٪", "72٪", "80٪"], ["عدد الوحدات المُبلِّغة", 6, 7, 8]]),
+    yearCompareHtml: () => reportTable(["البند", "1448هـ", "1449هـ", "1450هـ"], [["متوسط تحقق المؤشرات", "71٪", "78٪", "84٪"], ["متوسط تحقق الأهداف التشغيلية", "65٪", "72٪", "80٪"], ["عدد الوحدات المُبلِّغة", 6, 7, 8]]),
     hasYearCompare: () => true, hasPrograms: () => true,
     flat: U.slice(0, 3).map((name, i) => ({ unit: { id: "fake-" + i, name }, report: { ...rptFakeUnitReport(), createdAt: i } })),
     programsHtml: () => `<div class="rpt-subheading">إحصائية الإنجاز</div>` + reportTable(["نوع العمل", "عدد الأعمال", "المكتمل", "وحدة العدّ", "المستهدف", "المنجز", "النسبة"], [["زيارة إشرافية", 12, 10, "مركز", 45, 39, "87٪"], ["برنامج تدريبي", 6, 5, "برنامج", 8, 6, "75٪"]]),
@@ -5856,7 +5858,7 @@ function rmPanelHtml(st) {
     const yNow = hijriYearFromTs(Date.now());
     return rmFieldHtml("اسم التقرير", rmText("name", d.name), "يظهر بهذا الاسم في القائمة الجانبية وفي قائمة الصفحات عند تعديل الأدوار.") +
       rmFieldHtml("النطاق", `<select class="input" data-rm="scopeLevelId" style="width:100%;"><option value="">كل الجمعية</option>${ordered.map((l) => `<option value="${esc(l.id)}" ${d.scopeLevelId === l.id ? "selected" : ""}>${"— ".repeat(depth(l))}${esc(l.name)}${l.levelType ? " (" + esc(l.levelType) + ")" : ""}</option>`).join("")}</select>`, levels.length ? "مستوى من الهيكل المرن + كل ما تحته. ومن يملك نطاقًا أضيق يرى ما في نطاقه فقط." : "أضيفي مستويات في «المستخدمون ← الهيكل» لتحديد نطاق أضيق.") +
-      rmFieldHtml("الفترة", rmPills("periodKind", d.periodKind, [["all", "كل التقارير"], ["current", "السنة الهجرية الحالية"], ["year", "سنة محددة"]]) + (d.periodKind === "year" ? `<div class="rm-row" style="margin-top:8px;">${rmNum("year", d.year || yNow, 1400, 1500)}<span class="rm-hint">هـ</span></div>` : "")) +
+      rmFieldHtml("الفترة", rmPills("periodKind", d.periodKind, [["all", "كل التقارير"], ["current", "السنة الهجرية الحالية"], ["year", "سنة محددة"]]) + (d.periodKind === "year" ? `<div class="rm-row" style="margin-top:8px;">${rmNum("year", d.year || yNow, FIRST_HIJRI_YEAR, 1500)}<span class="rm-hint">هـ</span></div>` : "")) +
       `<div class="rm-sep"></div>` + rmRolesHtml("crpt-" + sel, d.name) +
       `<div class="rm-sep"></div>` + (st.confirmDel ? `<div class="hint" style="color:${DANGER};margin-bottom:8px;">حذف «${esc(d.name)}»؟ يُحذف التنسيق والصفحة فقط — لا تُحذف أي تقارير أو بيانات.</div><div class="rm-row">${pillBtn("نعم، احذفيه", { variant: "danger", action: "rm-delete" })}${pillBtn("إلغاء", { variant: "ghost", action: "rm-delete-cancel" })}</div>` : pillBtn("حذف هذا التقرير", { variant: "ghost", icon: iconX(14, DANGER), action: "rm-delete-ask" }));
   }
@@ -6804,7 +6806,7 @@ function reportHijriYearNum(r) {
   return r.createdAt ? hijriYearFromTs(r.createdAt) : null;
 }
 function hijriYearLabel(n) { return `${n}هـ`; }
-function lastThreeHijriYears() { const c = hijriYearFromTs(Date.now()); return [c - 2, c - 1, c]; }
+function lastThreeHijriYears() { const c = hijriYearFromTs(Date.now()); return [c - 2, c - 1, c].filter((y) => y >= FIRST_HIJRI_YEAR); }
 function numOrNull(v) { if (v === "" || v == null) return null; const n = Number(v); return isNaN(n) ? null : n; }
 function fmtNum(n) { if (n == null) return "—"; const r = Math.round(n * 10) / 10; return r.toLocaleString("en-US"); }
 
@@ -10645,7 +10647,7 @@ const RPT_COVER_BADGE_LOGO = "";
 
 function reportCoverPageHtml(unit, report, dept, s, totalPages) {
   const d = report.sections?.basic?.data || {};
-  const yearLabel = d.hijriYear || "١٤٤٧هـ";
+  const yearLabel = d.hijriYear || hijriYearLabel(hijriYearFromTs(report.createdAt || Date.now()));
   const num = rptPageNumText(s, 1, totalPages);
   return `
   <section class="a4-page rpt-cover-v4">
