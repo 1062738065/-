@@ -126,6 +126,18 @@ function computeIndicatorStatus(row) {
   if (ratio >= 0.7) return { key: "needsAction", emoji: "🟠", label: "يحتاج تدخلاً", color: "#c9863a", bg: "#fdeee0", ratio };
   return { key: "struggling", emoji: "🔴", label: "متعثر", color: DANGER, bg: DANGER_BG, ratio };
 }
+// صف مؤشر للعرض في اللوحات: المستهدف من «إدارة مؤشرات الأداء» (وإلا من التقرير نفسه)،
+// والنسبة واللون من نفس حساب حالة المؤشر (يراعي الاتجاه التصاعدي/التنازلي).
+// المطابقة بالاسم بعد حذف المسافات الزائدة (اسم بمسافة في آخره ما يضيع مستهدفه)
+function findIndicatorDef(name) { const n = String(name || "").trim(); return n ? (S.indicatorDefinitions || []).find((x) => String(x.name || "").trim() === n) || null : null; }
+function indicatorRowView(row) {
+  const def = findIndicatorDef(row.name);
+  const r = resolveIndicatorRow(row, def);
+  if ((r.target === "" || r.target == null) && row.target !== "" && row.target != null) r.target = row.target;
+  const st = computeIndicatorStatus(r);
+  const pct = st.ratio == null || !isFinite(st.ratio) ? null : Math.round(st.ratio * 100);
+  return { target: r.target !== "" && r.target != null ? r.target : "—", actual: row.actual !== "" && row.actual != null ? row.actual : "—", pct, pctText: pct == null ? "—" : pct + "٪", color: st.color };
+}
 function computeDeviationAmount(row) {
   const target = Number(row.target), actual = Number(row.actual);
   if (isNaN(target) || isNaN(actual)) return null;
@@ -2821,6 +2833,10 @@ async function refreshUnitsAndDepartmentsFromDb() {
     supabaseRequest("departments?select=*"),
     supabaseRequest("offices?select=*"),
     refreshReportSectionsFromDb(),
+    // تعريفات المؤشرات والأهداف وحقول الأقسام تُحمَّل لكل الحسابات (التعبئة واللوحات تعتمد عليها)
+    refreshIndicatorDefinitionsFromDb().catch(() => {}),
+    refreshGoalsDefinitionsFromDb().catch(() => {}),
+    refreshSectionFieldSchemasFromDb().catch(() => {}),
   ]);
   if (unitsRes.ok && Array.isArray(unitsRes.data)) {
     S.units = unitsRes.data.map(rowToUnit);
@@ -3488,7 +3504,7 @@ function renderDashboardBody(activeUnits, opts) {
   // Indicator status distribution (pie)
   const statusCounts = { achieved: 0, close: 0, needsAction: 0, struggling: 0, noData: 0 };
   allIndicators.forEach((ind) => {
-    const def = S.indicatorDefinitions.find((x) => x.name === ind.name);
+    const def = findIndicatorDef(ind.name);
     const st = computeIndicatorStatus(resolveIndicatorRow(ind, def));
     statusCounts[st.key] = (statusCounts[st.key] || 0) + 1;
   });
@@ -3506,10 +3522,8 @@ function renderDashboardBody(activeUnits, opts) {
   const goalPieHtml = svgPieChart(GOAL_LEVELS.map((lvl) => ({ label: lvl, value: goalLevelCounts[lvl] || 0, color: goalLevelMeta(lvl).color })));
 
   const indicatorsRows = allIndicators.map((ind) => {
-    const target = Number(ind.target) || 0, actual = Number(ind.actual) || 0;
-    const pct = target > 0 ? Math.round((actual / target) * 100) : 0;
-    const color = pct >= 100 ? GREEN : pct >= 60 ? GOLD : DANGER;
-    return `<tr><td style="color:${SUBTLE}">${esc(ind.unitName)}</td><td style="font-weight:600">${esc(ind.name)}</td><td style="text-align:center">${esc(target)}</td><td style="text-align:center">${esc(actual)}</td><td style="text-align:center;font-weight:800;color:${color}">${pct}٪</td></tr>`;
+    const v = indicatorRowView(ind);
+    return `<tr><td style="color:${SUBTLE}">${esc(ind.unitName)}</td><td style="font-weight:600">${esc(ind.name)}</td><td style="text-align:center">${esc(v.target)}</td><td style="text-align:center">${esc(v.actual)}</td><td style="text-align:center;font-weight:800;color:${v.color}">${v.pctText}</td></tr>`;
   }).join("");
 
   const goalsRows = allGoals.map((g) => {
@@ -3637,7 +3651,7 @@ function renderUnitDashboard() {
 
   const statusCounts = { achieved: 0, close: 0, needsAction: 0, struggling: 0, noData: 0 };
   allIndicators.forEach((ind) => {
-    const def = S.indicatorDefinitions.find((x) => x.name === ind.name);
+    const def = findIndicatorDef(ind.name);
     const st = computeIndicatorStatus(resolveIndicatorRow(ind, def));
     statusCounts[st.key] = (statusCounts[st.key] || 0) + 1;
   });
@@ -3654,10 +3668,8 @@ function renderUnitDashboard() {
   const goalPieHtml = svgPieChart(GOAL_LEVELS.map((lvl) => ({ label: lvl, value: goalLevelCounts[lvl] || 0, color: goalLevelMeta(lvl).color })));
 
   const indicatorsRows = allIndicators.map((ind) => {
-    const target = Number(ind.target) || 0, actual = Number(ind.actual) || 0;
-    const pct = target > 0 ? Math.round((actual / target) * 100) : 0;
-    const color = pct >= 100 ? GREEN : pct >= 60 ? GOLD : DANGER;
-    return `<tr><td style="font-weight:600">${esc(ind.name)}</td><td style="text-align:center">${esc(ind.target)}</td><td style="text-align:center">${esc(ind.actual)}</td><td style="text-align:center;font-weight:800;color:${color}">${pct}٪</td></tr>`;
+    const v = indicatorRowView(ind);
+    return `<tr><td style="font-weight:600">${esc(ind.name)}</td><td style="text-align:center">${esc(v.target)}</td><td style="text-align:center">${esc(v.actual)}</td><td style="text-align:center;font-weight:800;color:${v.color}">${v.pctText}</td></tr>`;
   }).join("");
 
   const goalsRows = allGoals.map((g) => {
@@ -6823,7 +6835,7 @@ function yearlyComparisonData(units) {
       (report.sections?.kpi?.data?.indicators || []).forEach((row) => {
         const name = (row.name || "").trim();
         if (!name) return;
-        const def = S.indicatorDefinitions.find((x) => x.name === name);
+        const def = findIndicatorDef(name);
         const resolved = resolveIndicatorRow(row, def);
         const actual = numOrNull(row.actual);
         if (actual == null) return;
@@ -7253,7 +7265,7 @@ function renderExecutiveSummary(scopeUnits, scopeDepartments, opts) {
   flat.forEach((x) => (x.report.sections?.kpi?.data?.indicators || []).filter((r) => r.name).forEach((row) => allIndicators.push({ ...row, unitName: x.unit.name })));
   const indicatorStatusCounts = { achieved: 0, close: 0, needsAction: 0, struggling: 0, noData: 0 };
   allIndicators.forEach((row) => {
-    const def = S.indicatorDefinitions.find((d) => d.name === row.name);
+    const def = findIndicatorDef(row.name);
     const st = computeIndicatorStatus(resolveIndicatorRow(row, def));
     indicatorStatusCounts[st.key]++;
   });
@@ -9795,7 +9807,7 @@ function kpiSectionHtml(d, report) {
   // اختير) يبقى مفتوح إجباريًا بغض النظر عن حالة الطيّ (ما فيه شيء يُطوى له أصلًا).
   const expandedId = schemaExpandedItemId("indicators", indicators);
   const rows = indicators.map((row, i) => {
-    const def = S.indicatorDefinitions.find((x) => x.name === row.name);
+    const def = findIndicatorDef(row.name);
     const isOpen = indicators.length === 1 || !row.name || row.id === expandedId;
     return indicatorCardHtml(row, i, def, report.indicatorHistory, isOpen, d);
   }).join("");
@@ -10361,7 +10373,7 @@ function sectionBodyOnly(section, saved, report) {
     if (!rows.length) { body = emptyHint("لا توجد مؤشرات مُدخلة."); }
     else {
       const barData = rows.map((row) => {
-        const def = S.indicatorDefinitions.find((x) => x.name === row.name);
+        const def = findIndicatorDef(row.name);
         const resolved = resolveIndicatorRow(row, def);
         const status = def ? computeIndicatorStatus(resolved) : { emoji: "⚪", label: "—", color: SUBTLE, ratio: null };
         return { label: row.name, value: Math.round(Math.min(1, Math.max(0, status.ratio || 0)) * 100), color: status.color, row, def, status };
@@ -10535,7 +10547,7 @@ function reportSummaryHtml(report, title) {
   const indicators = (report.sections?.kpi?.data?.indicators || []).filter((r) => r.name);
   const statusCounts = { achieved: 0, close: 0, needsAction: 0, struggling: 0, noData: 0 };
   indicators.forEach((row) => {
-    const def = S.indicatorDefinitions.find((x) => x.name === row.name);
+    const def = findIndicatorDef(row.name);
     const st = computeIndicatorStatus(resolveIndicatorRow(row, def));
     statusCounts[st.key] = (statusCounts[st.key] || 0) + 1;
   });
