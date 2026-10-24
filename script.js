@@ -4231,15 +4231,15 @@ function olParentOptionsHtml(selectedId, excludeId) {
   walk("", 0);
   return `<option value="" ${!selectedId ? "selected" : ""}>— أعلى الهيكل (بدون أب)</option>${opts.join("")}`;
 }
-// كل الجهات من النوع المختار (المعطّلة يُكتب بجانبها «معطّل»)، عدا المربوطة بمستوى آخر
+// كل الجهات من النوع المختار — المعطّلة يُكتب بجانبها «معطّل»، والمربوطة بمستوى آخر يُكتب اسمه (الحفظ ينقل الربط)
 function olLinkEntityOptions(kind, selfLevelId, curLinkId) {
-  const taken = new Set(olActive().filter((l) => l.id !== selfLevelId && l.linkKind === kind && l.linkId).map((l) => l.linkId));
+  const taken = new Map(olActive().filter((l) => l.id !== selfLevelId && l.linkKind === kind && l.linkId).map((l) => [l.linkId, l.name]));
   const off = (e) => (e.status === "disabled" ? { ...e, name: e.name + " (معطّل)" } : e);
   let list = [];
   if (kind === "office") list = (S.offices || []).map(off);
   else if (kind === "dept") list = (S.departments || []).map(off);
   else if (kind === "unit") list = (S.units || []).filter((u) => u.role !== "admin" && u.role !== "self_report").map((u) => off(u.role === "executive" ? { ...u, name: u.name + " (إدارة عليا)" } : u.role === "center" ? { ...u, name: u.name + " (مركز)" } : u));
-  return list.filter((e) => !taken.has(e.id) || e.id === curLinkId);
+  return list.map((e) => (taken.has(e.id) && e.id !== curLinkId ? { ...e, name: e.name + " — مربوطة بـ «" + taken.get(e.id) + "» (سيُنقل الربط)" } : e));
 }
 function olFormHtml() {
   const ui = olUi(); const f = ui.form;
