@@ -838,15 +838,14 @@ const REPORT_TABS_DEFAULT = [
   { id: "archived", label: "أرشيف التقارير", special: "archived", statuses: [], adminStatuses: [], enabled: true },
 ];
 function reportTabToRow(t, i) { return { id: t.id, label: t.label || "", statuses: t.statuses || [], admin_statuses: t.adminStatuses || [], special: t.special || "", order_index: i, enabled: t.enabled !== false, created_at: t.createdAt || Date.now() }; }
-function rowToReportTab(r) { return { id: r.id, label: r.label || "", statuses: Array.isArray(r.statuses) ? r.statuses : [], adminStatuses: Array.isArray(r.admin_statuses) ? r.admin_statuses : [], special: r.special || "", mode: r.mode || "", enabled: r.enabled !== false, order: Number(r.order_index) || 0, createdAt: Number(r.created_at) || 0 }; }
+function rowToReportTab(r) { return { id: r.id, label: r.label || "", statuses: Array.isArray(r.statuses) ? r.statuses : [], adminStatuses: Array.isArray(r.admin_statuses) ? r.admin_statuses : [], special: r.special || "", enabled: r.enabled !== false, order: Number(r.order_index) || 0, createdAt: Number(r.created_at) || 0 }; }
 // زر «بانتظار مراجعتي»: التقارير التي وصلت لمرحلتي في مسار الاعتماد (يحل محل صفحة «التقارير الواردة لي»).
 // يُضاف تلقائيًا للقائمة (دون تخزين) إن لم يكن موجودًا فيها، فلا يحتاج SQL.
 const MINE_TAB_ID = "pending_mine";
 const MINE_TAB = { id: MINE_TAB_ID, label: "بانتظار مراجعتي", special: "mine", statuses: [], adminStatuses: [], enabled: true };
 function reportTabsList() {
   if (!S.reportTabs) S.reportTabs = dataStore.getReportTabs();
-  const saved = S.reportTabs.filter((t) => !t.mode);
-  const base = saved.length ? saved : REPORT_TABS_DEFAULT;
+  const base = S.reportTabs.length ? S.reportTabs : REPORT_TABS_DEFAULT;
   if (base.some((t) => t.id === MINE_TAB_ID)) return base;
   const i = base.length && base[0].special === "all" ? 1 : 0;
   return [...base.slice(0, i), MINE_TAB, ...base.slice(i)];
@@ -4727,7 +4726,7 @@ function handleOrgLevelsAction(action, ds) {
         : SIDEBAR_PAGES.filter((p) => p.group === "الإدارة العليا" || ["executive-summary", "executive-final-report", "all-reports"].includes(p.id)).map((p) => p.id);
       const name = isA ? "مديرة النظام — كل الصفحات" : "الإدارة العليا — الاطّلاع الشامل";
       let role = rolesList().find((r) => r.name === name);
-      if (!role) { role = { id: uid("role"), name, mode: "admin", pin: "", description: "دور جاهز بنفس الصفحات السابقة", permissions: { pages, actions: [], buttons: [] }, status: "active", createdAt: Date.now() }; S.roles = [...rolesList(), role]; dataStore.saveRoles(S.roles); }
+      if (!role) { role = { id: uid("role"), name, pin: "", description: "دور جاهز بنفس الصفحات السابقة", permissions: { pages, actions: [], buttons: [] }, status: "active", createdAt: Date.now() }; S.roles = [...rolesList(), role]; dataStore.saveRoles(S.roles); }
       const targets = S.units.filter((u) => u.role === (isA ? "admin" : "executive"));
       S.units = S.units.map((u) => targets.some((t) => t.id === u.id) ? { ...u, baseRoleId: [...new Set([...baseRoleIdsRaw(u), role.id])].join(",") } : u);
       dataStore.saveUnits(S.units);
