@@ -1271,9 +1271,13 @@ function apStageList(path, unit, authorId) { return ((path && path.stages) || []
 function apStagesNamed(path, unit) { return ((path && path.stages) || []).filter((st) => !st.disabled).map((st) => apNamedStage(st, path, unit)); }
 function apNamedStage(st, path, unit) {
   const out = { ...st, key: AP_PREFIX + path.id + ":" + st.id };
-  if (st.treeName && unit) { const l = apStageTreeLevel(st, unit); if (l) out.name = l.name; }
-  return out;
+  if (path.id !== AUTO_PATH_ID) return out;
+  let pk = st.id;
+  if (st.treeName && unit) { const l = apStageTreeLevel(st, unit); if (l) { out.name = l.name; out.levelId = l.id; pk = "lvl:" + l.id; } }
+  return Object.assign(out, apPermToStage(apAutoPerm(pk)));
 }
+// المرحلة في «مسار الإرسال» الفعلي — «للعلم فقط» ما يوقف عندها التقرير
+function apFlow(list) { return (list || []).filter((s) => !s.info); }
 function apPersonInUnit(p, unit) {
   if (!p || !unit) return false;
   const kind = p.ownerKind === "department" ? "dept" : (p.ownerKind || "unit");
@@ -1304,7 +1308,6 @@ const AP_UNIT_DEPT = "unitdept:own";
 // معتمد ديناميكي من «الهيكل المرن»: "treeup:<n>" = المستوى رقم n فوق وحدة التقرير، من المستويات
 // اللي لها حساب فقط (دخول خاص مفعّل، أو مربوطة بقسم/مكتب). مستويات التنظيم بدون حساب تُتجاوز.
 const AP_TREE_UP = "treeup:";
-const AP_TREE_UP_MAX = 4;
 function apTreeUpLabel(n) { return ["", "المستوى الأعلى من الوحدة في الهيكل", "المستوى الثاني فوق الوحدة", "المستوى الثالث فوق الوحدة", "المستوى الرابع فوق الوحدة"][n] || ("المستوى " + n + " فوق الوحدة"); }
 function olLevelHasAccount(l) { return !!l && ((l.loginId && l.status !== "disabled") || ((l.linkKind === "dept" || l.linkKind === "office") && l.linkId) || olLevelIsExec(l)); }
 // مستوى مربوط بحساب «الإدارة العليا» — يدخل المسار مثل القسم والمكتب، وحسابها نفسه يقوم بالمرحلة
@@ -1342,11 +1345,41 @@ function apAutoSkipLevels(unit) {
 }
 function apAutoBuildStages(cfg, old) {
   const keep = (id) => { const o = (old || []).find((x) => x.id === id); return o && o.disabled ? { disabled: true } : {}; };
-  const base = { canApprove: true, canReturn: true, canEdit: false, allowSkip: true };
+  const base = { allowSkip: true };
   const st = [];
   [["ast", "مساعدة الوحدة", 1], ["head", "رئيسة الوحدة", 2]].forEach(([k, name, rank]) => { if (cfg[k]) st.push({ id: k, name, approver: "role:" + cfg[k], sameUnit: true, unitRank: rank, ...base, ...keep(k) }); });
   for (let n = 1; n <= AUTO_TREE_MAX; n++) st.push({ id: "t" + n, name: apTreeUpLabel(n), approver: AP_TREE_UP + n, treeName: true, ...base, ...keep("t" + n) });
   return st;
+}
+// وش تسوي كل مرحلة: لأدوار الوحدة بمفتاح الدور (ast/head) ولمستويات الهيكل بمفتاح "lvl:<id>"
+const AUTO_PERM_DEFAULT = { mode: "approve", ret: true, comp: true, edit: false, note: false, back: false, final: false, curate: false, info: false, skip: true };
+const AUTO_PERM_OPTS = [
+  { k: "ret", label: "تعيد للتعديل", color: "#B23B37", t: "ترجعه لصاحبته «بحاجة إلى تعديل» بملاحظة." },
+  { k: "comp", label: "تعيد للاستكمال", color: "#b0601e", t: "ترجعه لصاحبته «بحاجة إلى استكمال» — لو ناقص بيانات." },
+  { k: "back", label: "تعيده للمرحلة السابقة", color: "#8a3350", t: "ترجعه للي قبلها في المسار بدل صاحبته." },
+  { k: "edit", label: "تعدّل", color: "#C0782E", t: "تفتح التقرير وتعدّل فيه بنفسها قبل ما ترسله." },
+  { k: "note", label: "ملاحظة إلزامية", color: "#5b3a73", t: "ما ترسل ولا تعتمد إلا إذا كتبت ملاحظة." },
+  { k: "curate", label: "تعتمد أبرز النتائج والتوصيات", color: "#24527a", t: "تختار من التقرير أهم الإنجازات والتوصيات — تطلع أولًا في الملخص والتقرير النهائي." },
+  { k: "final", label: "اعتماد نهائي", color: "#2E6B52", t: "لما تعتمد يصير التقرير «معتمد» وينتهي المسار عندها — ما يطلع للي فوقها." },
+  { k: "skip", label: "تتخطّاها صاحبتها", color: "#4d5a66", t: "صاحبة المرحلة تقدر تتخطّاها لوحداتها من «الإعدادات»، واللي قبلها تقدر ترسل للي بعدها مباشرة." },
+  { k: "info", label: "للعلم فقط", color: "#6f5f66", t: "توصلها نسخة تشوفها — والتقرير ما يوقف عندها." }];
+function apAutoPerm(pk) { return { ...AUTO_PERM_DEFAULT, ...((autoPathCfg().perms || {})[pk] || {}) }; }
+function apPermToStage(p) {
+  return { canApprove: p.mode === "approve", canReturn: !!p.ret, canComplete: !!p.comp, canBack: !!p.back, canEdit: !!p.edit, noteRequired: !!p.note,
+    finalApprove: p.mode === "approve" && !!p.final, canCurate: !!p.curate, info: !!p.info, allowSkip: !!p.skip };
+}
+// مين يكتب: الأدوار المختارة اللي موجودة في الوحدة؛ لو ولا وحدة منها موجودة = أصغر دور موجود
+function apAutoWriterRanks(unit) {
+  const c = autoPathCfg(), w = c.writers || { idr: true, ast: true, head: true };
+  const has = (r) => !!c[r.k] && personsList().some((p) => p.status !== "disabled" && p.roleId === c[r.k] && apPersonInUnit(p, unit));
+  const present = AUTO_RANKS.filter(has);
+  const chosen = present.filter((r) => w[r.k]);
+  return (chosen.length ? chosen : present.slice(0, 1)).map((r) => r.rank);
+}
+function apAutoAuthorAllowed(unit, personId) {
+  if (!personId) return true;
+  const r = apAutoAuthorRank(personId);
+  return r < 0 || apAutoWriterRanks(unit).includes(r);
 }
 function apAutoGuessRoles() {
   const rs = rolesList().filter((r) => r.status !== "disabled");
@@ -1362,6 +1395,35 @@ function apAutoSave(patch) {
   const next = { ...cur, stages: apAutoBuildStages(cfg, cur.stages) };
   if (i >= 0) list[i] = next; else list.push(next);
   S.approvalPaths = list; dataStore.saveApprovalPaths(list);
+}
+// بعد أي تخطٍّ أو تغيير: التقرير الواقف عند مرحلة ما عادت تمر عليه (متخطّاة / للعلم فقط / ما فيها أحد)
+// ينتقل للي بعدها في المسار، ولو ما بعدها شيء ينتهي المسار — ما يبقى تقرير معلّق عند أحد
+function apRepairStuck(onlyUnitId) {
+  const path = autoPathObj(); if (!path) return;
+  const all = path.stages || [];
+  const prevAllow = S.__adminAllowWrite; S.__adminAllowWrite = true;
+  try {
+    (S.units || []).forEach((unit) => {
+      if (onlyUnitId && unit.id !== onlyUnitId) return;
+      ensureUnitReportsLoaded(unit.id).forEach((report) => {
+        const ref = report.status === "custom_pending" && apRefOf(report.customStageId);
+        if (!ref || ref.pathId !== path.id) return;
+        const idx = all.findIndex((x) => x.id === ref.stageId), raw = all[idx];
+        const ctx = { pathId: path.id, authorId: report.internalSentBy };
+        if (raw && !raw.disabled && apStageApplies(raw, unit, ctx) && !apNamedStage(raw, path, unit).info) return;
+        const nextSt = apFlow(apStageList(path, unit, report.internalSentBy)).find((x) => all.findIndex((y) => y.id === x.id) > idx);
+        const log = [...(report.customLog || [])];
+        const nm = raw ? raw.name : "مرحلة";
+        if (nextSt) {
+          log.push(apLogEntry("send", report.customStageId, nextSt.key, "تخطّى «" + nm + "» (ما عادت في مسار هذه الوحدة) إلى " + nextSt.name));
+          saveReportEntry(unit.id, { ...report, customStageId: nextSt.key, customLog: log, updatedAt: Date.now() });
+        } else {
+          log.push(apLogEntry("final", report.customStageId, "final", "انتهى المسار — تخطّى «" + nm + "»"));
+          saveReportEntry(unit.id, { ...report, status: "completed", customStageId: null, customLog: log, updatedAt: Date.now() });
+        }
+      });
+    });
+  } finally { S.__adminAllowWrite = prevAllow; }
 }
 // هل الجلسة الحالية هي حساب هذا المستوى؟ (دخول المستوى نفسه، أو حساب القسم/المكتب المربوط به)
 function sessionIsLevel(l) {
@@ -1394,59 +1456,6 @@ async function saveEntityPrefs(key, patch) {
   saveSiteTheme({ entityPrefs: all });
 }
 function apUnitSkipList(unitId) { return entityPrefs("unit:" + unitId).skip || []; }
-// نطاق المسار: جهة محددة (الأقوى) ← مستوى من الهيكل وما تحته ← نوع الجهة ← كل الوحدات والمراكز
-function apPathOwnerScore(p, unit) {
-  if (!unit || unit.role === "admin" || unit.role === "executive") return -1;
-  if (apOwnerCandidatesForUnit(unit).some((o) => o.kind === p.ownerKind && o.id === p.ownerId)) return 8;
-  if (p.ownerKind === "olevel") return olFind(p.ownerId) && olScopeUnitIds(p.ownerId).has(unit.id) ? 4 : -1;
-  if (p.ownerKind === "etype") return (unit.role || "unit") === p.ownerId ? 2 : -1;
-  if (p.ownerKind === "all") return 1;
-  return -1;
-}
-function apReportsAtStage(pathId, stageId) {
-  const key = AP_PREFIX + pathId + ":" + stageId, out = [];
-  (S.units || []).forEach((u) => ensureUnitReportsLoaded(u.id).forEach((r) => { if (r.status === "custom_pending" && r.customStageId === key) out.push({ unit: u, report: r }); }));
-  return out;
-}
-function apStageRowsHtml(a) {
-  const pend = S.ui.apStageDisableAsk;
-  return (a.stages || []).map((st, i) => {
-    const off = !!st.disabled;
-    const asking = pend && pend.pathId === a.id && pend.stageId === st.id;
-    const waiting = asking ? apReportsAtStage(a.id, st.id).length : 0;
-    return `<div style="display:flex;gap:8px;align-items:center;font-size:12px;margin-bottom:4px;flex-wrap:wrap;${off ? "opacity:.65;" : ""}">
-      <span style="width:22px;height:22px;border-radius:50%;background:${off ? SUBTLE : ROSE};color:#fff;font-size:11px;font-weight:800;display:flex;align-items:center;justify-content:center;flex-shrink:0;">${i + 1}</span>
-      <span style="font-weight:700;${off ? "text-decoration:line-through;" : ""}">${esc(st.name || "مرحلة")}</span><span style="color:${SUBTLE};">← ${esc(apApproverLabel(st.approver))}</span>
-      ${off ? badgeHtml("معطّلة مؤقتًا — تُتخطّى", "#7a4d16", GOLD_BG) : ""}
-      ${st.allowSkip && !off ? badgeHtml("يُسمح بتخطّيها", SUBTLE, GRAY_BG) : ""}
-      ${asking
-        ? `<span style="display:inline-flex;gap:6px;align-items:center;flex-wrap:wrap;background:${GOLD_BG};padding:4px 8px;border-radius:10px;"><span style="font-weight:700;">تعطيل هذه المرحلة؟${waiting ? ` ${waiting} تقرير واقف عندها الآن سينتقل للمرحلة التالية.` : ""}</span>${pillBtn("تعطيل", { variant: "danger", action: "ap-stage-disable", data: { id: a.id, sid: st.id } })}${pillBtn("تراجع", { variant: "ghost", action: "ap-stage-disable-cancel" })}</span>`
-        : `<button type="button" class="pill-btn pill-ghost" style="padding:3px 10px;font-size:11px;" data-action="${off ? "ap-stage-enable" : "ap-stage-disable-ask"}" data-id="${esc(a.id)}" data-sid="${esc(st.id)}">${off ? "تفعيل المرحلة" : "تعطيل مؤقت"}</button>`}
-    </div>`;
-  }).join("");
-}
-// ينقل التقارير الواقفة عند مرحلة صارت معطّلة إلى المرحلة المفعّلة التالية (أو ينهيها لو ما بعدها شيء)
-function apSkipReportsAtStage(path, stageId, onlyUnitId, why) {
-  const all = path.stages || [];
-  const idx = all.findIndex((x) => x.id === stageId);
-  const stName = (all[idx] || {}).name || "مرحلة";
-  why = why || "معطّلة مؤقتًا";
-  // إجراء هيكلي من مديرة النظام (تعطيل مرحلة) — يُسمح له بتحريك التقارير رغم وضع "الاطلاع فقط"
-  const prevAllow = S.__adminAllowWrite; S.__adminAllowWrite = true;
-  try { apReportsAtStage(path.id, stageId).forEach(({ unit, report }) => {
-    if (onlyUnitId && unit.id !== onlyUnitId) return;
-    const nextSt = all.slice(idx + 1).find((x) => !x.disabled && apStageApplies(x, unit, { pathId: path.id, authorId: report.internalSentBy }));
-    const log = [...(report.customLog || [])];
-    if (nextSt) {
-      const nk = AP_PREFIX + path.id + ":" + nextSt.id;
-      log.push(apLogEntry("send", AP_PREFIX + path.id + ":" + stageId, nk, "تخطّى مرحلة «" + stName + "» (" + why + ") إلى " + nextSt.name));
-      saveReportEntry(unit.id, { ...report, customStageId: nk, customLog: log, updatedAt: Date.now() });
-    } else {
-      log.push(apLogEntry("final", AP_PREFIX + path.id + ":" + stageId, "final", "انتهى المسار — تخطّى مرحلة «" + stName + "» (" + why + ")"));
-      saveReportEntry(unit.id, { ...report, status: "completed", customStageId: null, customLog: log, updatedAt: Date.now() });
-    }
-  }); } finally { S.__adminAllowWrite = prevAllow; }
-}
 // المسار المثبَّت على التقرير (من المرحلة الحالية أو من آخر حركة بالسجل)
 function reportApPathId(report) {
   if (!report) return null;
@@ -1473,22 +1482,11 @@ function currentAuthorRoleId() { const p = currentPersonObj(); return p ? (p.rol
 // أنسب مسار مفعّل لهذا التقرير: الأكثر تحديدًا (فترة محددة / دور محدد) يفوز
 function matchApprovalPath(unit, report) { return matchingApprovalPaths(unit, report)[0] || null; }
 function matchingApprovalPaths(unit, report) {
-  if (!unit) return [];
-  const period = (report && report.shared && report.shared.periodType) || (report && report.sections && report.sections.basic && report.sections.basic.data && report.sections.basic.data.periodType) || "";
-  const role = currentAuthorRoleId();
-  const out = [];
-  approvalPathsList().forEach((p) => {
-    // مسار كل مراحله تُتخطّى لهذه الوحدة (مثلًا وحدة خارج الهيكل في مسار يمشي على الهيكل) لا يُعتبر مسارًا لها
-    if (p.status !== "active" || !apStageList(p, unit).length) return;
-    const os = apPathOwnerScore(p, unit);
-    if (os < 0) return;
-    if (p.periodType && p.periodType !== period) return;
-    if (p.authorRoleId && p.authorRoleId !== role) return;
-    out.push({ p, os, score: os * 10 + (p.periodType ? 1 : 0) + (p.authorRoleId ? 1 : 0) });
-  });
-  // المسار الأخص بالوحدة يُقدَّم ويُخفي الأعم (جهة ← مستوى ← نوع ← الكل)
-  const top = out.reduce((m, x) => Math.max(m, x.os), -1);
-  return out.filter((x) => x.os === top).sort((a, b) => b.score - a.score).map((x) => x.p);
+  if (!unit || unit.role === "admin" || unit.role === "executive") return [];
+  const p = autoPathObj();
+  if (!p || p.status !== "active" || !apFlow(apStageList(p, unit)).length) return [];
+  if (!apAutoAuthorAllowed(unit, S.currentPersonId)) return [];
+  return [p];
 }
 // هل الجلسة الحالية هي صاحبة هذه المرحلة؟ (مديرة النظام للاطلاع فقط فلا تُعدّ صاحبة مرحلة)
 // unit (اختياري): وحدة التقرير — لمرحلة «دور من نفس وحدة التقرير»
@@ -1526,7 +1524,7 @@ function apPendingForMe() {
       if (r.status !== "custom_pending") return;
       const ref = apRefOf(r.customStageId); if (!ref) return;
       const p = apPathById(ref.pathId); if (!p) return;
-      const stages = apStageList(p, u, r.internalSentBy);
+      const stages = apFlow(apStageList(p, u, r.internalSentBy));
       const stage = apStagesNamed(p, u).find((s) => s.key === r.customStageId);
       if (stage && userHoldsApStage(stage, u)) out.push({ unit: u, report: r, stage, path: stages, ap: true });
     });
@@ -1544,7 +1542,25 @@ function canViewReportViaApPath(unitId) {
     const p = apPathById(ref.pathId);
     const unit = (S.units || []).find((u) => u.id === unitId);
     return !!p && apStageList(p, unit).some((st) => userHoldsApStage(st, unit));
+  }) || apInfoForMe().some((x) => x.unit.id === unitId);
+}
+// «للعلم فقط»: تقارير عدّت مرحلتي (أو انتهت) — توصلني نسخة للاطلاع بدون ما يوقف التقرير عندي
+function apInfoForMe() {
+  const p = autoPathObj(); if (!p || S.isAdmin) return [];
+  const out = [];
+  (S.units || []).forEach((u) => {
+    if (S.levelScope && !S.levelScope.unitIds.has(u.id)) return;
+    const mine = apStageList(p, u).filter((st) => st.info && userHoldsApStage(st, u));
+    if (!mine.length) return;
+    const order = (k) => (p.stages || []).findIndex((x) => AP_PREFIX + p.id + ":" + x.id === k);
+    ensureUnitReportsLoaded(u.id).forEach((r) => {
+      if (reportApPathId(r) !== p.id || !["custom_pending", "approved", "completed"].includes(r.status)) return;
+      const cur = r.status === "custom_pending" ? order(r.customStageId) : Infinity;
+      const st = mine.find((m) => order(m.key) < cur);
+      if (st) out.push({ unit: u, report: r, stage: st });
+    });
   });
+  return out.sort((a, b) => (b.report.updatedAt || 0) - (a.report.updatedAt || 0));
 }
 function apLogEntry(kind, from, to, text) { return { at: Date.now(), kind, from, to, text, by: S.currentPersonName || (S.currentUser && S.currentUser.name) || "" }; }
 // يرسل التقرير من كاتبته لأول مرحلة فعلية بمسار مطابق؛ يرجع false لو ما فيه مسار
@@ -1554,7 +1570,7 @@ function apSendReport(unitId, entry, pathId, notes) {
   if (!path) return false;
   const noteTxt = notes ? " — " + notes : "";
   // مراحل الكاتبة نفسها تُتخطّى (apStageList مع authorId)، ومراحل التمرير اللي تملكها الجلسة كذلك
-  const stages = apStageList(path, unit, S.currentPersonId);
+  const stages = apFlow(apStageList(path, unit, S.currentPersonId));
   let i = 0;
   while (i < stages.length && userHoldsApStage(stages[i], unit) && apStageIsPassThrough(stages[i])) i++;
   const log = [...(entry.customLog || [])];
@@ -1582,25 +1598,46 @@ function apAdvanceOrReturn(unitId, reportId, isReturn, notes, opts) {
   const all = apStagesNamed(path, unit);
   const cur = all.find((s) => s.key === entry.customStageId);
   if (!cur || !userHoldsApStage(cur, unit)) return "ليست مرحلتك";
-  // المراحل التالية المطبّقة على هذه الوحدة (تُتخطّى مرحلة دورٍ لا يوجد في الوحدة)
-  const stages = [cur, ...all.slice(all.indexOf(cur) + 1).filter((st) => apStageApplies(st, unit, { pathId: path.id, authorId: entry.internalSentBy }))];
-  const idx = 0;
+  // المراحل المطبّقة على هذه الوحدة (تُتخطّى مرحلة دورٍ لا يوجد في الوحدة، و«للعلم فقط» ما توقف التقرير)
+  const flow = apFlow(apStageList(path, unit, entry.internalSentBy));
+  const pos = (st) => all.findIndex((x) => x.key === st.key);
+  const before = flow.filter((st) => pos(st) < pos(cur)), after = flow.filter((st) => pos(st) > pos(cur));
   const log = [...(entry.customLog || [])];
+  if (isReturn && opts.type === "prev") {
+    if (!cur.canBack) return "هذه المرحلة لا تملك الإعادة للمرحلة السابقة";
+    if (!notes) return "الرجاء كتابة ملاحظة قبل الإعادة.";
+    const prev = before[before.length - 1];
+    if (prev) {
+      log.push(apLogEntry("back", cur.key, prev.key, "أعادته " + cur.name + " إلى " + prev.name + " — " + notes));
+      saveReportEntry(unitId, { ...entry, customStageId: prev.key, customLog: log, updatedAt: Date.now() });
+      return "";
+    }
+    opts = { ...opts, type: "returned" };
+  }
   if (isReturn) {
-    if (!cur.canReturn) return "هذه المرحلة لا تملك الإعادة";
+    const type0 = opts.type === "needs_completion" ? "needs_completion" : "returned";
+    if (type0 === "returned" && !cur.canReturn) return "هذه المرحلة لا تملك الإعادة للتعديل";
+    if (type0 === "needs_completion" && !cur.canComplete) return "هذه المرحلة لا تملك الإعادة للاستكمال";
     const secNotes = Object.entries(opts.sectionNotes || {}).filter(([, t]) => String(t || "").trim());
     if (!notes && !secNotes.length) return "الرجاء كتابة ملاحظات قبل إعادة التقرير.";
     const secLabel = (id) => { const sc = SECTIONS.find((x) => x.id === id); return sc ? sc.label : id; };
     const fullNotes = [notes, ...secNotes.map(([id, t]) => secLabel(id) + ": " + String(t).trim())].filter(Boolean).join(" | ");
     const sections = { ...(entry.sections || {}) };
     secNotes.forEach(([id, t]) => { sections[id] = { ...(sections[id] || { status: "not_started", data: {} }), reviewNote: { text: String(t).trim(), by: cur.name, at: Date.now() } }; });
-    const type = opts.type === "needs_completion" ? "needs_completion" : "returned";
+    const type = type0;
     log.push(apLogEntry("return", cur.key, "unit", "أعادته " + cur.name + (type === "needs_completion" ? " للاستكمال — " : " للتعديل — ") + fullNotes));
     saveReportEntry(unitId, { ...entry, sections, status: type, customStageId: null, customLog: log, internalReviewNotes: fullNotes, internalReturnedAt: Date.now(), updatedAt: Date.now() });
     return "";
   }
-  if (cur.noteRequired && !notes) return "هذه المرحلة تلزم كتابة ملاحظة قبل الاعتماد.";
-  const next = stages[idx + 1];
+  if (cur.noteRequired && !notes) return "هذه المرحلة تلزم كتابة ملاحظة قبل الإرسال.";
+  // «ترسل لـ»: الافتراضي اللي بعدها، وتقدر تتجاوز لأعلى لو كل اللي بينهم يُسمح بتخطّيها
+  let next = cur.finalApprove ? null : after[0];
+  if (next && opts.toKey && opts.toKey !== next.key) {
+    const j = after.findIndex((x) => x.key === opts.toKey);
+    if (j < 0 || after.slice(0, j).some((x) => !x.allowSkip)) return "ما يمديك ترسله لهذه المرحلة — اللي بينكم لازم يمر عليها.";
+    log.push(apLogEntry("skip", cur.key, after[j].key, "تجاوزت " + cur.name + ": " + after.slice(0, j).map((x) => x.name).join("، ")));
+    next = after[j];
+  }
   if (!next) {
     log.push(apLogEntry("final", cur.key, "final", (cur.canApprove ? "اعتُمد نهائيًا من " : "أنهته ") + cur.name + (notes ? " — " + notes : "")));
     saveReportEntry(unitId, { ...entry, status: cur.canApprove ? "approved" : "completed", customStageId: null, customLog: log, updatedAt: Date.now() });
@@ -1611,29 +1648,56 @@ function apAdvanceOrReturn(unitId, reportId, isReturn, notes, opts) {
   return "";
 }
 function apSendPickerHtml(unit, report) {
-  const paths = matchingApprovalPaths(unit, report);
-  const picked = S.ui.apSendPathId || (paths.length === 1 ? paths[0].id : "");
+  const p = matchingApprovalPaths(unit, report)[0];
+  const flow = p ? apFlow(apStageList(p, unit, S.currentPersonId)) : [];
   return `
   <div class="card" style="margin-top:16px;border:1.5px solid ${ROSE};">
-    <div style="font-size:13px;font-weight:800;margin-bottom:10px;">إرسال التقرير — إلى من؟</div>
-    <select class="input" id="ap-send-path" style="width:100%;margin-bottom:10px;">
-      <option value="">اختاري الجهة...</option>
-      ${paths.map((p) => `<option value="${esc(p.id)}" ${picked === p.id ? "selected" : ""}>${esc(p.name || apOwnerName(p.ownerKind, p.ownerId))} — ${esc(apStageList(p, unit, S.currentPersonId).map((st) => st.name).join(" ← "))}</option>`).join("")}
-    </select>
+    <div style="font-size:13px;font-weight:800;margin-bottom:6px;">إرسال التقرير</div>
+    ${p ? `<div style="font-size:12px;color:${SUBTLE};margin-bottom:10px;line-height:1.9;">يمر على: ${esc(flow.map((st) => st.name).join(" ← "))}</div>`
+      : `<div class="hint bad" style="margin-bottom:10px;">ما فيه مسار لتقارير هذه الوحدة — كلّمي مديرة النظام.</div>`}
     <textarea id="ap-send-notes" class="input" style="width:100%;min-height:56px;margin-bottom:10px;" placeholder="ملاحظات (اختياري)..."></textarea>
     <div style="display:flex;gap:8px;">
-      ${pillBtn("تأكيد الإرسال", { icon: iconCheckCircle(14, "#fff"), action: "ap-send-confirm" })}
+      ${p ? pillBtn("تأكيد الإرسال", { icon: iconCheckCircle(14, "#fff"), action: "ap-send-confirm" }) : ""}
       ${pillBtn("إلغاء", { variant: "ghost", action: "ap-send-cancel" })}
     </div>
   </div>`;
 }
-function apInboxCardHtml(item) {
+// قرار صاحبة المرحلة — نفس الشكل في «بانتظار مراجعتي» وتحت التقرير الكامل
+function apDecisionHtml(item) {
   const { unit, report, stage, path } = item;
   const key = unit.id + ":" + report.id;
   const idx = path.findIndex((s) => s.key === stage.key);
-  const next = path[idx + 1];
+  const after = path.slice(idx + 1), prev = idx > 0 ? path[idx - 1] : null;
+  const canRet = stage.canReturn || stage.canComplete || stage.canBack;
+  // «ترسل لـ»: اللي بعدها، وما بعدها لو كل اللي بينهم يُسمح بتخطّيها
+  const targets = [];
+  if (!stage.finalApprove) for (let j = 0; j < after.length; j++) { targets.push(after[j]); if (!after[j].allowSkip) break; }
+  const next = targets[0];
+  const advLabel = stage.finalApprove ? "اعتماد نهائي" : stage.canApprove ? (next ? "اعتماد وإرسال" : "اعتماد نهائي") : (next ? "إرسال" : "إنهاء المرحلة");
+  const cand = stage.canCurate ? collectCurationCandidatesForUnits([unit]) : null;
+  const curated = ((report.shared || {}).curatedKeys) || [];
+  const curList = cand ? [["أبرز الإنجازات", cand.achievements], ["نقاط القوة", cand.strengths], ["التوصيات", cand.recommendations], ["التحديات", cand.challenges]]
+    .map(([t, items]) => [t, items.filter((it) => String(it.key).split(":")[1] === report.id)]).filter(([, items]) => items.length) : [];
+  return `
+    ${cand ? `<div style="background:${BLUE_BG};border-radius:12px;padding:10px 12px;margin-bottom:10px;">
+      <div style="font-size:12.5px;font-weight:800;margin-bottom:6px;">اعتماد أبرز النتائج والتوصيات — علّمي الأهم (يطلع أولًا في الملخص والتقرير النهائي)</div>
+      ${curList.length ? curList.map(([t, items]) => `<div style="font-size:11.5px;font-weight:700;color:${SUBTLE};margin:6px 0 4px;">${t}</div>${items.map((it) => { const on = curated.includes(it.key); return `<button type="button" data-action="ap-curate" data-unit="${esc(unit.id)}" data-report="${esc(report.id)}" data-key="${esc(it.key)}" style="display:flex;gap:8px;align-items:flex-start;width:100%;text-align:right;padding:7px 10px;margin-bottom:4px;border-radius:10px;cursor:pointer;font-family:inherit;font-size:12.5px;color:${INK};border:1px solid ${on ? GREEN : BORDER};background:${on ? GREEN_BG : "#fff"};">${on ? iconCheckCircle(16, GREEN) : iconCircle(16, SUBTLE)}<span>${esc(it.text || "—")}</span></button>`; }).join("")}`).join("") : `<div style="font-size:12px;color:${SUBTLE};">ما فيه إنجازات أو توصيات في هذا التقرير.</div>`}
+    </div>` : ""}
+    <textarea id="cp-notes-${esc(key)}" class="input" style="width:100%;min-height:56px;margin-bottom:10px;" placeholder="ملاحظات عامة (${stage.noteRequired ? "إلزامية" : "اختياري"}${canRet ? "، وتلزم عند الإعادة إن لم تكتبي ملاحظة على قسم" : ""})...">${esc(apDraftGet(key, "__gen"))}</textarea>
+    ${stage.canReturn || stage.canComplete ? `<details style="margin-bottom:10px;"><summary style="font-size:12px;font-weight:700;color:${ROSE};cursor:pointer;">ملاحظات على أقسام محددة (تظهر داخل القسم نفسه عند الإعادة)</summary>
+      <div style="display:flex;flex-direction:column;gap:6px;margin-top:8px;">${reportSections(report, unit.id).map((sc) => `<textarea id="cp-sec-${esc(key)}-${esc(sc.id)}" class="input" style="width:100%;min-height:40px;" placeholder="ملاحظة على: ${esc(sc.label)}">${esc(apDraftGet(key, sc.id))}</textarea>`).join("")}</div></details>` : ""}
+    ${targets.length > 1 ? `<div class="field" style="margin-bottom:10px;"><label class="field-label" for="cp-to-${esc(key)}">ترسل لـ</label><select class="input" id="cp-to-${esc(key)}">${targets.map((t, j) => `<option value="${esc(t.key)}">${esc(t.name)}${j ? " (تتجاوز " + esc(targets.slice(0, j).map((x) => x.name).join("، ")) + ")" : ""}</option>`).join("")}</select></div>`
+      : next ? `<div class="hint" style="margin-bottom:10px;">يروح بعدك إلى: <b>${esc(next.name)}</b></div>` : ""}
+    <div style="display:flex;gap:8px;flex-wrap:wrap;">
+      ${pillBtn(advLabel, { icon: iconCheckCircle(14, "#fff"), action: "ap-advance", data: { unitId: unit.id, reportId: report.id } })}
+      ${stage.canReturn ? pillBtn("إعادة للتعديل", { variant: "ghost", icon: iconX(14, INK), action: "ap-return", data: { unitId: unit.id, reportId: report.id, rtype: "returned" } }) : ""}
+      ${stage.canComplete ? pillBtn("إعادة للاستكمال", { variant: "ghost", icon: iconX(14, INK), action: "ap-return", data: { unitId: unit.id, reportId: report.id, rtype: "needs_completion" } }) : ""}
+      ${stage.canBack && prev ? pillBtn("إعادة إلى «" + prev.name + "»", { variant: "ghost", action: "ap-return", data: { unitId: unit.id, reportId: report.id, rtype: "prev" } }) : ""}
+    </div>`;
+}
+function apInboxCardHtml(item) {
+  const { unit, report, stage } = item;
   const log = (report.customLog || []).slice(-3);
-  const advLabel = stage.canApprove ? (next ? "اعتماد وإرسال إلى " + next.name : "اعتماد نهائي") : (next ? "إرسال إلى " + next.name : "إنهاء المرحلة");
   return `
   <div class="card">
     <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;margin-bottom:6px;">
@@ -1645,14 +1709,7 @@ function apInboxCardHtml(item) {
       ${pillBtn("عرض التقرير", { variant: "ghost", action: "view-report-pdf", data: { unitId: unit.id, reportId: report.id } })}
       ${stage.canEdit ? pillBtn("فتح للتعديل", { variant: "ghost", action: "ap-open-edit", data: { unitId: unit.id, reportId: report.id } }) : ""}
     </div>
-    <textarea id="cp-notes-${esc(key)}" class="input" style="width:100%;min-height:56px;margin-bottom:10px;" placeholder="ملاحظات عامة (${stage.noteRequired ? "إلزامية عند الاعتماد" : "اختياري"}${stage.canReturn ? "، وتلزم عند الإعادة إن لم تكتبي ملاحظة على قسم" : ""})...">${esc(apDraftGet(key, "__gen"))}</textarea>
-    ${stage.canReturn ? `<details style="margin-bottom:10px;"><summary style="font-size:12px;font-weight:700;color:${ROSE};cursor:pointer;">ملاحظات على أقسام محددة (تظهر داخل القسم نفسه عند الإعادة)</summary>
-      <div style="display:flex;flex-direction:column;gap:6px;margin-top:8px;">${reportSections(report, unit.id).map((sc) => `<textarea id="cp-sec-${esc(key)}-${esc(sc.id)}" class="input" style="width:100%;min-height:40px;" placeholder="ملاحظة على: ${esc(sc.label)}">${esc(apDraftGet(key, sc.id))}</textarea>`).join("")}</div></details>
-    <select class="input" id="cp-rtype-${esc(key)}" style="width:100%;margin-bottom:10px;"><option value="returned">عند الإعادة: بحاجة إلى تعديل</option><option value="needs_completion">عند الإعادة: بحاجة إلى استكمال</option></select>` : ""}
-    <div style="display:flex;gap:8px;flex-wrap:wrap;">
-      ${pillBtn(advLabel, { icon: iconCheckCircle(14, "#fff"), action: "ap-advance", data: { unitId: unit.id, reportId: report.id } })}
-      ${stage.canReturn ? pillBtn("إعادة للتعديل", { variant: "ghost", icon: iconX(14, INK), action: "ap-return", data: { unitId: unit.id, reportId: report.id } }) : ""}
-    </div>
+    ${apDecisionHtml(item)}
   </div>`;
 }
 function apOrCustomStageName(unit, report) {
@@ -1669,6 +1726,10 @@ function renderCustomPathInbox() {
     <div style="display:flex;flex-direction:column;gap:12px;">
       ${items.map((item) => apInboxCardHtml(item)).join("")}
     </div>`}
+    ${(() => { const info = apInfoForMe(); return info.length ? `<div style="font-size:14px;font-weight:800;margin:20px 0 10px;">وصلتك للعلم (${info.length})</div>
+      <div style="display:flex;flex-direction:column;gap:8px;">${info.slice(0, 40).map((x) => `<div class="card" style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;">
+        <div><div style="font-size:13px;font-weight:800;">${esc(x.unit.name)} — ${esc(x.report.label)}</div><div style="font-size:11.5px;color:${SUBTLE};">${esc(((REPORT_STATUS_OPTIONS.find((o) => o[0] === x.report.status) || [])[1]) || "")}${x.report.status === "custom_pending" ? " — عند " + esc(apOrCustomStageName(x.unit, x.report)) : ""}</div></div>
+        ${pillBtn("عرض التقرير", { variant: "ghost", action: "view-report-pdf", data: { unitId: x.unit.id, reportId: x.report.id } })}</div>`).join("")}</div>` : ""; })()}
   </div></div>`;
 }
 
@@ -1684,12 +1745,12 @@ function computeApprovalPathState(unit, entry) {
   const apPath = apId ? apPathById(apId) : null;
   if (apPath) {
     const log = entry.customLog || [];
-    return apStageList(apPath, unit, entry.status === "draft" ? S.currentPersonId : entry.internalSentBy).map((st) => {
+    return apFlow(apStageList(apPath, unit, entry.status === "draft" ? S.currentPersonId : entry.internalSentBy)).map((st) => {
       const acted = log.filter((l) => l.from === st.key);
       const last = acted[acted.length - 1];
       let state = "pending";
       if (entry.status === "custom_pending" && entry.customStageId === st.key) state = "current";
-      else if (last) state = (last.kind === "return") ? "returned" : "done";
+      else if (last) state = (last.kind === "return" || last.kind === "back") ? "returned" : "done";
       return { key: st.key, label: st.name, state, dateStr: last ? approvalPathDateStr(last.at) : "", note: last ? (last.text || "") : "" };
     });
   }
@@ -3443,9 +3504,9 @@ function opsBlocksHtml(kind, units) {
     units.forEach((u) => {
       if (!baseRoleIdsOf(u).length && !unitActivePersons(u.id).length) issues.push([u.name, "بدون دور ولا أشخاص — يطلع لها «لم تُحدَّد صلاحيات»", "إعطاء دور"]);
       if (!u.departmentId) issues.push([u.name, "غير مربوطة بقسم", "ربطها في الهيكل"]);
-      const paths = approvalPathsList().filter((p) => p.status === "active" && apStageList(p, u).length && apPathOwnerScore(p, u) >= 0);
-      if (!paths.length) issues.push([u.name, "لا يوجد مسار اعتماد يمر بها (أو هي خارج الهيكل في مسار يمشي على الهيكل)", "ربط مسار"]);
-      paths.forEach((p) => (p.stages || []).forEach((st) => { if (!st.disabled && st.sameUnit && String(st.approver || "").indexOf("role:") === 0 && !apStageApplies(st, u)) issues.push([u.name, "لا يوجد أحد بـ«" + apApproverLabel(st.approver).replace("دور: ", "") + "» — مرحلة «" + st.name + "» تُتخطّى", "إضافة شخص"]); }));
+      const ap = autoPathObj();
+      if (!ap || ap.status !== "active") issues.push([u.name, "المسار التلقائي موقف", "تفعيله"]);
+      else if (!apFlow(apStageList(ap, u)).length) issues.push([u.name, "ما لها مسار — مو موجودة في الهيكل أو ما فوقها أحد له دخول", "ربطها في الهيكل"]);
     });
     const byUnit = new Map();
     issues.forEach(([n, i]) => { if (!byUnit.has(n)) byUnit.set(n, []); byUnit.get(n).push(i); });
@@ -3826,16 +3887,6 @@ function renderUnitDashboard() {
 }
 
 /* =============================== Unit settings ================================ */
-// صفحة «الإعدادات» للجهة: (١) الأقسام اللي تطلع في تقاريرها لكل نوع فترة، (٢) تخطّي مراحل المسار —
-// صاحبة المرحلة نفسها تتخطّى مرحلتها (لو مديرة النظام سمحت بتخطّيها في محرّر المسار).
-function usPathsForUnit(unit) {
-  const ps = approvalPathsList().filter((p) => p.status === "active" && (p.stages || []).length && apPathOwnerScore(p, unit) >= 0);
-  const top = ps.reduce((m, p) => Math.max(m, apPathOwnerScore(p, unit)), -1);
-  return ps.filter((p) => apPathOwnerScore(p, unit) === top);
-}
-function usSkipUnitsFor(path, st) {
-  return (S.units || []).filter((u) => u.status === "active" && apPathOwnerScore(path, u) >= 0 && usPathsForUnit(u).some((p) => p.id === path.id) && userHoldsApStage({ ...st, key: AP_PREFIX + path.id + ":" + st.id }, u));
-}
 function usLevelUnitSwitcherHtml() {
   const list = (S.units || []).filter((u) => u.status === "active" && S.levelScope.unitIds.has(u.id));
   if (list.length < 2) return "";
@@ -3879,30 +3930,10 @@ function usSectionsCardHtml(unit) {
   </div>`;
 }
 function usSkipCardHtml(unit) {
-  const skips = apUnitSkipList(unit.id);
-  const paths = usPathsForUnit(unit);
-  const rows = [];
-  paths.forEach((p) => (p.stages || []).forEach((st) => {
-    if (!st.allowSkip || st.disabled) return;
-    const k = p.id + ":" + st.id, on = skips.includes(k);
-    const mine = userHoldsApStage({ ...st, key: AP_PREFIX + k }, unit);
-    const many = mine && (S.isDepartmentUser || S.isOfficeUser || S.levelScope) ? usSkipUnitsFor(p, st).length : 0;
-    rows.push(`<div style="border:1px solid ${BORDER};border-radius:12px;padding:10px 12px;display:flex;flex-direction:column;gap:8px;${on ? "background:" + GRAY_BG + ";" : ""}">
-      <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
-        <span style="font-size:13px;font-weight:800;${on ? "text-decoration:line-through;color:" + SUBTLE + ";" : ""}">${esc(st.name || "مرحلة")}</span>
-        <span style="font-size:11.5px;color:${SUBTLE};">← ${esc(apApproverLabel(st.approver))}${paths.length > 1 ? " · " + esc(p.name || apOwnerName(p.ownerKind, p.ownerId)) : ""}</span>
-        ${on ? badgeHtml("متخطّاة لتقارير هذه الوحدة", "#7a4d16", GOLD_BG) : ""}
-      </div>
-      ${mine ? `<div style="display:flex;gap:6px;flex-wrap:wrap;">
-        ${pillBtn(on ? "إرجاع المرحلة" : "تخطّي مرحلتي لهذه الوحدة", { variant: on ? "ghost" : "primary", action: "us-skip-toggle", data: { path: p.id, sid: st.id } })}
-        ${many > 1 ? pillBtn((on ? "إرجاعها" : "تخطّيها") + " لكل وحداتي (" + many + ")", { variant: "soft", action: "us-skip-toggle", data: { path: p.id, sid: st.id, all: "1", on: on ? "0" : "1" } }) : ""}
-      </div>` : `<div style="font-size:11.5px;color:${SUBTLE};">يتحكم فيها صاحب المرحلة فقط.</div>`}
-    </div>`);
-  }));
   return `<div class="card" style="margin-bottom:14px;">
-    <div style="font-size:14px;font-weight:800;margin-bottom:4px;">تخطّي مراحل المسار</div>
-    <div class="hint" style="margin-bottom:10px;">صاحب المرحلة يقدر يتخطّى مرحلته لتقارير هذه الوحدة، فيروح التقرير للمرحلة اللي بعدها مباشرة. التقارير الواقفة عند المرحلة الآن تنتقل فورًا، ويُكتب ذلك في سجل التقرير. وتقدر ترجع المرحلة متى ما بغت.</div>
-    ${rows.length ? `<div style="display:flex;flex-direction:column;gap:8px;">${rows.join("")}</div>` : `<div style="font-size:12px;color:${SUBTLE};">${paths.length ? "ما فيه مراحل يُسمح بتخطّيها في مسار هذه الوحدة. تحددها مديرة النظام في محرّر المسار بخيار «تقدر صاحبة المرحلة تتخطّاها من الإعدادات»." : "لا يوجد مسار اعتماد مفعّل لهذه الوحدة."}</div>`}
+    <div style="font-size:14px;font-weight:800;margin-bottom:4px;">مسار تقارير الوحدة</div>
+    <div class="hint" style="margin-bottom:10px;">يطلع لحاله من الهيكل. لو أنتِ صاحبة مرحلة ومسموح بتخطّيها، تقدرين تتخطّينها لهذه الوحدة (أو لكل وحداتك) — ويروح التقرير للي بعدها مباشرة.</div>
+    ${apAutoPathListHtml(unit, true)}
   </div>`;
 }
 
@@ -4232,10 +4263,9 @@ const LEVEL_COMPATIBLE_PAGES = ["dashboard", "executive-dashboard", "custom-path
 function levelRoleSummary(roleId) {
   if (!roleId) return null;
   const role = rolesList().find((r) => r.id === roleId);
-  if (!role) return { name: "(دور محذوف)", pages: [], inPaths: 0 };
+  if (!role) return { name: "(دور محذوف)", pages: [] };
   const pages = normalizeDashboardPages(rolePermsOf(role).pages).filter((p) => LEVEL_COMPATIBLE_PAGES.includes(p));
-  const inPaths = approvalPathsList().filter((ap) => (ap.stages || []).some((st) => String(st.approver || "") === "role:" + role.id)).length;
-  return { name: role.name, pages, inPaths };
+  return { name: role.name, pages };
 }
 // كل الوحدات (النشطة، الحقيقية) تحت مستوى معيّن — يشمل المستوى نفسه وكل ما تحته.
 function olScopeUnitIds(levelId) {
@@ -4353,7 +4383,7 @@ function olFormHtml() {
       </select>
       ${(() => { const rs = levelRoleSummary(f.roleId); if (!rs) return `<div class="hint">لا توجد صفحات افتراضية — اختاري دورًا يحدد الصفحات (مثل لوحة المعلومات، جميع التقارير، الملخص، التقرير النهائي) وتظهر على وحدات ما تحته فقط.</div>`;
         const lbl = (id) => ((SIDEBAR_PAGES.find((x) => x.id === id) || {}).label || id);
-        return `<div class="hint">الصفحات: ${rs.pages.length ? rs.pages.map((x) => esc(lbl(x))).join("، ") : "لا توجد صفحات مناسبة لحساب مستوى بهذا الدور — لن يرى شيئًا"}.<br>الاعتماد / الإعادة / التعديل: ${rs.inPaths ? `هذا الدور مرحلة في ${rs.inPaths} مسار اعتماد — تعتمد وتعيد وتعدّل حسب إعداد المرحلة، على تقارير وحدات ما تحتها فقط` : "هذا الدور غير موضوع في أي مسار اعتماد بعد — أضيفيه كمرحلة من «كل المسارات» ليقدر يعتمد أو يعيد أو يعدّل"}.<br>تعديل صفحات وأزرار الدور نفسه من زر «الأدوار والصلاحيات» أعلى الصفحة.</div>`; })()}
+        return `<div class="hint">الصفحات: ${rs.pages.length ? rs.pages.map((x) => esc(lbl(x))).join("، ") : "لا توجد صفحات مناسبة لحساب مستوى بهذا الدور — لن يرى شيئًا"}.<br>الاعتماد / الإعادة / التعديل: هذا المستوى يطلع في المسار التلقائي لكل الوحدات اللي تحته في الهيكل — وش يسوي تحددينه من «كل المسارات».<br>تعديل صفحات وأزرار الدور نفسه من زر «الأدوار والصلاحيات» أعلى الصفحة.</div>`; })()}
     </div>
       <div class="hint" style="margin:0;">تشوف وتعتمد تقارير الوحدات اللي تحتها في الهيكل فقط — وتطلع في مسارهم تلقائيًا.</div>
     </div>` : `<div style="background:${GRAY_BG};border-radius:14px;padding:12px;margin-bottom:12px;font-size:12.5px;color:#4b3d44;">ما يحتاج شي ثاني — اضغطي «حفظ». التقارير ما تمر عليه.</div>`}
@@ -4388,7 +4418,7 @@ function olDetailsHtml(l) {
       ${kv("يتبع", esc(parent))}
       ${kv("مربوط بـ", linked ? `${esc(linked.kind)}: ${esc(linked.name)}` : "مستوى جديد — بدون جهة سابقة")}
       ${kv("دخول خاص", l.loginId ? `اسم المستخدم: ${esc(l.loginId)}${l.status === "disabled" ? ` <span style="color:${DANGER};">(معطّل)</span>` : ""}` : "لا يوجد")}
-      ${l.loginId ? kv("الصلاحيات", (() => { const rs = levelRoleSummary(l.roleId); return rs ? `حسب دور: ${esc(rs.name)}${rs.inPaths ? " — يعتمد في " + rs.inPaths + " مسار" : ""}` : "بدون دور — لا يرى شيئًا"; })()) : ""}
+      ${l.loginId ? kv("الصلاحيات", (() => { const rs = levelRoleSummary(l.roleId); return rs ? `حسب دور: ${esc(rs.name)}` : "بدون دور — لا يرى شيئًا"; })()) : ""}
     </div>
     ${confirm ? `<div style="background:${DANGER_BG};border-radius:12px;padding:12px;display:flex;flex-direction:column;gap:8px;">
         <div style="font-size:12.5px;font-weight:800;color:${DANGER};">حذف "${esc(l.name)}"؟</div>
@@ -4799,7 +4829,7 @@ function handleOrgLevelsAction(action, ds) {
   switch (action) {
     case "ol-select": ui.selected = ds.id; ui.form = null; ui.confirmDelete = null; S.ui.treeEditFor = null; S.ui.treeConfirmDel = null; break;
     case "ol-tab": ui.tab = ds.tab; break;
-    case "ol-section": ui.section = ds.section || ""; S.ui.apEdit = null; break;
+    case "ol-section": ui.section = ds.section || ""; break;
     case "ol-entity-status": { const e = treeEntity(ds.type === "exec" ? "unit" : ds.type, ds.id); if (e) treeSetEntity(ds.type === "exec" ? "unit" : ds.type, ds.id, { status: e.status === "disabled" ? "active" : "disabled" }); break; }
     case "ol-import-entities-ask": ui.importEntitiesConfirm = true; break;
     case "ol-preset-role": {
@@ -5099,26 +5129,6 @@ function handleEntryAction(action, ds) {
 }
 
 /* ---- مسار الاعتماد من الهيكل المرن ---- */
-// يبني مراحل مقترحة: من الجهة صاحبة التقرير صعودًا عبر مستوياتها بالشجرة. يُضمَّن
-// فقط المستوى اللي يقدر أحد يدخل به (له دخول خاص، أو مربوط بقسم/مكتب له حسابه).
-function apSuggestStagesFromTree(ownerKind, ownerId) {
-  if (ownerKind === "all" || ownerKind === "etype") return { error: "الاقتراح من الهيكل يحتاج جهة أو مستوى محددًا. أضيفي المراحل يدويًا (مثل: دور المساعدة ثم الرئيسة «من نفس وحدة التقرير»)." };
-  const lk = ownerKind === "unit" ? "unit" : ownerKind === "dept" ? "dept" : ownerKind === "office" ? "office" : "";
-  const self = ownerKind === "olevel" ? olFind(ownerId) : olActive().find((l) => l.linkKind === lk && l.linkId === ownerId);
-  if (!self) return { error: "هذه الجهة غير مربوطة بالهيكل المرن بعد — اربطيها بمستوى من «المستخدمون ← الهيكل المرن» أولًا." };
-  // مسار مستوى: المراحل من المستوى نفسه صعودًا؛ مسار جهة: مما فوقها
-  const ups = (ownerKind === "olevel" ? olPath(self.id) : olPath(self.id).slice(0, -1)).reverse();
-  const stages = [];
-  ups.forEach((l) => {
-    let approver = "";
-    if (l.loginId && l.status !== "disabled") approver = "level:" + l.id;
-    else if (l.linkKind === "dept" || l.linkKind === "office") approver = l.linkKind + ":" + l.linkId;
-    if (!approver) return;
-    stages.push({ id: uid("stg"), name: l.name, approver, canApprove: true, canReturn: true, canEdit: false, noteRequired: false });
-  });
-  if (!stages.length) return { error: "لا يوجد فوق هذه الجهة مستوى يقدر يدخل (بحساب دخول خاص، أو مربوط بقسم/مكتب) — أضيفي حساب دخول لمستوى أعلى أولًا." };
-  return { stages };
-}
 
 /* =============================== بوابة الدخول (اختيارية) ======================
    صفحة أولى بدل نموذج الدخول: أنواع الجهات (من أنواع الهيكل المرن) ← جهات النوع
@@ -6567,6 +6577,9 @@ function isOfficeCurated(office, key) { return !!(office.curation && office.cura
 // أو مكتب الإشراف (أيهما اعتمده) — طبقتا إشراف مستقلتان، كل وحدة يمر اعتمادها
 // عبر الاثنتين إن وُجدتا.
 function isItemCurated(unit, key) {
+  const rid = String(key).split(":")[1];
+  const rep = rid && ensureUnitReportsLoaded(unit.id).find((r) => r.id === rid);
+  if (rep && ((rep.shared || {}).curatedKeys || []).includes(key)) return true;
   const dept = S.departments.find((d) => d.id === unit.departmentId);
   if (dept && isDeptCurated(dept, key)) return true;
   const office = dept ? (S.offices || []).find((o) => o.id === dept.officeId) : null;
@@ -7776,35 +7789,35 @@ function structPanelTagHtml(type, e) {
   const t = STRUCT_PANEL_TAGS[type === "unit" && e && e.role === "center" ? "center" : type] || STRUCT_PANEL_TAGS.unit;
   return `<span style="font-size:11px;font-weight:800;padding:2px 9px;border-radius:999px;background:${t.bg};color:${t.fg};white-space:nowrap;">${t.label}</span>`;
 }
-function structPanelPathTabHtml(type, e) {
-  const list = approvalPathsList().filter((a) => a.ownerKind === type && a.ownerId === e.id);
-  const ed = S.ui.apEdit;
-  const edMine = ed && ((ed.id && list.some((a) => a.id === ed.id)) || (!ed.id && ed.draft && ed.draft.ownerKind === type && ed.draft.ownerId === e.id));
-  const rows = list.map((a) => {
-    const active = a.status === "active";
-    const confirming = S.ui.apConfirmDeleteId === a.id;
-    const roleName = a.authorRoleId ? ((rolesList().find((r) => r.id === a.authorRoleId) || {}).name || "(دور محذوف)") : "";
-    return `<div class="card" style="margin-bottom:8px;">
-      <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:10px;flex-wrap:wrap;">
-        <div style="min-width:0;flex:1;">
-          <div style="font-size:13.5px;font-weight:800;">${esc(a.name || apOwnerName(a.ownerKind, a.ownerId))} ${badgeHtml(active ? "مفعّل" : "مسودة", active ? GREEN : SUBTLE, active ? GREEN_BG : GRAY_BG)}</div>
-          <div style="font-size:11px;color:${SUBTLE};margin-top:3px;">${esc(a.periodType || "كل الفترات")} • ${roleName ? "تقرير " + esc(roleName) : "أي صاحب تقرير"} • ${(a.stages || []).length} مرحلة</div>
-          <div style="margin-top:8px;">${apStageRowsHtml(a)}</div>
-        </div>
-        <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;">${confirming
-          ? `${pillBtn("تأكيد الحذف", { variant: "danger", action: "ap-delete", data: { id: a.id } })}${pillBtn("تراجع", { variant: "ghost", action: "ap-delete-cancel" })}`
-          : `${pillBtn(active ? "إيقاف" : "تفعيل", { variant: active ? "ghost" : "primary", action: "ap-toggle", data: { id: a.id } })}
-             <button class="icon-btn" style="width:30px;height:30px;border:1px solid ${BORDER}" data-action="ap-edit" data-id="${esc(a.id)}" title="تعديل">${iconPencil(13, INK)}</button>
-             <button class="icon-btn" style="width:30px;height:30px;background:${DANGER_BG}" data-action="ap-delete-ask" data-id="${esc(a.id)}" title="حذف">${iconTrash(13, DANGER)}</button>`}</div>
-      </div>
-      ${S.ui.apMsg && S.ui.apMsg.id === a.id ? `<div style="color:${DANGER};font-size:11.5px;font-weight:700;margin-top:8px;">${esc(S.ui.apMsg.msg)}</div>` : ""}
+// مسار الوحدة التلقائي كقائمة مختصرة (للاطلاع) — مع أزرار تخطّي صاحبة المرحلة في «الإعدادات»
+function apAutoPathListHtml(unit, withSkip) {
+  const path = autoPathObj();
+  if (!path || path.status !== "active") return `<div style="font-size:12px;color:${SUBTLE};">المسار التلقائي موقف — تفعّله مديرة النظام من «كل المسارات».</div>`;
+  const pv = apAutoPreview(unit); if (!pv) return "";
+  let n = 0;
+  const rows = pv.rows.filter((r) => r.what !== "none" || r.state === "on").map((r) => {
+    const off = r.state !== "on", pm = r.pk ? apAutoPerm(r.pk) : null, info = !off && pm && pm.info;
+    if (!off && !info) n++;
+    const lvl = r.what === "lvl" ? olFind(r.id) : null;
+    const raw = r.what === "stage" ? (path.stages || []).find((x) => x.id === r.id) : null;
+    const mine = withSkip && pm && pm.skip && r.state !== "all" && r.state !== "auto" && (lvl ? sessionIsLevel(lvl) : raw ? userHoldsApStage(apNamedStage(raw, path, unit), unit) : false);
+    const key = AUTO_PATH_ID + ":" + (r.what === "lvl" ? "lvl:" + r.id : r.id);
+    const many = mine && lvl ? (S.units || []).filter((u) => u.status === "active" && olScopeUnitIds(lvl.id).has(u.id)).length : 0;
+    return `<div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;padding:8px 10px;border-radius:12px;border:1px ${off ? "dashed #d9c9cf" : "solid " + BORDER};background:${off ? "#faf6f7" : "#fff"};">
+      <span style="width:24px;height:24px;border-radius:50%;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:11.5px;font-weight:800;background:${off ? "#f1ecee" : "#f3e6ea"};color:${off ? "#a99" : ROSE};">${off ? "–" : info ? "ⓘ" : n}</span>
+      <div style="flex:1 1 180px;min-width:0;"><div style="font-size:12.5px;font-weight:800;${off ? "color:#a3949a;text-decoration:line-through;" : ""}">${esc(r.name)}</div>${r.why ? `<div style="font-size:11px;color:${SUBTLE};">${esc(r.why)}</div>` : ""}</div>
+      ${mine ? `<div style="display:flex;gap:6px;flex-wrap:wrap;">${pillBtn(r.state === "unit" ? "إرجاع مرحلتي" : "تخطّي مرحلتي لهذه الوحدة", { variant: r.state === "unit" ? "ghost" : "primary", action: "us-skip-toggle", data: { key, on: r.state === "unit" ? "0" : "1" } })}
+        ${many > 1 ? pillBtn((r.state === "unit" ? "إرجاعها" : "تخطّيها") + " لكل وحداتي (" + many + ")", { variant: "soft", action: "us-skip-toggle", data: { key, on: r.state === "unit" ? "0" : "1", all: lvl.id } }) : ""}</div>` : ""}
     </div>`;
   }).join("");
-  const otherEditing = ed && !edMine;
-  return `<div class="hint" style="margin-bottom:10px;">المسار الجديد يُحفظ مسودة ولا يعمل قبل «تفعيل». لا يوجد مسار افتراضي.</div>
-    ${edMine ? apEditorHtml() : otherEditing ? `<div class="card" style="color:${SUBTLE};font-size:12px;margin-bottom:10px;">يوجد مسار آخر قيد التعديل في صفحة «إعداد مسارات الاعتماد».</div>` : `<div style="margin-bottom:10px;">${pillBtn("مسار جديد لهذه الجهة", { icon: iconPlus(14, "#fff"), action: "struct-ap-new", data: { kind: type, id: e.id } })}</div>`}
-    ${rows || (edMine ? "" : `<div class="card" style="text-align:center;color:${SUBTLE};padding:24px;border-style:dashed;font-size:12px;">لا توجد مسارات لهذه الجهة بعد.</div>`)}
-`;
+  return `<div style="display:flex;gap:10px;align-items:center;padding:8px 10px;border-radius:12px;background:${ROSE};color:#fff;margin-bottom:6px;font-size:12.5px;"><span>✎</span><span>يكتب: <b>${esc(pv.writer)}</b></span></div>
+    <div style="display:flex;flex-direction:column;gap:6px;">${rows}</div>`;
+}
+function structPanelPathTabHtml(type, e) {
+  if (type === "unit") return `${apAutoPathListHtml(e, false)}<div class="hint" style="margin-top:10px;">المسار يطلع لحاله من الهيكل — التغيير من «كل المسارات».</div>`;
+  const lvl = olActive().find((l) => l.linkKind === type && l.linkId === e.id);
+  const n = lvl ? (S.units || []).filter((u) => u.status === "active" && olScopeUnitIds(lvl.id).has(u.id)).length : 0;
+  return `<div style="font-size:12.5px;line-height:2;">${lvl ? `«${esc(e.name)}» يطلع في مسار <b>${n}</b> وحدة تحته في الهيكل. وش يسوي فيها تحددينه من «كل المسارات».` : `«${esc(e.name)}» مو موجود في الهيكل — حطيه في مكانه عشان يطلع في مسار الوحدات اللي تحته.`}</div>`;
 }
 // ===== العرض المبسّط: أسئلة بسيطة (الأشخاص ← ماذا يرون ← المسار) + نسخ الإعداد + بطاقة الشخص =====
 // إضافة فقط: العرض السابق (ذو التبويبات) والشجرة القديمة يبقيان ويُفتحان من الأزرار أعلى الصفحة.
@@ -7813,9 +7826,6 @@ function structSimpleRoleCountsText(role) {
   const b = p.buttons.length ? p.buttons : p.actions.filter((a) => BUTTON_CATALOG.some((x) => x.id === a));
   if (!p.pages.length) return "⚠ بلا صفحات — لا يرى شيئًا";
   return `${p.pages.length} صفحات · ${b.length} أزرار`;
-}
-function structSimplePathsOf(type, e) {
-  return approvalPathsList().filter((a) => a.ownerKind === type && a.ownerId === e.id);
 }
 function structSimplePeopleHtml(type, e, key) {
   const kind = STRUCT_OWNER_KIND[type];
@@ -7876,14 +7886,13 @@ function structSimpleCopyHtml(type, e, key) {
   const lists = type === "office" ? (S.offices || []) : type === "dept" ? S.departments : S.units.filter((u) => u.role !== "admin" && u.role !== "executive" && u.role !== "self_report");
   const src = lists.filter((x) => x.id !== e.id);
   const from = c.from ? lists.find((x) => x.id === c.from) : null;
-  const nPaths = from ? structSimplePathsOf(type, from).length : 0;
   return `<div class="card" style="background:${GRAY_BG};margin-bottom:12px;">
     <div style="font-size:12.5px;font-weight:800;margin-bottom:8px;">نسخ الإعداد إلى «${esc(e.name)}»</div>
     <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;">
       <select class="input" data-action="struct-copy-from" style="width:230px;"><option value="">— من أي جهة؟ —</option>${src.map((x) => `<option value="${esc(x.id)}" ${c.from === x.id ? "selected" : ""}>${esc(x.name)}</option>`).join("")}</select>
       ${from ? pillBtn("نسخ", { action: "struct-copy-confirm", data: { key } }) : ""}${pillBtn("إلغاء", { variant: "ghost", action: "struct-copy-cancel" })}
     </div>
-    ${from ? `<div style="font-size:11.5px;color:${SUBTLE};margin-top:8px;">سيُنسخ: الدور الأساسي${from.baseRoleId ? "" : " (بلا دور)"} + ${nPaths} مسار كمسودات (تحتاج تفعيلًا). لا تُنسخ أسماء الأشخاص، ولا يُحذف شيء من هذه الجهة. إن كان لها دور حاليًا فسيُستبدل.</div>` : ""}
+    ${from ? `<div style="font-size:11.5px;color:${SUBTLE};margin-top:8px;">سيُنسخ: الدور الأساسي${from.baseRoleId ? "" : " (بلا دور)"}. لا تُنسخ أسماء الأشخاص، ولا يُحذف شيء من هذه الجهة. إن كان لها دور حاليًا فسيُستبدل.</div>` : ""}
   </div>`;
 }
 function structSimplePeopleViewHtml() {
@@ -7901,8 +7910,8 @@ function structSimplePeopleViewHtml() {
   const cards = list.map((p) => {
     const o = ownerOf(p);
     const r = roles.find((x) => x.id === p.roleId);
-    const paths = o.ent ? structSimplePathsOf(o.type, o.ent) : [];
-    const act = paths.find((a) => a.status === "active");
+    const ap = autoPathObj();
+    const act = o.type === "unit" && o.ent && ap && ap.status === "active" && apFlow(apStageList(ap, o.ent)).length;
     const on = p.status !== "disabled";
     return `<div class="card" style="padding:14px 16px;${r ? "" : "border:1.5px dashed #e3c9a1;"}opacity:${on ? 1 : 0.6};">
       <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px;">
@@ -7914,8 +7923,8 @@ function structSimplePeopleViewHtml() {
           <select class="input" data-action="struct-person-role" data-id="${esc(p.id)}" style="margin-top:4px;padding:5px 8px;font-size:12.5px;"><option value="">— بلا دور —</option>${roles.map((x) => `<option value="${esc(x.id)}" ${p.roleId === x.id ? "selected" : ""}>${esc(x.name)}</option>`).join("")}</select>
           <div style="font-size:11px;color:${SUBTLE};margin-top:3px;">${r ? structSimpleRoleCountsText(r) : ""}</div></div>
         <div style="padding:9px 11px;background:${act ? GRAY_BG : "#fdf7ec"};border:1px ${act ? "solid" : "dashed"} ${act ? BORDER : "#e3c9a1"};border-radius:12px;"><div style="font-size:11px;color:${SUBTLE};">مسار تقاريرها</div>
-          <div style="font-size:13px;font-weight:800;margin-top:4px;">${act ? esc(act.name || apOwnerName(act.ownerKind, act.ownerId)) : "لم يُحدَّد"}</div>
-          <div style="font-size:11px;color:${act ? GREEN : "#9a6420"};margin-top:3px;font-weight:700;">${act ? `● مفعّل · ${(act.stages || []).length} مراحل` : (paths.length ? "مسودات غير مفعّلة" : "لا مسار لهذه الجهة")}</div></div>
+          <div style="font-size:13px;font-weight:800;margin-top:4px;">${act ? "تلقائي من الهيكل" : "ما لها مسار"}</div>
+          <div style="font-size:11px;color:${act ? GREEN : "#9a6420"};margin-top:3px;font-weight:700;">${act ? "● " + apFlow(apStageList(ap, o.ent)).length + " مراحل" : "حطي الجهة في الهيكل"}</div></div>
       </div>
       ${!r ? `<div style="margin-top:8px;font-size:12px;color:#9a6420;font-weight:700;">⚠ بلا دور، فلا يرى أي صفحة. اختاري له دورًا.</div>` : ""}
       <div style="margin-top:10px;display:flex;align-items:center;gap:8px;flex-wrap:wrap;justify-content:flex-end;">${S.ui.personConfirmDeleteId === p.id
@@ -8144,22 +8153,6 @@ function permLogCardHtml() {
 // المسارات هنا إعدادات فقط: لا تؤثر على دورة التقرير الحالية ولا تعمل إلا بعد «تفعيل»
 // صريح منها، ولا يوجد أي مسار افتراضي. 
 function approvalPathsList() { return S.approvalPaths || (S.approvalPaths = dataStore.getApprovalPaths()); }
-function apOwnerOptions() {
-  const offices = (S.offices || []).map((o) => ["office", o]);
-  const depts = (S.departments || []).map((d) => ["dept", d]);
-  const real = (S.units || []).filter((u) => u.role !== "admin" && u.role !== "executive" && u.role !== "self_report");
-  const levels = [];
-  const walk = (pid, depth) => olChildren(pid).forEach((l) => { levels.push(["olevel", { id: l.id, name: "— ".repeat(depth) + l.name + " وما تحته" }]); walk(l.id, depth + 1); });
-  walk("", 0);
-  return [
-    ["مسار عام (كل وحدة تمشي فيه بأشخاصها)", [["all", { id: "*", name: "كل الوحدات والمراكز" }], ["etype", { id: "unit", name: "كل الوحدات (بدون المراكز)" }], ["etype", { id: "center", name: "كل المراكز" }]]],
-    ["مستوى من الهيكل المرن وما تحته", levels],
-    ["مكاتب الإشراف", offices],
-    ["الأقسام", depts],
-    ["الوحدات", real.filter((u) => u.role !== "center").map((u) => ["unit", u])],
-    ["المراكز", real.filter((u) => u.role === "center").map((u) => ["unit", u])],
-  ].filter((g) => g[1].length);
-}
 function apOwnerName(kind, id) {
   if (kind === "all") return "كل الوحدات والمراكز";
   if (kind === "etype") return id === "center" ? "كل المراكز" : "كل الوحدات";
@@ -8167,16 +8160,6 @@ function apOwnerName(kind, id) {
   const list = kind === "office" ? (S.offices || []) : kind === "dept" ? (S.departments || []) : (S.units || []);
   const e = list.find((x) => x.id === id);
   return e ? e.name : "(جهة محذوفة)";
-}
-function apApproverOptions(cur) {
-  const roles = rolesList(), persons = personsList();
-  const opt = (v, label) => `<option value="${esc(v)}" ${cur === v ? "selected" : ""}>${esc(label)}</option>`;
-  return `<option value="">— من يقوم بالمرحلة —</option>
-    ${roles.length ? `<optgroup label="أدوار">${roles.map((r) => opt("role:" + r.id, r.name)).join("")}</optgroup>` : ""}
-    ${persons.length ? `<optgroup label="أشخاص">${persons.map((p) => opt("person:" + p.id, p.name + " — " + apOwnerName(p.ownerKind === "department" ? "dept" : p.ownerKind, p.ownerId))).join("")}</optgroup>` : ""}
-    <optgroup label="حسب وحدة التقرير">${opt(AP_UNIT_DEPT, "مديرة قسم الوحدة صاحبة التقرير")}${Array.from({ length: AP_TREE_UP_MAX }, (_, i) => opt(AP_TREE_UP + (i + 1), apTreeUpLabel(i + 1))).join("")}</optgroup>
-    <optgroup label="حسابات الجهات">${[...(S.departments || []).map((d) => opt("dept:" + d.id, d.name + " (قسم)")), ...(S.offices || []).map((o) => opt("office:" + o.id, o.name + " (مكتب)"))].join("")}</optgroup>
-    ${(() => { const lv = []; const walk = (pid, depth) => olChildren(pid).forEach((l) => { if (l.loginId || l.linkKind === "dept" || l.linkKind === "office") lv.push(opt("level:" + l.id, "— ".repeat(depth) + l.name + (l.type ? " (" + l.type + ")" : "") + (l.loginId ? "" : " — بحساب الجهة المربوطة"))); walk(l.id, depth + 1); }); walk("", 0); return lv.length ? `<optgroup label="الهيكل المرن">${lv.join("")}</optgroup>` : ""; })()}`;
 }
 function apApproverLabel(v) {
   if (!v) return "—";
@@ -8188,94 +8171,25 @@ function apApproverLabel(v) {
   if (v.indexOf(AP_TREE_UP) === 0) return apTreeUpLabel(Number(v.slice(AP_TREE_UP.length)) || 1);
   return apOwnerName(k, id);
 }
-function apCaptureForm() {
-  const d = S.ui.apEdit && S.ui.apEdit.draft; if (!d) return;
-  const g = (id) => { const el = document.getElementById(id); return el ? el.value : null; };
-  const c = (id) => { const el = document.getElementById(id); return el ? !!el.checked : null; };
-  if (g("ap-name") !== null) d.name = g("ap-name");
-  if (g("ap-owner") !== null) { const v = g("ap-owner"); const [k, ...rest] = v.split(":"); d.ownerKind = v ? k : ""; d.ownerId = rest.join(":"); }
-  if (g("ap-period") !== null) d.periodType = g("ap-period");
-  if (g("ap-author") !== null) d.authorRoleId = g("ap-author");
-  d.stages = (d.stages || []).map((st, i) => ({
-    ...st,
-    name: g("ap-s-name-" + i) !== null ? g("ap-s-name-" + i) : st.name,
-    approver: g("ap-s-appr-" + i) !== null ? g("ap-s-appr-" + i) : st.approver,
-    canApprove: c("ap-s-ap-" + i) !== null ? c("ap-s-ap-" + i) : st.canApprove,
-    canReturn: c("ap-s-rt-" + i) !== null ? c("ap-s-rt-" + i) : st.canReturn,
-    canEdit: c("ap-s-ed-" + i) !== null ? c("ap-s-ed-" + i) : st.canEdit,
-    noteRequired: c("ap-s-nr-" + i) !== null ? c("ap-s-nr-" + i) : !!st.noteRequired,
-    sameUnit: c("ap-s-su-" + i) !== null ? c("ap-s-su-" + i) : !!st.sameUnit,
-    allowSkip: c("ap-s-sk-" + i) !== null ? c("ap-s-sk-" + i) : !!st.allowSkip,
-  }));
-}
-function apEditorHtml() {
-  const ed = S.ui.apEdit; const d = ed.draft;
-  const ownerVal = d.ownerKind ? d.ownerKind + ":" + d.ownerId : "";
-  const roles = rolesList();
-  const stagesHtml = (d.stages || []).map((st, i) => `
-    <div class="card" style="background:${GRAY_BG};margin-bottom:8px;padding:10px 12px;">
-      <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:8px;">
-        <div style="font-size:12px;font-weight:800;color:${ROSE};">المرحلة ${i + 1}${st.disabled ? ` <span style="color:#7a4d16;font-weight:700;">(معطّلة مؤقتًا)</span>` : ""}</div>
-        <div style="display:flex;gap:5px;">
-          <button class="icon-btn" style="width:28px;height:28px;border:1px solid ${BORDER}" data-action="ap-stage-move" data-idx="${i}" data-dir="up" title="تحريك لأعلى">${iconChevronDown ? `<span style="display:inline-flex;transform:rotate(180deg);">${iconChevronDown(13, INK)}</span>` : "▲"}</button>
-          <button class="icon-btn" style="width:28px;height:28px;border:1px solid ${BORDER}" data-action="ap-stage-move" data-idx="${i}" data-dir="down" title="تحريك لأسفل">${iconChevronDown ? iconChevronDown(13, INK) : "▼"}</button>
-          <button class="icon-btn" style="width:28px;height:28px;background:${DANGER_BG}" data-action="ap-stage-remove" data-idx="${i}" title="حذف المرحلة">${iconTrash(13, DANGER)}</button>
-        </div>
-      </div>
-      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:8px;">
-        <input class="input" id="ap-s-name-${i}" placeholder="اسم المرحلة (مثال: مراجعة)" value="${esc(st.name || "")}" />
-        <select class="input" id="ap-s-appr-${i}">${apApproverOptions(st.approver || "")}</select>
-      </div>
-      <div style="display:flex;gap:14px;flex-wrap:wrap;margin-top:8px;font-size:12px;">
-        <label style="display:flex;gap:6px;align-items:center;cursor:pointer;"><input type="checkbox" id="ap-s-ap-${i}" ${st.canApprove ? "checked" : ""} /> يعتمد</label>
-        <label style="display:flex;gap:6px;align-items:center;cursor:pointer;"><input type="checkbox" id="ap-s-rt-${i}" ${st.canReturn ? "checked" : ""} /> يعيد للتعديل</label>
-        <label style="display:flex;gap:6px;align-items:center;cursor:pointer;"><input type="checkbox" id="ap-s-ed-${i}" ${st.canEdit ? "checked" : ""} /> يعدّل التقرير</label>
-        <label style="display:flex;gap:6px;align-items:center;cursor:pointer;"><input type="checkbox" id="ap-s-nr-${i}" ${st.noteRequired ? "checked" : ""} /> ملاحظة إلزامية عند الاعتماد</label>
-        <label style="display:flex;gap:6px;align-items:center;cursor:pointer;color:${ROSE};font-weight:700;"><input type="checkbox" id="ap-s-su-${i}" ${st.sameUnit ? "checked" : ""} /> من نفس وحدة التقرير (عند اختيار دور)</label>
-        <label style="display:flex;gap:6px;align-items:center;cursor:pointer;"><input type="checkbox" id="ap-s-sk-${i}" ${st.allowSkip ? "checked" : ""} /> تقدر صاحبة المرحلة تتخطّاها من «الإعدادات»</label>
-      </div>
-      ${String(st.approver || "").indexOf(AP_TREE_UP) === 0 ? `<div style="font-size:11px;color:${SUBTLE};margin-top:6px;">يمشي على «الهيكل المرن»: كل تقرير يصعد في فرع وحدته، ويُحسب فقط المستويات اللي لها حساب (دخول خاص أو مربوطة بقسم/مكتب). وحدة غير موجودة في الهيكل، أو ما فوقها مستوى بهذا الترتيب، تُتخطّى عندها المرحلة.</div>` : ""}
-      ${st.approver === AP_UNIT_DEPT ? `<div style="font-size:11px;color:${SUBTLE};margin-top:6px;">كل تقرير يروح لحساب القسم اللي تتبع له وحدته فقط — الأقسام الثانية ما تشوفه. الوحدة غير المربوطة بقسم تُتخطّى عندها المرحلة.</div>` : ""}
-      ${String(st.approver || "").indexOf("role:") === 0 ? `<div style="font-size:11px;color:${SUBTLE};margin-top:6px;">${st.sameUnit ? "يصل التقرير فقط لصاحبة هذا الدور داخل وحدة التقرير، ولو الوحدة ما فيها أحد بهذا الدور تُتخطّى المرحلة تلقائيًا." : "أي شخص بهذا الدور (في أي جهة) يرى التقرير — فعّلي «من نفس وحدة التقرير» لأدوار الوحدة مثل المساعدة والرئيسة."}</div>` : ""}
-    </div>`).join("");
-  return `<div class="card" style="margin-bottom:14px;border:1.5px solid ${ROSE};">
-    <div style="font-size:14px;font-weight:800;margin-bottom:10px;">${ed.id ? "تعديل المسار" : "مسار جديد"} <span style="font-size:11px;color:${SUBTLE};font-weight:600;">(يُحفظ كمسودة ولا يعمل قبل التفعيل)</span></div>
-    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:8px;margin-bottom:10px;">
-      <input class="input" id="ap-name" placeholder="اسم المسار (اختياري)" value="${esc(d.name || "")}" />
-      <select class="input" id="ap-owner"><option value="">— الجهة —</option>${apOwnerOptions().map((g) => `<optgroup label="${esc(g[0])}">${g[1].map(([k, e]) => `<option value="${esc(k + ":" + e.id)}" ${ownerVal === k + ":" + e.id ? "selected" : ""}>${esc(e.name)}</option>`).join("")}</optgroup>`).join("")}</select>
-      <select class="input" id="ap-period"><option value="">كل الفترات</option>${PERIOD_TYPES.map((pt) => `<option value="${esc(pt)}" ${d.periodType === pt ? "selected" : ""}>${esc(pt)}</option>`).join("")}</select>
-      <select class="input" id="ap-author"><option value="">أي صاحب تقرير</option>${roles.map((r) => `<option value="${esc(r.id)}" ${d.authorRoleId === r.id ? "selected" : ""}>تقرير ${esc(r.name)}</option>`).join("")}</select>
-    </div>
-    <div style="display:flex;gap:6px;align-items:center;margin-bottom:12px;flex-wrap:wrap;">
-      <input class="input" id="ap-new-period" placeholder="فترة جديدة غير موجودة بالقائمة" style="flex:1;min-width:180px;" />
-      ${pillBtn("إضافة فترة", { variant: "soft", action: "ap-add-period" })}
-    </div>
-    <div style="font-size:12.5px;font-weight:800;margin-bottom:6px;">المراحل (بالترتيب)</div>
-    ${stagesHtml || `<div style="font-size:12px;color:${SUBTLE};margin-bottom:8px;">لا توجد مراحل بعد. أضيفي المرحلة الأولى.</div>`}
-    <div style="display:flex;gap:6px;flex-wrap:wrap;">${pillBtn("إضافة مرحلة", { variant: "ghost", icon: iconPlus(14, INK), action: "ap-stage-add" })}${pillBtn("اقتراح المراحل من الهيكل المرن", { variant: "soft", icon: iconLayers(14, GREEN), action: "ap-suggest-tree" })}</div>
-    ${ed.suggestMsg ? `<div class="hint ${ed.suggestOk ? "good" : "bad"}" style="font-weight:700;">${esc(ed.suggestMsg)}</div>` : ""}
-    ${ed.error ? `<div style="color:${DANGER};font-size:11.5px;font-weight:700;margin-top:8px;">${esc(ed.error)}</div>` : ""}
-    <div style="display:flex;gap:6px;margin-top:12px;">${pillBtn("حفظ كمسودة", { action: "ap-save" })}${pillBtn("إلغاء", { variant: "ghost", action: "ap-cancel" })}</div>
-  </div>`;
-}
 // ===== بطاقة «المسار التلقائي من الهيكل» في «كل المسارات» =====
 function apAutoPreview(unit) {
   const path = autoPathObj(), cfg = autoPathCfg();
   if (!path || !unit) return null;
   const holders = (rid) => rid ? personsList().filter((p) => p.status !== "disabled" && p.roleId === rid && apPersonInUnit(p, unit)) : [];
-  const writerR = AUTO_RANKS.find((r) => holders(cfg[r.k]).length);
-  const writerRank = writerR ? writerR.rank : -1;
-  const writer = writerR ? writerR.label + " — " + holders(cfg[writerR.k]).map((p) => p.name).join("، ") : "حساب الوحدة نفسه (ما فيه أشخاص بأدوار الوحدة)";
+  const wr = apAutoWriterRanks(unit);
+  const writerRank = wr.length ? Math.min(...wr) : -1;
+  const writer = wr.length ? AUTO_RANKS.filter((r) => wr.includes(r.rank)).map((r) => r.label + " (" + holders(cfg[r.k]).map((p) => p.name).join("، ") + ")").join(" أو ") : "حساب الوحدة نفسه (ما فيه أشخاص بأدوار الوحدة)";
   const uSkip = apUnitSkipList(unit.id);
   const rows = [];
   (path.stages || []).filter((st) => st.unitRank).forEach((st) => {
     const h = holders(String(st.approver).slice(5));
-    const r = { what: "stage", id: st.id, name: st.name, sub: "داخل الوحدة — " + (h.length ? h.map((p) => p.name).join("، ") : "ما فيه أحد بهذا الدور") };
+    const r = { what: "stage", id: st.id, pk: st.id, name: st.name, sub: "داخل الوحدة — " + (h.length ? h.map((p) => p.name).join("، ") : "ما فيه أحد بهذا الدور") };
     if (st.disabled) { r.state = "all"; r.why = "متخطّاة لكل الوحدات"; }
     else if (!h.length) { r.state = "auto"; r.why = "تُتخطّى تلقائيًا — ما فيه أحد"; }
     else if (st.unitRank <= writerRank) { r.state = "auto"; r.why = st.unitRank === writerRank ? "تُتخطّى — هي اللي تكتب التقرير" : "تُتخطّى — أقل من اللي تكتب"; }
+    else if (wr.includes(st.unitRank)) { r.state = "on"; r.why = "لو هي اللي كتبت التقرير ما يمر عليها"; r.whyOk = true; }
     else if (uSkip.includes(AUTO_PATH_ID + ":" + st.id)) { r.state = "unit"; r.why = "متخطّاة لهذه الوحدة"; }
-    else r.state = "on";
+    else if (!r.state) r.state = "on";
     rows.push(r);
   });
   let l = olActive().find((x) => x.linkKind === "unit" && x.linkId === unit.id);
@@ -8285,7 +8199,7 @@ function apAutoPreview(unit) {
   while (l && (l = olFind(l.parentId)) && guard++ < 50 && n < AUTO_TREE_MAX) {
     const acc = olLevelHasAccount(l);
     const lk = olLinkedEntity(l);
-    const r = { what: "lvl", id: l.id, name: l.name, sub: "في الهيكل — " + (l.loginId ? "دخول خاص" : lk ? "حساب " + lk.kind + ": " + lk.name : "تنظيم فقط") };
+    const r = { what: "lvl", id: l.id, pk: "lvl:" + l.id, name: l.name, sub: "في الهيكل — " + (l.loginId ? "دخول خاص" : lk ? "حساب " + lk.kind + ": " + lk.name : "تنظيم فقط") };
     if (!acc) { r.state = "auto"; r.why = "ما له دخول — ما يمر عليه"; r.what = "none"; }
     else { n++; if (glob.has(l.id)) { r.state = "all"; r.why = "متخطّى لكل وحداته"; } else if (uSkip.includes(AUTO_PATH_ID + ":lvl:" + l.id)) { r.state = "unit"; r.why = "متخطّى لهذه الوحدة"; } else r.state = "on"; }
     rows.push(r);
@@ -8304,16 +8218,25 @@ function apAutoCardHtml() {
   const pv = path ? apAutoPreview(unit) : null;
   let num = 0;
   const btn = (r, scope, label, on) => `<button type="button" class="pill-btn pill-ghost" style="padding:4px 10px;font-size:11px;${on ? `color:${GREEN};border-color:${GREEN};` : `color:${DANGER};`}" data-action="ap-auto-skip" data-what="${r.what}" data-id="${esc(r.id)}" data-scope="${scope}" data-unit="${esc(uid0 || "")}" data-on="${on ? 0 : 1}">${label}</button>`;
+  const permChips = (r) => {
+    const pm = apAutoPerm(r.pk);
+    const chip = (on, color, label, data) => `<button type="button" data-action="ap-auto-perm" data-pk="${esc(r.pk)}" ${data} style="min-height:34px;padding:0 10px;border-radius:999px;font-size:11.5px;cursor:pointer;font-family:inherit;font-weight:${on ? 800 : 500};border:1px solid ${on ? color : BORDER};background:${on ? color : "#fff"};color:${on ? "#fff" : INK};">${on ? "✓ " : ""}${esc(label)}</button>`;
+    return `<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:8px;width:100%;">
+      ${chip(pm.mode === "send", "#8B4A73", "تراجع وترسل", `data-opt="mode" data-val="send"`)}${chip(pm.mode === "approve", GREEN, "تعتمد", `data-opt="mode" data-val="approve"`)}
+      ${AUTO_PERM_OPTS.filter((o) => o.k !== "final" || pm.mode === "approve").map((o) => chip(!!pm[o.k], o.color, o.label, `data-opt="${o.k}"`)).join("")}</div>`;
+  };
   const rowHtml = (r) => {
     const off = r.state !== "on";
-    if (!off) num++;
+    const info = !off && r.pk && apAutoPerm(r.pk).info;
+    if (!off && !info) num++;
     const acts = r.what === "none" || r.state === "auto" ? "" : r.state === "on"
       ? `${btn(r, "unit", "تخطّي لهذه الوحدة", false)}${btn(r, "all", r.what === "lvl" ? "تخطّي لكل وحداته" : "تخطّي لكل الوحدات", false)}`
       : btn(r, r.state, "رجّعيها", true);
     return `<div style="display:flex;gap:10px;align-items:center;padding:9px 10px;border-radius:12px;margin-bottom:6px;border:1px ${off ? "dashed #d9c9cf" : "solid " + BORDER};background:${off ? "#faf6f7" : "#fff"};flex-wrap:wrap;">
-      <span style="width:26px;height:26px;border-radius:50%;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:800;background:${off ? "#f1ecee" : "#f3e6ea"};color:${off ? "#a99" : ROSE};">${off ? "–" : num}</span>
-      <div style="flex:1 1 200px;min-width:0;"><div style="font-size:13px;font-weight:800;${off ? "color:#a3949a;text-decoration:line-through;" : ""}">${esc(r.name)}</div><div style="font-size:11px;color:${SUBTLE};">${esc(r.sub)}</div>${r.why ? `<div style="font-size:11px;font-weight:700;color:${r.state === "auto" ? "#7a4d16" : DANGER};">${esc(r.why)}</div>` : ""}</div>
-      <div style="display:flex;gap:6px;flex-wrap:wrap;">${acts}</div></div>`;
+      <span style="width:26px;height:26px;border-radius:50%;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:800;background:${off ? "#f1ecee" : "#f3e6ea"};color:${off ? "#a99" : ROSE};">${off ? "–" : info ? "ⓘ" : num}</span>
+      <div style="flex:1 1 200px;min-width:0;"><div style="font-size:13px;font-weight:800;${off ? "color:#a3949a;text-decoration:line-through;" : ""}">${esc(r.name)}${info ? ` ${badgeHtml("للعلم فقط", SUBTLE, GRAY_BG)}` : ""}</div><div style="font-size:11px;color:${SUBTLE};">${esc(r.sub)}</div>${r.why ? `<div style="font-size:11px;font-weight:700;color:${r.whyOk ? SUBTLE : r.state === "auto" ? "#7a4d16" : DANGER};">${esc(r.why)}</div>` : ""}</div>
+      <div style="display:flex;gap:6px;flex-wrap:wrap;">${acts}</div>
+      ${r.state === "on" && r.pk ? permChips(r) : ""}</div>`;
   };
   return `<div class="card card-lg" style="margin-bottom:14px;border:1.5px solid ${active ? GREEN : BORDER};">
     <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:10px;flex-wrap:wrap;">
@@ -8325,7 +8248,13 @@ function apAutoCardHtml() {
       ${roleSel("idr", "دور الإدارية")}${roleSel("ast", "دور المساعدة")}${roleSel("head", "دور الرئيسة")}
       ${pillBtn("حفظ الأدوار", { variant: "soft", action: "ap-auto-roles-save" })}
     </div>
-    ${path ? `<div style="margin-top:14px;">
+    ${path ? `<div style="margin-top:14px;display:flex;gap:8px;align-items:center;flex-wrap:wrap;"><span style="font-size:13px;font-weight:800;">مين يكتب التقرير؟</span>
+      ${AUTO_RANKS.map((r) => { const w = cfg.writers || { idr: true, ast: true, head: true }; const on = w[r.k] !== false; return `<button type="button" data-action="ap-auto-writer" data-k="${r.k}" style="min-height:38px;padding:0 14px;border-radius:999px;font-size:12.5px;cursor:pointer;font-family:inherit;font-weight:${on ? 800 : 500};border:1px solid ${on ? ROSE : BORDER};background:${on ? ROSE : "#fff"};color:${on ? "#fff" : INK};">${on ? "✓ " : "＋ "}${r.label}</button>`; }).join("")}
+      <span style="font-size:11.5px;color:${SUBTLE};">اللي تكتب ما يمر التقرير عليها ولا على اللي أقل منها. لو ولا وحدة منهن موجودة بالوحدة يكتب أصغر دور موجود.</span></div>
+    <details style="margin-top:10px;"><summary style="font-size:12.5px;font-weight:800;color:${ROSE};cursor:pointer;">وش معنى كل خيار؟</summary>
+      <div style="display:flex;flex-direction:column;gap:4px;margin-top:8px;font-size:12px;line-height:1.8;"><div><b>تراجع وترسل:</b> تشوفه وترسله للي بعدها بدون اعتماد.</div><div><b>تعتمد:</b> تعتمد وترسل — ولو هي آخر مرحلة يصير «معتمد».</div>${AUTO_PERM_OPTS.map((o) => `<div><b>${esc(o.label)}:</b> ${esc(o.t)}</div>`).join("")}</div></details>
+    <div style="margin-top:14px;">
+      <div style="font-size:11.5px;color:${SUBTLE};margin-bottom:6px;">الخيارات تحت كل مرحلة تنطبق عليها في كل الوحدات (دور الوحدة لكل الوحدات، والمستوى لكل وحداته).</div>
       <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:10px;"><span style="font-size:13px;font-weight:800;">شوفي مسار وحدة:</span>
         <select class="input" style="width:auto;flex:1 1 220px;" data-action="ap-auto-unit">${units.map((u) => `<option value="${esc(u.id)}" ${u.id === uid0 ? "selected" : ""}>${esc(u.name)}</option>`).join("")}</select></div>
       ${pv ? `<div style="display:flex;gap:10px;align-items:center;padding:10px 12px;border-radius:12px;background:${ROSE};color:#fff;margin-bottom:8px;"><span>✎</span><div><div style="font-size:11px;opacity:.85;">يكتب التقرير</div><div style="font-size:13.5px;font-weight:800;">${esc(pv.writer)}</div></div></div>
@@ -8335,36 +8264,7 @@ function apAutoCardHtml() {
   </div>`;
 }
 function renderApprovalPathsSetup() {
-  const list = approvalPathsList().filter((a) => a.id !== AUTO_PATH_ID);
-  const ed = S.ui.apEdit;
-  const rows = list.map((a) => {
-    const active = a.status === "active";
-    const confirming = S.ui.apConfirmDeleteId === a.id;
-    const roleName = a.authorRoleId ? ((rolesList().find((r) => r.id === a.authorRoleId) || {}).name || "(دور محذوف)") : "";
-    return `<div class="card" style="margin-bottom:8px;">
-      <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:10px;flex-wrap:wrap;">
-        <div style="min-width:0;">
-          <div style="font-size:13.5px;font-weight:800;">${esc(a.name || apOwnerName(a.ownerKind, a.ownerId))} ${badgeHtml(active ? "مفعّل" : "مسودة", active ? GREEN : SUBTLE, active ? GREEN_BG : GRAY_BG)}</div>
-          <div style="font-size:11px;color:${SUBTLE};margin-top:3px;">${esc(apOwnerName(a.ownerKind, a.ownerId))} • ${esc(a.periodType || "كل الفترات")} • ${roleName ? "تقرير " + esc(roleName) : "أي صاحب تقرير"} • ${(a.stages || []).length} مرحلة</div>
-          <div style="margin-top:8px;">${apStageRowsHtml(a)}</div>
-        </div>
-        <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;">${confirming
-          ? `${pillBtn("تأكيد الحذف", { variant: "danger", action: "ap-delete", data: { id: a.id } })}${pillBtn("تراجع", { variant: "ghost", action: "ap-delete-cancel" })}`
-          : `${pillBtn(active ? "إيقاف" : "تفعيل", { variant: active ? "ghost" : "primary", action: "ap-toggle", data: { id: a.id } })}
-             <button class="icon-btn" style="width:30px;height:30px;border:1px solid ${BORDER}" data-action="ap-edit" data-id="${esc(a.id)}" title="تعديل">${iconPencil(13, INK)}</button>
-             <button class="icon-btn" style="width:30px;height:30px;background:${DANGER_BG}" data-action="ap-delete-ask" data-id="${esc(a.id)}" title="حذف">${iconTrash(13, DANGER)}</button>`}</div>
-      </div>
-      ${S.ui.apMsg && S.ui.apMsg.id === a.id ? `<div style="color:${DANGER};font-size:11.5px;font-weight:700;margin-top:8px;">${esc(S.ui.apMsg.msg)}</div>` : ""}
-    </div>`;
-  }).join("");
-  return `
-    <div class="card" style="background:${BLUE_BG};border:1px solid #cfe0f5;margin-bottom:14px;">
-      <div style="font-size:12px;color:#3a5a85;">لكل جهة ولكل نوع تقرير (من قائمة الفترات) تضيفين المراحل بالترتيب وتحددين من يقوم بكل مرحلة. المسار الجديد يُحفظ مسودة، ولا يُطبَّق على التقارير إلا بعد ضغط «تفعيل». المسارات الحالية في «الهيكل والأشخاص» تبقى كما هي.</div>
-    </div>
-    ${apAutoCardHtml()}
-    ${ed ? apEditorHtml() : `<div style="margin-bottom:12px;">${pillBtn("مسار جديد", { icon: iconPlus(15, "#fff"), action: "ap-new" })}</div>`}
-    ${rows || (ed ? "" : `<div class="card" style="text-align:center;color:${SUBTLE};padding:30px 20px;border-style:dashed;">لا توجد مسارات بعد.</div>`)}
-  `;
+  return apAutoCardHtml();
 }
 function renderRolesManage() {
   const ui = S.ui;
@@ -10413,20 +10313,10 @@ function apReviewAfterPageHtml(item) {
   };
 }
 function apReviewPanelHtml(item) {
-  const { unit, report, stage, path } = item;
-  const key = unit.id + ":" + report.id;
-  const idx = path.findIndex((x) => x.key === stage.key);
-  const next = path[idx + 1];
-  const advLabel = stage.canApprove ? (next ? "اعتماد وإرسال إلى " + next.name : "اعتماد نهائي") : (next ? "إرسال إلى " + next.name : "إنهاء المرحلة");
   return `<div class="card no-print" style="margin-top:16px;border:1.5px solid ${ROSE};">
-    <div style="font-size:13.5px;font-weight:800;margin-bottom:4px;">قرارك على التقرير — مرحلتك: ${esc(stage.name)}</div>
+    <div style="font-size:13.5px;font-weight:800;margin-bottom:4px;">قرارك على التقرير — مرحلتك: ${esc(item.stage.name)}</div>
     <div class="hint" style="margin-bottom:10px;">ملاحظاتك على الصفحات مكتوبة تحت كل صفحة أعلاه، وتُرسل كلها مع قرارك.</div>
-    <textarea id="cp-notes-${esc(key)}" class="input" style="width:100%;min-height:56px;margin-bottom:10px;" placeholder="ملاحظات عامة (${stage.noteRequired ? "إلزامية عند الاعتماد" : "اختياري"}${stage.canReturn ? "، وتلزم عند الإعادة إن لم تكتبي ملاحظة على قسم" : ""})...">${esc(apDraftGet(key, "__gen"))}</textarea>
-    ${stage.canReturn ? `<select class="input" id="cp-rtype-${esc(key)}" style="width:100%;margin-bottom:10px;"><option value="returned">عند الإعادة: بحاجة إلى تعديل</option><option value="needs_completion">عند الإعادة: بحاجة إلى استكمال</option></select>` : ""}
-    <div style="display:flex;gap:8px;flex-wrap:wrap;">
-      ${pillBtn(advLabel, { icon: iconCheckCircle(14, "#fff"), action: "ap-advance", data: { unitId: unit.id, reportId: report.id } })}
-      ${stage.canReturn ? pillBtn("إعادة للتعديل", { variant: "ghost", icon: iconX(14, INK), action: "ap-return", data: { unitId: unit.id, reportId: report.id } }) : ""}
-    </div>
+    ${apDecisionHtml(item)}
   </div>`;
 }
 
@@ -10891,7 +10781,7 @@ function attachClickListener() {
         // بدل أن تبقى الصفحة فارغة/معطّلة.
         ensureUnitContextForNav(navView);
         if (navView === "custom-path-inbox" && dbConnected()) {
-          Promise.all((S.units || []).filter((u) => approvalPathsList().some((p) => p.status === "active" && apPathOwnerScore(p, u) >= 0)).map((u) => refreshReportsFromDb(u.id))).then(() => { if (S.currentUser && S.view === "custom-path-inbox") render(); });
+          Promise.all((S.units || []).filter((u) => u.role !== "admin" && u.role !== "executive").map((u) => refreshReportsFromDb(u.id))).then(() => { if (S.currentUser && S.view === "custom-path-inbox") render(); });
         }
         if (navView === "report-tabs-manage") {
           S.reportTabs = dataStore.getReportTabs(); S.ui.rtEdit = null; S.ui.rtMsg = ""; S.ui.rtDeleteId = null;
@@ -10899,7 +10789,7 @@ function attachClickListener() {
         }
         if (navView === "org-levels" || navView === "org-chart") navView = "units-manage";
         if (navView === "units-manage") { S.roles = dataStore.getRoles(); S.approvalPaths = dataStore.getApprovalPaths(); if (dbConnected()) Promise.all([refreshOrgLevelsFromDb(), refreshRolesPersonsFromDb(), refreshApprovalPathsFromDb(), refreshPermLogFromDb()]).then(() => { if (S.view === "org-levels" || S.view === "units-manage") render(); }).catch(() => {}); }
-        if (navView === "units-manage") { S.persons = dataStore.getPersons(); S.ui.apEdit = null; S.ui.rolePermEditId = null; }
+        if (navView === "units-manage") { S.persons = dataStore.getPersons(); S.ui.rolePermEditId = null; }
         render();
         if (dbConnected()) {
           if (navView === "admin-reports" || navView === "units-manage" || navView === "dashboard") {
@@ -11134,42 +11024,6 @@ function attachClickListener() {
         dataStore.savePersons(S.persons);
         S.ui.personEditId = null; render(); break;
       }
-      case "ap-new": S.ui.apEdit = { id: null, error: "", draft: { name: "", ownerKind: "", ownerId: "", periodType: "", authorRoleId: "", stages: [] } }; S.ui.apMsg = null; render(); break;
-      case "ap-edit": {
-        const a = approvalPathsList().find((x) => x.id === ds.id); if (!a) break;
-        S.ui.apEdit = { id: a.id, error: "", draft: JSON.parse(JSON.stringify(a)) }; S.ui.apMsg = null; render(); break;
-      }
-      case "ap-cancel": S.ui.apEdit = null; render(); break;
-      case "ap-stage-add": apCaptureForm(); S.ui.apEdit.draft.stages.push({ id: uid("stg"), name: "", approver: "", canApprove: true, canReturn: true, canEdit: false, noteRequired: false }); render(); break;
-      case "ap-stage-remove": apCaptureForm(); S.ui.apEdit.draft.stages.splice(Number(ds.idx), 1); render(); break;
-      case "ap-stage-move": {
-        apCaptureForm();
-        const st = S.ui.apEdit.draft.stages, i = Number(ds.idx), to = ds.dir === "up" ? i - 1 : i + 1;
-        if (to >= 0 && to < st.length) { [st[i], st[to]] = [st[to], st[i]]; }
-        render(); break;
-      }
-      case "ap-add-period": {
-        apCaptureForm();
-        const el = document.getElementById("ap-new-period"); const nv = el ? String(el.value || "").trim() : "";
-        if (!nv || PERIOD_TYPES.includes(nv)) { render(); break; }
-        S.siteSettings = S.siteSettings || dataStore.getSiteSettings();
-        const list = [...PERIOD_TYPES, nv];
-        S.siteSettings = { ...S.siteSettings, theme: { ...(S.siteSettings.theme || {}), periodTypes: list } };
-        applySiteColors(S.siteSettings);
-        dataStore.saveSiteSettings(S.siteSettings);
-        if (S.ui.apEdit) S.ui.apEdit.draft.periodType = nv;
-        render(); break;
-      }
-      case "ap-suggest-tree": {
-        apCaptureForm();
-        const ed = S.ui.apEdit; if (!ed) break; const d = ed.draft;
-        if (!d.ownerKind || !d.ownerId) { ed.suggestOk = false; ed.suggestMsg = "اختاري الجهة صاحبة التقرير أولًا."; render(); break; }
-        const res = apSuggestStagesFromTree(d.ownerKind, d.ownerId);
-        if (res.error) { ed.suggestOk = false; ed.suggestMsg = res.error; render(); break; }
-        d.stages = res.stages; ed.suggestOk = true;
-        ed.suggestMsg = `تم اقتراح ${res.stages.length} مرحلة من الهيكل المرن — راجعيها وعدّلي الصلاحيات ثم احفظي.`;
-        render(); break;
-      }
       case "dash-period": S.ui.dashPeriod = ds.v; render(); break;
       case "dash-year": S.ui.dashYear = ds.v; render(); break;
       case "dash-pie-scope": S.ui.dashPieScope = ds.v; render(); break;
@@ -11186,72 +11040,50 @@ function attachClickListener() {
         render(); break;
       }
       case "us-skip-toggle": {
-        const unit = (S.units || []).find((u) => u.id === S.currentUnitId);
-        const path = apPathById(ds.path); const st = path && (path.stages || []).find((x) => x.id === ds.sid);
-        if (!unit || !st || !st.allowSkip) break;
-        const k = path.id + ":" + st.id;
-        const targets = ds.all ? usSkipUnitsFor(path, st) : (userHoldsApStage({ ...st, key: AP_PREFIX + k }, unit) ? [unit] : []);
-        if (!targets.length) break;
-        const turnOn = ds.all ? ds.on === "1" : !apUnitSkipList(unit.id).includes(k);
+        const unit = (S.units || []).find((u) => u.id === S.currentUnitId); if (!unit || !ds.key) break;
+        const lvl = ds.all ? olFind(ds.all) : null;
+        const targets = lvl ? (S.units || []).filter((u) => u.status === "active" && olScopeUnitIds(lvl.id).has(u.id)) : [unit];
+        const turnOn = ds.on === "1";
         (async () => {
           for (const u of targets) {
-            const cur = apUnitSkipList(u.id).filter((x) => x !== k);
-            if (turnOn) cur.push(k);
-            await saveEntityPrefs("unit:" + u.id, { skip: cur });
-            if (turnOn) apSkipReportsAtStage(path, st.id, u.id, "تخطّتها صاحبة المرحلة");
+            const cur = apUnitSkipList(u.id).filter((x) => x !== ds.key);
+            await saveEntityPrefs("unit:" + u.id, { skip: turnOn ? [...cur, ds.key] : cur });
+            if (turnOn) apRepairStuck(u.id);
           }
-          addPermLog("unit-settings", targets.length > 1 ? "multi" : unit.id, targets.length > 1 ? targets.length + " وحدات" : unit.name, (turnOn ? "تخطّي مرحلة «" : "إرجاع مرحلة «") + (st.name || "مرحلة") + "»");
-          S.ui.usMsg = (turnOn ? "تم تخطّي «" : "رجعت مرحلة «") + (st.name || "مرحلة") + "» " + (targets.length > 1 ? "لـ " + targets.length + " وحدات." : "لهذه الوحدة.");
+          addPermLog("unit-settings", targets.length > 1 ? "multi" : unit.id, targets.length > 1 ? targets.length + " وحدات" : unit.name, turnOn ? "تخطّي مرحلة في المسار" : "إرجاع مرحلة في المسار");
+          S.ui.usMsg = (turnOn ? "تم التخطّي " : "رجعت المرحلة ") + (targets.length > 1 ? "لـ " + targets.length + " وحدات." : "لهذه الوحدة.");
           render();
         })();
         break;
-      }
-      case "ap-stage-disable-ask": S.ui.apStageDisableAsk = { pathId: ds.id, stageId: ds.sid }; render(); break;
-      case "ap-stage-disable-cancel": S.ui.apStageDisableAsk = null; render(); break;
-      case "ap-stage-disable":
-      case "ap-stage-enable": {
-        const off = action === "ap-stage-disable";
-        const list = approvalPathsList(); const a = list.find((x) => x.id === ds.id); if (!a) break;
-        const st = (a.stages || []).find((x) => x.id === ds.sid); if (!st) break;
-        const updated = { ...a, stages: a.stages.map((x) => x.id === ds.sid ? { ...x, disabled: off } : x) };
-        S.approvalPaths = list.map((x) => x.id === a.id ? updated : x);
-        dataStore.saveApprovalPaths(S.approvalPaths);
-        if (off) apSkipReportsAtStage(updated, ds.sid);
-        addPermLog("approval-path", a.id, a.name || apOwnerName(a.ownerKind, a.ownerId), (off ? "تعطيل مؤقت لمرحلة «" : "تفعيل مرحلة «") + (st.name || "مرحلة") + "»");
-        S.ui.apStageDisableAsk = null;
-        render(); break;
-      }
-      case "ap-save": {
-        apCaptureForm();
-        const ed = S.ui.apEdit; const d = ed.draft;
-        if (!d.ownerKind || !d.ownerId) { ed.error = "اختاري الجهة"; render(); break; }
-        if (!d.stages.length) { ed.error = "أضيفي مرحلة واحدة على الأقل"; render(); break; }
-        if (d.stages.some((st) => !String(st.name || "").trim() || !st.approver)) { ed.error = "كل مرحلة تحتاج اسمًا وجهة تقوم بها"; render(); break; }
-        const list = approvalPathsList();
-        const clean = { ...d, name: String(d.name || "").trim(), stages: d.stages.map((st) => ({ ...st, name: String(st.name).trim() })) };
-        if (ed.id) {
-          const old = list.find((x) => x.id === ed.id);
-          const keepActive = old && old.status === "active";
-          S.approvalPaths = list.map((x) => x.id === ed.id ? { ...x, ...clean, status: keepActive ? "draft" : x.status, activatedAt: keepActive ? null : x.activatedAt } : x);
-          addPermLog("approval-path", ed.id, clean.name || apOwnerName(clean.ownerKind, clean.ownerId), keepActive ? "تعديل مسار مفعّل (عاد مسودة ويحتاج تفعيلًا جديدًا)" : "تعديل مسار اعتماد");
-        } else {
-          const id = uid("apath");
-          S.approvalPaths = [...list, { ...clean, id, status: "draft", createdAt: Date.now(), activatedAt: null }];
-          addPermLog("approval-path", id, clean.name || apOwnerName(clean.ownerKind, clean.ownerId), `إنشاء مسار اعتماد (مسودة) — ${clean.stages.length} مرحلة`);
-        }
-        dataStore.saveApprovalPaths(S.approvalPaths);
-        S.ui.apEdit = null; render(); break;
       }
       case "ap-auto-roles-save":
       case "ap-auto-toggle": {
         const g = (k) => { const el = document.getElementById("ap-auto-" + k); return el ? el.value : (autoPathCfg()[k] || ""); };
         apAutoSave({ idr: g("idr"), ast: g("ast"), head: g("head") });
+        apRepairStuck();
         if (action === "ap-auto-toggle") {
           const was = (autoPathObj() || {}).status === "active";
           S.approvalPaths = approvalPathsList().map((x) => x.id === AUTO_PATH_ID ? { ...x, status: was ? "draft" : "active", activatedAt: was ? null : Date.now() } : x);
           dataStore.saveApprovalPaths(S.approvalPaths);
           addPermLog("approval-path", AUTO_PATH_ID, "المسار التلقائي من الهيكل", was ? "إيقاف المسار" : "تفعيل المسار");
         }
+        render(); break;
+      }
+      case "ap-auto-writer": {
+        const w = { idr: true, ast: true, head: true, ...(autoPathCfg().writers || {}) };
+        w[ds.k] = w[ds.k] === false;
+        saveSiteTheme({ autoPath: { ...autoPathCfg(), writers: w } });
+        render(); break;
+      }
+      case "ap-auto-perm": {
+        const cfg = autoPathCfg(), perms = { ...(cfg.perms || {}) };
+        const pm = apAutoPerm(ds.pk);
+        if (ds.opt === "mode") { pm.mode = ds.val; if (ds.val !== "approve") pm.final = false; }
+        else pm[ds.opt] = !pm[ds.opt];
+        perms[ds.pk] = pm;
+        saveSiteTheme({ autoPath: { ...cfg, perms } });
+        addPermLog("approval-path", AUTO_PATH_ID, "المسار التلقائي من الهيكل", "تغيير خيارات مرحلة");
+        if (ds.opt === "info") apRepairStuck();
         render(); break;
       }
       case "ap-auto-skip": {
@@ -11261,7 +11093,7 @@ function attachClickListener() {
           const key = AUTO_PATH_ID + ":" + (ds.what === "lvl" ? "lvl:" + ds.id : ds.id);
           const cur = apUnitSkipList(unitId).filter((k) => k !== key);
           saveEntityPrefs("unit:" + unitId, { skip: on ? [...cur, key] : cur }).then(() => {
-            if (on && ds.what === "stage") apSkipReportsAtStage(autoPathObj(), ds.id, unitId, "متخطّاة لهذه الوحدة");
+            if (on) apRepairStuck(unitId);
             render();
           });
           break;
@@ -11272,30 +11104,9 @@ function attachClickListener() {
         } else {
           S.approvalPaths = approvalPathsList().map((x) => x.id === AUTO_PATH_ID ? { ...x, stages: (x.stages || []).map((st) => st.id === ds.id ? { ...st, disabled: on } : st) } : x);
           dataStore.saveApprovalPaths(S.approvalPaths);
-          if (on) apSkipReportsAtStage(autoPathObj(), ds.id, null, "متخطّاة لكل الوحدات");
         }
+        if (on) apRepairStuck();
         render(); break;
-      }
-      case "ap-toggle": {
-        const list = approvalPathsList(); const a = list.find((x) => x.id === ds.id); if (!a) break;
-        if (a.status !== "active") {
-          const clash = list.find((x) => x.id !== a.id && x.status === "active" && x.ownerKind === a.ownerKind && x.ownerId === a.ownerId && (x.periodType || "") === (a.periodType || "") && (x.authorRoleId || "") === (a.authorRoleId || "") && String(x.name || "").trim() === String(a.name || "").trim());
-          if (clash) { S.ui.apMsg = { id: a.id, msg: "يوجد مسار مفعّل بنفس الاسم لنفس الجهة والفترة — غيّري الاسم حتى يظهر مختلفًا في قائمة الإرسال" }; render(); break; }
-        }
-        S.ui.apMsg = null;
-        S.approvalPaths = list.map((x) => x.id === a.id ? { ...x, status: x.status === "active" ? "draft" : "active", activatedAt: x.status === "active" ? null : Date.now() } : x);
-        dataStore.saveApprovalPaths(S.approvalPaths);
-        addPermLog("approval-path", a.id, a.name || apOwnerName(a.ownerKind, a.ownerId), a.status === "active" ? "إيقاف المسار" : "تفعيل المسار");
-        render(); break;
-      }
-      case "ap-delete-ask": S.ui.apConfirmDeleteId = ds.id; render(); break;
-      case "ap-delete-cancel": S.ui.apConfirmDeleteId = null; render(); break;
-      case "ap-delete": {
-        const a = approvalPathsList().find((x) => x.id === ds.id);
-        S.approvalPaths = approvalPathsList().filter((x) => x.id !== ds.id);
-        dataStore.saveApprovalPaths(S.approvalPaths);
-        if (a) addPermLog("approval-path", a.id, a.name || apOwnerName(a.ownerKind, a.ownerId), "حذف مسار اعتماد");
-        S.ui.apConfirmDeleteId = null; render(); break;
       }
       case "choose-entity-account": if (S.pendingEntityLogin) enterEntityAsPerson(null); break;
       case "choose-base-role": {
@@ -11505,14 +11316,14 @@ function attachClickListener() {
         render();
         break;
       }
-      case "ap-send": { S.ui.showApSendPicker = true; S.ui.apSendPathId = ""; render(); break; }
+      case "ap-send": { S.ui.showApSendPicker = true; render(); break; }
       case "ap-send-cancel": { S.ui.showApSendPicker = false; render(); break; }
       case "ap-send-confirm": {
         const entry = getCurrentReportEntry();
         if (!entry) break;
-        const sel = document.getElementById("ap-send-path");
-        const pathId = sel ? sel.value : "";
-        if (!pathId) { alert("اختاري الجهة اللي يُرسل لها التقرير."); break; }
+        const p0 = matchingApprovalPaths((S.units || []).find((u) => u.id === S.currentUnitId), entry)[0];
+        const pathId = p0 ? p0.id : "";
+        if (!pathId) break;
         const notes = ((document.getElementById("ap-send-notes") || {}).value || "").trim();
         if (!apSendReport(S.currentUnitId, entry, pathId, notes)) break;
         S.ui.showApSendPicker = false;
@@ -11526,13 +11337,20 @@ function attachClickListener() {
         const notes = ((document.getElementById("cp-notes-" + key) || {}).value || "").trim();
         const secNotes = {};
         SECTIONS.forEach((sc) => { const el = document.getElementById("cp-sec-" + key + "-" + sc.id); if (el && el.value.trim()) secNotes[sc.id] = el.value.trim(); });
-        const typeEl = document.getElementById("cp-rtype-" + key);
-        const err = apAdvanceOrReturn(ds.unitId, ds.reportId, isReturn, notes, { sectionNotes: secNotes, type: typeEl ? typeEl.value : "returned" });
+        const toEl = document.getElementById("cp-to-" + key);
+        const err = apAdvanceOrReturn(ds.unitId, ds.reportId, isReturn, notes, { sectionNotes: secNotes, type: ds.rtype || "returned", toKey: toEl ? toEl.value : "" });
         if (err) { alert(err); break; }
         if (S.ui.apDraft) delete S.ui.apDraft[key];
         if (S.view === "full-report") S.view = "custom-path-inbox";
         render();
         break;
+      }
+      case "ap-curate": {
+        const entry = getReportEntry(ds.unit, ds.report); if (!entry) break;
+        const it = apReviewItemFor(ds.unit, ds.report); if (!it || !it.stage.canCurate) break;
+        const cur = ((entry.shared || {}).curatedKeys) || [];
+        saveReportEntry(ds.unit, { ...entry, shared: { ...(entry.shared || {}), curatedKeys: cur.includes(ds.key) ? cur.filter((k) => k !== ds.key) : [...cur, ds.key] } });
+        render(); break;
       }
       case "ap-open-edit": {
         const entry = getReportEntry(ds.unitId, ds.reportId);
@@ -11647,12 +11465,9 @@ function attachClickListener() {
         if (kind === "department") { S.departments = S.departments.map((d) => d.id === toId ? { ...d, ...patch } : d); dataStore.saveDepartments(S.departments); }
         else if (kind === "office") { S.offices = S.offices.map((o) => o.id === toId ? { ...o, ...patch } : o); dataStore.saveOffices(S.offices); }
         else { S.units = S.units.map((u) => u.id === toId ? { ...u, ...patch } : u); dataStore.saveUnits(S.units); }
-        const clones = approvalPathsList().filter((a) => a.ownerKind === type && a.ownerId === c.from).map((a) => ({ ...JSON.parse(JSON.stringify(a)), id: uid("apath"), ownerId: toId, status: "draft", createdAt: Date.now(), activatedAt: null, stages: (a.stages || []).map((st) => ({ ...st, id: uid("stg") })) }));
-        if (clones.length) { S.approvalPaths = [...approvalPathsList(), ...clones]; dataStore.saveApprovalPaths(S.approvalPaths); }
-        addPermLog("copy-config", toId, apOwnerName(type, toId), `نسخ إعداد من «${from.name}»: الدور الأساسي + ${clones.length} مسار (مسودات)`);
+        addPermLog("copy-config", toId, apOwnerName(type, toId), `نسخ إعداد من «${from.name}»: الدور الأساسي`);
         S.ui.structCopy = null; render(); break;
       }
-      case "struct-ap-new": S.ui.apEdit = { id: null, error: "", draft: { name: "", ownerKind: ds.kind, ownerId: ds.id, periodType: "", authorRoleId: "", stages: [] } }; S.ui.apMsg = null; render(); break;
       case "tree-edit-start": S.ui.treeEditFor = { type: ds.type, id: ds.id }; render(); break;
       case "tree-edit-cancel": S.ui.treeEditFor = null; render(); break;
       case "tree-edit-save": {
