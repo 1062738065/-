@@ -1266,7 +1266,14 @@ function apPathById(id) { return approvalPathsList().find((p) => p.id === id) ||
 // وترجع تعمل بمجرد تفعيلها من جديد (بدون تعديل المسار أو إرجاعه مسودة).
 // مراحل المسار الفعّالة. مع unit: تُتخطّى مرحلة «دور من نفس وحدة التقرير» إن لم يكن في الوحدة أحد بهذا الدور
 // authorId (اختياري): كاتبة التقرير — المراحل اللي هي صاحبتها تُتخطّى (ما تراجع تقريرها بنفسها)
-function apStageList(path, unit, authorId) { return ((path && path.stages) || []).filter((st) => !st.disabled && (!unit || apStageApplies(st, unit, { pathId: path.id, authorId }))).map((st) => ({ ...st, key: AP_PREFIX + path.id + ":" + st.id })); }
+function apStageList(path, unit, authorId) { return ((path && path.stages) || []).filter((st) => !st.disabled && (!unit || apStageApplies(st, unit, { pathId: path.id, authorId }))).map((st) => apNamedStage(st, path, unit)); }
+// كل المراحل الفعّالة (بدون فلترة على الوحدة) بأسمائها لهذه الوحدة — للبحث عن المرحلة الحالية لتقرير
+function apStagesNamed(path, unit) { return ((path && path.stages) || []).filter((st) => !st.disabled).map((st) => apNamedStage(st, path, unit)); }
+function apNamedStage(st, path, unit) {
+  const out = { ...st, key: AP_PREFIX + path.id + ":" + st.id };
+  if (st.treeName && unit) { const l = apStageTreeLevel(st, unit); if (l) out.name = l.name; }
+  return out;
+}
 function apPersonInUnit(p, unit) {
   if (!p || !unit) return false;
   const kind = p.ownerKind === "department" ? "dept" : (p.ownerKind || "unit");
@@ -1281,7 +1288,9 @@ function apStageApplies(st, unit, ctx) {
   if (!st || !unit) return true;
   const a = String(st.approver || "");
   if (a.indexOf(AP_UNIT_DEPT) === 0 && !unit.departmentId) return false;
-  if (a.indexOf(AP_TREE_UP) === 0 && !apTreeUpLevel(unit, a)) return false;
+  if (a.indexOf(AP_TREE_UP) === 0 && !apStageTreeLevel(st, unit)) return false;
+  // المسار التلقائي: مرحلة داخل الوحدة أقل من أو بنفس رتبة كاتبة التقرير تُتخطّى (المساعدة لما تكتب ما تمر على المساعدة)
+  if (st.unitRank && ctx && ctx.authorId && apAutoAuthorRank(ctx.authorId) >= st.unitRank) return false;
   if (st.sameUnit && a.indexOf("role:") === 0) {
     const rid = a.slice(5);
     if (!personsList().some((p) => p.status !== "disabled" && p.roleId === rid && apPersonInUnit(p, unit))) return false;
@@ -1298,14 +1307,59 @@ const AP_TREE_UP = "treeup:";
 const AP_TREE_UP_MAX = 4;
 function apTreeUpLabel(n) { return ["", "المستوى الأعلى من الوحدة في الهيكل", "المستوى الثاني فوق الوحدة", "المستوى الثالث فوق الوحدة", "المستوى الرابع فوق الوحدة"][n] || ("المستوى " + n + " فوق الوحدة"); }
 function olLevelHasAccount(l) { return !!l && ((l.loginId && l.status !== "disabled") || ((l.linkKind === "dept" || l.linkKind === "office") && l.linkId)); }
-function apTreeUpLevel(unit, approver) {
+function apTreeUpLevel(unit, approver, skip) {
   if (!unit) return null;
   const n = Number(String(approver).slice(AP_TREE_UP.length)) || 1;
   let l = olActive().find((x) => x.linkKind === "unit" && x.linkId === unit.id);
   if (!l) return null;
   let found = 0, guard = 0;
-  while ((l = olFind(l.parentId)) && guard++ < 50) { if (olLevelHasAccount(l) && ++found === n) return l; }
+  while ((l = olFind(l.parentId)) && guard++ < 50) { if (olLevelHasAccount(l) && !(skip && skip.has(l.id)) && ++found === n) return l; }
   return null;
+}
+// مستوى الهيكل لمرحلة «فوق الوحدة» — مراحل المسار التلقائي تتخطّى المستويات المتخطّاة (للكل أو لهذه الوحدة)
+function apStageTreeLevel(st, unit) { return apTreeUpLevel(unit, st.approver, st.treeName ? apAutoSkipLevels(unit) : null); }
+
+/* ===== المسار التلقائي من الهيكل =====
+   مسار واحد (id ثابت) لكل الوحدات: أدوار داخل الوحدة (مساعدة ← رئيسة) ثم كل مستوى له حساب فوق الوحدة
+   في الهيكل باسمه. الإعدادات في site_settings.theme.autoPath = { idr, ast, head, skipLevels: [] }.
+   تخطّي لوحدة واحدة: entityPrefs("unit:<id>").skip فيها "auto-tree:<stageId>" أو "auto-tree:lvl:<levelId>". */
+const AUTO_PATH_ID = "auto-tree";
+const AUTO_TREE_MAX = 6;
+const AUTO_RANKS = [{ k: "idr", label: "إدارية", rank: 0 }, { k: "ast", label: "مساعدة", rank: 1 }, { k: "head", label: "رئيسة", rank: 2 }];
+function autoPathCfg() { const th = ((S.siteSettings || {}).theme) || {}; return th.autoPath || {}; }
+function autoPathObj() { return apPathById(AUTO_PATH_ID); }
+function apAutoAuthorRank(personId) {
+  const p = personsList().find((x) => x.id === personId); if (!p || !p.roleId) return -1;
+  const c = autoPathCfg(); const r = AUTO_RANKS.find((x) => c[x.k] && c[x.k] === p.roleId);
+  return r ? r.rank : -1;
+}
+function apAutoSkipLevels(unit) {
+  const out = new Set(autoPathCfg().skipLevels || []);
+  if (unit) apUnitSkipList(unit.id).forEach((k) => { const pre = AUTO_PATH_ID + ":lvl:"; if (k.indexOf(pre) === 0) out.add(k.slice(pre.length)); });
+  return out;
+}
+function apAutoBuildStages(cfg, old) {
+  const keep = (id) => { const o = (old || []).find((x) => x.id === id); return o && o.disabled ? { disabled: true } : {}; };
+  const base = { canApprove: true, canReturn: true, canEdit: false, allowSkip: true };
+  const st = [];
+  [["ast", "مساعدة الوحدة", 1], ["head", "رئيسة الوحدة", 2]].forEach(([k, name, rank]) => { if (cfg[k]) st.push({ id: k, name, approver: "role:" + cfg[k], sameUnit: true, unitRank: rank, ...base, ...keep(k) }); });
+  for (let n = 1; n <= AUTO_TREE_MAX; n++) st.push({ id: "t" + n, name: apTreeUpLabel(n), approver: AP_TREE_UP + n, treeName: true, ...base, ...keep("t" + n) });
+  return st;
+}
+function apAutoGuessRoles() {
+  const rs = rolesList().filter((r) => r.status !== "disabled");
+  const f = (re) => (rs.find((r) => re.test(r.name || "")) || {}).id || "";
+  return { idr: f(/إداري/), ast: f(/مساعد/), head: f(/رئيس/) };
+}
+function apAutoSave(patch) {
+  const cfg = { ...autoPathCfg(), ...patch };
+  saveSiteTheme({ autoPath: cfg });
+  const list = approvalPathsList().slice();
+  const i = list.findIndex((p) => p.id === AUTO_PATH_ID);
+  const cur = i >= 0 ? list[i] : { id: AUTO_PATH_ID, name: "المسار التلقائي من الهيكل", ownerKind: "all", ownerId: "", periodType: "", authorRoleId: "", status: "draft", createdAt: Date.now() };
+  const next = { ...cur, stages: apAutoBuildStages(cfg, cur.stages) };
+  if (i >= 0) list[i] = next; else list.push(next);
+  S.approvalPaths = list; dataStore.saveApprovalPaths(list);
 }
 // هل الجلسة الحالية هي حساب هذا المستوى؟ (دخول المستوى نفسه، أو حساب القسم/المكتب المربوط به)
 function sessionIsLevel(l) {
@@ -1456,7 +1510,7 @@ function userHoldsApStage(stage, unit) {
   }
   if (k === "dept") return !!S.isDepartmentUser && !S.currentPersonId && S.currentDepartmentId === id;
   if (k === "unitdept") return !!S.isDepartmentUser && !S.currentPersonId && (!unit || unit.departmentId === S.currentDepartmentId);
-  if (k === "treeup") return unit ? sessionIsLevel(apTreeUpLevel(unit, s)) : olActive().some((l) => olLevelHasAccount(l) && sessionIsLevel(l));
+  if (k === "treeup") return unit ? sessionIsLevel(apStageTreeLevel(stage, unit)) : olActive().some((l) => olLevelHasAccount(l) && sessionIsLevel(l));
   if (k === "office") return !!S.isOfficeUser && !S.currentPersonId && S.currentOfficeId === id;
   return false;
 }
@@ -1470,7 +1524,7 @@ function apPendingForMe() {
       const ref = apRefOf(r.customStageId); if (!ref) return;
       const p = apPathById(ref.pathId); if (!p) return;
       const stages = apStageList(p, u, r.internalSentBy);
-      const stage = apStageList(p).find((s) => s.key === r.customStageId);
+      const stage = apStagesNamed(p, u).find((s) => s.key === r.customStageId);
       if (stage && userHoldsApStage(stage, u)) out.push({ unit: u, report: r, stage, path: stages, ap: true });
     });
   });
@@ -1522,7 +1576,7 @@ function apAdvanceOrReturn(unitId, reportId, isReturn, notes, opts) {
   const ref = apRefOf(entry.customStageId); if (!ref) return "غير متاح";
   const path = apPathById(ref.pathId); if (!path) return "المسار محذوف";
   const unit = (S.units || []).find((u) => u.id === unitId);
-  const all = apStageList(path);
+  const all = apStagesNamed(path, unit);
   const cur = all.find((s) => s.key === entry.customStageId);
   if (!cur || !userHoldsApStage(cur, unit)) return "ليست مرحلتك";
   // المراحل التالية المطبّقة على هذه الوحدة (تُتخطّى مرحلة دورٍ لا يوجد في الوحدة)
@@ -1600,7 +1654,7 @@ function apInboxCardHtml(item) {
 }
 function apOrCustomStageName(unit, report) {
   const ref = apRefOf(report && report.customStageId);
-  if (ref) { const p = apPathById(ref.pathId); const st = p && (p.stages || []).find((x) => x.id === ref.stageId); return st ? st.name : "مرحلة"; }
+  if (ref) { const p = apPathById(ref.pathId); const st = p && apStagesNamed(p, unit).find((x) => x.id === ref.stageId); return st ? st.name : "مرحلة"; }
   return "مرحلة";
 }
 function renderCustomPathInbox() {
@@ -3364,8 +3418,8 @@ function opsBlocksHtml(kind, units) {
   if (!dashHidden(kind, "opsStuck")) {
     const rows = flat.filter((x) => x.report.status === "custom_pending").map((x) => {
       const log = x.report.customLog || []; const last = log[log.length - 1];
-      const ref = apRefOf(x.report.customStageId); const p = ref && apPathById(ref.pathId); const st = p && (p.stages || []).find((s) => s.id === ref.stageId);
-      const lvl = st && String(st.approver || "").indexOf(AP_TREE_UP) === 0 ? apTreeUpLevel(x.unit, st.approver) : null;
+      const ref = apRefOf(x.report.customStageId); const p = ref && apPathById(ref.pathId); const st = p && apStagesNamed(p, x.unit).find((s) => s.id === ref.stageId);
+      const lvl = st && String(st.approver || "").indexOf(AP_TREE_UP) === 0 ? apStageTreeLevel(st, x.unit) : null;
       return { ...x, days: opsDays(last ? last.at : x.report.updatedAt), stage: st ? st.name : "—", who: lvl ? lvl.name : st ? apApproverLabel(st.approver) : "—" };
     }).filter((x) => x.days >= OPS_STUCK_DAYS).sort((a, b) => b.days - a.days);
     stuckH = dashCard("تقارير واقفة في المسار", `أكثر من ${OPS_STUCK_DAYS} أيام في نفس المرحلة`, rows.length ? `<div class="table-wrap"><table class="prs-table"><thead><tr style="background:${GRAY_BG}"><th>الوحدة</th><th>التقرير</th><th>المرحلة</th><th>صاحب المرحلة</th><th style="text-align:center">منذ</th></tr></thead><tbody>${rows.map((x) => `<tr><td style="font-weight:700">${esc(x.unit.name)}</td><td>${esc(x.report.label || "")}</td><td>${esc(x.stage)}</td><td style="color:${SUBTLE}">${esc(x.who)}</td><td style="text-align:center;font-weight:800;color:${x.days >= 10 ? DANGER : "#c9863a"}">${x.days} يوم</td></tr>`).join("")}</tbody></table></div>` : emptyHint("لا توجد تقارير واقفة."));
@@ -4066,7 +4120,6 @@ function renderBrowseStructure() {
 const ORG_LEVELS_KEY = "prs:org-levels";
 const DEFAULT_LEVEL_TYPES = ["مساعدة", "قسم", "مكتب", "مديرة", "مجلس", "وحدة", "مركز"];
 const LEVEL_TYPE_PALETTE = [["#6b2337", "#f6e6eb"], ["#7a4d16", "#fbf0e1"], ["#24527a", "#e6eff7"], ["#5b3a73", "#efe7f5"], ["#2E6B52", "#e7f5ee"], ["#4d5a66", "#eaeef2"], ["#8a3350", "#fbeaf0"], ["#6b5a12", "#f7f1d9"]];
-const OL_LINK_KINDS = [{ id: "", label: "بدون حساب — مستوى للتنظيم فقط" }, { id: "new", label: "+ إنشاء حساب جديد" }, { id: "office", label: "ربط بمكتب موجود" }, { id: "dept", label: "ربط بقسم موجود" }, { id: "unit", label: "ربط بوحدة / مركز / إدارة عليا موجودة" }];
 const OL_NEW_KINDS = [{ id: "unit", label: "وحدة" }, { id: "center", label: "مركز" }, { id: "dept", label: "قسم" }, { id: "office", label: "مكتب" }, { id: "exec", label: "إدارة عليا" }];
 
 function orgLevelToRow(l) {
@@ -4240,40 +4293,57 @@ function olLinkEntityOptions(kind, selfLevelId, curLinkId) {
   else if (kind === "unit") list = (S.units || []).filter((u) => u.role !== "admin" && u.role !== "self_report").map((u) => off(u.role === "executive" ? { ...u, name: u.name + " (إدارة عليا)" } : u.role === "center" ? { ...u, name: u.name + " (مركز)" } : u));
   return list.map((e) => (taken.has(e.id) && e.id !== curLinkId ? { ...e, name: e.name + " — مربوطة بـ «" + taken.get(e.id) + "» (سيُنقل الربط)" } : e));
 }
+// «وش هذا المربع؟» — ثلاث بطاقات بدل خانات الربط والدخول
+const OL_CARDS = [
+  { id: "acc", title: "يكتب تقارير أو له حساب", sub: "وحدة، مركز، قسم، مكتب", color: "#2E6B52", bg: "#eef8f2" },
+  { id: "mgr", title: "مسؤولة تشوف وتعتمد", sub: "مثل المساعدة ومديرة الشؤون", color: "#4b3d7a", bg: "#f3f0fa" },
+  { id: "org", title: "للتنظيم فقط", sub: "مثل السكرتارية والمجالس", color: "#6f5f66", bg: "#f6f0f2" }];
+const OL_ENT_GROUPS = [{ kind: "office", label: "مكاتب" }, { kind: "dept", label: "أقسام" }, { kind: "unit", label: "وحدات ومراكز وإدارة عليا" }];
+function olFormCard(f) { return f.card || (f.linkKind ? "acc" : f.loginId ? "mgr" : "org"); }
+function olEntityTypeLabel(kind, id) {
+  if (kind === "office") return "مكتب";
+  if (kind === "dept") return "قسم";
+  const u = (S.units || []).find((x) => x.id === id);
+  return u && u.role === "center" ? "مركز" : u && u.role === "executive" ? "إدارة عليا" : "وحدة";
+}
+// النوع يتعبّى لحاله حسب البطاقة/الحساب — إلا لو المستخدمة اختارته بنفسها
+function olAutoType(f) {
+  if (f.typeNewMode || (f.type && !f.typeAuto)) return;
+  const card = olFormCard(f);
+  const t = card === "acc" && f.linkKind && f.linkKind !== "new" && f.linkId ? olEntityTypeLabel(f.linkKind, f.linkId)
+    : card === "acc" && f.linkKind === "new" ? ({ unit: "وحدة", center: "مركز", dept: "قسم", office: "مكتب", exec: "إدارة عليا" }[f.newKind || "unit"])
+    : card === "mgr" ? "مديرة" : "";
+  if (t) { f.type = t; f.typeAuto = true; }
+}
 function olFormHtml() {
   const ui = olUi(); const f = ui.form;
   const types = levelTypesList();
-  const ents = olLinkEntityOptions(f.linkKind, f.id, f.linkId);
+  const card = olFormCard(f);
   const usedBy = (f.linkKind && f.linkId) ? olActive().find((l) => l.id !== f.id && l.linkKind === f.linkKind && l.linkId === f.linkId) : null;
   return `<div class="card card-lg">
     <div class="prs-title" style="font-size:15px;font-weight:800;margin-bottom:14px;">${f.mode === "edit" ? "تعديل مستوى" : "إضافة مستوى"}</div>
     ${ui.formError ? `<div class="error-box">${esc(ui.formError)}</div>` : ""}
     <div class="field"><label class="field-label" for="ol-f-name">الاسم <span class="req-star">*</span></label><input class="input" id="ol-f-name" value="${esc(f.name || "")}" placeholder="مثال: مديرة الشؤون التعليمية" /></div>
-    <div class="field"><label class="field-label" for="ol-f-type">النوع</label>
-      <select class="input" id="ol-f-type" data-action="ol-form-refresh">
-        <option value="" ${!f.typeNewMode && !f.type ? "selected" : ""}>بدون نوع</option>
-        ${types.map((t) => `<option value="${esc(t)}" ${!f.typeNewMode && f.type === t ? "selected" : ""}>${esc(t)}</option>`).join("")}
-        <option value="__new" ${f.typeNewMode ? "selected" : ""}>+ نوع جديد…</option>
-      </select>
-      ${f.typeNewMode ? `<input class="input" id="ol-f-type-new" style="margin-top:8px;" value="${esc(f.typeNew || "")}" placeholder="اكتبي النوع الجديد (يُضاف لقائمة الأنواع)" />` : ""}
-    </div>
     <div class="field"><label class="field-label" for="ol-f-parent">يتبع</label><select class="input" id="ol-f-parent">${olParentOptionsHtml(f.parentId, f.mode === "edit" ? f.id : null)}</select></div>
-    <div class="field"><label class="field-label" for="ol-f-link-kind">ربطه بجهة موجودة؟</label>
-      <select class="input" id="ol-f-link-kind" data-action="ol-form-refresh">${OL_LINK_KINDS.map((k) => `<option value="${k.id}" ${f.linkKind === k.id ? "selected" : ""}>${esc(k.label)}</option>`).join("")}</select>
-      ${f.linkKind === "new" ? `<div style="background:${GRAY_BG};border-radius:12px;padding:10px 12px;margin-top:8px;display:flex;flex-direction:column;gap:8px;">
-          <select class="input" id="ol-f-new-kind" aria-label="نوع الحساب">${OL_NEW_KINDS.map((k) => `<option value="${k.id}" ${(f.newKind || "unit") === k.id ? "selected" : ""}>حساب ${esc(k.label)}</option>`).join("")}</select>
-          <div class="row-flex"><input class="input" id="ol-f-acc-pass" value="${esc(f.accPass || "")}" placeholder="كلمة سر الحساب" autocomplete="off" /><input class="input" id="ol-f-acc-email" type="email" value="${esc(f.accEmail || "")}" placeholder="الإيميل (اختياري)" /></div>
-          <div class="hint" style="margin:0;">اسم الدخول = اسم المستوى أعلاه. يُنشأ الحساب ويُربط بهذا المكان بالشجرة مباشرة.</div>
-        </div>` : f.linkKind ? `<select class="input" id="ol-f-link-id" style="margin-top:8px;" data-action="ol-form-refresh"><option value="">اختاري…</option>${ents.map((e) => `<option value="${esc(e.id)}" ${f.linkId === e.id ? "selected" : ""}>${esc(e.name)}</option>`).join("")}</select>
-        <div class="hint">الجهة تبقى بحسابها وتقاريرها كما هي — الربط يضعها في مكانها بالشجرة فقط.</div>
-        ${usedBy ? `<div class="hint bad">هذه الجهة مربوطة أصلًا بـ "${esc(usedBy.name)}" — الحفظ ينقل الربط إلى هنا.</div>` : ""}` : `<div class="hint">مستوى للتنظيم (مثل: مساعدة، مجلس) — يقدر يكون له دخول خاص من الأسفل.</div>`}
-    </div>
-    <div class="subhead">حساب دخول لهذا المستوى (اختياري)</div>
-    <div class="row-flex">
-      <div class="field"><label class="field-label" for="ol-f-login">اسم المستخدم</label><input class="input" id="ol-f-login" value="${esc(f.loginId || "")}" placeholder="فارغ = بدون دخول" autocomplete="off" /></div>
-      <div class="field"><label class="field-label" for="ol-f-pass">كلمة السر</label><input class="input" id="ol-f-pass" value="${esc(f.password || "")}" autocomplete="off" /></div>
-    </div>
-    <div class="field"><label class="field-label" for="ol-f-role">الصلاحيات</label>
+    <div class="field-label" style="margin-bottom:8px;">وش هذا المربع؟</div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px;">${OL_CARDS.map((c) => { const on = card === c.id; return `<button type="button" data-action="ol-form-card" data-card="${c.id}" style="flex:1 1 150px;text-align:right;padding:12px;border-radius:14px;cursor:pointer;font-family:inherit;color:${INK};border:2px solid ${on ? c.color : BORDER};background:${on ? c.bg : "#fff"};"><div style="font-size:13.5px;font-weight:800;">${on ? "✓ " : ""}${esc(c.title)}</div><div style="font-size:11.5px;color:#6f5f66;margin-top:4px;line-height:1.7;">${esc(c.sub)}</div></button>`; }).join("")}</div>
+    ${card === "acc" ? `<div style="background:#f3faf6;border-radius:14px;padding:12px;margin-bottom:12px;display:flex;flex-direction:column;gap:8px;">
+      <label class="field-label" for="ol-f-ent" style="margin:0;">اختاري حسابه</label>
+      <select class="input" id="ol-f-ent" data-action="ol-form-refresh"><option value="">اختاري…</option>
+        ${OL_ENT_GROUPS.map((g) => { const list = olLinkEntityOptions(g.kind, f.id, f.linkId).filter(g.only || (() => true)); return list.length ? `<optgroup label="${esc(g.label)}">${list.map((e) => `<option value="${g.kind}:${esc(e.id)}" ${f.linkKind === g.kind && f.linkId === e.id ? "selected" : ""}>${esc(e.name)}</option>`).join("")}</optgroup>` : ""; }).join("")}
+        <option value="new" ${f.linkKind === "new" ? "selected" : ""}>＋ ما له حساب — أنشئ حساب جديد</option>
+      </select>
+      ${f.linkKind === "new" ? `<select class="input" id="ol-f-new-kind" aria-label="نوع الحساب">${OL_NEW_KINDS.map((k) => `<option value="${k.id}" ${(f.newKind || "unit") === k.id ? "selected" : ""}>حساب ${esc(k.label)}</option>`).join("")}</select>
+        <div class="row-flex"><input class="input" id="ol-f-acc-pass" value="${esc(f.accPass || "")}" placeholder="كلمة سر الحساب" autocomplete="off" /><input class="input" id="ol-f-acc-email" type="email" value="${esc(f.accEmail || "")}" placeholder="الإيميل (اختياري)" /></div>
+        <div class="hint" style="margin:0;">اسم الدخول = اسم المستوى أعلاه.</div>`
+        : `<div class="hint" style="margin:0;">الحساب يبقى بتقاريره كما هو — الربط يحطه في مكانه بالشجرة فقط.</div>`}
+      ${usedBy ? `<div class="hint bad" style="margin:0;">هذا الحساب مربوط أصلًا بـ "${esc(usedBy.name)}" — الحفظ ينقل الربط إلى هنا.</div>` : ""}
+    </div>` : card === "mgr" ? `<div style="background:#f3f0fa;border-radius:14px;padding:12px;margin-bottom:12px;">
+      <div class="row-flex">
+        <div class="field"><label class="field-label" for="ol-f-login">اسم المستخدم</label><input class="input" id="ol-f-login" value="${esc(f.loginId || "")}" autocomplete="off" /></div>
+        <div class="field"><label class="field-label" for="ol-f-pass">كلمة السر</label><input class="input" id="ol-f-pass" value="${esc(f.password || "")}" autocomplete="off" /></div>
+      </div>
+      <div class="field" style="margin-bottom:0;"><label class="field-label" for="ol-f-role">الصلاحيات</label>
       <select class="input" id="ol-f-role" data-action="ol-form-refresh">
         <option value="" ${!f.roleId ? "selected" : ""}>بدون دور — لا يرى أي صفحة</option>
         ${rolesList().filter((r) => r.status !== "disabled").map((r) => `<option value="${esc(r.id)}" ${f.roleId === r.id ? "selected" : ""}>حسب دور: ${esc(r.name)}</option>`).join("")}
@@ -4281,6 +4351,16 @@ function olFormHtml() {
       ${(() => { const rs = levelRoleSummary(f.roleId); if (!rs) return `<div class="hint">لا توجد صفحات افتراضية — اختاري دورًا يحدد الصفحات (مثل لوحة المعلومات، جميع التقارير، الملخص، التقرير النهائي) وتظهر على وحدات ما تحته فقط.</div>`;
         const lbl = (id) => ((SIDEBAR_PAGES.find((x) => x.id === id) || {}).label || id);
         return `<div class="hint">الصفحات: ${rs.pages.length ? rs.pages.map((x) => esc(lbl(x))).join("، ") : "لا توجد صفحات مناسبة لحساب مستوى بهذا الدور — لن يرى شيئًا"}.<br>الاعتماد / الإعادة / التعديل: ${rs.inPaths ? `هذا الدور مرحلة في ${rs.inPaths} مسار اعتماد — تعتمد وتعيد وتعدّل حسب إعداد المرحلة، على تقارير وحدات ما تحتها فقط` : "هذا الدور غير موضوع في أي مسار اعتماد بعد — أضيفيه كمرحلة من «كل المسارات» ليقدر يعتمد أو يعيد أو يعدّل"}.<br>تعديل صفحات وأزرار الدور نفسه من زر «الأدوار والصلاحيات» أعلى الصفحة.</div>`; })()}
+    </div>
+      <div class="hint" style="margin:0;">تشوف وتعتمد تقارير الوحدات اللي تحتها في الهيكل فقط — وتطلع في مسارهم تلقائيًا.</div>
+    </div>` : `<div style="background:${GRAY_BG};border-radius:14px;padding:12px;margin-bottom:12px;font-size:12.5px;color:#4b3d44;">ما يحتاج شي ثاني — اضغطي «حفظ». التقارير ما تمر عليه.</div>`}
+    <div class="field"><label class="field-label" for="ol-f-type">النوع <span style="font-weight:500;color:#6f5f66;font-size:11.5px;">(يتعبّى لحاله — تقدرين تغيرينه)</span></label>
+      <select class="input" id="ol-f-type" data-action="ol-form-refresh">
+        <option value="" ${!f.typeNewMode && !f.type ? "selected" : ""}>بدون نوع</option>
+        ${types.map((t) => `<option value="${esc(t)}" ${!f.typeNewMode && f.type === t ? "selected" : ""}>${esc(t)}</option>`).join("")}
+        <option value="__new" ${f.typeNewMode ? "selected" : ""}>+ نوع جديد…</option>
+      </select>
+      ${f.typeNewMode ? `<input class="input" id="ol-f-type-new" style="margin-top:8px;" value="${esc(f.typeNew || "")}" placeholder="اكتبي النوع الجديد (يُضاف لقائمة الأنواع)" />` : ""}
     </div>
     <div style="display:flex;gap:8px;flex-wrap:wrap;">
       ${pillBtn("حفظ", { icon: iconCheck(14, "#fff"), action: "ol-save" })}
@@ -4627,17 +4707,18 @@ function olReadForm() {
   const tSel = g("ol-f-type");
   if (tSel !== null) {
     if (tSel === "__new") { f.typeNewMode = true; const tn = g("ol-f-type-new"); if (tn !== null) f.typeNew = tn; }
-    else { f.typeNewMode = false; f.type = tSel; }
+    else { if (tSel !== (f.type || "")) f.typeAuto = false; f.typeNewMode = false; f.type = tSel; }
   }
   if (g("ol-f-parent") !== null) f.parentId = g("ol-f-parent");
-  const lk = g("ol-f-link-kind");
-  if (lk !== null) { if (lk !== f.linkKind) { f.linkKind = lk; f.linkId = ""; } else if (g("ol-f-link-id") !== null) f.linkId = g("ol-f-link-id"); }
+  const ent = g("ol-f-ent");
+  if (ent !== null) { if (ent === "new") { f.linkKind = "new"; f.linkId = ""; } else if (!ent) { f.linkKind = ""; f.linkId = ""; } else { const i = ent.indexOf(":"); f.linkKind = ent.slice(0, i); f.linkId = ent.slice(i + 1); } }
   if (g("ol-f-new-kind") !== null) f.newKind = g("ol-f-new-kind");
   if (g("ol-f-acc-pass") !== null) f.accPass = g("ol-f-acc-pass");
   if (g("ol-f-acc-email") !== null) f.accEmail = g("ol-f-acc-email");
   if (g("ol-f-login") !== null) f.loginId = g("ol-f-login");
   if (g("ol-f-pass") !== null) f.password = g("ol-f-pass");
   if (g("ol-f-role") !== null) f.roleId = g("ol-f-role");
+  olAutoType(f);
 }
 // ينشئ حساب جهة جديد (بنفس بنية الحسابات الموجودة) ويرجع نوع الربط ومعرّفه
 function olCreateEntity(kind, name, password, email) {
@@ -4751,14 +4832,19 @@ function handleOrgLevelsAction(action, ds) {
     case "ol-start-add": ui.form = { mode: "add", name: "", type: "", parentId: ds.parent || "", linkKind: "", linkId: "", loginId: "", password: "", roleId: "" }; ui.formError = ""; ui.confirmDelete = null; break;
     case "ol-start-edit": { const l = olFind(ds.id); if (!l) break; const custom = !!(l.type && !levelTypesList().includes(l.type)); ui.form = { mode: "edit", id: l.id, name: l.name, type: custom ? "" : l.type, typeNewMode: custom, typeNew: custom ? l.type : "", parentId: l.parentId, linkKind: l.linkKind, linkId: l.linkId, loginId: l.loginId, password: l.password, roleId: l.roleId || "" }; ui.formError = ""; break; }
     case "ol-cancel-form": ui.form = null; ui.formError = ""; break;
+    case "ol-form-card": { olReadForm(); const f = ui.form; if (!f) break; f.card = ds.card; if (ds.card !== "acc") { f.linkKind = ""; f.linkId = ""; } olAutoType(f); ui.formError = ""; break; }
     case "ol-save": {
       olReadForm();
       const f = ui.form; if (!f) break;
       const name = String(f.name || "").trim();
       let type = f.typeNewMode ? String(f.typeNew || "").trim() : String(f.type || "").trim();
+      const card = olFormCard(f);
+      if (card !== "acc") { f.linkKind = ""; f.linkId = ""; }
+      if (card !== "mgr") { f.loginId = ""; f.password = ""; f.roleId = ""; }
       const loginId = String(f.loginId || "").trim(), password = String(f.password || "").trim();
       if (!name) { ui.formError = "اكتبي اسم المستوى."; break; }
-      if (f.linkKind && f.linkKind !== "new" && !f.linkId) { ui.formError = "اختاري الجهة الموجودة، أو اختاري \"بدون حساب\"."; break; }
+      if (card === "acc" && !f.linkKind) { ui.formError = "اختاري حسابه من القائمة، أو «أنشئ حساب جديد»."; break; }
+      if (card === "mgr" && !loginId) { ui.formError = "اكتبي اسم المستخدم وكلمة السر لدخولها."; break; }
       if (f.linkKind === "new") {
         const taken = [...(S.units || []), ...(S.departments || []), ...(S.offices || [])].some((x) => String(x.name || "").trim() === name);
         if (taken) { ui.formError = "يوجد حساب بنفس الاسم — الاسم هو اسم الدخول فلازم يكون مختلفًا."; break; }
@@ -8169,8 +8255,84 @@ function apEditorHtml() {
     <div style="display:flex;gap:6px;margin-top:12px;">${pillBtn("حفظ كمسودة", { action: "ap-save" })}${pillBtn("إلغاء", { variant: "ghost", action: "ap-cancel" })}</div>
   </div>`;
 }
+// ===== بطاقة «المسار التلقائي من الهيكل» في «كل المسارات» =====
+function apAutoPreview(unit) {
+  const path = autoPathObj(), cfg = autoPathCfg();
+  if (!path || !unit) return null;
+  const holders = (rid) => rid ? personsList().filter((p) => p.status !== "disabled" && p.roleId === rid && apPersonInUnit(p, unit)) : [];
+  const writerR = AUTO_RANKS.find((r) => holders(cfg[r.k]).length);
+  const writerRank = writerR ? writerR.rank : -1;
+  const writer = writerR ? writerR.label + " — " + holders(cfg[writerR.k]).map((p) => p.name).join("، ") : "حساب الوحدة نفسه (ما فيه أشخاص بأدوار الوحدة)";
+  const uSkip = apUnitSkipList(unit.id);
+  const rows = [];
+  (path.stages || []).filter((st) => st.unitRank).forEach((st) => {
+    const h = holders(String(st.approver).slice(5));
+    const r = { what: "stage", id: st.id, name: st.name, sub: "داخل الوحدة — " + (h.length ? h.map((p) => p.name).join("، ") : "ما فيه أحد بهذا الدور") };
+    if (st.disabled) { r.state = "all"; r.why = "متخطّاة لكل الوحدات"; }
+    else if (!h.length) { r.state = "auto"; r.why = "تُتخطّى تلقائيًا — ما فيه أحد"; }
+    else if (st.unitRank <= writerRank) { r.state = "auto"; r.why = st.unitRank === writerRank ? "تُتخطّى — هي اللي تكتب التقرير" : "تُتخطّى — أقل من اللي تكتب"; }
+    else if (uSkip.includes(AUTO_PATH_ID + ":" + st.id)) { r.state = "unit"; r.why = "متخطّاة لهذه الوحدة"; }
+    else r.state = "on";
+    rows.push(r);
+  });
+  let l = olActive().find((x) => x.linkKind === "unit" && x.linkId === unit.id);
+  const glob = new Set(cfg.skipLevels || []);
+  let n = 0, guard = 0;
+  if (!l) rows.push({ what: "none", name: "الوحدة مو موجودة في الهيكل", sub: "حطيها في مكانها بالهيكل عشان يطلع لها اللي فوقها", state: "auto", why: "" });
+  while (l && (l = olFind(l.parentId)) && guard++ < 50 && n < AUTO_TREE_MAX) {
+    const acc = olLevelHasAccount(l);
+    const lk = olLinkedEntity(l);
+    const r = { what: "lvl", id: l.id, name: l.name, sub: "في الهيكل — " + (l.loginId ? "دخول خاص" : lk ? "حساب " + lk.kind + ": " + lk.name : "تنظيم فقط") };
+    if (!acc) { r.state = "auto"; r.why = "ما له دخول — ما يمر عليه"; r.what = "none"; }
+    else { n++; if (glob.has(l.id)) { r.state = "all"; r.why = "متخطّى لكل وحداته"; } else if (uSkip.includes(AUTO_PATH_ID + ":lvl:" + l.id)) { r.state = "unit"; r.why = "متخطّى لهذه الوحدة"; } else r.state = "on"; }
+    rows.push(r);
+  }
+  return { writer, rows };
+}
+function apAutoCardHtml() {
+  const path = autoPathObj(), cfg = autoPathCfg();
+  const active = !!path && path.status === "active";
+  const roles = rolesList().filter((r) => r.status !== "disabled");
+  const guess = apAutoGuessRoles();
+  const roleSel = (k, label) => { const cur = path ? (cfg[k] || "") : (cfg[k] || guess[k]); return `<div class="field" style="flex:1 1 160px;margin:0;"><label class="field-label" for="ap-auto-${k}">${label}</label><select class="input" id="ap-auto-${k}"><option value="">— ما فيه —</option>${roles.map((r) => `<option value="${esc(r.id)}" ${cur === r.id ? "selected" : ""}>${esc(r.name)}</option>`).join("")}</select></div>`; };
+  const units = (S.units || []).filter((u) => u.role !== "admin" && u.role !== "executive" && u.role !== "self_report");
+  const uid0 = S.ui.apAutoUnit && units.some((u) => u.id === S.ui.apAutoUnit) ? S.ui.apAutoUnit : (units[0] || {}).id;
+  const unit = units.find((u) => u.id === uid0);
+  const pv = path ? apAutoPreview(unit) : null;
+  let num = 0;
+  const btn = (r, scope, label, on) => `<button type="button" class="pill-btn pill-ghost" style="padding:4px 10px;font-size:11px;${on ? `color:${GREEN};border-color:${GREEN};` : `color:${DANGER};`}" data-action="ap-auto-skip" data-what="${r.what}" data-id="${esc(r.id)}" data-scope="${scope}" data-unit="${esc(uid0 || "")}" data-on="${on ? 0 : 1}">${label}</button>`;
+  const rowHtml = (r) => {
+    const off = r.state !== "on";
+    if (!off) num++;
+    const acts = r.what === "none" || r.state === "auto" ? "" : r.state === "on"
+      ? `${btn(r, "unit", "تخطّي لهذه الوحدة", false)}${btn(r, "all", r.what === "lvl" ? "تخطّي لكل وحداته" : "تخطّي لكل الوحدات", false)}`
+      : btn(r, r.state, "رجّعيها", true);
+    return `<div style="display:flex;gap:10px;align-items:center;padding:9px 10px;border-radius:12px;margin-bottom:6px;border:1px ${off ? "dashed #d9c9cf" : "solid " + BORDER};background:${off ? "#faf6f7" : "#fff"};flex-wrap:wrap;">
+      <span style="width:26px;height:26px;border-radius:50%;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:800;background:${off ? "#f1ecee" : "#f3e6ea"};color:${off ? "#a99" : ROSE};">${off ? "–" : num}</span>
+      <div style="flex:1 1 200px;min-width:0;"><div style="font-size:13px;font-weight:800;${off ? "color:#a3949a;text-decoration:line-through;" : ""}">${esc(r.name)}</div><div style="font-size:11px;color:${SUBTLE};">${esc(r.sub)}</div>${r.why ? `<div style="font-size:11px;font-weight:700;color:${r.state === "auto" ? "#7a4d16" : DANGER};">${esc(r.why)}</div>` : ""}</div>
+      <div style="display:flex;gap:6px;flex-wrap:wrap;">${acts}</div></div>`;
+  };
+  return `<div class="card card-lg" style="margin-bottom:14px;border:1.5px solid ${active ? GREEN : BORDER};">
+    <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:10px;flex-wrap:wrap;">
+      <div><div style="font-size:15px;font-weight:800;">المسار التلقائي من الهيكل ${badgeHtml(active ? "مفعّل" : path ? "موقف" : "غير مفعّل", active ? GREEN : SUBTLE, active ? GREEN_BG : GRAY_BG)}</div>
+      <div style="font-size:12px;color:#6f5f66;margin-top:4px;line-height:1.9;">كل وحدة يطلع لها مسارها لحاله: أدوار الوحدة (مساعدة ← رئيسة) ثم كل مستوى له دخول فوقها في الهيكل باسمه.<br>اللي تكتب = أصغر دور موجود بالوحدة. المرحلة اللي ما فيها أحد تُتخطّى لحالها. المسار الخاص بجهة معيّنة (لو سويتيه) يتقدّم عليه.</div></div>
+      ${pillBtn(active ? "إيقاف" : "تفعيل", { variant: active ? "ghost" : "primary", action: "ap-auto-toggle" })}
+    </div>
+    <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;margin-top:12px;background:${GRAY_BG};border-radius:12px;padding:10px 12px;">
+      ${roleSel("idr", "دور الإدارية")}${roleSel("ast", "دور المساعدة")}${roleSel("head", "دور الرئيسة")}
+      ${pillBtn("حفظ الأدوار", { variant: "soft", action: "ap-auto-roles-save" })}
+    </div>
+    ${path ? `<div style="margin-top:14px;">
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:10px;"><span style="font-size:13px;font-weight:800;">شوفي مسار وحدة:</span>
+        <select class="input" style="width:auto;flex:1 1 220px;" data-action="ap-auto-unit">${units.map((u) => `<option value="${esc(u.id)}" ${u.id === uid0 ? "selected" : ""}>${esc(u.name)}</option>`).join("")}</select></div>
+      ${pv ? `<div style="display:flex;gap:10px;align-items:center;padding:10px 12px;border-radius:12px;background:${ROSE};color:#fff;margin-bottom:8px;"><span>✎</span><div><div style="font-size:11px;opacity:.85;">يكتب التقرير</div><div style="font-size:13.5px;font-weight:800;">${esc(pv.writer)}</div></div></div>
+        ${pv.rows.map(rowHtml).join("")}
+        <div style="padding:9px 12px;border-radius:12px;background:${GREEN_BG};color:${GREEN};font-size:13px;font-weight:800;">✓ معتمد — بعد آخر مرحلة</div>` : `<div class="hint">ما فيه وحدات.</div>`}
+    </div>` : `<div class="hint" style="margin-top:10px;">اختاري الأدوار ثم اضغطي «تفعيل».</div>`}
+  </div>`;
+}
 function renderApprovalPathsSetup() {
-  const list = approvalPathsList();
+  const list = approvalPathsList().filter((a) => a.id !== AUTO_PATH_ID);
   const ed = S.ui.apEdit;
   const rows = list.map((a) => {
     const active = a.status === "active";
@@ -8196,6 +8358,7 @@ function renderApprovalPathsSetup() {
     <div class="card" style="background:${BLUE_BG};border:1px solid #cfe0f5;margin-bottom:14px;">
       <div style="font-size:12px;color:#3a5a85;">لكل جهة ولكل نوع تقرير (من قائمة الفترات) تضيفين المراحل بالترتيب وتحددين من يقوم بكل مرحلة. المسار الجديد يُحفظ مسودة، ولا يُطبَّق على التقارير إلا بعد ضغط «تفعيل». المسارات الحالية في «الهيكل والأشخاص» تبقى كما هي.</div>
     </div>
+    ${apAutoCardHtml()}
     ${ed ? apEditorHtml() : `<div style="margin-bottom:12px;">${pillBtn("مسار جديد", { icon: iconPlus(15, "#fff"), action: "ap-new" })}</div>`}
     ${rows || (ed ? "" : `<div class="card" style="text-align:center;color:${SUBTLE};padding:30px 20px;border-style:dashed;">لا توجد مسارات بعد.</div>`)}
   `;
@@ -8857,7 +9020,7 @@ function reportLockReason(entry, unit) {
     const ref = apRefOf(entry.customStageId);
     if (ref) {
       const p = apPathById(ref.pathId);
-      const st = p && apStageList(p).find((x) => x.key === entry.customStageId);
+      const st = p && apStagesNamed(p, unit).find((x) => x.key === entry.customStageId);
       if (st && st.canEdit && userHoldsApStage(st, unit)) return "";
       return "بانتظار مرحلة «" + (st ? st.name : "المسار") + "»";
     }
@@ -10510,6 +10673,7 @@ function attachFormListeners() {
       return;
     }
     if (el.dataset && el.dataset.action === "ol-form-refresh") { olReadForm(); render(); return; }
+    if (el.dataset && el.dataset.action === "ap-auto-unit") { S.ui.apAutoUnit = el.value; render(); return; }
     if (el.dataset && el.dataset.action === "dash-prog-year") { S.ui.dashProgYear = el.value; render(); return; }
     if (el.dataset && el.dataset.action === "filter-all-reports-dept") { S.ui.allReportsDept = el.value; render(); return; }
     if (el.dataset && el.dataset.action === "filter-unit-reports-type") { S.ui.unitReportsTypeFilter = el.value; render(); return; }
@@ -11075,6 +11239,40 @@ function attachClickListener() {
         dataStore.saveApprovalPaths(S.approvalPaths);
         S.ui.apEdit = null; render(); break;
       }
+      case "ap-auto-roles-save":
+      case "ap-auto-toggle": {
+        const g = (k) => { const el = document.getElementById("ap-auto-" + k); return el ? el.value : (autoPathCfg()[k] || ""); };
+        apAutoSave({ idr: g("idr"), ast: g("ast"), head: g("head") });
+        if (action === "ap-auto-toggle") {
+          const was = (autoPathObj() || {}).status === "active";
+          S.approvalPaths = approvalPathsList().map((x) => x.id === AUTO_PATH_ID ? { ...x, status: was ? "draft" : "active", activatedAt: was ? null : Date.now() } : x);
+          dataStore.saveApprovalPaths(S.approvalPaths);
+          addPermLog("approval-path", AUTO_PATH_ID, "المسار التلقائي من الهيكل", was ? "إيقاف المسار" : "تفعيل المسار");
+        }
+        render(); break;
+      }
+      case "ap-auto-skip": {
+        const path = autoPathObj(); if (!path) break;
+        const on = ds.on === "1", unitId = ds.unit;
+        if (ds.scope === "unit" && unitId) {
+          const key = AUTO_PATH_ID + ":" + (ds.what === "lvl" ? "lvl:" + ds.id : ds.id);
+          const cur = apUnitSkipList(unitId).filter((k) => k !== key);
+          saveEntityPrefs("unit:" + unitId, { skip: on ? [...cur, key] : cur }).then(() => {
+            if (on && ds.what === "stage") apSkipReportsAtStage(autoPathObj(), ds.id, unitId, "متخطّاة لهذه الوحدة");
+            render();
+          });
+          break;
+        }
+        if (ds.what === "lvl") {
+          const cur = (autoPathCfg().skipLevels || []).filter((x) => x !== ds.id);
+          saveSiteTheme({ autoPath: { ...autoPathCfg(), skipLevels: on ? [...cur, ds.id] : cur } });
+        } else {
+          S.approvalPaths = approvalPathsList().map((x) => x.id === AUTO_PATH_ID ? { ...x, stages: (x.stages || []).map((st) => st.id === ds.id ? { ...st, disabled: on } : st) } : x);
+          dataStore.saveApprovalPaths(S.approvalPaths);
+          if (on) apSkipReportsAtStage(autoPathObj(), ds.id, null, "متخطّاة لكل الوحدات");
+        }
+        render(); break;
+      }
       case "ap-toggle": {
         const list = approvalPathsList(); const a = list.find((x) => x.id === ds.id); if (!a) break;
         if (a.status !== "active") {
@@ -11337,7 +11535,7 @@ function attachClickListener() {
         const entry = getReportEntry(ds.unitId, ds.reportId);
         const ref = entry && apRefOf(entry.customStageId);
         const path = ref && apPathById(ref.pathId);
-        const st = path && apStageList(path).find((x) => x.key === entry.customStageId);
+        const st = path && apStagesNamed(path, (S.units || []).find((u) => u.id === ds.unitId)).find((x) => x.key === entry.customStageId);
         if (!st || !st.canEdit || !userHoldsApStage(st, (S.units || []).find((u) => u.id === ds.unitId))) break;
         S.currentUnitId = ds.unitId; S.currentReportId = ds.reportId; S.view = "unit-report"; S.openPhaseId = null; S.activeSectionId = null;
         render();
