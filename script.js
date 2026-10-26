@@ -4418,6 +4418,117 @@ function olUnlinkedDeleteHtml(list) {
     </div>
   </div>`;
 }
+// ===== إدخال شجرة من نص =====
+// كل سطر = مستوى، وعدد «-» في بدايته = عمقه. اختياري: «الاسم = اسم الجهة | النوع».
+// يُربط تلقائيًا بالجهة اللي لها نفس الاسم (أو الاسم بدون «مديرة»)، ويُعاد استخدام المستوى الموجود
+// بنفس الاسم بدل ما يتكرر. ما يحذف أي مستوى ولا حساب — المستويات اللي ما ذُكرت تبقى كما هي.
+function olNorm(x) { return String(x || "").replace(/\s+/g, " ").trim(); }
+function olStripTitle(x) { return olNorm(x).replace(/^(مديرة|مدير|مديرية)\s+/, ""); }
+function olEntityByName(name) {
+  const n = olNorm(name); if (!n) return null;
+  const o = (S.offices || []).find((x) => olNorm(x.name) === n); if (o) return { linkKind: "office", id: o.id, name: o.name, kind: "مكتب" };
+  const d = (S.departments || []).find((x) => olNorm(x.name) === n); if (d) return { linkKind: "dept", id: d.id, name: d.name, kind: "قسم" };
+  const u = (S.units || []).find((x) => x.role !== "admin" && x.role !== "self_report" && olNorm(x.name) === n);
+  if (u) return { linkKind: "unit", id: u.id, name: u.name, kind: u.role === "center" ? "مركز" : u.role === "executive" ? "إدارة عليا" : "وحدة" };
+  return null;
+}
+function olParsePasteTree(text) {
+  const lines = []; let prev = -1;
+  String(text || "").split(/\r?\n/).forEach((raw) => {
+    const m = raw.match(/^[\s\-]*/); const lead = m ? m[0] : "";
+    let body = raw.slice(lead.length).trim(); if (!body) return;
+    let depth = (lead.match(/-/g) || []).length;
+    if (depth > prev + 1) depth = prev + 1;
+    prev = depth;
+    let type = "", ent = "";
+    const bar = body.indexOf("|"); if (bar !== -1) { type = olNorm(body.slice(bar + 1)); body = body.slice(0, bar); }
+    const eq = body.indexOf("="); if (eq !== -1) { ent = olNorm(body.slice(eq + 1)); body = body.slice(0, eq); }
+    const name = olNorm(body); if (name) lines.push({ name, type, ent, depth });
+  });
+  return lines;
+}
+// يرجع خطة التطبيق بدون ما يغيّر شي (للمعاينة)
+function olPastePlan(text) {
+  const lines = olParsePasteTree(text);
+  const levels = olActive();
+  const claimedLv = new Set(), claimedEnt = new Set();
+  const plan = lines.map((ln) => {
+    let e = ln.ent ? olEntityByName(ln.ent) : null;
+    if (!e && !ln.ent) e = olEntityByName(ln.name) || olEntityByName(olStripTitle(ln.name));
+    let warn = ln.ent && !e ? `ما لقيت جهة باسم «${ln.ent}» — يصير تنظيم فقط` : "";
+    if (e && claimedEnt.has(e.linkKind + ":" + e.id)) { warn = `«${e.name}» مربوطة بسطر قبله — هذا يصير تنظيم فقط`; e = null; }
+    if (e) claimedEnt.add(e.linkKind + ":" + e.id);
+    const names = [ln.name, olStripTitle(ln.name), ln.ent].filter(Boolean).map(olNorm);
+    let lv = levels.find((l) => !claimedLv.has(l.id) && names.includes(olNorm(l.name)));
+    if (!lv && e) lv = levels.find((l) => !claimedLv.has(l.id) && l.linkKind === e.linkKind && l.linkId === e.id);
+    if (lv) claimedLv.add(lv.id);
+    return { ...ln, entity: e, level: lv || null, warn };
+  });
+  const untouched = levels.filter((l) => !claimedLv.has(l.id));
+  return { plan, untouched };
+}
+function olApplyPaste(text) {
+  const { plan } = olPastePlan(text);
+  if (!plan.length) return null;
+  let list = currentOrgLevels().slice();
+  const types = levelTypesList();
+  const stack = []; const order = {}; let added = 0, updated = 0;
+  plan.forEach((p, i) => {
+    const parentId = p.depth > 0 ? (stack[p.depth - 1] || "") : "";
+    const sib = parentId || ""; order[sib] = (order[sib] || 0);
+    const linkKind = p.entity ? p.entity.linkKind : (p.level ? p.level.linkKind || "" : "");
+    const linkId = p.entity ? p.entity.id : (p.level ? p.level.linkId || "" : "");
+    if (p.type && !types.includes(p.type)) types.push(p.type);
+    let id;
+    if (p.level) {
+      id = p.level.id;
+      list = list.map((l) => l.id === id ? { ...l, name: p.name, type: p.type || l.type || "", parentId, linkKind, linkId, order: order[sib] } : l);
+      updated++;
+    } else {
+      id = uid("lvl");
+      list.push({ id, name: p.name, type: p.type || "", parentId, linkKind, linkId, loginId: "", password: "", roleId: "", status: "active", order: order[sib], createdAt: Date.now() + i });
+      added++;
+    }
+    order[sib]++;
+    // جهة واحدة = مستوى واحد: ننقل الربط من أي مستوى آخر
+    if (linkKind && linkId) list = list.map((l) => (l.id !== id && l.linkKind === linkKind && l.linkId === linkId) ? { ...l, linkKind: "", linkId: "" } : l);
+    stack[p.depth] = id; stack.length = p.depth + 1;
+  });
+  if (types.length !== levelTypesList().length) saveSiteTheme({ levelTypes: types });
+  saveOrgLevels(list);
+  olChildren("").forEach((r) => olSyncSubtree(r.id));
+  return { added, updated };
+}
+function olPasteCardHtml() {
+  const ui = olUi();
+  if (!ui.pasteOpen) return `<div class="card" style="margin-top:14px;display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;">
+      <div><div style="font-size:14px;font-weight:800;">إدخال شجرة من نص</div><div style="font-size:11.5px;color:#6f5f66;margin-top:3px;">تلصقين الهيكل كامل مرة وحدة بدل ما تضيفين مستوى مستوى — وبعدها تعدّلين وتحذفين عادي.</div></div>
+      ${pillBtn("فتح", { variant: "soft", icon: iconLayers(13, GREEN), action: "ol-paste-open" })}</div>`;
+  const pv = ui.pastePreview;
+  const row = (p) => {
+    const st = p.entity ? `<span style="color:${GREEN};">يُربط بـ ${esc(p.entity.kind)} «${esc(p.entity.name)}»</span>`
+      : p.level && p.level.linkKind ? `<span style="color:${GREEN};">يبقى على ربطه الحالي</span>` : `<span style="color:#6f5f66;">تنظيم فقط (بدون حساب)</span>`;
+    const lv = p.level ? `<span style="color:#7a4d16;">مستوى موجود «${esc(p.level.name)}» — يُحدَّث</span>` : `<span style="color:#24527a;">جديد</span>`;
+    return `<div style="border-top:1px solid ${BORDER};padding:7px 0;padding-right:${p.depth * 18}px;font-size:12.5px;line-height:1.8;">
+      <b>${esc(p.name)}</b>${p.type ? ` ${levelTypeChipHtml(p.type)}` : ""}<div style="font-size:11.5px;">${lv} · ${st}</div>${p.warn ? `<div style="font-size:11.5px;color:${DANGER};">${esc(p.warn)}</div>` : ""}</div>`;
+  };
+  return `<div class="card card-lg" style="margin-top:14px;display:flex;flex-direction:column;gap:10px;">
+    <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;">
+      <div style="font-size:14px;font-weight:800;">إدخال شجرة من نص</div>${pillBtn("إغلاق", { variant: "ghost", action: "ol-paste-close" })}</div>
+    <div style="font-size:12px;color:#6f5f66;line-height:2;background:${GRAY_BG};border-radius:12px;padding:10px 12px;">
+      • كل سطر مستوى، وعدد <b>-</b> في أوله = تحت مين (بدون - = أعلى الهيكل، - = تحته، -- = تحت اللي تحته…).<br>
+      • النوع بعد <b>|</b> مثل: <code>- مديرة قسم الموارد البشرية | قسم</code><br>
+      • يُربط تلقائيًا بالحساب اللي له نفس الاسم (أو نفس الاسم بدون «مديرة»). لو اسم الحساب مختلف اكتبيه بعد <b>=</b> مثل: <code>--- وحدة الاختبارات — الداخل = وحدة الاختبارات</code><br>
+      • المستوى الموجود بنفس الاسم يُحدَّث مكانه بدل ما يتكرر. <b>ما ينحذف أي مستوى ولا حساب ولا تقرير.</b></div>
+    <textarea class="input" id="ol-paste" rows="12" style="font-family:inherit;line-height:1.9;min-height:220px;" placeholder="مساعدة مدير إدارة التعليم النسائي | مساعدة&#10;- مديرة قسم الموارد البشرية | قسم&#10;-- وحدة التوظيف | وحدة">${esc(ui.pasteText || "")}</textarea>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;">${pillBtn("معاينة", { action: "ol-paste-preview" })}${pv && pv.plan.length ? pillBtn(`تطبيق (${pv.plan.length} مستوى)`, { variant: "soft", icon: iconLayers(13, GREEN), action: "ol-paste-apply" }) : ""}</div>
+    ${pv ? (pv.plan.length ? `<div>
+      <div style="font-size:12.5px;font-weight:800;margin-bottom:4px;">المعاينة — ${pv.plan.filter((p) => !p.level).length} جديد، ${pv.plan.filter((p) => p.level).length} موجود يُحدَّث، ${pv.plan.filter((p) => p.entity).length} مربوط بحساب</div>
+      ${pv.plan.map(row).join("")}
+      ${pv.untouched.length ? `<div style="font-size:12px;color:#7a4d16;background:#fbf0e1;border-radius:10px;padding:8px 12px;margin-top:8px;line-height:1.9;">مستويات موجودة ما ذُكرت في النص — تبقى كما هي، احذفيها بنفسك لو ما تحتاجينها: ${pv.untouched.map((l) => "«" + esc(l.name) + "»").join("، ")}</div>` : ""}
+    </div>` : `<div class="hint bad">النص فاضي.</div>`) : ""}
+  </div>`;
+}
 function olUnlinkedCardHtml() {
   const ui = olUi();
   const list = olUnlinkedEntities();
@@ -4501,6 +4612,7 @@ function renderOrgLevelsPage() {
       </div>
       <div style="flex:1 1 340px;min-width:0;display:flex;flex-direction:column;gap:14px;">${side}</div>
     </div>
+    ${olPasteCardHtml()}
     ${olUnlinkedCardHtml()}`}
   </div></div>`;
 }
@@ -4628,6 +4740,15 @@ function handleOrgLevelsAction(action, ds) {
     case "ol-toggle": ui.collapsed = { ...ui.collapsed, [ds.id]: !ui.collapsed[ds.id] }; break;
     case "ol-expand-all": ui.collapsed = {}; break;
     case "ol-clear-msg": ui.msg = ""; break;
+    case "ol-paste-open": ui.pasteOpen = true; break;
+    case "ol-paste-close": ui.pasteOpen = false; ui.pastePreview = null; break;
+    case "ol-paste-preview": { const el = document.getElementById("ol-paste"); ui.pasteText = el ? el.value : ui.pasteText || ""; ui.pastePreview = olPastePlan(ui.pasteText); break; }
+    case "ol-paste-apply": {
+      const el = document.getElementById("ol-paste"); if (el) ui.pasteText = el.value;
+      const r = olApplyPaste(ui.pasteText || "");
+      if (r) { ui.msg = `تم إدخال الشجرة: ${r.added} مستوى جديد، ${r.updated} مستوى موجود تحدّث. تقدرين تعدّلين أو تحذفين أي مستوى عادي.`; ui.pasteOpen = false; ui.pastePreview = null; ui.pasteText = ""; ui.collapsed = {}; }
+      break;
+    }
     case "ol-start-add": ui.form = { mode: "add", name: "", type: "", parentId: ds.parent || "", linkKind: "", linkId: "", loginId: "", password: "", roleId: "" }; ui.formError = ""; ui.confirmDelete = null; break;
     case "ol-start-edit": { const l = olFind(ds.id); if (!l) break; const custom = !!(l.type && !levelTypesList().includes(l.type)); ui.form = { mode: "edit", id: l.id, name: l.name, type: custom ? "" : l.type, typeNewMode: custom, typeNew: custom ? l.type : "", parentId: l.parentId, linkKind: l.linkKind, linkId: l.linkId, loginId: l.loginId, password: l.password, roleId: l.roleId || "" }; ui.formError = ""; break; }
     case "ol-cancel-form": ui.form = null; ui.formError = ""; break;
