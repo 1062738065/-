@@ -1306,7 +1306,9 @@ const AP_UNIT_DEPT = "unitdept:own";
 const AP_TREE_UP = "treeup:";
 const AP_TREE_UP_MAX = 4;
 function apTreeUpLabel(n) { return ["", "المستوى الأعلى من الوحدة في الهيكل", "المستوى الثاني فوق الوحدة", "المستوى الثالث فوق الوحدة", "المستوى الرابع فوق الوحدة"][n] || ("المستوى " + n + " فوق الوحدة"); }
-function olLevelHasAccount(l) { return !!l && ((l.loginId && l.status !== "disabled") || ((l.linkKind === "dept" || l.linkKind === "office") && l.linkId)); }
+function olLevelHasAccount(l) { return !!l && ((l.loginId && l.status !== "disabled") || ((l.linkKind === "dept" || l.linkKind === "office") && l.linkId) || olLevelIsExec(l)); }
+// مستوى مربوط بحساب «الإدارة العليا» — يدخل المسار مثل القسم والمكتب، وحسابها نفسه يقوم بالمرحلة
+function olLevelIsExec(l) { return !!l && l.linkKind === "unit" && !!l.linkId && (S.units || []).some((u) => u.id === l.linkId && u.role === "executive" && u.status !== "disabled"); }
 function apTreeUpLevel(unit, approver, skip) {
   if (!unit) return null;
   const n = Number(String(approver).slice(AP_TREE_UP.length)) || 1;
@@ -1368,6 +1370,7 @@ function sessionIsLevel(l) {
   if (S.currentPersonId) return false;
   if (l.linkKind === "dept") return !!S.isDepartmentUser && S.currentDepartmentId === l.linkId;
   if (l.linkKind === "office") return !!S.isOfficeUser && S.currentOfficeId === l.linkId;
+  if (olLevelIsExec(l)) return !!S.isExecutive && !!S.currentUser && S.currentUser.id === l.linkId;
   return false;
 }
 function apStageHeldByPerson(st, unit, personId) {
@@ -2127,7 +2130,7 @@ function computeVisibleSidebarPagesRaw() {
     // "تصفّح الهيكل" يحل محل الصفحات الأربع (مكاتب الإشراف/الأقسام/الوحدات/المراكز) بالشريط — الصفحات نفسها باقية.
     return SIDEBAR_PAGES.filter((p) => ADMIN_FIXED_PAGES.includes(p.id));
   } else if (S.isExecutive) {
-    return [];
+    return userInAnyApStage() ? SIDEBAR_PAGES.filter((p) => p.id === "custom-path-inbox") : [];
   }
   // لا توجد قوائم صفحات افتراضية ثابتة لأي حساب: الصفحات تأتي من الدور فقط (قرار نجود).
   return [];
