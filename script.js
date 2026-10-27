@@ -830,7 +830,6 @@ function parseReportTabsCfg(v) {
 /* ===================== أزرار صفحة التقارير من القاعدة (جدول report_tabs) =====================
    كل زر: id, label, statuses (حالات التقارير التي يعرضها), adminStatuses (حالات إضافية تظهر
    فقط بصفة «الإدارية»), special ("all" كل غير المؤرشف / "archived" المؤرشف), enabled.
-   أزرار قديمة محفوظة بعمود mode (رئيسة الوحدة/المراجعة الإضافية) لا تظهر.
    لو الجدول فاضي تُستخدم القائمة المدمجة أدناه كما هي (نفس الأزرار السابقة بالضبط). */
 const REPORT_TABS_KEY = "prs:report-tabs";
 const REPORT_STATUS_OPTIONS = [
@@ -940,20 +939,7 @@ function reportToRow(unitId, r) { return { id: r.id, unit_id: unitId, label: r.l
   custom_stage_id: r.customStageId || null,
   custom_log: r.customLog || [],
 }; }
-// المسار الثابت القديم (رئيسة الوحدة/المراجعة الإضافية/القسم) والمسار الحر القديم أُزيلا —
-// المسار الوحيد الآن «مسارات الاعتماد». تقرير واقف على مسار قديم يرجع لكاتبته لتعيد إرساله
-// (المُعاد سابقًا يبقى «بحاجة إلى تعديل/استكمال»). لا يُكتب شيء للقاعدة إلا عند حفظ التقرير.
-const LEGACY_PENDING_STATUSES = ["pending_head_review", "pending_extra_review", "under_review"];
-function migrateLegacyReport(r) {
-  if (!r) return r;
-  const st = r.status;
-  if (LEGACY_PENDING_STATUSES.includes(st)) return { ...r, status: "draft" };
-  if (st === "head_returned_edit" || st === "extra_returned_edit") return { ...r, status: "returned" };
-  if (st === "head_returned_completion" || st === "extra_returned_completion") return { ...r, status: "needs_completion" };
-  if (st === "custom_pending" && !(typeof r.customStageId === "string" && r.customStageId.indexOf("ap:") === 0)) return { ...r, status: "draft", customStageId: null };
-  return r;
-}
-function rowToReport(r) { return migrateLegacyReport({ id: r.id, label: r.label || "", status: r.status || "draft", reportType: r.report_type || "general", createdAt: Number(r.created_at) || 0, updatedAt: Number(r.updated_at) || 0, shared: r.shared || {}, sections: r.sections || {}, lastSectionId: r.last_section_id || "", internalSentAt: r.internal_sent_at ? Number(r.internal_sent_at) : null, internalSentBy: r.internal_sent_by || null, internalReviewNotes: r.internal_review_notes || null, internalReturnedAt: r.internal_returned_at ? Number(r.internal_returned_at) : null,
+function rowToReport(r) { return ({ id: r.id, label: r.label || "", status: r.status || "draft", reportType: r.report_type || "general", createdAt: Number(r.created_at) || 0, updatedAt: Number(r.updated_at) || 0, shared: r.shared || {}, sections: r.sections || {}, lastSectionId: r.last_section_id || "", internalSentAt: r.internal_sent_at ? Number(r.internal_sent_at) : null, internalSentBy: r.internal_sent_by || null, internalReviewNotes: r.internal_review_notes || null, internalReturnedAt: r.internal_returned_at ? Number(r.internal_returned_at) : null,
   customStageId: r.custom_stage_id || null,
   customLog: Array.isArray(r.custom_log) ? r.custom_log : [],
 }); }
@@ -1149,10 +1135,10 @@ const dataStore = {
   },
   cacheSectionFieldSchemasLocally(map) { lsSet(SECTION_FIELD_SCHEMAS_KEY, JSON.stringify(map)); },
   // Each unit now holds a LIST of report entries (one per period/submission),
-  // each carrying its own status: draft / under_review / completed.
+  // each carrying its own status: draft / custom_pending / returned / completed / approved.
   getReports(unitId) {
     const v = lsGet(reportsKey(unitId));
-    return v ? JSON.parse(v).map(migrateLegacyReport) : [];
+    return v ? JSON.parse(v) : [];
   },
   saveReports(unitId, list) { lsSet(reportsKey(unitId), JSON.stringify(list)); },
   cacheReportsLocally(unitId, list) { lsSet(reportsKey(unitId), JSON.stringify(list)); },
@@ -7631,15 +7617,11 @@ function renderUnitReportsHub() {
   const typeFilter = S.ui.unitReportsTypeFilter || "";
   const yearFilter = S.ui.unitReportsYearFilter || "";
 
-  const isAdminMode = true;
-  // تبويبات "بحاجة إلى تعديل/استكمال" و"التقارير المرسلة" تجمع حالتها القديمة (المسار
-  // الخارجي) مع نظيرتها الجديدة من مسار الإدارية/رئيسة الوحدة/المراجعة الإضافية
-  // الداخلي، حتى تظهر تحت نفس التبويب المألوف بدون إضافة عناصر واجهة مكررة.
-  // الأزرار وحالاتها صارت من القاعدة (report_tabs) — تُدار من «إدارة أزرار التقارير».
+  // الأزرار وحالاتها من القاعدة (report_tabs) — تُدار من «إدارة أزرار التقارير».
   const reportMatchesTab = (r, id) => {
     const t = reportTabDef(id);
     if (!t) return false;
-    return (t.statuses || []).indexOf(r.status) !== -1 || (isAdminMode && (t.adminStatuses || []).indexOf(r.status) !== -1);
+    return (t.statuses || []).indexOf(r.status) !== -1 || (t.adminStatuses || []).indexOf(r.status) !== -1;
   };
   const tabSpecial = (id) => { const t = reportTabDef(id); return t ? t.special : ""; };
 
