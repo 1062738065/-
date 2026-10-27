@@ -727,16 +727,20 @@ async function supabaseReplaceTable(table, rows, keyCol, removedIds) {
     if (!del.ok) reportSupabaseWriteError(table, del.error);
   }
 }
-// المعرّفات التي كانت في النسخة المحلية قبل هذا الحفظ وليست في القائمة الجديدة = حُذفت هنا عمدًا.
-function removedIdsFor(lsKey, newIds, idsOf) {
-  try {
-    const v = lsGet(lsKey);
-    if (!v) return [];
-    const keep = new Set(newIds.map(String));
-    return idsOf(JSON.parse(v)).filter((id) => !keep.has(String(id)));
-  } catch (e) { return []; }
+// حفظ جدول قائمة: يرسل للقاعدة الصفوف اللي تغيّرت فعلًا (مقارنة بآخر نسخة معروفة على هذا الجهاز) والمحذوفة فقط —
+// بدل القائمة كاملة. كذا جهاز مفتوح من قبل ما يمسح تعديلات جهاز ثاني على صفوف ما لمسها.
+function saveListTable(lsKey, table, list, toRows, keyCol, storeVal) {
+  keyCol = keyCol || "id";
+  let prevRows = [];
+  try { const v = lsGet(lsKey); if (v) prevRows = toRows(JSON.parse(v)); } catch (e) { prevRows = []; }
+  const rows = toRows(list);
+  const prevBy = new Map(prevRows.map((r) => [String(r[keyCol]), JSON.stringify(r)]));
+  const keep = new Set(rows.map((r) => String(r[keyCol])));
+  const changed = rows.filter((r) => prevBy.get(String(r[keyCol])) !== JSON.stringify(r));
+  const gone = [...prevBy.keys()].filter((k) => !keep.has(k));
+  lsSet(lsKey, JSON.stringify(storeVal !== undefined ? storeVal : list));
+  if (dbConnected() && (changed.length || gone.length)) queueSupabaseReplaceTable(table, changed, keyCol, gone).catch(() => {});
 }
-const idsOfList = (l) => (Array.isArray(l) ? l : []).map((x) => x && x.id);
 
 // طابور كتابة لكل جدول: لو صار أكثر من تعديل سريع بعد بعض (مثال: ضغط "نقل لأعلى"
 // عدة مرات متتالية بسرعة على حقل)، كل تعديل يبدأ كتابته للقاعدة فقط بعد ما تخلص
@@ -747,9 +751,15 @@ const idsOfList = (l) => (Array.isArray(l) ? l : []).map((x) => x && x.id);
 // الأحدث (وهذا بالضبط سبب مشكلة "رجع الترتيب تحت" اللي لاحظتها).
 const supabaseWriteQueues = {};
 function queueSupabaseReplaceTable(table, rows, keyCol, removedIds) {
+  return queueSupabaseTask(table, () => supabaseReplaceTable(table, rows, keyCol, removedIds));
+}
+let lastDbWriteAt = 0;
+function queueSupabaseTask(table, fn) {
+  lastDbWriteAt = Date.now();
   const prev = supabaseWriteQueues[table] || Promise.resolve();
-  const next = prev.catch(() => {}).then(() => supabaseReplaceTable(table, rows, keyCol, removedIds));
+  const next = prev.catch(() => {}).then(fn);
   supabaseWriteQueues[table] = next;
+  next.catch(() => {});
   return next;
 }
 function pendingSupabaseWrite(table) {
@@ -1075,15 +1085,11 @@ const dataStore = {
     return v ? JSON.parse(v) : [];
   },
   saveDepartments(d) {
-    const gone = removedIdsFor(DEPARTMENTS_KEY, d.map((x) => x.id), idsOfList);
-    lsSet(DEPARTMENTS_KEY, JSON.stringify(d));
-    if (dbConnected()) queueSupabaseReplaceTable("departments", d.map(deptToRow), "id", gone).catch(() => {});
+    saveListTable(DEPARTMENTS_KEY, "departments", d, (l) => (l || []).map(deptToRow));
   },
   getOffices() { const v = lsGet(OFFICES_KEY); return v ? JSON.parse(v) : []; },
   saveOffices(o) {
-    const gone = removedIdsFor(OFFICES_KEY, o.map((x) => x.id), idsOfList);
-    lsSet(OFFICES_KEY, JSON.stringify(o));
-    if (dbConnected()) queueSupabaseReplaceTable("offices", o.map(officeToRow), "id", gone).catch(() => {});
+    saveListTable(OFFICES_KEY, "offices", o, (l) => (l || []).map(officeToRow));
   },
   getDashboardConfig() { try { const v = lsGet(DASHBOARD_CONFIG_KEY); return v ? JSON.parse(v) : {}; } catch (e) { return {}; } },
   saveDashboardConfig(cfg) {
@@ -1093,64 +1099,45 @@ const dataStore = {
   cacheOfficesLocally(o) { lsSet(OFFICES_KEY, JSON.stringify(o)); },
   getUnits() { const v = lsGet(UNITS_KEY); return v ? JSON.parse(v) : []; },
   saveUnits(u) {
-    const gone = removedIdsFor(UNITS_KEY, u.map((x) => x.id), idsOfList);
-    lsSet(UNITS_KEY, JSON.stringify(u));
-    if (dbConnected()) queueSupabaseReplaceTable("units", u.map(unitToRow), "id", gone).catch(() => {});
+    saveListTable(UNITS_KEY, "units", u, (l) => (l || []).map(unitToRow));
   },
   getIndicatorDefinitions() { const v = lsGet(INDICATOR_DEFINITIONS_KEY); return v ? JSON.parse(v) : []; },
   saveIndicatorDefinitions(d) {
-    const gone = removedIdsFor(INDICATOR_DEFINITIONS_KEY, d.map((x) => x.id), idsOfList);
-    lsSet(INDICATOR_DEFINITIONS_KEY, JSON.stringify(d));
-    if (dbConnected()) queueSupabaseReplaceTable("indicator_definitions", d.map(indDefToRow), "id", gone).catch(() => {});
+    saveListTable(INDICATOR_DEFINITIONS_KEY, "indicator_definitions", d, (l) => (l || []).map(indDefToRow));
   },
   getSiteSettings() { const v = lsGet(SITE_SETTINGS_KEY); return { ...DEFAULT_SITE_COLORS, ...DEFAULT_BRANDING, ...(v ? JSON.parse(v) : {}) }; },
   saveSiteSettings(s) {
     lsSet(SITE_SETTINGS_KEY, JSON.stringify(s));
-    if (dbConnected()) supabaseRequest("site_settings", { method: "POST", prefer: "return=minimal,resolution=merge-duplicates", body: JSON.stringify(siteSettingsToRow(s)) }).then(dbWriteCheck("site_settings")).catch(() => {});
+    if (dbConnected()) queueSupabaseTask("site_settings", () => supabaseRequest("site_settings", { method: "POST", prefer: "return=minimal,resolution=merge-duplicates", body: JSON.stringify(siteSettingsToRow(s)) }).then(dbWriteCheck("site_settings")));
   },
   cacheIndicatorDefinitionsLocally(d) { lsSet(INDICATOR_DEFINITIONS_KEY, JSON.stringify(d)); },
   cacheUnitsLocally(u) { lsSet(UNITS_KEY, JSON.stringify(u)); },
   cacheDepartmentsLocally(d) { lsSet(DEPARTMENTS_KEY, JSON.stringify(d)); },
   getRoles() { const v = lsGet(ROLES_KEY); return v ? JSON.parse(v) : []; },
   saveRoles(list) {
-    const gone = removedIdsFor(ROLES_KEY, list.map((x) => x.id), idsOfList);
-    lsSet(ROLES_KEY, JSON.stringify(list));
-    if (dbConnected()) queueSupabaseReplaceTable("roles", list.map(roleToRow), "id", gone).catch(() => {});
+    saveListTable(ROLES_KEY, "roles", list, (l) => (l || []).map(roleToRow));
   },
   getReportTabs() { const v = lsGet(REPORT_TABS_KEY); return v ? JSON.parse(v) : []; },
   saveReportTabs(list) {
-    const gone = removedIdsFor(REPORT_TABS_KEY, list.map((x) => x.id), idsOfList);
-    lsSet(REPORT_TABS_KEY, JSON.stringify(list));
-    if (dbConnected()) queueSupabaseReplaceTable("report_tabs", list.map(reportTabToRow), "id", gone).catch(() => {});
+    saveListTable(REPORT_TABS_KEY, "report_tabs", list, (l) => (l || []).map(reportTabToRow));
   },
   getApprovalPaths() { const v = lsGet(APPROVAL_PATHS_KEY); return v ? JSON.parse(v) : []; },
   saveApprovalPaths(list) {
-    const gone = removedIdsFor(APPROVAL_PATHS_KEY, list.map((x) => x.id), idsOfList);
-    lsSet(APPROVAL_PATHS_KEY, JSON.stringify(list));
-    if (dbConnected()) queueSupabaseReplaceTable("approval_paths", list.map(approvalPathToRow), "id", gone).catch(() => {});
+    saveListTable(APPROVAL_PATHS_KEY, "approval_paths", list, (l) => (l || []).map(approvalPathToRow));
   },
   getPermLog() { const v = lsGet(PERM_LOG_KEY); return v ? JSON.parse(v) : []; },
   getPersons() { const v = lsGet(PERSONS_KEY); return v ? JSON.parse(v) : []; },
   savePersons(list) {
-    const gone = removedIdsFor(PERSONS_KEY, list.map((x) => x.id), idsOfList);
-    lsSet(PERSONS_KEY, JSON.stringify(list));
-    if (dbConnected()) queueSupabaseReplaceTable("persons", list.map(personToRow), "id", gone).catch(() => {});
+    saveListTable(PERSONS_KEY, "persons", list, (l) => (l || []).map(personToRow));
   },
   getGoalsDefinitions() { const v = lsGet(GOALS_DEFINITIONS_KEY); return v ? JSON.parse(v) : { strategic: [], operational: [] }; },
   saveGoalsDefinitions(d) {
-    const gone = removedIdsFor(GOALS_DEFINITIONS_KEY, (d.strategic || []).concat(d.operational || []).map((g) => g.id), (o) => ((o && o.strategic) || []).concat((o && o.operational) || []).map((g) => g.id));
-    lsSet(GOALS_DEFINITIONS_KEY, JSON.stringify(d));
-    if (dbConnected()) {
-      const rows = (d.strategic || []).map((g) => goalToRow(g, "strategic")).concat((d.operational || []).map((g) => goalToRow(g, "operational")));
-      queueSupabaseReplaceTable("goals_definitions", rows, "id", gone).catch(() => {});
-    }
+    saveListTable(GOALS_DEFINITIONS_KEY, "goals_definitions", d, (o) => ((o && o.strategic) || []).map((g) => goalToRow(g, "strategic")).concat(((o && o.operational) || []).map((g) => goalToRow(g, "operational"))));
   },
   cacheGoalsDefinitionsLocally(d) { lsSet(GOALS_DEFINITIONS_KEY, JSON.stringify(d)); },
   getReportSectionDefs() { const v = lsGet(REPORT_SECTIONS_KEY); return v ? JSON.parse(v) : DEFAULT_SECTIONS.map((s, i) => ({ id: s.id, label: s.label, order: i, enabled: true })); },
   saveReportSectionDefs(list) {
-    const gone = removedIdsFor(REPORT_SECTIONS_KEY, list.map((x) => x.id), idsOfList);
-    lsSet(REPORT_SECTIONS_KEY, JSON.stringify(list));
-    if (dbConnected()) queueSupabaseReplaceTable("report_sections", list.map(sectionDefToRow), "id", gone).catch(() => {});
+    saveListTable(REPORT_SECTIONS_KEY, "report_sections", list, (l) => (l || []).map(sectionDefToRow));
   },
   cacheReportSectionDefsLocally(list) { lsSet(REPORT_SECTIONS_KEY, JSON.stringify(list)); },
   // خريطة { sectionId: [field, field, ...] } — تخصيصات حقول الأقسام المبنية على
@@ -1158,9 +1145,7 @@ const dataStore = {
   // النظام التعريفات الافتراضية المكتوبة بالكود كما هي.
   getSectionFieldSchemas() { const v = lsGet(SECTION_FIELD_SCHEMAS_KEY); return v ? JSON.parse(v) : {}; },
   saveSectionFieldSchemas(map) {
-    const gone = removedIdsFor(SECTION_FIELD_SCHEMAS_KEY, Object.keys(map), (o) => Object.keys(o || {}));
-    lsSet(SECTION_FIELD_SCHEMAS_KEY, JSON.stringify(map));
-    if (dbConnected()) queueSupabaseReplaceTable("section_field_schemas", Object.keys(map).map((id) => fieldSchemaToRow(id, map[id])), "section_id", gone).catch(() => {});
+    saveListTable(SECTION_FIELD_SCHEMAS_KEY, "section_field_schemas", map, (o) => Object.keys(o || {}).map((id) => fieldSchemaToRow(id, o[id])), "section_id");
   },
   cacheSectionFieldSchemasLocally(map) { lsSet(SECTION_FIELD_SCHEMAS_KEY, JSON.stringify(map)); },
   // Each unit now holds a LIST of report entries (one per period/submission),
@@ -1215,8 +1200,8 @@ function isUnitInUserScope(unitId) {
 function dbWriteCheck(table) { return (res) => { if (res && !res.ok) reportSupabaseWriteError(table, res.error); }; }
 function pushReportToDb(unitId, entry) {
   if (!dbConnected()) return;
-  supabaseRequest("reports?on_conflict=id", { method: "POST", prefer: "return=minimal,resolution=merge-duplicates", body: JSON.stringify(reportToRow(unitId, entry)) })
-    .then(dbWriteCheck("reports")).catch(() => {});
+  queueSupabaseTask("reports", () => supabaseRequest("reports?on_conflict=id", { method: "POST", prefer: "return=minimal,resolution=merge-duplicates", body: JSON.stringify(reportToRow(unitId, entry)) })
+    .then(dbWriteCheck("reports")));
 }
 // وضع "الاطلاع فقط" لمديرة النظام (الحساب الأصلي): تشوف كل التقارير والأرشيف
 // وتتصفحها، لكن بدون تعديل أو إرسال أو اعتماد أو إعادة أو حذف. حسابات "المسمى
@@ -1291,7 +1276,6 @@ function apPersonInUnit(p, unit) {
 function apStageApplies(st, unit, ctx) {
   if (!st || !unit) return true;
   const a = String(st.approver || "");
-  if (a.indexOf(AP_UNIT_DEPT) === 0 && !unit.departmentId) return false;
   if (a.indexOf(AP_TREE_UP) === 0 && !apStageTreeLevel(st, unit)) return false;
   // المسار التلقائي: مرحلة داخل الوحدة أقل من أو بنفس رتبة كاتبة التقرير تُتخطّى (المساعدة لما تكتب ما تمر على المساعدة)
   if (st.unitRank && ctx && ctx.authorId && apAutoAuthorRank(ctx.authorId) >= st.unitRank) return false;
@@ -1303,8 +1287,6 @@ function apStageApplies(st, unit, ctx) {
   if (ctx && ctx.authorId && apStageHeldByPerson(st, unit, ctx.authorId)) return false;
   return true;
 }
-// معتمد ديناميكي: حساب القسم اللي تتبع له وحدة التقرير (كل تقرير يروح لقسم وحدته فقط)
-const AP_UNIT_DEPT = "unitdept:own";
 // معتمد ديناميكي من «الهيكل المرن»: "treeup:<n>" = المستوى رقم n فوق وحدة التقرير، من المستويات
 // اللي لها حساب فقط (دخول خاص مفعّل، أو مربوطة بقسم/مكتب). مستويات التنظيم بدون حساب تُتجاوز.
 const AP_TREE_UP = "treeup:";
@@ -1388,7 +1370,7 @@ function apAutoGuessRoles() {
 }
 function apAutoSave(patch) {
   const cfg = { ...autoPathCfg(), ...patch };
-  saveSiteTheme({ autoPath: cfg });
+  saveSiteTheme((th) => ({ autoPath: { ...(th.autoPath || {}), ...patch } }));
   const list = approvalPathsList().slice();
   const i = list.findIndex((p) => p.id === AUTO_PATH_ID);
   const cur = i >= 0 ? list[i] : { id: AUTO_PATH_ID, name: "المسار التلقائي من الهيكل", ownerKind: "all", ownerId: "", periodType: "", authorRoleId: "", status: "draft", createdAt: Date.now() };
@@ -1436,24 +1418,15 @@ function sessionIsLevel(l) {
   return false;
 }
 function apStageHeldByPerson(st, unit, personId) {
-  if (!personId || !st) return false;
-  const a = String(st.approver || ""); const i = a.indexOf(":");
-  const k = a.slice(0, i), id = a.slice(i + 1);
-  if (k === "person") return personId === id;
-  if (k !== "role") return false;
+  if (!personId || !st || String(st.approver || "").indexOf("role:") !== 0) return false;
   const p = personsList().find((x) => x.id === personId);
-  return !!p && p.roleId === id && (!st.sameUnit || !unit || apPersonInUnit(p, unit));
+  return !!p && p.roleId === String(st.approver).slice(5) && (!st.sameUnit || !unit || apPersonInUnit(p, unit));
 }
 /* إعدادات كل جهة (صفحة «الإعدادات»): تُحفظ في site_settings.theme_json.entityPrefs["unit:<id>"]
    { skip: ["<pathId>:<stageId>"], sectionsOff: { "<نوع الفترة>": ["<sectionId>"] } } */
 function entityPrefs(key) { const th = ((S.siteSettings || {}).theme) || {}; return (th.entityPrefs && th.entityPrefs[key]) || {}; }
 async function saveEntityPrefs(key, patch) {
-  // نجيب آخر نسخة من الإعدادات قبل الحفظ عشان ما نمسح تعديلات مديرة النظام أو جهة ثانية
-  try { await refreshSiteSettingsFromDb(); } catch (e) {}
-  const th = ((S.siteSettings || {}).theme) || {};
-  const all = { ...(th.entityPrefs || {}) };
-  all[key] = { ...(all[key] || {}), ...patch };
-  saveSiteTheme({ entityPrefs: all });
+  saveSiteTheme((th) => { const all = { ...(th.entityPrefs || {}) }; all[key] = { ...(all[key] || {}), ...patch }; return { entityPrefs: all }; });
 }
 function apUnitSkipList(unitId) { return entityPrefs("unit:" + unitId).skip || []; }
 // المسار المثبَّت على التقرير (من المرحلة الحالية أو من آخر حركة بالسجل)
@@ -1478,7 +1451,6 @@ function apOwnerCandidatesForUnit(unit) {
   return [{ kind: "unit", id: unit.id }];
 }
 function currentPersonObj() { return S.currentPersonId ? (personsList().find((x) => x.id === S.currentPersonId) || null) : null; }
-function currentAuthorRoleId() { const p = currentPersonObj(); return p ? (p.roleId || "") : ""; }
 // أنسب مسار مفعّل لهذا التقرير: الأكثر تحديدًا (فترة محددة / دور محدد) يفوز
 function matchApprovalPath(unit, report) { return matchingApprovalPaths(unit, report)[0] || null; }
 function matchingApprovalPaths(unit, report) {
@@ -1494,25 +1466,13 @@ function userHoldsApStage(stage, unit) {
   if (!stage || !stage.approver || S.isAdmin) return false;
   const s = String(stage.approver); const i = s.indexOf(":");
   const k = s.slice(0, i), id = s.slice(i + 1);
-  if (k === "person") return S.currentPersonId === id;
   if (k === "role") {
     if (S.levelScope) return S.levelScope.roleId === id && (!stage.sameUnit || !unit || S.levelScope.unitIds.has(unit.id));
     const p = currentPersonObj();
     if (!p || p.roleId !== id) return false;
     return !stage.sameUnit || !unit || apPersonInUnit(p, unit);
   }
-  if (k === "level") {
-    if (S.levelScope) return S.levelScope.levelId === id;
-    // مستوى مربوط بقسم/مكتب موجود: حساب تلك الجهة نفسه يقوم بالمرحلة أيضًا
-    const l = olFind(id); if (!l || S.currentPersonId) return false;
-    if (l.linkKind === "dept") return !!S.isDepartmentUser && S.currentDepartmentId === l.linkId;
-    if (l.linkKind === "office") return !!S.isOfficeUser && S.currentOfficeId === l.linkId;
-    return false;
-  }
-  if (k === "dept") return !!S.isDepartmentUser && !S.currentPersonId && S.currentDepartmentId === id;
-  if (k === "unitdept") return !!S.isDepartmentUser && !S.currentPersonId && (!unit || unit.departmentId === S.currentDepartmentId);
   if (k === "treeup") return unit ? sessionIsLevel(apStageTreeLevel(stage, unit)) : olActive().some((l) => olLevelHasAccount(l) && sessionIsLevel(l));
-  if (k === "office") return !!S.isOfficeUser && !S.currentPersonId && S.currentOfficeId === id;
   return false;
 }
 function apStageIsPassThrough(st) { return !st.canApprove && !st.canReturn && !st.canEdit; }
@@ -4167,10 +4127,8 @@ function rowToOrgLevel(r) {
 function getOrgLevelsLocal() { try { const v = lsGet(ORG_LEVELS_KEY); return v ? JSON.parse(v) : []; } catch (e) { return []; } }
 function currentOrgLevels() { return S.orgLevels || (S.orgLevels = getOrgLevelsLocal()); }
 function saveOrgLevels(list) {
-  const gone = removedIdsFor(ORG_LEVELS_KEY, list.map((x) => x.id), idsOfList);
   S.orgLevels = list;
-  lsSet(ORG_LEVELS_KEY, JSON.stringify(list));
-  if (dbConnected()) queueSupabaseReplaceTable("org_levels", list.map(orgLevelToRow), "id", gone).catch(() => {});
+  saveListTable(ORG_LEVELS_KEY, "org_levels", list, (l) => (l || []).map(orgLevelToRow));
   syncUnitDeptsFromTree();
 }
 // الهيكل المرن هو المرجع: وحدة موضوعة تحت مستوى مربوط بقسم يصير قسمها هذا القسم تلقائيًا
@@ -4205,10 +4163,23 @@ function levelTypesList() {
   const th = ((S.siteSettings || {}).theme) || {};
   return Array.isArray(th.levelTypes) ? th.levelTypes.slice() : DEFAULT_LEVEL_TYPES.slice();
 }
+// patch: كائن، أو دالة (theme) => كائن. الدالة تُطبَّق محليًا فورًا، ثم على آخر نسخة في القاعدة وقت الكتابة —
+// فتعديل جهاز ما يمسح تعديل جهاز ثاني على مفاتيح ثانية (أو على عناصر ثانية داخل نفس المفتاح).
 function saveSiteTheme(patch) {
+  const mk = (th) => (typeof patch === "function" ? patch(th || {}) : patch);
   S.siteSettings = S.siteSettings || dataStore.getSiteSettings();
-  S.siteSettings = { ...S.siteSettings, theme: { ...(S.siteSettings.theme || {}), ...patch } };
-  dataStore.saveSiteSettings(S.siteSettings);
+  S.siteSettings = { ...S.siteSettings, theme: { ...(S.siteSettings.theme || {}), ...mk(S.siteSettings.theme) } };
+  lsSet(SITE_SETTINGS_KEY, JSON.stringify(S.siteSettings));
+  if (!dbConnected()) return;
+  queueSupabaseTask("site_settings", async () => {
+    const res = await supabaseRequest("site_settings?id=eq.main&select=*");
+    const base = res.ok && Array.isArray(res.data) && res.data.length ? rowToSiteSettings(res.data[0]) : S.siteSettings;
+    const merged = { ...base, theme: { ...(base.theme || {}), ...mk(base.theme) } };
+    const up = await supabaseRequest("site_settings", { method: "POST", prefer: "return=minimal,resolution=merge-duplicates", body: JSON.stringify(siteSettingsToRow(merged)) });
+    if (!up.ok) { reportSupabaseWriteError("site_settings", up.error); return; }
+    S.siteSettings = { ...S.siteSettings, theme: merged.theme };
+    lsSet(SITE_SETTINGS_KEY, JSON.stringify(S.siteSettings));
+  });
 }
 function levelTypeChipHtml(type) {
   if (!type) return `<span style="font-size:10.5px;font-weight:700;padding:3px 9px;border-radius:999px;white-space:nowrap;color:#5c4f55;background:${GRAY_BG};">بدون نوع</span>`;
@@ -5094,18 +5065,14 @@ function entryLinkPanelHtml(kind, id, title) {
 }
 function handleEntryAction(action, ds) {
   if (action === "entry-icon" || action === "entry-color") {
-    const th = (S.siteSettings || {}).theme || {};
-    const all = { ...(th.entityIcons || {}) };
-    all[ds.key] = { ...entryIconOf(ds.key), ...(action === "entry-icon" ? { icon: ds.icon } : { color: ds.color }) };
-    saveSiteTheme({ entityIcons: all });
+    const v = { ...entryIconOf(ds.key), ...(action === "entry-icon" ? { icon: ds.icon } : { color: ds.color }) };
+    saveSiteTheme((th) => ({ entityIcons: { ...(th.entityIcons || {}), [ds.key]: v } }));
     render(); return true;
   }
   if (action === "entry-link-toggle") {
-    const th = (S.siteSettings || {}).theme || {};
-    const all = { ...(th.entityIcons || {}) };
     const cur = entryIconOf(ds.key);
-    all[ds.key] = { icon: cur.icon, color: cur.color, linkOff: !cur.linkOff };
-    saveSiteTheme({ entityIcons: all });
+    const v = { icon: cur.icon, color: cur.color, linkOff: !cur.linkOff };
+    saveSiteTheme((th) => ({ entityIcons: { ...(th.entityIcons || {}), [ds.key]: v } }));
     render(); return true;
   }
   if (action === "entry-qr") { S.ui.entryQrKey = S.ui.entryQrKey === ds.key ? "" : ds.key; render(); return true; }
@@ -8020,7 +7987,6 @@ function pagesChecklistHtml(selected, action) {
 // على اسم الـ action — يخدم "تحديد الكل"/"إلغاء الكل" بدون تكرار منطق الحفظ.
 function permDropdownTargetArray(key) {
   if (key === "toggle-role-perm-page") { const f = rolePermFormState(); return f.pages; }
-  if (key === "toggle-role-perm-action") { const f = rolePermFormState(); return f.actions; }
   if (key === "toggle-role-perm-button") { const f = rolePermFormState(); return f.buttons; }
   return [];
 }
@@ -8044,6 +8010,13 @@ function permButtonsChecklistHtml(allSelected, action) {
     action, selected, total: shownCatalog.length, emptyLabel: "الأزرار",
     renderList: () => groups.map((g) => `<div style="margin-bottom:8px;"><div style="font-size:10.5px;font-weight:800;color:${ROSE};margin-bottom:4px;">${esc(g.name)}</div>${g.items.map((b) => permCheckboxRowHtml(action, b.id, b.label, selected.includes(b.id)) + (b.id.indexOf("chip:") === 0 ? `<div style="padding-inline-start:22px;">${permCheckboxRowHtml(action, "notify:" + b.id, "↳ ينبّه بعدد تقارير هذا الزر (في التنبيهات)", selectedAll.includes("notify:" + b.id))}</div>` : "")).join("")}</div>`).join(""),
   });
+}
+// الصلاحيات تنحفظ أول ما تتعلّم — والمحرّر يبقى مفتوح
+function permAutoSave() {
+  const f = S.ui.rolePermForm; if (!f) return;
+  const perms = { pages: [...f.pages], actions: [], buttons: [...f.buttons] };
+  if (S.ui.rolePermEditId) { S.roles = rolesList().map((x) => x.id === S.ui.rolePermEditId ? { ...x, permissions: perms } : x); dataStore.saveRoles(S.roles); S.ui.permDirty = true; }
+  else if (S.ui.personPermEditId) { S.persons = personsList().map((x) => x.id === S.ui.personPermEditId ? { ...x, permsOverride: perms } : x); dataStore.savePersons(S.persons); S.ui.permDirty = true; }
 }
 function rolePermFormState() {
   return S.ui.rolePermForm || (S.ui.rolePermForm = { pages: [], actions: [], buttons: [] });
@@ -8103,7 +8076,7 @@ function rolePermsEditorHtml(role) {
     ${pagesChecklistHtml(f.pages, "toggle-role-perm-page")}
     <div style="font-size:11.5px;font-weight:800;color:${ROSE};margin:10px 0 4px;">أزرار الصفحات (التقارير والإرسال والمراجعة والاعتماد)</div>
     ${permButtonsChecklistHtml(f.buttons, "toggle-role-perm-button")}
-    <div style="display:flex;gap:6px;margin-top:10px;">${pillBtn("حفظ الصلاحيات", { action: "role-perm-save", data: { id: role.id } })}${pillBtn("إلغاء", { variant: "ghost", action: "role-perm-cancel" })}</div>
+    <div style="display:flex;gap:6px;margin-top:10px;">${pillBtn("تم", { icon: iconCheck(14, "#fff"), action: "role-perm-cancel" })}<span class="hint" style="margin:0;align-self:center;">كل تعليم ينحفظ على طول</span></div>
   </div>`;
 }
 function personPermsEditorHtml(person) {
@@ -8116,7 +8089,7 @@ function personPermsEditorHtml(person) {
     ${pagesChecklistHtml(f.pages, "toggle-role-perm-page")}
     <div style="font-size:11.5px;font-weight:800;color:${ROSE};margin:10px 0 4px;">أزرار الصفحات</div>
     ${permButtonsChecklistHtml(f.buttons, "toggle-role-perm-button")}
-    <div style="display:flex;gap:6px;margin-top:10px;flex-wrap:wrap;">${pillBtn("حفظ الاستثناء", { action: "person-perm-save", data: { id: person.id } })}${pillBtn("إلغاء الاستثناء (العودة للدور)", { variant: "soft", action: "person-perm-clear", data: { id: person.id } })}${pillBtn("إغلاق", { variant: "ghost", action: "role-perm-cancel" })}</div>
+    <div style="display:flex;gap:6px;margin-top:10px;flex-wrap:wrap;">${pillBtn("تم", { icon: iconCheck(14, "#fff"), action: "role-perm-cancel" })}${pillBtn("إلغاء الاستثناء (العودة للدور)", { variant: "soft", action: "person-perm-clear", data: { id: person.id } })}${pillBtn("إغلاق", { variant: "ghost", action: "role-perm-cancel" })}</div>
   </div>`;
 }
 function rolesBulkCardHtml() {
@@ -8153,23 +8126,11 @@ function permLogCardHtml() {
 // المسارات هنا إعدادات فقط: لا تؤثر على دورة التقرير الحالية ولا تعمل إلا بعد «تفعيل»
 // صريح منها، ولا يوجد أي مسار افتراضي. 
 function approvalPathsList() { return S.approvalPaths || (S.approvalPaths = dataStore.getApprovalPaths()); }
-function apOwnerName(kind, id) {
-  if (kind === "all") return "كل الوحدات والمراكز";
-  if (kind === "etype") return id === "center" ? "كل المراكز" : "كل الوحدات";
-  if (kind === "olevel") { const l = olFind(id); return l ? l.name + " وما تحته" : "(مستوى محذوف)"; }
-  const list = kind === "office" ? (S.offices || []) : kind === "dept" ? (S.departments || []) : (S.units || []);
-  const e = list.find((x) => x.id === id);
-  return e ? e.name : "(جهة محذوفة)";
-}
 function apApproverLabel(v) {
   if (!v) return "—";
-  const [k, id] = v.split(":");
-  if (k === "role") { const r = rolesList().find((x) => x.id === id); return r ? "دور: " + r.name : "(دور محذوف)"; }
-  if (k === "person") { const p = personsList().find((x) => x.id === id); return p ? p.name : "(شخص محذوف)"; }
-  if (k === "level") { const l = olFind(id); return l ? l.name + (l.type ? " (" + l.type + ")" : "") : "(مستوى محذوف)"; }
-  if (v === AP_UNIT_DEPT) return "قسم الوحدة صاحبة التقرير";
+  if (v.indexOf("role:") === 0) { const r = rolesList().find((x) => x.id === v.slice(5)); return r ? "دور: " + r.name : "(دور محذوف)"; }
   if (v.indexOf(AP_TREE_UP) === 0) return apTreeUpLabel(Number(v.slice(AP_TREE_UP.length)) || 1);
-  return apOwnerName(k, id);
+  return "—";
 }
 // ===== بطاقة «المسار التلقائي من الهيكل» في «كل المسارات» =====
 function apAutoPreview(unit) {
@@ -10956,25 +10917,25 @@ function attachClickListener() {
       }
       case "set-all-reports-filter": S.ui.allReportsFilter = ds.filter; render(); break;
       case "logout": doLogout(); break;
-      case "toggle-role-perm-page": { const a = rolePermFormState().pages; const i = a.indexOf(ds.id); if (i >= 0) a.splice(i, 1); else a.push(ds.id); render(); break; }
+      case "toggle-role-perm-page": { const a = rolePermFormState().pages; const i = a.indexOf(ds.id); if (i >= 0) a.splice(i, 1); else a.push(ds.id); permAutoSave(); render(); break; }
       case "toggle-role-perm-button": { const a = rolePermFormState().buttons; const i = a.indexOf(ds.id); if (i >= 0) a.splice(i, 1); else a.push(ds.id);
         if (i < 0 && ds.id.indexOf("notify:") === 0) { const chip = ds.id.slice("notify:".length); if (a.some((x) => x.indexOf("notify:") !== 0) && !a.includes(chip)) a.push(chip); }
-        render(); break; }
-      case "toggle-role-perm-action": { const a = rolePermFormState().actions; const i = a.indexOf(ds.id); if (i >= 0) a.splice(i, 1); else a.push(ds.id); render(); break; }
+        permAutoSave(); render(); break; }
       case "role-perm-edit": {
         const r = rolesList().find((x) => x.id === ds.id); if (!r) break;
         const p = rolePermsOf(r);
         S.ui.rolePermForm = { pages: [...p.pages], actions: [], buttons: [...(p.buttons.length ? p.buttons : p.actions.filter((a) => BUTTON_CATALOG.some((b) => b.id === a)))] };
         S.ui.rolePermEditId = r.id; S.ui.personPermEditId = null; S.ui.rolesBulk = null; render(); break;
       }
-      case "role-perm-cancel": S.ui.rolePermEditId = null; S.ui.personPermEditId = null; S.ui.rolePermForm = null; render(); break;
-      case "role-perm-save": {
-        const f = rolePermFormState();
-        const r = rolesList().find((x) => x.id === ds.id); if (!r) break;
-        S.roles = rolesList().map((x) => x.id === r.id ? { ...x, permissions: { pages: [...f.pages], actions: [], buttons: [...f.buttons] } } : x);
-        dataStore.saveRoles(S.roles);
-        addPermLog("role", r.id, r.name, `تعديل صلاحيات الدور: ${permSummaryText(f)}`);
-        S.ui.rolePermEditId = null; S.ui.rolePermForm = null; render(); break;
+      case "role-perm-cancel": {
+        if (S.ui.permDirty) {
+          const f = rolePermFormState();
+          const r = S.ui.rolePermEditId && rolesList().find((x) => x.id === S.ui.rolePermEditId);
+          const p = S.ui.personPermEditId && personsList().find((x) => x.id === S.ui.personPermEditId);
+          if (r) addPermLog("role", r.id, r.name, `تعديل صلاحيات الدور: ${permSummaryText(f)}`);
+          if (p) addPermLog("person", p.id, p.name, `استثناء خاص: ${permSummaryText(f)}`);
+        }
+        S.ui.rolePermEditId = null; S.ui.personPermEditId = null; S.ui.rolePermForm = null; S.ui.permDirty = false; render(); break;
       }
       case "person-perm-edit": {
         const p = personsList().find((x) => x.id === ds.id); if (!p) break;
@@ -10982,20 +10943,12 @@ function attachClickListener() {
         S.ui.rolePermForm = { pages: [...e.pages], actions: [], buttons: [...(e.buttons.length ? e.buttons : e.actions.filter((a) => BUTTON_CATALOG.some((b) => b.id === a)))] };
         S.ui.personPermEditId = p.id; S.ui.rolePermEditId = null; S.ui.rolesBulk = null; render(); break;
       }
-      case "person-perm-save": {
-        const f = rolePermFormState();
-        const p = personsList().find((x) => x.id === ds.id); if (!p) break;
-        S.persons = personsList().map((x) => x.id === p.id ? { ...x, permsOverride: { pages: [...f.pages], actions: [], buttons: [...f.buttons] } } : x);
-        dataStore.savePersons(S.persons);
-        addPermLog("person", p.id, p.name, `استثناء خاص: ${permSummaryText(f)}`);
-        S.ui.personPermEditId = null; S.ui.rolePermForm = null; render(); break;
-      }
       case "person-perm-clear": {
         const p = personsList().find((x) => x.id === ds.id); if (!p) break;
         S.persons = personsList().map((x) => x.id === p.id ? { ...x, permsOverride: {} } : x);
         dataStore.savePersons(S.persons);
         addPermLog("person", p.id, p.name, "إلغاء الاستثناء (عاد لصلاحيات الدور)");
-        S.ui.personPermEditId = null; S.ui.rolePermForm = null; render(); break;
+        S.ui.personPermEditId = null; S.ui.rolePermForm = null; S.ui.permDirty = false; render(); break;
       }
       case "roles-bulk-start": S.ui.rolesBulk = { confirm: false }; S.ui.rolePermForm = { pages: [], actions: [], buttons: [] }; S.ui.rolePermEditId = null; S.ui.personPermEditId = null; render(); break;
       case "roles-bulk-preset": rolePermFormState().pages = [...BULK_PERM_PRESETS.unit]; render(); break;
@@ -11070,18 +11023,14 @@ function attachClickListener() {
         render(); break;
       }
       case "ap-auto-writer": {
-        const w = { idr: true, ast: true, head: true, ...(autoPathCfg().writers || {}) };
-        w[ds.k] = w[ds.k] === false;
-        saveSiteTheme({ autoPath: { ...autoPathCfg(), writers: w } });
+        const turnOn = (autoPathCfg().writers || {})[ds.k] === false;
+        saveSiteTheme((th) => { const a = th.autoPath || {}; return { autoPath: { ...a, writers: { idr: true, ast: true, head: true, ...(a.writers || {}), [ds.k]: turnOn } } }; });
         render(); break;
       }
       case "ap-auto-perm": {
-        const cfg = autoPathCfg(), perms = { ...(cfg.perms || {}) };
         const pm = apAutoPerm(ds.pk);
-        if (ds.opt === "mode") { pm.mode = ds.val; if (ds.val !== "approve") pm.final = false; }
-        else pm[ds.opt] = !pm[ds.opt];
-        perms[ds.pk] = pm;
-        saveSiteTheme({ autoPath: { ...cfg, perms } });
+        const ch = ds.opt === "mode" ? { mode: ds.val, ...(ds.val !== "approve" ? { final: false } : {}) } : { [ds.opt]: !pm[ds.opt] };
+        saveSiteTheme((th) => { const a = th.autoPath || {}, ps = a.perms || {}; return { autoPath: { ...a, perms: { ...ps, [ds.pk]: { ...(ps[ds.pk] || {}), ...ch } } } }; });
         addPermLog("approval-path", AUTO_PATH_ID, "المسار التلقائي من الهيكل", "تغيير خيارات مرحلة");
         if (ds.opt === "info") apRepairStuck();
         render(); break;
@@ -11099,8 +11048,7 @@ function attachClickListener() {
           break;
         }
         if (ds.what === "lvl") {
-          const cur = (autoPathCfg().skipLevels || []).filter((x) => x !== ds.id);
-          saveSiteTheme({ autoPath: { ...autoPathCfg(), skipLevels: on ? [...cur, ds.id] : cur } });
+          saveSiteTheme((th) => { const a = th.autoPath || {}, cur = (a.skipLevels || []).filter((x) => x !== ds.id); return { autoPath: { ...a, skipLevels: on ? [...cur, ds.id] : cur } }; });
         } else {
           S.approvalPaths = approvalPathsList().map((x) => x.id === AUTO_PATH_ID ? { ...x, stages: (x.stages || []).map((st) => st.id === ds.id ? { ...st, disabled: on } : st) } : x);
           dataStore.saveApprovalPaths(S.approvalPaths);
@@ -11465,7 +11413,7 @@ function attachClickListener() {
         if (kind === "department") { S.departments = S.departments.map((d) => d.id === toId ? { ...d, ...patch } : d); dataStore.saveDepartments(S.departments); }
         else if (kind === "office") { S.offices = S.offices.map((o) => o.id === toId ? { ...o, ...patch } : o); dataStore.saveOffices(S.offices); }
         else { S.units = S.units.map((u) => u.id === toId ? { ...u, ...patch } : u); dataStore.saveUnits(S.units); }
-        addPermLog("copy-config", toId, apOwnerName(type, toId), `نسخ إعداد من «${from.name}»: الدور الأساسي`);
+        addPermLog("copy-config", toId, (treeEntity(type, toId) || {}).name || "", `نسخ إعداد من «${from.name}»: الدور الأساسي`);
         S.ui.structCopy = null; render(); break;
       }
       case "tree-edit-start": S.ui.treeEditFor = { type: ds.type, id: ds.id }; render(); break;
@@ -11528,7 +11476,7 @@ function attachClickListener() {
         } else {
           arr.length = 0;
         }
-        render();
+        permAutoSave(); render();
         break;
       }
       /* ---------- indicators management ---------- */
@@ -12046,6 +11994,79 @@ function afterRender() {
   if (loginUserEl) loginUserEl.focus();
 }
 
+/* ===== التحديث الحي: أي جهاز فاتح الموقع يجيب آخر التعديلات كل ٢٠ ثانية (ولما يرجع للتبويب) =====
+   ويطبّق الصلاحيات الجديدة بدون خروج. ما يرسم الصفحة من جديد وأحد يكتب في خانة — ينتظر لين يطلع منها. */
+const LIVE_SYNC_MS = 20000;
+let liveSyncBusy = false;
+function liveSig() {
+  const reps = Object.keys(S.reports || {}).map((k) => (S.reports[k] || []).map((r) => r.id + r.status + (r.updatedAt || 0) + (r.customStageId || "")).join()).join("|");
+  return JSON.stringify([S.units, S.departments, S.offices, S.roles, S.persons, S.orgLevels, S.approvalPaths, (S.siteSettings || {}).theme, S.indicatorDefinitions, S.goalsDefinitions]) + reps;
+}
+async function liveSyncReports() {
+  await pendingSupabaseWrite("reports");
+  const res = await supabaseRequest("reports?select=*");
+  if (!res.ok || !Array.isArray(res.data)) return;
+  const by = {};
+  res.data.forEach((row) => { (by[row.unit_id] = by[row.unit_id] || []).push(rowToReport(row)); });
+  const editing = S.view === "unit-report" ? S.currentReportId : null;
+  Object.keys(S.reports || {}).forEach((uid0) => {
+    const local = new Map((S.reports[uid0] || []).map((r) => [r.id, r]));
+    // النسخة الأحدث تفوز؛ والتقرير المفتوح للتعبئة على هذا الجهاز يبقى كما هو
+    const merged = (by[uid0] || []).map((r) => { const l = local.get(r.id); return l && (l.id === editing || (l.updatedAt || 0) > (r.updatedAt || 0)) ? l : r; });
+    (S.reports[uid0] || []).forEach((l) => { if (!merged.some((m) => m.id === l.id) && (l.id === editing || Date.now() - (l.createdAt || 0) < 60000)) merged.push(l); });
+    S.reports[uid0] = merged;
+    dataStore.cacheReportsLocally(uid0, merged);
+  });
+}
+function applySessionPermsLive() {
+  if (!S.currentUser) return;
+  if (S.currentPersonId) { const p = personsList().find((x) => x.id === S.currentPersonId); if (p) { S.allowedActions = null; S.allowedButtons = null; applyPersonPerms(p); } return; }
+  if (S.levelScope) {
+    const l = olFind(S.levelScope.levelId); if (!l) return;
+    S.levelScope.unitIds = olScopeUnitIds(l.id);
+    const role = l.roleId ? rolesList().find((r) => r.id === l.roleId) : null;
+    S.allowedActions = null; S.allowedButtons = null;
+    if (role) { S.levelScope.roleId = role.id; applyPersonPerms({ roleId: role.id, permsOverride: null }); S.allowedPages = (S.allowedPages || []).filter((x) => LEVEL_COMPATIBLE_PAGES.includes(x)); }
+    else S.allowedPages = [];
+    return;
+  }
+  if (S.isAdmin || S.isExecutive) {
+    const u = S.currentUser;
+    const ent = S.units.find((x) => x.id === u.id || x.id === u.unitId) || S.units.find((x) => x.role === (S.isAdmin ? "admin" : "executive") && x.name === u.name);
+    S.allowedActions = null; S.allowedButtons = null;
+    applyAdminOrExecRoles(ent, S.isAdmin);
+    return;
+  }
+  const ent = S.isDepartmentUser ? S.departments.find((d) => d.id === S.currentDepartmentId) : S.isOfficeUser ? (S.offices || []).find((o) => o.id === S.currentOfficeId) : S.units.find((x) => x.id === S.currentUser.id);
+  const ids = baseRoleIdsOf(ent || {});
+  if (ids.length === 1) { S.allowedActions = null; S.allowedButtons = null; applyPersonPerms({ roleId: ids[0], permsOverride: null }); }
+}
+function liveTyping() {
+  const a = document.activeElement;
+  return !!a && (a.tagName === "TEXTAREA" || a.tagName === "SELECT" || (a.tagName === "INPUT" && !["button", "checkbox", "radio", "submit"].includes(a.type)));
+}
+async function liveSync() {
+  if (liveSyncBusy || !dbConnected() || !S.currentUser || document.hidden) return;
+  // تعديل قبل لحظات: ننتظر لين توصل كتابته للقاعدة، عشان ما نرجّع نسخة أقدم منه
+  if (Date.now() - lastDbWriteAt < 5000) { setTimeout(liveSync, 5000); return; }
+  liveSyncBusy = true;
+  const started = Date.now();
+  try {
+    const before = liveSig();
+    await Promise.all([refreshUnitsAndDepartmentsFromDb(), refreshOrgLevelsFromDb(), refreshRolesPersonsFromDb(), refreshApprovalPathsFromDb(),
+      pendingSupabaseWrite("site_settings").then(refreshSiteSettingsFromDb), liveSyncReports()].map((x) => Promise.resolve(x).catch(() => {})));
+    if (lastDbWriteAt >= started) { setTimeout(liveSync, 5000); return; }
+    if (liveSig() === before) return;
+    applySessionPermsLive();
+    if (liveTyping()) S.ui.livePending = true; else render();
+  } finally { liveSyncBusy = false; }
+}
+function startLiveSync() {
+  setInterval(liveSync, LIVE_SYNC_MS);
+  document.addEventListener("visibilitychange", () => { if (!document.hidden) liveSync(); });
+  window.addEventListener("focus", () => liveSync());
+  document.addEventListener("focusout", () => setTimeout(() => { if (S.ui && S.ui.livePending && !liveTyping()) { S.ui.livePending = false; render(); } }, 200));
+}
 function boot() {
   S.siteSettings = dataStore.getSiteSettings();
   applySiteColors(S.siteSettings);
@@ -12063,6 +12084,7 @@ function boot() {
   });
   if (dbConnected()) refreshDashboardConfigFromDb().then(() => render()).catch(() => {});
   if (dbConnected()) refreshOrgLevelsFromDb().then(() => { if (S.view === "org-levels" || S.view === "units-manage") render(); }).catch(() => {});
+  if (dbConnected()) startLiveSync();
 }
 
 document.addEventListener("DOMContentLoaded", boot);
