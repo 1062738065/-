@@ -8357,8 +8357,8 @@ function apAutoCardHtml() {
       <div style="display:flex;flex-direction:column;gap:4px;margin-top:8px;font-size:12px;line-height:1.8;"><div><b>تراجع وترسل:</b> تشوفه وترسله للي بعدها بدون اعتماد.</div><div><b>تعتمد:</b> تعتمد وترسل — ولو هي آخر مرحلة يصير «معتمد».</div>${AUTO_PERM_OPTS.map((o) => `<div><b>${esc(o.label)}:</b> ${esc(o.t)}</div>`).join("")}</div></details>
     <div style="margin-top:14px;">
       <div style="font-size:11.5px;color:${SUBTLE};margin-bottom:6px;">الخيارات تحت كل مرحلة تنطبق عليها في كل الوحدات (دور الوحدة لكل الوحدات، والمستوى لكل وحداته).</div>
-      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:10px;"><span style="font-size:13px;font-weight:800;">شوفي مسار وحدة:</span>
-        <select class="input" style="width:auto;flex:1 1 220px;" data-action="ap-auto-unit">${units.map((u) => `<option value="${esc(u.id)}" ${u.id === uid0 ? "selected" : ""}>${esc(u.name)}</option>`).join("")}</select></div>
+      <div style="font-size:13px;font-weight:800;margin-bottom:8px;">اختاري وحدة لترين مسارها:</div>
+      <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:8px;margin-bottom:12px;">${units.map((u) => { const n = path && path.status === "active" ? apFlow(apStageList(path, u)).length : 0; const on = u.id === uid0; return `<button type="button" data-action="ap-auto-unit-pick" data-id="${esc(u.id)}" style="text-align:right;font-family:inherit;cursor:pointer;padding:10px 12px;border-radius:12px;border:${on ? "1.5px solid " + ROSE : "1px solid " + BORDER};background:${on ? "#f6e6eb" : "#fff"};color:${INK};"><div style="font-size:13px;font-weight:800;">${esc(u.name)}</div><div style="font-size:11px;color:${SUBTLE};margin-top:2px;">${n} ${n === 1 ? "مرحلة" : "مراحل"}</div></button>`; }).join("")}</div>
       ${pv ? `<div style="display:flex;gap:10px;align-items:center;padding:10px 12px;border-radius:12px;background:${ROSE};color:#fff;margin-bottom:8px;"><span>✎</span><div><div style="font-size:11px;opacity:.85;">يكتب التقرير</div><div style="font-size:13.5px;font-weight:800;">${esc(pv.writer)}</div></div></div>
         ${pv.rows.map(rowHtml).join("")}
         <div style="padding:9px 12px;border-radius:12px;background:${GREEN_BG};color:${GREEN};font-size:13px;font-weight:800;">✓ معتمد — بعد آخر مرحلة</div>` : `<div class="hint">ما فيه وحدات.</div>`}
@@ -11235,6 +11235,7 @@ function attachClickListener() {
         }
         render(); break;
       }
+      case "ap-auto-unit-pick": S.ui.apAutoUnit = ds.id; render(); break;
       case "ap-auto-perms-toggle": {
         apAutoSave({ autoPerms: !autoPathCfg().autoPerms });
         addPermLog("approval-path", AUTO_PATH_ID, "المسار التلقائي من الهيكل", autoPathCfg().autoPerms ? "تفعيل الصلاحيات التلقائية" : "إيقاف الصلاحيات التلقائية");
