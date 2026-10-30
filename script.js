@@ -8195,11 +8195,14 @@ function rolePermsEditorHtml(role) {
   return `<div class="card" style="background:${GRAY_BG};margin:0 0 10px;">
     <div style="font-size:12.5px;font-weight:800;margin-bottom:4px;">صلاحيات الدور: ${esc(role.name)}</div>
     <div class="hint" style="margin-bottom:8px;">الصفحات = صلاحية العرض. إذا تُركت فارغة فلن يرى هذا الدور أي صفحة.</div>
-    <div style="font-size:11.5px;font-weight:800;color:${ROSE};margin-bottom:4px;">الصفحات (عرض)</div>
+    <div style="font-size:11.5px;font-weight:800;color:${ROSE};margin-bottom:6px;">المفعّل لهذا الدور الآن</div>
+    <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px;">${(normalizeDashboardPages(f.pages) || []).map((id) => { const pg = SIDEBAR_PAGES.find((x) => x.id === id); return `<span style="font-size:12px;font-weight:700;padding:5px 12px;border-radius:999px;background:#f3e6ea;color:${ROSE};">${esc(pg ? pg.label : id)}</span>`; }).join("") || `<span style="font-size:12px;color:${SUBTLE};">لا توجد صفحات مفعّلة.</span>`}</div>
+    <div style="font-size:12px;color:${SUBTLE};margin-bottom:8px;">${(f.buttons || []).filter((b) => b.indexOf("notify:") !== 0).length ? (f.buttons || []).filter((b) => b.indexOf("notify:") !== 0).length + " زر مفعّل" : "الأزرار: بلا تخصيص (تظهر كلها)"}</div>
+    ${S.ui.rolePermOpen ? `<div style="font-size:11.5px;font-weight:800;color:${ROSE};margin-bottom:4px;">الصفحات (عرض)</div>
     ${pagesChecklistHtml(f.pages, "toggle-role-perm-page")}
     <div style="font-size:11.5px;font-weight:800;color:${ROSE};margin:10px 0 4px;">أزرار الصفحات (التقارير والإرسال والمراجعة والاعتماد)</div>
-    ${permButtonsChecklistHtml(f.buttons, "toggle-role-perm-button")}
-    <div style="display:flex;gap:6px;margin-top:10px;">${pillBtn("تم", { icon: iconCheck(14, "#fff"), action: "role-perm-cancel" })}<span class="hint" style="margin:0;align-self:center;">كل تعليم ينحفظ على طول</span></div>
+    ${permButtonsChecklistHtml(f.buttons, "toggle-role-perm-button")}` : ""}
+    <div style="display:flex;gap:6px;margin-top:10px;flex-wrap:wrap;">${pillBtn(S.ui.rolePermOpen ? "إخفاء قائمة الصلاحيات" : "＋ إضافة صلاحية", { variant: "soft", action: "role-perm-open-toggle" })}${pillBtn("تم", { icon: iconCheck(14, "#fff"), action: "role-perm-cancel" })}<span class="hint" style="margin:0;align-self:center;">كل تعليم ينحفظ على طول</span></div>
   </div>`;
 }
 function personPermsEditorHtml(person) {
@@ -11112,7 +11115,7 @@ function attachClickListener() {
         const r = rolesList().find((x) => x.id === ds.id); if (!r) break;
         const p = rolePermsOf(r);
         S.ui.rolePermForm = { pages: [...p.pages], actions: [], buttons: [...(p.buttons.length ? p.buttons : p.actions.filter((a) => BUTTON_CATALOG.some((b) => b.id === a)))] };
-        S.ui.rolePermEditId = r.id; S.ui.personPermEditId = null; S.ui.rolesBulk = null; render(); break;
+        S.ui.rolePermEditId = r.id; S.ui.rolePermOpen = false; S.ui.personPermEditId = null; S.ui.rolesBulk = null; render(); break;
       }
       case "type-role-open": S.ui.typeRoleOpen = S.ui.typeRoleOpen === ds.k ? "" : ds.k; render(); break;
       case "type-role-reset": {
@@ -11123,6 +11126,7 @@ function attachClickListener() {
         addPermLog("role", ds.id, "", "رجوع لدور الكل");
         render(); break;
       }
+      case "role-perm-open-toggle": S.ui.rolePermOpen = !S.ui.rolePermOpen; render(); break;
       case "role-perm-cancel": {
         if (S.ui.permDirty) {
           const f = rolePermFormState();
