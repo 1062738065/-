@@ -4544,15 +4544,15 @@ function olEntityByName(name) {
 function olParsePasteTree(text) {
   const lines = []; let prev = -1;
   String(text || "").split(/\r?\n/).forEach((raw) => {
-    const m = raw.match(/^[\s\-]*/); const lead = m ? m[0] : "";
+    const pinOnly = /^\s*\*/.test(raw);
+    const m = pinOnly ? raw.match(/^\s*\*\s*/) : raw.match(/^[\s\-]*/); const lead = m ? m[0] : "";
     let body = raw.slice(lead.length).trim(); if (!body) return;
-    let depth = (lead.match(/-/g) || []).length;
-    if (depth > prev + 1) depth = prev + 1;
-    prev = depth;
+    let depth = pinOnly ? 0 : (lead.match(/-/g) || []).length;
+    if (!pinOnly) { if (depth > prev + 1) depth = prev + 1; prev = depth; }
     let type = "", ent = "", pin = "";
     const bar = body.indexOf("|"); if (bar !== -1) { const parts = body.slice(bar + 1).split("|"); type = olNorm(parts[0]); pin = parts.length > 1 ? String(parts[1] || "").trim() : ""; body = body.slice(0, bar); }
     const eq = body.indexOf("="); if (eq !== -1) { ent = olNorm(body.slice(eq + 1)); body = body.slice(0, eq); }
-    const name = olNorm(body); if (name) lines.push({ name, type, ent, depth, pin });
+    const name = olNorm(body); if (name) lines.push({ name, type, ent, depth, pin, pinOnly });
   });
   return lines;
 }
@@ -4562,6 +4562,13 @@ function olPastePlan(text) {
   const levels = olActive();
   const claimedLv = new Set(), claimedEnt = new Set();
   const plan = lines.map((ln) => {
+    if (ln.pinOnly) {
+      const e0 = olEntityByName(ln.ent || ln.name) || olEntityByName(olStripTitle(ln.ent || ln.name));
+      const lv0 = levels.find((l) => olNorm(l.name) === olNorm(ln.name) && l.linkKind && l.linkId);
+      const lnk0 = e0 ? { k: e0.linkKind, id: e0.id } : lv0 ? { k: lv0.linkKind, id: lv0.linkId } : null;
+      let w0 = !ln.pin ? "ما كتبتِ رقمًا في هذا السطر" : !lnk0 ? "ما لقيت حسابًا بهذا الاسم" : "";
+      return { ...ln, entity: null, level: null, warn: w0, pinTarget: ln.pin && lnk0 ? lnk0 : null };
+    }
     let e = ln.ent ? olEntityByName(ln.ent) : null;
     if (!e && !ln.ent) e = olEntityByName(ln.name) || olEntityByName(olStripTitle(ln.name));
     let warn = ln.ent && !e ? `ما لقيت جهة باسم «${ln.ent}» — يصير تنظيم فقط` : "";
@@ -4575,7 +4582,22 @@ function olPastePlan(text) {
     if (ln.pin && !lnk) warn = (warn ? warn + " — " : "") + "هذا السطر بدون حساب، فلن يُحفظ رقمه السري";
     return { ...ln, entity: e, level: lv || null, warn, pinTarget: ln.pin && lnk ? lnk : null };
   });
-  // الرقم السري: تنبيه على المكرر داخل النص أو المستعمل لحساب آخر
+  // تنبيه: سطر سينقل مستوى موجودًا من مكانه
+  const stk = [];
+  plan.forEach((x, i) => {
+    if (x.pinOnly) return;
+    const parentKey = x.depth > 0 ? (stk[x.depth - 1] || "") : "";
+    if (x.level) {
+      const curParent = x.level.parentId || "";
+      if (curParent !== parentKey) {
+        const f = (id) => { if (!id) return "أعلى الهيكل"; const lv = olFind(id); return lv ? lv.name : "مستوى جديد"; };
+        x.warn = (x.warn ? x.warn + " — " : "") + `سيُنقل من «${f(curParent)}» إلى «${parentKey.indexOf("new:") === 0 ? "مستوى جديد" : f(parentKey)}»`;
+      }
+    }
+    stk[x.depth] = x.level ? x.level.id : "new:" + i; stk.length = x.depth + 1;
+  });
+  // الرقم السري: لازم أحرف وأرقام إنجليزية فقط، وتنبيه على المكرر داخل النص أو المستعمل لحساب آخر
+  plan.forEach((x) => { if (x.pin && /[^0-9A-Za-z]/.test(x.pin)) { x.warn = (x.warn ? x.warn + " — " : "") + "الرقم السري يجب أن يكون أرقامًا أو أحرفًا إنجليزية فقط — لن يُحفظ"; x.pinTarget = null; } });
   const pinCount = {}; plan.forEach((x) => { if (x.pinTarget) pinCount[x.pin] = (pinCount[x.pin] || 0) + 1; });
   const others = [];
   (S.units || []).forEach((u) => others.push({ k: "unit", id: u.id, pw: u.password })); (S.departments || []).forEach((d) => others.push({ k: "dept", id: d.id, pw: d.password })); (S.offices || []).forEach((o) => others.push({ k: "office", id: o.id, pw: o.password }));
@@ -4590,10 +4612,12 @@ function olPastePlan(text) {
 function olApplyPaste(text) {
   const { plan } = olPastePlan(text);
   if (!plan.length) return null;
+  if (plan.every((x) => x.pinOnly)) { let n = 0; plan.forEach((p) => { if (p.pinTarget && !(p.warn || "").includes("مكرر")) { treeSetEntity(p.pinTarget.k, p.pinTarget.id, { password: p.pin }); n++; } }); return { added: 0, updated: 0, pinsSaved: n }; }
   let list = currentOrgLevels().slice();
   const types = levelTypesList();
   const stack = []; const order = {}; let added = 0, updated = 0, pinsSaved = 0;
   plan.forEach((p, i) => {
+    if (p.pinOnly) { if (p.pinTarget && !(p.warn || "").includes("مكرر")) { treeSetEntity(p.pinTarget.k, p.pinTarget.id, { password: p.pin }); pinsSaved++; } return; }
     const parentId = p.depth > 0 ? (stack[p.depth - 1] || "") : "";
     const sib = parentId || ""; order[sib] = (order[sib] || 0);
     const linkKind = p.entity ? p.entity.linkKind : (p.level ? p.level.linkKind || "" : "");
@@ -4627,6 +4651,7 @@ function olPasteCardHtml() {
       ${pillBtn("فتح", { variant: "soft", icon: iconLayers(13, GREEN), action: "ol-paste-open" })}</div>`;
   const pv = ui.pastePreview;
   const row = (p) => {
+    if (p.pinOnly) return `<div style="border-top:1px solid ${BORDER};padding:7px 0;font-size:12.5px;line-height:1.8;"><b>${esc(p.name)}</b> <span style="font-size:11px;color:#6f5f66;">رقم سري فقط: ${"•".repeat(Math.min(String(p.pin).length, 8))}</span><div style="font-size:11.5px;color:${p.pinTarget ? GREEN : DANGER};">${p.pinTarget ? "يُغيَّر رقمه فقط — لا يُنقل ولا يتغير شيء آخر" : ""}</div>${p.warn ? `<div style="font-size:11.5px;color:${DANGER};">${esc(p.warn)}</div>` : ""}</div>`;
     const st = p.entity ? `<span style="color:${GREEN};">يُربط بـ ${esc(p.entity.kind)} «${esc(p.entity.name)}»</span>`
       : p.level && p.level.linkKind ? `<span style="color:${GREEN};">يبقى على ربطه الحالي</span>` : `<span style="color:#6f5f66;">تنظيم فقط (بدون حساب)</span>`;
     const lv = p.level ? `<span style="color:#7a4d16;">مستوى موجود «${esc(p.level.name)}» — يُحدَّث</span>` : `<span style="color:#24527a;">جديد</span>`;
@@ -4640,12 +4665,13 @@ function olPasteCardHtml() {
       • كل سطر مستوى، وعدد <b>-</b> في أوله = تحت مين (بدون - = أعلى الهيكل، - = تحته، -- = تحت اللي تحته…).<br>
       • النوع بعد <b>|</b> مثل: <code>- مديرة قسم الموارد البشرية | قسم</code><br>
       • يُربط تلقائيًا بالحساب اللي له نفس الاسم (أو نفس الاسم بدون «مديرة»). لو اسم الحساب مختلف اكتبيه بعد <b>=</b> مثل: <code>--- وحدة الاختبارات — الداخل = وحدة الاختبارات</code><br>
+      • <b>لتغيير الرقم السري فقط بدون لمس الهيكل</b> ابدئي السطر بنجمة: <code>* وحدة الجودة | | 3333</code> — لا ينقل ولا يغيّر شيئًا غير الرقم. (الرقم أرقام أو أحرف إنجليزية فقط.)<br>
       • الرقم السري اختياري بعد النوع: <code>-- وحدة الجودة | وحدة | 3333</code> — يُحفظ مع الحساب، وتظهر المعاينة نجومًا. الحساب الذي لا رقم له في النص يبقى رقمه كما هو. بدون نوع اتركيه فارغًا: <code>-- وحدة الجودة | | 3333</code><br>
       • المستوى الموجود بنفس الاسم يُحدَّث مكانه بدل ما يتكرر. <b>ما ينحذف أي مستوى ولا حساب ولا تقرير.</b></div>
     <textarea class="input" id="ol-paste" rows="12" style="font-family:inherit;line-height:1.9;min-height:220px;" placeholder="مساعدة مدير إدارة التعليم النسائي | مساعدة&#10;- مديرة قسم الموارد البشرية | قسم&#10;-- وحدة التوظيف | وحدة">${esc(ui.pasteText || "")}</textarea>
     <div style="display:flex;gap:8px;flex-wrap:wrap;">${pillBtn("معاينة", { action: "ol-paste-preview" })}${pv && pv.plan.length ? pillBtn(`تطبيق (${pv.plan.length} مستوى)`, { variant: "soft", icon: iconLayers(13, GREEN), action: "ol-paste-apply" }) : ""}</div>
     ${pv ? (pv.plan.length ? `<div>
-      <div style="font-size:12.5px;font-weight:800;margin-bottom:4px;">المعاينة — ${pv.plan.filter((p) => !p.level).length} جديد، ${pv.plan.filter((p) => p.level).length} موجود يُحدَّث، ${pv.plan.filter((p) => p.entity).length} مربوط بحساب</div>
+      <div style="font-size:12.5px;font-weight:800;margin-bottom:4px;">المعاينة — ${pv.plan.filter((p) => !p.level && !p.pinOnly).length} جديد، ${pv.plan.filter((p) => p.level).length} موجود يُحدَّث، ${pv.plan.filter((p) => p.entity).length} مربوط بحساب، ${pv.plan.filter((p) => p.pinOnly).length} رقم سري فقط</div>
       ${pv.plan.map(row).join("")}
       ${pv.untouched.length ? `<div style="font-size:12px;color:#7a4d16;background:#fbf0e1;border-radius:10px;padding:8px 12px;margin-top:8px;line-height:1.9;">مستويات موجودة ما ذُكرت في النص — تبقى كما هي، احذفيها بنفسك لو ما تحتاجينها: ${pv.untouched.map((l) => "«" + esc(l.name) + "»").join("، ")}</div>` : ""}
     </div>` : `<div class="hint bad">النص فاضي.</div>`) : ""}
