@@ -4549,10 +4549,10 @@ function olParsePasteTree(text) {
     let depth = (lead.match(/-/g) || []).length;
     if (depth > prev + 1) depth = prev + 1;
     prev = depth;
-    let type = "", ent = "";
-    const bar = body.indexOf("|"); if (bar !== -1) { type = olNorm(body.slice(bar + 1)); body = body.slice(0, bar); }
+    let type = "", ent = "", pin = "";
+    const bar = body.indexOf("|"); if (bar !== -1) { const parts = body.slice(bar + 1).split("|"); type = olNorm(parts[0]); pin = parts.length > 1 ? String(parts[1] || "").trim() : ""; body = body.slice(0, bar); }
     const eq = body.indexOf("="); if (eq !== -1) { ent = olNorm(body.slice(eq + 1)); body = body.slice(0, eq); }
-    const name = olNorm(body); if (name) lines.push({ name, type, ent, depth });
+    const name = olNorm(body); if (name) lines.push({ name, type, ent, depth, pin });
   });
   return lines;
 }
@@ -4571,7 +4571,18 @@ function olPastePlan(text) {
     let lv = levels.find((l) => !claimedLv.has(l.id) && names.includes(olNorm(l.name)));
     if (!lv && e) lv = levels.find((l) => !claimedLv.has(l.id) && l.linkKind === e.linkKind && l.linkId === e.id);
     if (lv) claimedLv.add(lv.id);
-    return { ...ln, entity: e, level: lv || null, warn };
+    const lnk = e ? { k: e.linkKind, id: e.id } : (lv && lv.linkKind && lv.linkId ? { k: lv.linkKind, id: lv.linkId } : null);
+    if (ln.pin && !lnk) warn = (warn ? warn + " — " : "") + "هذا السطر بدون حساب، فلن يُحفظ رقمه السري";
+    return { ...ln, entity: e, level: lv || null, warn, pinTarget: ln.pin && lnk ? lnk : null };
+  });
+  // الرقم السري: تنبيه على المكرر داخل النص أو المستعمل لحساب آخر
+  const pinCount = {}; plan.forEach((x) => { if (x.pinTarget) pinCount[x.pin] = (pinCount[x.pin] || 0) + 1; });
+  const others = [];
+  (S.units || []).forEach((u) => others.push({ k: "unit", id: u.id, pw: u.password })); (S.departments || []).forEach((d) => others.push({ k: "dept", id: d.id, pw: d.password })); (S.offices || []).forEach((o) => others.push({ k: "office", id: o.id, pw: o.password }));
+  plan.forEach((x) => {
+    if (!x.pinTarget) return;
+    if (pinCount[x.pin] > 1) x.warn = (x.warn ? x.warn + " — " : "") + "رقم سري مكرر في النص — لن يُحفظ";
+    else if (others.some((o) => o.pw && o.pw === x.pin && !(o.k === x.pinTarget.k && o.id === x.pinTarget.id))) x.warn = (x.warn ? x.warn + " — " : "") + "هذا الرقم مستعمل لحساب آخر";
   });
   const untouched = levels.filter((l) => !claimedLv.has(l.id));
   return { plan, untouched };
@@ -4581,7 +4592,7 @@ function olApplyPaste(text) {
   if (!plan.length) return null;
   let list = currentOrgLevels().slice();
   const types = levelTypesList();
-  const stack = []; const order = {}; let added = 0, updated = 0;
+  const stack = []; const order = {}; let added = 0, updated = 0, pinsSaved = 0;
   plan.forEach((p, i) => {
     const parentId = p.depth > 0 ? (stack[p.depth - 1] || "") : "";
     const sib = parentId || ""; order[sib] = (order[sib] || 0);
@@ -4602,11 +4613,12 @@ function olApplyPaste(text) {
     // جهة واحدة = مستوى واحد: ننقل الربط من أي مستوى آخر
     if (linkKind && linkId) list = list.map((l) => (l.id !== id && l.linkKind === linkKind && l.linkId === linkId) ? { ...l, linkKind: "", linkId: "" } : l);
     stack[p.depth] = id; stack.length = p.depth + 1;
+    if (p.pinTarget && !(p.warn || "").includes("مكرر")) { treeSetEntity(p.pinTarget.k, p.pinTarget.id, { password: p.pin }); pinsSaved++; }
   });
   if (types.length !== levelTypesList().length) saveSiteTheme({ levelTypes: types });
   saveOrgLevels(list);
   olChildren("").forEach((r) => olSyncSubtree(r.id));
-  return { added, updated };
+  return { added, updated, pinsSaved };
 }
 function olPasteCardHtml() {
   const ui = olUi();
@@ -4619,7 +4631,7 @@ function olPasteCardHtml() {
       : p.level && p.level.linkKind ? `<span style="color:${GREEN};">يبقى على ربطه الحالي</span>` : `<span style="color:#6f5f66;">تنظيم فقط (بدون حساب)</span>`;
     const lv = p.level ? `<span style="color:#7a4d16;">مستوى موجود «${esc(p.level.name)}» — يُحدَّث</span>` : `<span style="color:#24527a;">جديد</span>`;
     return `<div style="border-top:1px solid ${BORDER};padding:7px 0;padding-right:${p.depth * 18}px;font-size:12.5px;line-height:1.8;">
-      <b>${esc(p.name)}</b>${p.type ? ` ${levelTypeChipHtml(p.type)}` : ""}<div style="font-size:11.5px;">${lv} · ${st}</div>${p.warn ? `<div style="font-size:11.5px;color:${DANGER};">${esc(p.warn)}</div>` : ""}</div>`;
+      <b>${esc(p.name)}</b>${p.type ? ` ${levelTypeChipHtml(p.type)}` : ""}${p.pin ? ` <span style="font-size:11px;color:#6f5f66;">الرقم السري: ${"•".repeat(Math.min(String(p.pin).length, 8))}</span>` : ""}<div style="font-size:11.5px;">${lv} · ${st}</div>${p.warn ? `<div style="font-size:11.5px;color:${DANGER};">${esc(p.warn)}</div>` : ""}</div>`;
   };
   return `<div class="card card-lg" style="margin-top:14px;display:flex;flex-direction:column;gap:10px;">
     <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;">
@@ -4628,6 +4640,7 @@ function olPasteCardHtml() {
       • كل سطر مستوى، وعدد <b>-</b> في أوله = تحت مين (بدون - = أعلى الهيكل، - = تحته، -- = تحت اللي تحته…).<br>
       • النوع بعد <b>|</b> مثل: <code>- مديرة قسم الموارد البشرية | قسم</code><br>
       • يُربط تلقائيًا بالحساب اللي له نفس الاسم (أو نفس الاسم بدون «مديرة»). لو اسم الحساب مختلف اكتبيه بعد <b>=</b> مثل: <code>--- وحدة الاختبارات — الداخل = وحدة الاختبارات</code><br>
+      • الرقم السري اختياري بعد النوع: <code>-- وحدة الجودة | وحدة | 3333</code> — يُحفظ مع الحساب، وتظهر المعاينة نجومًا. الحساب الذي لا رقم له في النص يبقى رقمه كما هو. بدون نوع اتركيه فارغًا: <code>-- وحدة الجودة | | 3333</code><br>
       • المستوى الموجود بنفس الاسم يُحدَّث مكانه بدل ما يتكرر. <b>ما ينحذف أي مستوى ولا حساب ولا تقرير.</b></div>
     <textarea class="input" id="ol-paste" rows="12" style="font-family:inherit;line-height:1.9;min-height:220px;" placeholder="مساعدة مدير إدارة التعليم النسائي | مساعدة&#10;- مديرة قسم الموارد البشرية | قسم&#10;-- وحدة التوظيف | وحدة">${esc(ui.pasteText || "")}</textarea>
     <div style="display:flex;gap:8px;flex-wrap:wrap;">${pillBtn("معاينة", { action: "ol-paste-preview" })}${pv && pv.plan.length ? pillBtn(`تطبيق (${pv.plan.length} مستوى)`, { variant: "soft", icon: iconLayers(13, GREEN), action: "ol-paste-apply" }) : ""}</div>
@@ -4888,7 +4901,7 @@ function handleOrgLevelsAction(action, ds) {
     case "ol-paste-apply": {
       const el = document.getElementById("ol-paste"); if (el) ui.pasteText = el.value;
       const r = olApplyPaste(ui.pasteText || "");
-      if (r) { ui.msg = `تم إدخال الشجرة: ${r.added} مستوى جديد، ${r.updated} مستوى موجود تحدّث. تقدرين تعدّلين أو تحذفين أي مستوى عادي.`; ui.pasteOpen = false; ui.pastePreview = null; ui.pasteText = ""; ui.collapsed = {}; }
+      if (r) { ui.msg = `تم إدخال الشجرة: ${r.added} مستوى جديد، ${r.updated} مستوى موجود تحدّث${r.pinsSaved ? "، و" + r.pinsSaved + " رقم سري انحفظ" : ""}. تقدرين تعدّلين أو تحذفين أي مستوى عادي.`; ui.pasteOpen = false; ui.pastePreview = null; ui.pasteText = ""; ui.collapsed = {}; }
       break;
     }
     case "ol-start-add": ui.form = { mode: "add", name: "", type: "", parentId: ds.parent || "", linkKind: "", linkId: "", loginId: "", password: "", roleId: "" }; ui.formError = ""; ui.confirmDelete = null; break;
