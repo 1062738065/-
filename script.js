@@ -7984,11 +7984,16 @@ function structSimplePeopleViewHtml() {
   let list = personsList();
   if (filt === "none") list = list.filter((p) => !roles.some((r) => r.id === p.roleId));
   else if (filt !== "all") list = list.filter((p) => p.roleId === filt);
+  const stF = S.ui.structPeopleStatus || "all";
+  if (stF === "on") list = list.filter((p) => p.status !== "disabled"); else if (stF === "off") list = list.filter((p) => p.status === "disabled");
+  const q = olNorm(S.ui.structPeopleQ || "");
   const ownerOf = (p) => {
     const k = p.ownerKind === "department" ? "dept" : (p.ownerKind || "unit");
     const ent = treeEntity(k, p.ownerId);
     return { key: k + ":" + p.ownerId, name: ent ? ent.name : "(جهة محذوفة)", type: k, ent };
   };
+  if (q) list = list.filter((p) => olNorm(p.name).includes(q) || olNorm(ownerOf(p).name).includes(q));
+  const stChip = (id, label) => `<button type="button" data-action="struct-people-status" data-f="${id}" style="font-family:inherit;cursor:pointer;padding:7px 14px;border-radius:999px;font-size:12.5px;font-weight:700;border:1px solid ${BORDER};background:${stF === id ? ROSE : "#fff"};color:${stF === id ? "#fff" : INK};">${label}</button>`;
   const chip = (id, label) => `<button type="button" data-action="struct-people-filter" data-f="${esc(id)}" style="font-family:inherit;cursor:pointer;padding:7px 14px;border-radius:999px;font-size:12.5px;font-weight:700;border:1px solid ${BORDER};background:${filt === id ? ROSE : "#fff"};color:${filt === id ? "#fff" : INK};">${label}</button>`;
   const cards = list.map((p) => {
     const o = ownerOf(p);
@@ -8000,7 +8005,8 @@ function structSimplePeopleViewHtml() {
       <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px;">
         <span style="width:40px;height:40px;border-radius:50%;background:${ROSE};color:#fff;font-size:16px;font-weight:800;display:flex;align-items:center;justify-content:center;">${esc((p.name || "؟").charAt(0))}</span>
         <div style="flex:1;min-width:0;"><div style="font-size:14.5px;font-weight:800;">${esc(p.name)}</div>
-          <button type="button" data-action="struct-open-entity" data-key="${esc(o.key)}" style="font-family:inherit;cursor:pointer;background:none;border:none;padding:0;font-size:12px;color:${ROSE};font-weight:700;">${esc(o.name)} ›</button></div></div>
+          <button type="button" data-action="struct-open-entity" data-key="${esc(o.key)}" style="font-family:inherit;cursor:pointer;background:none;border:none;padding:0;font-size:12px;color:${ROSE};font-weight:700;">${esc(o.name)} ›</button></div>
+        <span style="font-size:10.5px;font-weight:700;padding:3px 9px;border-radius:999px;white-space:nowrap;${personEffectivePin(p) ? `color:${GREEN};background:${GREEN_BG};` : `color:${DANGER};background:${DANGER_BG};`}">${personEffectivePin(p) ? "رقم سري ✓" : "بلا رقم"}</span>${on ? "" : badgeHtml("موقوف", SUBTLE, GRAY_BG)}</div>
       <div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;">
         <div style="padding:9px 11px;background:${GRAY_BG};border:1px solid ${BORDER};border-radius:12px;"><div style="font-size:11px;color:${SUBTLE};">الدور</div>
           <select class="input" data-action="struct-person-role" data-id="${esc(p.id)}" style="margin-top:4px;padding:5px 8px;font-size:12.5px;"><option value="">— بلا دور —</option>${roles.map((x) => `<option value="${esc(x.id)}" ${p.roleId === x.id ? "selected" : ""}>${esc(x.name)}</option>`).join("")}</select>
@@ -8015,7 +8021,8 @@ function structSimplePeopleViewHtml() {
         : pillBtn("حذف الشخص", { variant: "danger", action: "person-delete-ask", data: { id: p.id } })}</div>
     </div>`;
   }).join("");
-  return `<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px;">${chip("all", "الكل")}${roles.map((r) => chip(r.id, esc(r.name))).join("")}${chip("none", "بلا دور ⚠")}</div>
+  return `<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:10px;"><input class="input" id="struct-people-q" value="${esc(S.ui.structPeopleQ || "")}" placeholder="ابحثي باسم الشخص أو الجهة…" autocomplete="off" style="flex:1 1 240px;max-width:420px;" />${stChip("all", "الكل")}${stChip("on", "فعّال")}${stChip("off", "موقوف")}<span style="font-size:12px;color:${SUBTLE};">${list.length} شخص</span></div>
+    <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px;">${chip("all", "كل الأدوار")}${roles.map((r) => chip(r.id, esc(r.name))).join("")}${chip("none", "بلا دور ⚠")}</div>
     <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:12px;">${cards || `<div class="card" style="text-align:center;color:${SUBTLE};padding:30px;border-style:dashed;grid-column:1/-1;">لا يوجد أشخاص بهذا الفلتر.</div>`}</div>
     <div style="font-size:11.5px;color:${SUBTLE};margin-top:10px;">لإضافة شخص جديد: «الهيكل»، ثم اختاري الجهة ← تبويب «الأشخاص».</div>`;
 }
@@ -10699,6 +10706,7 @@ function attachFormListeners() {
       return;
     }
     if (el.dataset && el.dataset.action === "ol-form-refresh") { olReadForm(); render(); return; }
+    if (el.id === "struct-people-q") { S.ui.structPeopleQ = el.value; render(); const n = document.getElementById("struct-people-q"); if (n) { n.focus(); n.setSelectionRange(n.value.length, n.value.length); } return; }
     if (el.dataset && el.dataset.action === "ap-auto-unit") { S.ui.apAutoUnit = el.value; render(); return; }
     if (el.dataset && el.dataset.action === "type-role-set") {
       const k = el.dataset.k, v = el.value;
@@ -11600,6 +11608,7 @@ function attachClickListener() {
       case "struct-person-add-open": S.ui.structPersonAdd = ds.key; S.ui.structPersonError = null; render(); break;
       case "struct-person-add-cancel": S.ui.structPersonAdd = null; S.ui.structPersonError = null; render(); break;
       case "struct-people-filter": S.ui.structPeopleFilter = ds.f; render(); break;
+      case "struct-people-status": S.ui.structPeopleStatus = ds.f; render(); break;
       case "struct-open-entity": {
         // من "كل الأشخاص": يفتح جهة الشخص في الهيكل (تبويب الأشخاص)، ويضيفها للشجرة لو ما كانت فيها
         const [k0, ...r0] = String(ds.key).split(":"); const k = k0 === "exec" ? "unit" : k0; const id = r0.join(":");
