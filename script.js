@@ -4688,6 +4688,35 @@ function olTypesBarHtml() {
     <span style="display:inline-flex;gap:6px;align-items:center;"><input class="input" id="ol-type-new" placeholder="نوع جديد…" style="width:130px;padding:6px 8px;font-size:12px;" />${pillBtn("إضافة", { variant: "ghost", icon: iconPlus(13, INK), action: "ol-type-add" })}</span>
   </div>`;
 }
+// عرض الهيكل بالبطاقات: وحدات جنب بعض تحت قسمها (أعمدة تتكيّف: ٣ آيباد أفقي، ٢ عمودي، ١ جوال)
+function olCardsViewHtml() {
+  const ui = olUi();
+  const groups = [];
+  const walk = (parentId) => {
+    const kids = olChildren(parentId);
+    const units = kids.filter((l) => l.linkKind === "unit" && (S.units || []).some((u) => u.id === l.linkId && u.role !== "executive"));
+    if (units.length) groups.push({ parent: parentId ? olFind(parentId) : null, units });
+    kids.forEach((k) => walk(k.id));
+  };
+  walk("");
+  if (!groups.length) return `<div style="text-align:center;color:${SUBTLE};padding:30px 10px;font-size:13px;">لا توجد وحدات في الهيكل بعد.</div>`;
+  const roleName = (id) => ((rolesList().find((r) => r.id === id) || {}).name) || "بلا دور";
+  const path = autoPathObj();
+  const card = (l) => {
+    const unit = (S.units || []).find((u) => u.id === l.linkId);
+    const people = personsList().filter((x) => x.status !== "disabled" && (x.ownerKind || "unit") === "unit" && x.ownerId === l.linkId);
+    const stages = path && path.status === "active" ? apFlow(apStageList(path, unit)).length : 0;
+    const sel = ui.selected === l.id;
+    const dim = !people.length;
+    return `<button type="button" data-action="ol-select" data-id="${esc(l.id)}" style="text-align:right;font-family:inherit;color:${INK};cursor:pointer;display:flex;flex-direction:column;gap:8px;padding:12px 14px;border-radius:14px;min-height:120px;border:${dim ? "1.5px dashed #d9c9cf" : "1px solid " + BORDER};background:${sel ? "#f6e6eb" : dim ? "#faf6f7" : "#fff"};box-shadow:${sel ? `inset -3px 0 0 ${ROSE}` : "none"};">
+      <div style="display:flex;align-items:center;gap:6px;justify-content:space-between;"><span style="font-size:13.5px;font-weight:800;">${esc(l.name)}</span>${l.type ? levelTypeChipHtml(l.type) : ""}</div>
+      ${people.length ? people.map((x) => `<div style="display:flex;align-items:center;gap:6px;font-size:12px;"><span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(x.name)} <span style="color:${SUBTLE};">· ${esc(roleName(x.roleId))}</span></span><span style="font-size:10.5px;font-weight:700;padding:2px 8px;border-radius:999px;white-space:nowrap;${x.pin ? `color:${GREEN};background:${GREEN_BG};` : `color:${DANGER};background:${DANGER_BG};`}">${x.pin ? "رقم سري ✓" : "بلا رقم"}</span></div>`).join("")
+        : `<div style="font-size:12px;color:${SUBTLE};">لا يوجد أشخاص — يكتب التقرير حساب الوحدة نفسه</div>`}
+      <div style="margin-top:auto;font-size:11px;color:#7a6870;">${path && path.status === "active" ? `المسار: ${stages} ${stages === 1 ? "مرحلة" : "مراحل"}` : "المسار غير مفعّل"}${l.loginId ? " · له دخول خاص" : ""}</div>
+    </button>`;
+  };
+  return groups.map((g) => `<div style="margin-bottom:16px;"><div style="font-size:13px;font-weight:800;color:${ROSE};margin-bottom:8px;">${esc(g.parent ? g.parent.name : "بلا قسم")} <span style="font-weight:600;color:${SUBTLE};font-size:11.5px;">(${g.units.length})</span></div><div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:10px;">${g.units.map(card).join("")}</div></div>`).join("");
+}
 function renderOrgLevelsPage() {
   if (!canManageUsers()) return `<div class="page-wrap"><div class="page-inner"><div class="card" style="text-align:center;color:${SUBTLE};padding:36px;">هذه الصفحة غير ممنوحة لهذا الحساب.</div></div></div>`;
   const ui = olUi();
@@ -4697,29 +4726,31 @@ function renderOrgLevelsPage() {
   const side = ui.form ? olFormHtml() : sel ? olSidePanelHtml(sel)
     : `<div class="card card-lg" style="color:${SUBTLE};font-size:12.5px;line-height:2;">اختاري مستوى من الشجرة لعرض تفاصيله، أو اضغطي "إضافة مستوى".<br>• الجهات الموجودة (مكاتب/أقسام/وحدات) تبقى بحساباتها وتقاريرها كما هي — تُربط بالشجرة فقط.<br>• كل مستوى له حساب دخول يرى ما تحته فقط.</div>`;
   return `
-  <div class="page-wrap"><div class="page-inner" style="max-width:1180px;">
+  <div class="page-wrap"><div class="page-inner" style="max-width:1400px;">
     ${topBarHtml({ title: "المستخدمون", subtitle: "كل شيء في مكان واحد: الهيكل، الجهات وحساباتها، الأشخاص، الأدوار، والمسارات", icon: iconUser(18, ROSE), backAction: "nav-back-admin" })}
     ${olSectionBarHtml()}
     ${ui.section === "roles" ? renderRolesManage() : ui.section === "paths" ? renderApprovalPathsSetup() : ui.section === "people" ? structSimplePeopleViewHtml() : `
     ${ui.msg ? `<div class="card" style="background:${GREEN_BG};color:${GREEN};font-size:12.5px;font-weight:700;margin-bottom:14px;display:flex;justify-content:space-between;gap:10px;align-items:center;"><span>${esc(ui.msg)}</span><button type="button" class="icon-btn" style="background:transparent;" data-action="ol-clear-msg" aria-label="إغلاق">${iconX(13, GREEN)}</button></div>` : ""}
     ${olTypesBarHtml()}
+    ${ui.view === "cards" && (ui.form || sel) ? `<div style="margin-bottom:14px;">${side}</div>` : ""}
     <div style="display:flex;flex-wrap:wrap;gap:16px;align-items:flex-start;">
       <div class="card card-lg" style="flex:999 1 520px;min-width:0;">
         <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-bottom:10px;">
           <div><div class="prs-title" style="font-size:15px;font-weight:800;display:flex;align-items:center;gap:8px;">${iconLayers(17, ROSE)} الهيكل المرن</div>
           <div style="font-size:11.5px;color:#6f5f66;margin-top:3px;">مستويات بلا حد — اضغطي أي مستوى لعرض تفاصيله</div></div>
           <div style="display:flex;gap:6px;flex-wrap:wrap;">
-            ${roots.length ? pillBtn("فتح الكل", { variant: "ghost", action: "ol-expand-all" }) : ""}
+            ${pillBtn(ui.view === "cards" ? "عرض الشجرة" : "عرض بطاقات الوحدات", { variant: "soft", action: "ol-view" })}
+            ${roots.length && ui.view !== "cards" ? pillBtn("فتح الكل", { variant: "ghost", action: "ol-expand-all" }) : ""}
             ${pillBtn("إضافة مستوى", { icon: iconPlus(14, "#fff"), action: "ol-start-add", data: { parent: "" } })}
           </div>
         </div>
-        ${roots.length ? `<div style="display:flex;flex-direction:column;gap:2px;">${roots.map((r) => olRowHtml(r, 0)).join("")}</div>`
+        ${ui.view === "cards" ? olCardsViewHtml() : roots.length ? `<div style="display:flex;flex-direction:column;gap:2px;">${roots.map((r) => olRowHtml(r, 0)).join("")}</div>`
           : `<div style="text-align:center;color:${SUBTLE};padding:30px 10px;font-size:13px;line-height:2;">الشجرة فاضية — ابدئي بـ"إضافة مستوى".</div>`}
         <div style="border-top:1px solid ${BORDER};margin-top:14px;padding-top:12px;display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
           ${pillBtn(portalEnabled() ? `بوابة الدخول: مفعّلة (${portalEntries().length}) — إيقاف` : "تفعيل بوابة الدخول", { variant: portalEnabled() ? "ghost" : "soft", icon: iconHome(13, portalEnabled() ? INK : GREEN), action: "ol-toggle-portal" })}
         </div>
       </div>
-      <div style="flex:1 1 340px;min-width:0;display:flex;flex-direction:column;gap:14px;">${side}</div>
+      ${ui.view === "cards" ? "" : `<div style="flex:1 1 340px;min-width:0;display:flex;flex-direction:column;gap:14px;">${side}</div>`}
     </div>
     ${olPasteCardHtml()}
     ${olUnlinkedCardHtml()}`}
@@ -4847,6 +4878,7 @@ function handleOrgLevelsAction(action, ds) {
     case "ol-import-entities-cancel": ui.importEntitiesConfirm = false; break;
     case "ol-import-entities": { const n = olImportEntities(); ui.importEntitiesConfirm = false; ui.msg = n ? `أُضيفت ${n} جهة للشجرة بنفس ترتيبها — الحسابات والتقارير كما هي.` : "لا توجد جهات جديدة للإضافة."; break; }
     case "ol-add-entity": { const n = olImportEntities(ds.key); const [k, ...r] = String(ds.key).split(":"); const lv = olActive().find((l) => l.linkKind === k && l.linkId === r.join(":")); if (lv) { ui.selected = lv.id; ui.tab = "info"; } ui.msg = n ? "أُضيفت للشجرة — انقليها لمكانها الصحيح من «تعديل / نقل» إن لزم." : ""; break; }
+    case "ol-view": ui.view = ui.view === "cards" ? "" : "cards"; break;
     case "ol-toggle": ui.collapsed = { ...ui.collapsed, [ds.id]: !ui.collapsed[ds.id] }; break;
     case "ol-expand-all": ui.collapsed = {}; break;
     case "ol-clear-msg": ui.msg = ""; break;
