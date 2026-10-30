@@ -2453,6 +2453,19 @@ function personEffectivePin(p) {
   const r = rolesList().find((x) => x.id === p.roleId);
   return String(p.pin || (r && r.pin) || "").trim();
 }
+// الصلاحيات التلقائية حسب موقع الشخص في المسار (مفتاح تشغيل في «كل المسارات»، متوقف افتراضيًا):
+// كاتبة (إدارية/مساعدة/رئيسة): صفحات التقارير. صاحبة مرحلة في المسار: «بانتظار مراجعتي» وأزرار المراجعة.
+// تُضاف فوق ما حدّدتِه يدويًا في «الأدوار» ولا تحذف منه شيئًا.
+function apAutoPositionPerms(p) {
+  const c = autoPathCfg();
+  if (!c.autoPerms || !p || !p.roleId) return null;
+  const out = { pages: [], buttons: [] };
+  if ([c.idr, c.ast, c.head].some((r) => r && r === p.roleId)) out.pages.push("dashboard", "unit-reports", "unit-report", "unit-settings");
+  const path = autoPathObj();
+  const holds = path && path.status === "active" && (path.stages || []).some((st) => !st.disabled && String(st.approver) === "role:" + p.roleId);
+  if (holds) { out.pages.push("custom-path-inbox"); out.buttons.push("ap-advance", "ap-return"); }
+  return out.pages.length || out.buttons.length ? out : null;
+}
 function applyPersonPerms(p) {
   const eff = personEffectivePerms(p);
   // دور بلا صفحات = لا صفحات (لا يرث صفحات حساب الجهة) — قرار نجود: الفارغ لا يعني الوراثة.
@@ -2463,6 +2476,11 @@ function applyPersonPerms(p) {
   S.allowedButtons = chips.length ? [...chips] : null;
   // «ينبّه» = إدخال بصيغة notify:chip:<tab> داخل نفس قائمة الأزرار (بدون تغيير بنية الصلاحيات)
   S.personNotifyTabs = bs.filter((b) => b.indexOf("notify:chip:") === 0).map((b) => b.slice("notify:chip:".length));
+  const ap = apAutoPositionPerms(p);
+  if (ap) {
+    S.allowedPages = normalizeDashboardPages([...(S.allowedPages || []), ...ap.pages.filter((x) => !(S.allowedPages || []).includes(x))]);
+    if (S.allowedButtons) S.allowedButtons = [...S.allowedButtons, ...ap.buttons.filter((x) => !S.allowedButtons.includes(x))];
+  }
 }
 function enterEntityAsPerson(p, role) {
   const pe = S.pendingEntityLogin;
@@ -8318,6 +8336,10 @@ function apAutoCardHtml() {
       ${roleSel("idr", "دور الإدارية")}${roleSel("ast", "دور المساعدة")}${roleSel("head", "دور الرئيسة")}${roleSel("sec", "دور السكرتارية (مرحلة قبل الاعتماد النهائي)")}
       ${pillBtn("حفظ الأدوار", { variant: "soft", action: "ap-auto-roles-save" })}
     </div>
+    <div style="margin-top:12px;display:flex;gap:10px;align-items:center;flex-wrap:wrap;background:${GRAY_BG};border-radius:12px;padding:10px 12px;">
+      <div style="flex:1 1 260px;"><div style="font-size:13px;font-weight:800;">الصلاحيات التلقائية حسب الموقع في المسار ${badgeHtml(cfg.autoPerms ? "مفعّلة" : "موقفة", cfg.autoPerms ? GREEN : SUBTLE, cfg.autoPerms ? GREEN_BG : GRAY_BG)}</div>
+      <div style="font-size:11.5px;color:${SUBTLE};line-height:1.8;margin-top:3px;">لو فعّلتيها: الإدارية والمساعدة والرئيسة تظهر لهن صفحات التقارير تلقائيًا، ومن لها مرحلة في المسار تظهر لها «بانتظار مراجعتي» وأزرار المراجعة — بدون تفعيلها يدويًا لكل دور. تُضاف فوق ما حددتيه في «الأدوار» ولا تحذف منه شيئًا.</div></div>
+      ${pillBtn(cfg.autoPerms ? "إيقاف" : "تفعيل", { variant: cfg.autoPerms ? "ghost" : "soft", action: "ap-auto-perms-toggle" })}</div>
     ${path ? `<div style="margin-top:14px;display:flex;gap:8px;align-items:center;flex-wrap:wrap;"><span style="font-size:13px;font-weight:800;">مين يكتب التقرير؟</span>
       ${AUTO_RANKS.map((r) => { const w = cfg.writers || { idr: true, ast: true, head: true }; const on = w[r.k] !== false; return `<button type="button" data-action="ap-auto-writer" data-k="${r.k}" style="min-height:38px;padding:0 14px;border-radius:999px;font-size:12.5px;cursor:pointer;font-family:inherit;font-weight:${on ? 800 : 500};border:1px solid ${on ? ROSE : BORDER};background:${on ? ROSE : "#fff"};color:${on ? "#fff" : INK};">${on ? "✓ " : "＋ "}${r.label}</button>`; }).join("")}
       <span style="font-size:11.5px;color:${SUBTLE};">اللي تكتب ما يمر التقرير عليها ولا على اللي أقل منها. لو ولا وحدة منهن موجودة بالوحدة يكتب أصغر دور موجود.</span></div>
@@ -11199,6 +11221,11 @@ function attachClickListener() {
           dataStore.saveApprovalPaths(S.approvalPaths);
           addPermLog("approval-path", AUTO_PATH_ID, "المسار التلقائي من الهيكل", was ? "إيقاف المسار" : "تفعيل المسار");
         }
+        render(); break;
+      }
+      case "ap-auto-perms-toggle": {
+        apAutoSave({ autoPerms: !autoPathCfg().autoPerms });
+        addPermLog("approval-path", AUTO_PATH_ID, "المسار التلقائي من الهيكل", autoPathCfg().autoPerms ? "تفعيل الصلاحيات التلقائية" : "إيقاف الصلاحيات التلقائية");
         render(); break;
       }
       case "ap-auto-writer": {
