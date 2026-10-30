@@ -1237,7 +1237,15 @@ function apPathById(id) { return approvalPathsList().find((p) => p.id === id) ||
 // وترجع تعمل بمجرد تفعيلها من جديد (بدون تعديل المسار أو إرجاعه مسودة).
 // مراحل المسار الفعّالة. مع unit: تُتخطّى مرحلة «دور من نفس وحدة التقرير» إن لم يكن في الوحدة أحد بهذا الدور
 // authorId (اختياري): كاتبة التقرير — المراحل اللي هي صاحبتها تُتخطّى (ما تراجع تقريرها بنفسها)
-function apStageList(path, unit, authorId, period) { return ((path && path.stages) || []).filter((st) => !st.disabled && (!unit || apStageApplies(st, unit, { pathId: path.id, authorId, period }))).map((st) => apNamedStage(st, path, unit, period)); }
+function apStageList(path, unit, authorId, period) {
+  const res = ((path && path.stages) || []).filter((st) => !st.disabled && (!unit || apStageApplies(st, unit, { pathId: path.id, authorId, period }))).map((st) => apNamedStage(st, path, unit, period));
+  // المسار التلقائي: مرحلة السكرتارية تقع قبل آخر مرحلة (الاعتماد النهائي) لكل الوحدات
+  if (path && path.id === AUTO_PATH_ID) {
+    const i = res.findIndex((x) => x.secStage);
+    if (i >= 0 && res.length > 1 && i !== res.length - 2) { const [sx] = res.splice(i, 1); res.splice(res.length - 1, 0, sx); }
+  }
+  return res;
+}
 // كل المراحل الفعّالة (بدون فلترة على الوحدة) بأسمائها لهذه الوحدة — للبحث عن المرحلة الحالية لتقرير
 function apStagesNamed(path, unit) { return ((path && path.stages) || []).filter((st) => !st.disabled).map((st) => apNamedStage(st, path, unit)); }
 function apNamedStage(st, path, unit, period) {
@@ -1265,6 +1273,7 @@ function apStageApplies(st, unit, ctx) {
   if (a.indexOf(AP_TREE_UP) === 0 && !apStageTreeLevel(st, unit, ctx && ctx.period)) return false;
   // المسار التلقائي: مرحلة داخل الوحدة أقل من أو بنفس رتبة كاتبة التقرير تُتخطّى (المساعدة لما تكتب ما تمر على المساعدة)
   if (st.unitRank && ctx && ctx.authorId && apAutoAuthorRank(ctx.authorId) >= st.unitRank) return false;
+  if (st.secStage && !personsList().some((p) => p.status !== "disabled" && p.roleId === a.slice(5))) return false;
   if (st.sameUnit && a.indexOf("role:") === 0) {
     const rid = a.slice(5);
     if (!personsList().some((p) => p.status !== "disabled" && p.roleId === rid && apPersonInUnit(p, unit))) return false;
@@ -1317,6 +1326,7 @@ function apAutoBuildStages(cfg, old) {
   const st = [];
   [["ast", "مساعدة الوحدة", 1], ["head", "رئيسة الوحدة", 2]].forEach(([k, name, rank]) => { if (cfg[k]) st.push({ id: k, name, approver: "role:" + cfg[k], sameUnit: true, unitRank: rank, ...base, ...keep(k) }); });
   for (let n = 1; n <= AUTO_TREE_MAX; n++) st.push({ id: "t" + n, name: apTreeUpLabel(n), approver: AP_TREE_UP + n, treeName: true, ...base, ...keep("t" + n) });
+  if (cfg.sec) st.push({ id: "sec", name: "السكرتارية", approver: "role:" + cfg.sec, secStage: true, ...base, ...keep("sec") });
   return st;
 }
 // وش تسوي كل مرحلة: لأدوار الوحدة بمفتاح الدور (ast/head) ولمستويات الهيكل بمفتاح "lvl:<id>"
@@ -1352,7 +1362,7 @@ function apAutoAuthorAllowed(unit, personId) {
 function apAutoGuessRoles() {
   const rs = rolesList().filter((r) => r.status !== "disabled");
   const f = (re) => (rs.find((r) => re.test(r.name || "")) || {}).id || "";
-  return { idr: f(/إداري/), ast: f(/مساعد/), head: f(/رئيس/) };
+  return { idr: f(/إداري/), ast: f(/مساعد/), head: f(/رئيس/), sec: f(/سكرتار/) };
 }
 function apAutoSave(patch) {
   const cfg = { ...autoPathCfg(), ...patch };
@@ -2234,7 +2244,7 @@ function renderMainSidebar(mobile) {
   const sbPersonRole = sbPerson ? rolesList().find((r) => r.id === sbPerson.roleId) : null;
   const sbName = sbPerson ? sbPerson.name : (S.currentUser ? S.currentUser.name : "");
   const initial = (sbName ? String(sbName).trim()[0] : "؟");
-  const roleLabel = S.isAdmin ? "مديرة النظام" : S.isDepartmentUser ? "مديرة قسم" : S.isExecutive ? (S.levelScope ? (S.levelScope.type || "مستوى") : "الإدارة العليا") : S.isOfficeUser ? "مكتب إشراف" : S.currentUnitEntryMode === "head" ? "رئيسة الوحدة" : S.currentUnitEntryMode === "extra" ? (((S.units.find((u) => u.id === S.currentUnitId) || {}).extraReviewerTitle) || "مراجعة إضافية") : "مسؤولة الوحدة";
+  const roleLabel = S.isAdmin ? "مديرة النظام" : S.isDepartmentUser ? "مديرة قسم" : S.isExecutive ? (S.levelScope ? (S.levelScope.type || "مستوى") : "إدارة التعليم النسائي") : S.isOfficeUser ? "مكتب إشراف" : S.currentUnitEntryMode === "head" ? "رئيسة الوحدة" : S.currentUnitEntryMode === "extra" ? (((S.units.find((u) => u.id === S.currentUnitId) || {}).extraReviewerTitle) || "مراجعة إضافية") : "مسؤولة الوحدة";
   const site = currentSiteSettings();
   const taglineHtml = S.isAdmin ? "" : sidebarTaglineBlockHtml(site);
 
@@ -3010,7 +3020,7 @@ function statIconCardHtml(label, value, iconHtml, iconBg) {
 
 /* ---- إعدادات ما يظهر في لوحة المعلومات (حسب نوع الجهة) ---- */
 const DASH_KINDS = [
-  { id: "admin", label: "مديرة النظام" }, { id: "executive", label: "الإدارة العليا" },
+  { id: "admin", label: "مديرة النظام" }, { id: "executive", label: "إدارة التعليم النسائي" },
   { id: "office", label: "المكتب" }, { id: "dept", label: "القسم" }, { id: "unit", label: "الوحدة" },
 ];
 // اللوحة العامة (مديرة النظام / المكتب / القسم / الوحدة)
@@ -4650,8 +4660,8 @@ function olUnlinkedCardHtml() {
     ${S.isAdmin && admins.length ? `<div class="card card-lg" style="margin-top:14px;"><div style="font-size:14px;font-weight:800;margin-bottom:6px;">حسابات مديرة النظام</div>${adminRows}</div>` : ""}
     ${S.isAdmin ? `<div class="card card-lg" style="margin-top:14px;display:flex;flex-direction:column;gap:8px;">
       <div style="font-size:14px;font-weight:800;">أدوار جاهزة (اختياري)</div>
-      <div style="font-size:12px;color:#6f5f66;line-height:1.9;">لا توجد صفحات افتراضية لأي حساب. لو تبين ترجعين لمديرة النظام أو الإدارة العليا صفحاتها السابقة بضغطة، هذي الأزرار تنشئ دورًا بنفس الصفحات السابقة وتعيّنه لكل حسابات هذا النوع — وبعدها تعدّلين الدور كما تبين.</div>
-      <div style="display:flex;gap:8px;flex-wrap:wrap;">${pillBtn("دور «مديرة النظام» بصفحاتها السابقة", { variant: "ghost", action: "ol-preset-role", data: { kind: "admin" } })}${pillBtn("دور «الإدارة العليا» بصفحاتها السابقة", { variant: "ghost", action: "ol-preset-role", data: { kind: "exec" } })}</div>
+      <div style="font-size:12px;color:#6f5f66;line-height:1.9;">لا توجد صفحات افتراضية لأي حساب. لو تبين ترجعين لمديرة النظام أو إدارة التعليم النسائي صفحاتها السابقة بضغطة، هذي الأزرار تنشئ دورًا بنفس الصفحات السابقة وتعيّنه لكل حسابات هذا النوع — وبعدها تعدّلين الدور كما تبين.</div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;">${pillBtn("دور «مديرة النظام» بصفحاتها السابقة", { variant: "ghost", action: "ol-preset-role", data: { kind: "admin" } })}${pillBtn("دور «إدارة التعليم النسائي» بصفحاتها السابقة", { variant: "ghost", action: "ol-preset-role", data: { kind: "exec" } })}</div>
     </div>` : ""}`;
 }
 function olTypesBarHtml() {
@@ -4825,7 +4835,7 @@ function handleOrgLevelsAction(action, ds) {
       const pages = isA
         ? SIDEBAR_PAGES.filter((p) => p.group !== "unit-extra" && !["departments-list", "admin-reports"].includes(p.id)).map((p) => p.id)
         : SIDEBAR_PAGES.filter((p) => p.group === "الإدارة العليا" || ["executive-summary", "executive-final-report", "all-reports"].includes(p.id)).map((p) => p.id);
-      const name = isA ? "مديرة النظام — كل الصفحات" : "الإدارة العليا — الاطّلاع الشامل";
+      const name = isA ? "مديرة النظام — كل الصفحات" : "إدارة التعليم النسائي — الاطّلاع الشامل";
       let role = rolesList().find((r) => r.name === name);
       if (!role) { role = { id: uid("role"), name, pin: "", description: "دور جاهز بنفس الصفحات السابقة", permissions: { pages, actions: [], buttons: [] }, status: "active", createdAt: Date.now() }; S.roles = [...rolesList(), role]; dataStore.saveRoles(S.roles); }
       const targets = S.units.filter((u) => u.role === (isA ? "admin" : "executive"));
@@ -5250,7 +5260,7 @@ const RPT_COMMON_DEFAULTS = {
   fontBody: "Almarai", fontTitle: "Amiri", fontHeading: "Cairo", mainColor: "#6b2337", chapterBg: "#f3e8dd",
   showCover: true, showCoverMeta: true, assocName: "جمعية فرقان لتحفيظ القرآن الكريم بالطائف", coverTitle: "", coverSub: "", preparedBy: "",
 };
-const RPT_FINAL_DEFAULTS = { ...RPT_COMMON_DEFAULTS, coverTitle: "التقرير الإداري النهائي", coverSub: "تقرير منتقى — أبرز ما يستحق قرار الإدارة، لا كل البيانات", preparedBy: "الإدارة العليا" };
+const RPT_FINAL_DEFAULTS = { ...RPT_COMMON_DEFAULTS, coverTitle: "التقرير الإداري النهائي", coverSub: "تقرير منتقى — أبرز ما يستحق قرار الإدارة، لا كل البيانات", preparedBy: "إدارة التعليم النسائي" };
 const RPT_UNIT_DEFAULTS = { ...RPT_COMMON_DEFAULTS, fontTitle: "Cairo", pageNum: "paren", spine: true, perPage: 2 };
 const RPT_CUSTOM_DEFAULTS = { ...RPT_COMMON_DEFAULTS, name: "", scopeLevelId: "", periodKind: "all", year: "", coverSub: "", preparedBy: "" };
 const RPT_NUM_KEYS = ["mt", "mb", "mr", "ml", "limit", "tableFs", "year", "perPage"];
@@ -7965,7 +7975,7 @@ const SENSITIVE_PAGE_IDS = [
 ];
 // أسماء عرض مخصّصة لمجموعات الصفحات بقائمة الصلاحيات — فقط
 // حيث اسم المجموعة الأصلي (المستخدم بالشريط الجانبي الحقيقي) غير واضح هنا.
-const PAGE_GROUP_LABELS = { "unit-home": "صفحات التقارير (لوحة المعلومات/تقارير/إنشاء تقرير/الإعدادات)", "unit-extra": "صفحات الوحدة (التنبيهات/جميع تقارير الوحدة)" };
+const PAGE_GROUP_LABELS = { "الإدارة العليا": "إدارة التعليم النسائي", "unit-home": "صفحات التقارير (لوحة المعلومات/تقارير/إنشاء تقرير/الإعدادات)", "unit-extra": "صفحات الوحدة (التنبيهات/جميع تقارير الوحدة)" };
 function pagesChecklistHtml(selected, action) {
   selected = normalizeDashboardPages(selected || []);
   const groups = [];
@@ -8182,6 +8192,17 @@ function apAutoPreview(unit, period) {
     else { n++; if (glob.has(l.id)) { r.state = "all"; r.why = "متخطّى لكل وحداته"; } else if (uSkip.includes(AUTO_PATH_ID + ":lvl:" + l.id)) { r.state = "unit"; r.why = "متخطّى لهذه الوحدة"; } else r.state = "on"; }
     rows.push(r);
   }
+  const secSt = (path.stages || []).find((st) => st.secStage);
+  if (secSt) {
+    const h = personsList().filter((p) => p.status !== "disabled" && p.roleId === String(secSt.approver).slice(5));
+    const r = { what: "stage", id: "sec", pk: "sec", name: "السكرتارية", sub: "مرحلة لكل الوحدات قبل الاعتماد النهائي — " + (h.length ? h.map((p) => p.name).join("، ") : "ما فيه أحد بهذا الدور") };
+    if (secSt.disabled) { r.state = "all"; r.why = "متخطّاة لكل الوحدات"; }
+    else if (!h.length) { r.state = "auto"; r.why = "تُتخطّى تلقائيًا — ما فيه أحد"; }
+    else if (uSkip.includes(AUTO_PATH_ID + ":sec")) { r.state = "unit"; r.why = "متخطّاة لهذه الوحدة"; }
+    else r.state = "on";
+    let at = -1; rows.forEach((x, i) => { if (x.what === "lvl" && x.state !== "all" && x.state !== "unit") at = i; });
+    if (at < 0) rows.push(r); else rows.splice(at, 0, r);
+  }
   return { writer, rows };
 }
 function apAutoCardHtml() {
@@ -8223,7 +8244,7 @@ function apAutoCardHtml() {
       ${pillBtn(active ? "إيقاف" : "تفعيل", { variant: active ? "ghost" : "primary", action: "ap-auto-toggle" })}
     </div>
     <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;margin-top:12px;background:${GRAY_BG};border-radius:12px;padding:10px 12px;">
-      ${roleSel("idr", "دور الإدارية")}${roleSel("ast", "دور المساعدة")}${roleSel("head", "دور الرئيسة")}
+      ${roleSel("idr", "دور الإدارية")}${roleSel("ast", "دور المساعدة")}${roleSel("head", "دور الرئيسة")}${roleSel("sec", "دور السكرتارية (مرحلة قبل الاعتماد النهائي)")}
       ${pillBtn("حفظ الأدوار", { variant: "soft", action: "ap-auto-roles-save" })}
     </div>
     ${path ? `<div style="margin-top:14px;display:flex;gap:8px;align-items:center;flex-wrap:wrap;"><span style="font-size:13px;font-weight:800;">مين يكتب التقرير؟</span>
@@ -11099,7 +11120,7 @@ function attachClickListener() {
       case "ap-auto-roles-save":
       case "ap-auto-toggle": {
         const g = (k) => { const el = document.getElementById("ap-auto-" + k); return el ? el.value : (autoPathCfg()[k] || ""); };
-        apAutoSave({ idr: g("idr"), ast: g("ast"), head: g("head") });
+        apAutoSave({ idr: g("idr"), ast: g("ast"), head: g("head"), sec: g("sec") });
         apRepairStuck();
         if (action === "ap-auto-toggle") {
           const was = (autoPathObj() || {}).status === "active";
