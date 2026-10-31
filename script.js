@@ -3981,7 +3981,7 @@ function usLevelUnitSwitcherHtml() {
 }
 function renderUnitSettings() {
   const unit = (S.units || []).find((u) => u.id === S.currentUnitId);
-  const body = !unit ? `<div class="card" style="text-align:center;color:${SUBTLE};padding:36px;">اختاري الوحدة أولًا.</div>` : `${usLetterheadCardHtml(unit)}${usSectionsCardHtml(unit)}${usSkipCardHtml(unit)}`;
+  const body = !unit ? `<div class="card" style="text-align:center;color:${SUBTLE};padding:36px;">اختاري الوحدة أولًا.</div>` : (() => { const t = S.ui.usTab || "sections"; return `<div class="st-tabs" style="margin-bottom:14px;">${[["sections", "الأقسام"], ["path", "المسار"], ["format", "التنسيق"]].map(([id, l]) => `<button type="button" class="st-tab${t === id ? " on" : ""}" data-action="us-tab" data-tab="${id}">${l}</button>`).join("")}</div>${t === "path" ? usSkipCardHtml(unit) : t === "format" ? usLetterheadCardHtml(unit) : usSectionsCardHtml(unit)}`; })();
   return `
   <div class="page-wrap"><div class="page-inner narrow">
     ${topBarHtml({ title: "الإعدادات", subtitle: unit ? unit.name : "" })}
@@ -4033,7 +4033,7 @@ function usSectionsCardHtml(unit) {
     <div style="display:flex;flex-direction:column;gap:6px;">${SECTIONS.map((sc) => {
       const locked = SECTIONS_ALWAYS.includes(sc.id), on = locked || !off.includes(sc.id);
       return `<button type="button" data-action="us-sec-toggle" data-sid="${esc(sc.id)}" data-pt="${esc(pt)}" ${locked ? "disabled" : ""} style="display:flex;align-items:center;gap:10px;min-height:44px;padding:8px 12px;border-radius:12px;border:1px solid ${on ? ROSE : BORDER};background:${on ? "#fff" : GRAY_BG};cursor:${locked ? "default" : "pointer"};font-family:inherit;text-align:start;">
-        <span style="width:20px;height:20px;border-radius:6px;flex-shrink:0;display:flex;align-items:center;justify-content:center;background:${on ? ROSE : "#fff"};border:1.5px solid ${on ? ROSE : BORDER};">${on ? iconCheck(12, "#fff") : ""}</span>
+        <span class="sw-tg${on ? " on" : ""}${locked ? " lk" : ""}"><i></i></span>
         <span style="flex:1;font-size:13px;font-weight:700;color:${on ? INK : SUBTLE};${on ? "" : "text-decoration:line-through;"}">${esc(sc.label)}</span>
         ${locked ? `<span style="font-size:10.5px;color:${SUBTLE};">دائمًا (فيه اختيار الفترة)</span>` : ""}
       </button>`;
@@ -8078,7 +8078,7 @@ function renderAllReports() {
       </div>
     </div>` : ""}
     <div style="display:flex;gap:8px;margin-bottom:18px;flex-wrap:wrap;">
-      ${tabs.map((t) => `<button class="pill-btn ${filter === t.id ? "pill-primary" : "pill-ghost"}" data-action="set-all-reports-filter" data-filter="${t.id}">${esc(t.label)} (${t.id === "all" ? rows.length : rows.filter((x) => x.report.status === t.id).length})</button>`).join("")}
+      ${tabs.map((t) => `<button class="flt-chip${filter === t.id ? " on" : ""}" data-action="set-all-reports-filter" data-filter="${t.id}">${esc(t.label)}<span class="flt-n${(t.id === "all" ? rows.length : rows.filter((x) => x.report.status === t.id).length) ? "" : " z"}">${t.id === "all" ? rows.length : rows.filter((x) => x.report.status === t.id).length}</span></button>`).join("")}
     </div>
     ${filtered.length === 0 ? `<div class="card" style="text-align:center;color:${SUBTLE};padding:36px;">لا توجد تقارير مطابقة.</div>` :
       `<div class="table-wrap" style="margin-bottom:10px;"><table class="prs-table" id="all-reports-table">
@@ -8218,7 +8218,7 @@ function renderUnitReportsHub() {
     </div>
 
     <div style="display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap;">
-      ${tabs.map((t) => `<button class="pill-btn ${filter === t.id ? "pill-primary" : "pill-ghost"}" data-action="set-unit-reports-filter" data-filter="${t.id}">${esc(t.label)} (${countFor(t.id)})</button>`).join("")}
+      ${tabs.map((t) => `<button class="flt-chip${filter === t.id ? " on" : ""}" data-action="set-unit-reports-filter" data-filter="${t.id}">${esc(t.label)}<span class="flt-n${countFor(t.id) ? "" : " z"}">${countFor(t.id)}</span></button>`).join("")}
     </div>
 
     <div class="card" style="margin-bottom:16px;">
@@ -11842,6 +11842,7 @@ function attachClickListener() {
         break;
       }
       case "font-pick": { const se = document.getElementById(ds.sel); if (se) { se.value = ds.v; se.dispatchEvent(new Event("change", { bubbles: true })); } break; }
+      case "us-tab": S.ui.usTab = ds.tab; break;
       case "site-tab": {
         S.ui.siteTab = ds.tab;
         document.querySelectorAll("[data-st]").forEach((el) => { el.style.display = el.getAttribute("data-st") === ds.tab ? "" : "none"; });

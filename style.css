@@ -569,3 +569,12 @@ table.prs-table td { padding: 8px 10px; border-top: 1px solid var(--border); }
 .rm-soft .rm-pill.on{background:#e3f0e7;color:#2e7a4e;text-decoration:none;border-color:transparent}
 .rm-soft table .rm-pill{min-width:0;width:34px;height:30px;padding:0;border-radius:9px}
 .rm-soft table th{background:#fbeeee;color:#7b2d3b}
+/* s10/s11: شرائح الفلتر ومفاتيح التشغيل بتنسيق التصميم */
+.flt-chip{display:inline-flex;align-items:center;gap:8px;font-family:inherit;font-size:13px;font-weight:700;padding:9px 16px;border-radius:999px;border:1px solid #e6d9dd;background:#fff;color:#4a3a40;cursor:pointer}
+.flt-chip.on{background:#f8e9ea;border-color:#d9aeb4;color:var(--primary,#6a1b25)}
+.flt-n{min-width:20px;height:20px;border-radius:999px;background:#b9777f;color:#fff;font-size:11px;display:inline-flex;align-items:center;justify-content:center;padding:0 5px}
+.flt-n.z{background:#cfc4c7}
+.sw-tg{position:relative;width:40px;height:24px;border-radius:999px;background:#d7d0cd;flex:none;display:inline-block}
+.sw-tg i{position:absolute;top:3px;inset-inline-end:3px;width:18px;height:18px;border-radius:50%;background:#fff;box-shadow:0 1px 3px rgba(0,0,0,.25);transition:.15s}
+.sw-tg.on{background:#8aa894}.sw-tg.on i{inset-inline-end:auto;inset-inline-start:3px}
+.sw-tg.lk{opacity:.6}
