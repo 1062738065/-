@@ -530,3 +530,8 @@ table.prs-table td { padding: 8px 10px; border-top: 1px solid var(--border); }
   .page-inner.dash-wide > .dash-blk[data-dk="exCompare"], .page-inner.dash-wide > .dash-blk[data-dk="exUnitPerf"], .page-inner.dash-wide > .dash-blk[data-dk="bars"] { grid-column: 1 / -1; }
 }
 .hero-banner .search-bar { align-self: stretch; position: relative; z-index: 2; }
+
+.rpt-runhead-img { margin-bottom: 4mm; }
+.rpt-runhead-img img { display: block; width: 100%; max-height: 30mm; object-fit: contain; }
+.rpt-runfoot-img { position: absolute; bottom: 14mm; left: var(--rpt-ml, 15mm); right: var(--rpt-mr, 15mm); }
+.rpt-runfoot-img img { display: block; width: 100%; max-height: 20mm; object-fit: contain; }

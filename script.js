@@ -5396,7 +5396,7 @@ function portalPreload() {
 
 /* =============================== Site settings (admin) ======================= */
 /* ===== قالب الصفحة العام: ترويسة وتذييل وترقيم وعلامة مائية وهوامش — يُطبَّق على كل التقارير بزر ===== */
-const PG_KEYS = ["orient", "margin", "paper", "watermark", "frame", "showHead", "headRight", "headCenter", "headLeft", "headLogo", "showFoot", "footText", "pageNum"];
+const PG_KEYS = ["headImage", "footImage", "orient", "margin", "paper", "watermark", "frame", "showHead", "headRight", "headCenter", "headLeft", "headLogo", "showFoot", "footText", "pageNum"];
 function pgDraft() {
   if (!S.ui.pgDraft) { const f = rptSettings("final"); S.ui.pgDraft = {}; PG_KEYS.forEach((k) => { S.ui.pgDraft[k] = f[k]; }); }
   return S.ui.pgDraft;
@@ -5411,10 +5411,52 @@ function pgPreviewHtml() {
   return `<div style="position:relative;width:${w}px;height:${h}px;background:${/^#[0-9a-fA-F]{6}$/.test(d.paper) ? d.paper : "#fff"};border:1px solid ${BORDER};box-shadow:0 4px 14px rgba(0,0,0,.08);margin:0 auto;overflow:hidden;${d.frame ? `outline:2px solid ${ROSE};outline-offset:-8px;` : ""}">
     ${d.watermark ? `<div style="position:absolute;inset:0;background:url('${ASSOCIATION_LOGO}') center/45% no-repeat;opacity:.08;"></div>` : ""}
     <div style="position:absolute;top:${Math.round(m[0] * sc)}px;bottom:${Math.round(m[1] * sc)}px;right:${Math.round(m[2] * sc)}px;left:${Math.round(m[3] * sc)}px;display:flex;flex-direction:column;border:1px dashed #d8c9c1;">
-      ${d.showHead ? `<div style="display:flex;justify-content:space-between;align-items:center;font-size:7px;padding:3px 4px;border-bottom:1px solid ${BORDER};color:${INK};"><span>${esc(d.headRight)}</span><span style="display:flex;gap:3px;align-items:center;">${d.headLogo ? `<img src="${ASSOCIATION_LOGO}" alt="" style="height:12px;" />` : ""}<b>${esc(d.headCenter)}</b></span><span>${esc(d.headLeft)}</span></div>` : ""}
+      ${d.headImage && RPT_DATA_IMG_RE.test(d.headImage) ? `<img src="${d.headImage}" alt="" style="width:100%;max-height:28px;object-fit:contain;border-bottom:1px solid ${BORDER};" />` : d.showHead ? `<div style="display:flex;justify-content:space-between;align-items:center;font-size:7px;padding:3px 4px;border-bottom:1px solid ${BORDER};color:${INK};"><span>${esc(d.headRight)}</span><span style="display:flex;gap:3px;align-items:center;">${d.headLogo ? `<img src="${ASSOCIATION_LOGO}" alt="" style="height:12px;" />` : ""}<b>${esc(d.headCenter)}</b></span><span>${esc(d.headLeft)}</span></div>` : ""}
       <div style="flex:1;padding:8px 6px;">${[70, 90, 55, 80, 40].map((x) => `<div style="height:5px;width:${x}%;background:#e9dfda;border-radius:3px;margin-bottom:7px;"></div>`).join("")}</div>
+      ${d.footImage && RPT_DATA_IMG_RE.test(d.footImage) ? `<img src="${d.footImage}" alt="" style="width:100%;max-height:22px;object-fit:contain;" />` : ""}
       ${(d.showFoot && d.footText) || num ? `<div style="display:flex;justify-content:space-between;font-size:7px;padding:3px 4px;border-top:1px solid ${BORDER};color:${SUBTLE};"><span>${d.showFoot ? esc(d.footText) : ""}</span><span>${num}</span><span></span></div>` : ""}
     </div></div>`;
+}
+function pgImgRow(inputId, val, clearAction, key) {
+  return `<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+    <label class="pill-btn pill-ghost" style="margin:0;">${iconPlus(14, INK)} اختيار صورة<input type="file" accept="image/*" id="${inputId}" style="display:none;" /></label>
+    ${val ? `<img src="${esc(val)}" alt="" style="max-width:150px;max-height:48px;border:1px solid ${BORDER};border-radius:6px;background:#fff;" />${pillBtn("إزالة", { variant: "ghost", icon: iconX(14, INK), action: clearAction, data: { key } })}` : ""}
+  </div>`;
+}
+function unitLetterheadHtml() {
+  const units = (S.units || []).filter((u) => u.status === "active");
+  const uid = units.some((u) => u.id === S.ui.ulUnit) ? S.ui.ulUnit : (units[0] || {}).id;
+  const all = ((S.siteSettings || {}).theme || {}).unitLetterheads || {};
+  const cur = (uid && all[uid]) || {};
+  const withImg = units.filter((u) => all[u.id] && (all[u.id].head || all[u.id].foot));
+  return `<div style="border-top:1px solid ${BORDER};margin-top:20px;padding-top:16px;">
+    <div style="font-size:13px;font-weight:800;margin-bottom:6px;">كليشة خاصة بوحدة</div>
+    <div class="hint" style="margin-bottom:10px;">الوحدة اللي ما لها صورة خاصة تأخذ صورة القالب أعلاه. الصورة الخاصة تظهر في تقارير الوحدة (العرض والطباعة وPDF). تُحفظ فورًا.</div>
+    ${units.length ? `<select class="input" id="ul-unit" style="max-width:300px;margin-bottom:12px;">${units.map((u) => `<option value="${esc(u.id)}" ${u.id === uid ? "selected" : ""}>${esc(u.name)}${all[u.id] && (all[u.id].head || all[u.id].foot) ? " ✓" : ""}</option>`).join("")}</select>
+    <div style="display:flex;flex-direction:column;gap:12px;"><div><div style="font-size:12.5px;font-weight:700;margin-bottom:4px;">صورة الكليشة</div>${pgImgRow("ul-img-head", cur.head, "ul-img-clear", "head")}</div>
+    <div><div style="font-size:12.5px;font-weight:700;margin-bottom:4px;">صورة التذييل</div>${pgImgRow("ul-img-foot", cur.foot, "ul-img-clear", "foot")}</div></div>
+    ${withImg.length ? `<div class="hint" style="margin-top:10px;">وحدات لها كليشة خاصة: ${withImg.map((u) => esc(u.name)).join("، ")}</div>` : ""}` : `<div class="hint">لا توجد وحدات.</div>`}
+  </div>`;
+}
+// تصغير الصورة قبل الحفظ (أقصى عرض 1400px) لتبقى خفيفة
+function imgDownscale(file, cb) {
+  if (!file || !/^image\//.test(file.type)) return;
+  const rd = new FileReader();
+  rd.onload = () => {
+    const im = new Image();
+    im.onload = () => {
+      const w = Math.min(1400, im.width), h = Math.round(im.height * (w / im.width));
+      const cv = document.createElement("canvas"); cv.width = w; cv.height = h;
+      cv.getContext("2d").drawImage(im, 0, 0, w, h);
+      let out = cv.toDataURL("image/png");
+      if (out.length > 600 * 1024) out = cv.toDataURL("image/jpeg", 0.85);
+      if (out.length > 900 * 1024) { alert("الصورة كبيرة بعد التصغير. اختاري صورة أخف."); return; }
+      cb(out);
+    };
+    im.onerror = () => alert("تعذّر قراءة الصورة.");
+    im.src = rd.result;
+  };
+  rd.readAsDataURL(file);
 }
 function pageTplCardHtml() {
   const d = pgDraft();
@@ -5432,6 +5474,8 @@ function pageTplCardHtml() {
         ${fld("لون الورقة", `<input type="color" data-pg="paper" value="${/^#[0-9a-fA-F]{6}$/.test(d.paper) ? esc(d.paper) : "#ffffff"}" style="width:56px;height:40px;border:1px solid ${BORDER};border-radius:10px;padding:2px;background:#fff;" />`)}
         ${fld("زخارف", `<div style="display:flex;gap:6px;flex-wrap:wrap;">${tog("watermark", "علامة مائية (الشعار)")}${tog("frame", "إطار حول الصفحة")}</div>`)}
         ${fld("الترويسة (أعلى الصفحة)", `<div style="margin-bottom:8px;">${tog("showHead", d.showHead ? "ظاهرة" : "مخفية")}</div>${d.showHead ? `<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:8px;">${txt("headRight", "يمين: اسم الجمعية")}${txt("headCenter", "وسط: نص اختياري")}${txt("headLeft", "يسار: اسم الإدارة")}</div><div style="margin-top:8px;">${tog("headLogo", "الشعار في الوسط")}</div>` : ""}`)}
+        ${fld("صورة الكليشة (ترويسة جاهزة بعرض الصفحة)", pgImgRow("pg-img-head", d.headImage, "pg-img-clear", "headImage"), "إذا رفعتي صورة تحل محل نص الترويسة. الأفضل عرضها ٢١٠ مم تقريبًا وارتفاعها أقل من ٣٠ مم.")}
+        ${fld("صورة التذييل", pgImgRow("pg-img-foot", d.footImage, "pg-img-clear", "footImage"))}
         ${fld("التذييل (أسفل الصفحة)", `<div style="margin-bottom:8px;">${tog("showFoot", d.showFoot ? "ظاهر" : "مخفي")}</div>${d.showFoot ? txt("footText", "مثال: سري — للاستخدام الداخلي") : ""}`)}
         ${fld("ترقيم الصفحات", pills("pageNum", [["none", "بدون"], ["paren", "(٢)"], ["num", "٢"], ["of", "٢ من ٨"]]))}
       </div>
@@ -5442,6 +5486,7 @@ function pageTplCardHtml() {
       ${pillBtn("إعادة من التقرير الحالي", { variant: "ghost", icon: iconX(14, INK), action: "pg-reload" })}
     </div>
     ${S.ui.pgMsg ? `<div class="hint" style="margin-top:10px;color:${GREEN};">${esc(S.ui.pgMsg)}</div>` : ""}
+    ${unitLetterheadHtml()}
   </div>`;
 }
 /* ===== الأرشفة وDrive: إعدادات الروابط ومفاتيح التشغيل (تُحفظ مع إعدادات الموقع؛ التنفيذ الفعلي للحفظ في Drive في الدفعة ٤) ===== */
@@ -5768,10 +5813,18 @@ function rptPageNumText(s, n, total) {
   return "";
 }
 // صفحة واحدة من التقرير مع الكليشة (رأس) والتذييل ورقم الصفحة والعلامة المائية
+function rptLetterhead(s) {
+  const uid = RPT_CTX && RPT_CTX.unitId;
+  const ul = (uid && (((S.siteSettings || {}).theme || {}).unitLetterheads || {})[uid]) || {};
+  const ok = (v) => (v && RPT_DATA_IMG_RE.test(v) ? v : "");
+  return { head: ok(ul.head) || ok(s.headImage), foot: ok(ul.foot) || ok(s.footImage) };
+}
 function rptPageHtml(s, inner, n, total) {
-  const head = s.showHead ? `<div class="rpt-runhead"><span>${esc(s.headRight)}</span><span class="rpt-runhead-c">${s.headLogo ? `<img src="${ASSOCIATION_LOGO}" alt="" />` : ""}${s.headCenter ? `<b>${esc(s.headCenter)}</b>` : ""}</span><span>${esc(s.headLeft)}</span></div>` : "";
+  const lh = rptLetterhead(s);
+  const head = lh.head ? `<div class="rpt-runhead-img"><img src="${lh.head}" alt="" /></div>` : s.showHead ? `<div class="rpt-runhead"><span>${esc(s.headRight)}</span><span class="rpt-runhead-c">${s.headLogo ? `<img src="${ASSOCIATION_LOGO}" alt="" />` : ""}${s.headCenter ? `<b>${esc(s.headCenter)}</b>` : ""}</span><span>${esc(s.headLeft)}</span></div>` : "";
   const num = rptPageNumText(s, n, total);
-  const foot = (s.showFoot && s.footText) || num ? `<div class="rpt-runfoot"><span>${s.showFoot ? esc(s.footText) : ""}</span><span class="rpt-runfoot-num">${num}</span><span></span></div>` : "";
+  const footImg = lh.foot ? `<div class="rpt-runfoot-img"><img src="${lh.foot}" alt="" /></div>` : "";
+  const foot = footImg + ((s.showFoot && s.footText) || num ? `<div class="rpt-runfoot"><span>${s.showFoot ? esc(s.footText) : ""}</span><span class="rpt-runfoot-num">${num}</span><span></span></div>` : "");
   return `<section class="a4-page${s.spine ? " has-spine" : ""}">${s.spine ? `<div class="rpt-spine"></div>` : ""}${s.watermark ? `<div class="rpt-wm" style="background-image:url('${ASSOCIATION_LOGO}')"></div>` : ""}${head}${inner}${foot}</section>`;
 }
 
@@ -10641,7 +10694,7 @@ function fullReportOrPreviewBody(unit, report, afterPage, opts) {
   const dept = S.departments.find((x) => x.id === unit.departmentId);
   const chapters = rptOrdered(unitChapterDefs(opts.capture ? null : report, unit.id), s).filter((c) => review || (!s.hidden[c.key] &&
     (s.showEmpty || opts.capture || c.special || c.sections.some((sid) => sectionHasData(report, sid)))));
-  return rptWithCtx({ ...rptChartCtx(s), hiddenCols: review ? null : s.hiddenCols, colsShow: s.colsShow, capture: opts.capture || null }, () => {
+  return rptWithCtx({ ...rptChartCtx(s), hiddenCols: review ? null : s.hiddenCols, colsShow: s.colsShow, capture: opts.capture || null, unitId: unit.id }, () => {
     // «ملخص التقرير» بصفحة مستقلة، ثم الأقسام (عدد محدد بكل صفحة، 0 = متتابعة)، و«الإغلاق والاعتماد» مع آخر صفحة
     const per = Number(s.perPage) || 0;
     const pages = [];
@@ -11087,6 +11140,20 @@ function attachFormListeners() {
       render();
       return;
     }
+    if (el.id === "pg-img-head" || el.id === "pg-img-foot") {
+      imgDownscale(el.files && el.files[0], (url) => { pgDraft()[el.id === "pg-img-head" ? "headImage" : "footImage"] = url; S.ui.pgMsg = ""; render(); });
+      return;
+    }
+    if (el.id === "ul-unit") { S.ui.ulUnit = el.value; render(); return; }
+    if (el.id === "ul-img-head" || el.id === "ul-img-foot") {
+      const uid = S.ui.ulUnit || ((S.units || []).filter((u) => u.status === "active")[0] || {}).id; const k = el.id === "ul-img-head" ? "head" : "foot";
+      if (!uid || !S.isAdmin) return;
+      imgDownscale(el.files && el.files[0], (url) => {
+        saveSiteTheme((th) => { const all = { ...((th || {}).unitLetterheads || {}) }; all[uid] = { ...(all[uid] || {}), [k]: url }; return { unitLetterheads: all }; });
+        render();
+      });
+      return;
+    }
     if (el.id === "dash-order-kind") { S.ui.dashOrderKind = el.value; render(); return; }
     if (el.id === "site-heading-font") {
       S.siteSettings = S.siteSettings || dataStore.getSiteSettings();
@@ -11304,6 +11371,13 @@ function attachClickListener() {
         S.ui.siteSettingsSaved = false; render();
         break;
       }
+      case "pg-img-clear": { pgDraft()[ds.key] = ""; S.ui.pgMsg = ""; render(); break; }
+      case "ul-img-clear": {
+        if (!S.isAdmin) break;
+        const uid = S.ui.ulUnit; if (!uid) break;
+        saveSiteTheme((th) => { const all = { ...((th || {}).unitLetterheads || {}) }; const cur = { ...(all[uid] || {}) }; delete cur[ds.key]; if (cur.head || cur.foot) all[uid] = cur; else delete all[uid]; return { unitLetterheads: all }; });
+        render(); break;
+      }
       case "dash-move": {
         if (!S.isAdmin) break;
         const kind = ds.kind, i = Number(ds.i), j = ds.dir === "up" ? i - 1 : i + 1;
@@ -11345,7 +11419,7 @@ function attachClickListener() {
       }
       case "restore-five-colors": {
         const th0 = ((S.siteSettings || dataStore.getSiteSettings()).theme) || {};
-        const keep = {}; ["periodTypes", "levelTypes", "entityIcons", "portalEnabled", "reportStyle", "reportTemplates", "archive", "customFont"].forEach((k) => { if (k in th0) keep[k] = th0[k]; });
+        const keep = {}; ["periodTypes", "levelTypes", "entityIcons", "portalEnabled", "reportStyle", "reportTemplates", "archive", "customFont", "unitLetterheads"].forEach((k) => { if (k in th0) keep[k] = th0[k]; });
         S.siteSettings = { ...(S.siteSettings || dataStore.getSiteSettings()), ...DEFAULT_SITE_COLORS, theme: keep };
         applySiteColors(S.siteSettings);
         S.ui.siteSettingsSaved = false;
@@ -11386,7 +11460,7 @@ function attachClickListener() {
         // نرجّع الألوان فقط — ونحفظ إعدادات غير الألوان المخزّنة بنفس المكان (الفترات، أنواع المستويات،
         // أيقونات الجهات وروابطها، بوابة الدخول، شكل التقرير النهائي)
         const th0 = ((S.siteSettings || dataStore.getSiteSettings()).theme) || {};
-        const keep = {}; ["periodTypes", "levelTypes", "entityIcons", "portalEnabled", "reportStyle", "reportTemplates", "archive", "customFont"].forEach((k) => { if (k in th0) keep[k] = th0[k]; });
+        const keep = {}; ["periodTypes", "levelTypes", "entityIcons", "portalEnabled", "reportStyle", "reportTemplates", "archive", "customFont", "unitLetterheads"].forEach((k) => { if (k in th0) keep[k] = th0[k]; });
         S.siteSettings = { ...(S.siteSettings || dataStore.getSiteSettings()), theme: keep };
         applySiteColors(S.siteSettings);
         dataStore.saveSiteSettings(S.siteSettings);
