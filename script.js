@@ -6341,6 +6341,8 @@ function handleReportsManageAction(action, ds) {
 }
 
 function renderSiteSettings() {
+  const stTab = S.ui.siteTab || "look";
+  const stH = (t) => (t === stTab ? "" : "display:none;");
   const current = S.siteSettings || dataStore.getSiteSettings();
   const theme = themeOf(current);
   const isColorDefault = current.primary === DEFAULT_SITE_COLORS.primary && current.background === DEFAULT_SITE_COLORS.background;
@@ -6366,7 +6368,9 @@ function renderSiteSettings() {
   <div class="page-wrap"><div class="page-inner">
     ${topBarHtml({ title: "إعدادات الموقع", subtitle: "تخصيص هوية الموقع — الألوان، الشعار، البانر، والعبارات. التغيير يظهر فورًا هنا، ولازم الضغط على \"حفظ\" ليصير دائمًا" })}
 
-    <div class="card" style="max-width:560px;margin-bottom:16px;">
+    ${(() => { const T = [["look", "المظهر"], ["brand", "الشعار والشريط"], ["dash", "لوحة المعلومات"], ["report", "خيارات التقرير"]]; return `<div style="display:flex;flex-wrap:wrap;border-bottom:1px solid ${BORDER};margin-bottom:16px;">${T.map(([id, l]) => `<button type="button" data-action="site-tab" data-tab="${id}" data-st-btn="${id}" style="font-family:inherit;font-size:14px;cursor:pointer;padding:10px 4px;margin-inline-end:18px;background:none;border:none;border-bottom:2.5px solid ${stTab === id ? ROSE : "transparent"};margin-bottom:-1px;font-weight:${stTab === id ? 800 : 600};color:${stTab === id ? ROSE : "#8a7b82"};">${l}</button>`).join("")}</div>`; })()}
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,420px),1fr));gap:16px;align-items:start;">
+    <div class="card" data-st="look" style="${stH("look")}margin-bottom:16px;">
       <div class="subhead" style="margin-top:0;">الألوان</div>
       <div style="margin-bottom:20px;">
         ${fieldLabel("اللون الأساسي (الأزرار، العناوين، التحديد)")}
@@ -6385,7 +6389,7 @@ function renderSiteSettings() {
       <div>${pillBtn("استعادة الألوان الافتراضية", { variant: "ghost", icon: iconX(14, INK), action: "restore-site-settings-defaults", disabled: isColorDefault })}</div>
     </div>
 
-    <div class="card" style="max-width:560px;margin-bottom:16px;">
+    <div class="card" data-st="look" style="${stH("look")}margin-bottom:16px;">
       <div class="subhead" style="margin-top:0;">ألوان متقدمة (كل ألوان الموقع)</div>
       <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:14px;margin-bottom:16px;">
         ${THEME_COLOR_FIELDS.map((f) => `<div>${fieldLabel(f.label)}<div style="display:flex;align-items:center;gap:10px;">
@@ -6401,7 +6405,7 @@ function renderSiteSettings() {
       </div>
     </div>
 
-    <div class="card" style="max-width:560px;margin-bottom:16px;">
+    <div class="card" data-st="report" style="${stH("report")}margin-bottom:16px;">
       <div class="subhead" style="margin-top:0;">خيارات «الفترة التي يغطيها التقرير»</div>
       <div class="hint" style="margin-bottom:12px;">تظهر في البيانات الأساسية للتقرير وفي فلتر الفترة. «شهري» و«فصلي» مثبّتتان لأنهما تفتحان حقل الشهر وحقل الفصل. التقارير القديمة تحتفظ بقيمتها حتى لو حذفتِ الخيار أو غيّرتِ اسمه.</div>
       <div style="display:flex;flex-direction:column;gap:8px;margin-bottom:12px;">
@@ -6420,7 +6424,7 @@ function renderSiteSettings() {
       </div>
     </div>
 
-    <div class="card" style="max-width:560px;margin-bottom:16px;">
+    <div class="card" data-st="look" style="${stH("look")}margin-bottom:16px;">
       <div class="subhead" style="margin-top:0;">ألوان الأيقونات</div>
       ${[["iconColor", "لون كل أيقونات الموقع (القوائم، الأزرار، البطاقات)", current.primary], ["fieldIconColor", "لون أيقونات إدارة حقول الأقسام (تتجاوز اللون العام)", theme.iconColor || current.primary]].map(([k, lb, def]) => `<div style="margin-bottom:14px;">${fieldLabel(lb)}
         <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;"><input type="color" id="site-x-${k}" value="${esc(theme[k] || def)}" style="width:46px;height:36px;border:1px solid ${BORDER};border-radius:8px;cursor:pointer;padding:2px;" />
@@ -6428,7 +6432,7 @@ function renderSiteSettings() {
       <div class="hint">ولكل حقل لونه الخاص من نافذة تعديل الحقل بإدارة حقول الأقسام. الأيقونات الحمراء/الخضراء/البيضاء ذات المعنى (حذف، نجاح، على الزر) تبقى كما هي.</div>
     </div>
 
-    <div class="card" style="max-width:560px;margin-bottom:16px;">
+    <div class="card" data-st="look" style="${stH("look")}margin-bottom:16px;">
       <div class="subhead" style="margin-top:0;">النصوص: الألوان والأحجام</div>
       ${TEXT_STYLE_FIELDS.map((f) => `<div style="margin-bottom:16px;">${fieldLabel(f.label)}
         <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
@@ -6440,7 +6444,7 @@ function renderSiteSettings() {
       <div class="hint">لون ونص عبارة الشريط الجانبي وحجمها في بطاقة «الشريط الجانبي» أدناه.</div>
     </div>
 
-    <div class="card" style="max-width:560px;margin-bottom:16px;">
+    <div class="card" data-st="look" style="${stH("look")}margin-bottom:16px;">
       <div class="subhead" style="margin-top:0;">الخط</div>
       <div>
         ${fieldLabel("خط الموقع (يشمل النصوص والعناوين والأزرار بكل الصفحات — عدا التقرير المطبوع نفسه)")}
@@ -6454,7 +6458,7 @@ function renderSiteSettings() {
       </div>
     </div>
 
-    <div class="card" style="max-width:560px;margin-bottom:16px;">
+    <div class="card" data-st="brand" style="${stH("brand")}margin-bottom:16px;">
       <div class="subhead" style="margin-top:0;">الشعار</div>
       <div style="margin-bottom:20px;">
         ${fieldLabel("صورة الشعار (يظهر بالشريط الجانبي وصفحة الدخول)")}
@@ -6469,7 +6473,7 @@ function renderSiteSettings() {
       </div>
     </div>
 
-    <div class="card" style="max-width:560px;margin-bottom:16px;">
+    <div class="card" data-st="brand" style="${stH("brand")}margin-bottom:16px;">
       <div class="subhead" style="margin-top:0;">بانر لوحة المعلومات</div>
       <div style="margin-bottom:20px;">
         ${fieldLabel("صورة البانر")}
@@ -6485,7 +6489,7 @@ function renderSiteSettings() {
       </div>
     </div>
 
-    <div class="card" style="max-width:560px;margin-bottom:16px;">
+    <div class="card" data-st="brand" style="${stH("brand")}margin-bottom:16px;">
       <div class="subhead" style="margin-top:0;">الشريط الجانبي</div>
       <div style="margin-bottom:14px;">
         ${fieldLabel("اسم المنصة (يظهر بعنوان الشريط الجانبي)")}
@@ -6540,9 +6544,10 @@ function renderSiteSettings() {
     </div>
 
 
-    ${dashSettingsCardHtml()}
+    <div data-st="dash" style="${stH("dash")}">${dashSettingsCardHtml()}</div>
 
-    <div class="card" style="max-width:560px;">
+    </div>
+    <div class="card">
       <div style="display:flex;gap:8px;flex-wrap:wrap;">
         ${pillBtn("حفظ", { icon: iconCheckCircle(15, "#fff"), action: "save-site-settings" })}
         ${pillBtn("استعادة إعدادات الهوية الافتراضية", { variant: "ghost", icon: iconX(14, INK), action: "restore-site-branding-defaults", disabled: isBrandingDefault })}
@@ -8477,8 +8482,6 @@ function renderRolesManage() {
     </div>`;
   }).join("") || `<div style="font-size:12px;color:${SUBTLE};padding:8px 2px;">لا يوجد أشخاص بعد.</div>`;
   return `
-    ${typeRolesCardHtml()}
-    ${rolesBulkCardHtml()}
     <div class="card" style="margin-bottom:18px;">
       <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:6px;">
         <div style="font-size:15px;font-weight:800;">الأدوار</div>${pillBtn("إضافة دور", { icon: iconPlus(15, "#fff"), action: "role-show-add" })}
@@ -8489,6 +8492,8 @@ function renderRolesManage() {
     <div class="card" style="background:${BLUE_BG};border:1px solid #cfe0f5;">
       <div style="font-size:12px;color:#3a5a85;">الأشخاص يُدارون من «الهيكل»: اختاري الجهة ← تبويب «الأشخاص». (${personsList().length} شخص مسجّل حاليًا)</div>
     </div>
+    <details ${S.ui.typeRoleOpen || S.ui.rolesBulk ? "open" : ""} style="margin-top:18px;"><summary style="font-size:13px;font-weight:800;color:${ROSE};cursor:pointer;padding:8px 2px;">إعدادات متقدمة (اختياري)</summary>
+      <div style="margin-top:10px;">${typeRolesCardHtml()}${rolesBulkCardHtml()}</div></details>
     ${permLogCardHtml()}
   `;
 }
@@ -11003,6 +11008,12 @@ function attachClickListener() {
         dataStore.saveDashboardConfig({});
         addPermLog("dashboard", "all", "كل الجهات", "إظهار كل عناصر لوحة المعلومات");
         render();
+        break;
+      }
+      case "site-tab": {
+        S.ui.siteTab = ds.tab;
+        document.querySelectorAll("[data-st]").forEach((el) => { el.style.display = el.getAttribute("data-st") === ds.tab ? "" : "none"; });
+        document.querySelectorAll("[data-st-btn]").forEach((b) => { const on = b.getAttribute("data-st-btn") === ds.tab; b.style.borderBottomColor = on ? ROSE : "transparent"; b.style.color = on ? ROSE : "#8a7b82"; b.style.fontWeight = on ? 800 : 600; });
         break;
       }
       case "save-site-settings": {
