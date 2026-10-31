@@ -4775,14 +4775,18 @@ function olCardsViewHtml() {
     const stages = path && path.status === "active" ? apFlow(apStageList(path, unit)).length : 0;
     const sel = ui.selected === l.id;
     const dim = !people.length;
-    return `<button type="button" data-action="ol-select" data-id="${esc(l.id)}" style="text-align:right;font-family:inherit;color:${INK};cursor:pointer;display:flex;flex-direction:column;gap:8px;padding:12px 14px;border-radius:14px;min-height:120px;border:${dim ? "1.5px dashed #d9c9cf" : "1px solid " + BORDER};background:${sel ? "#f6e6eb" : dim ? "#faf6f7" : "#fff"};box-shadow:${sel ? `inset -3px 0 0 ${ROSE}` : "none"};">
-      <div style="display:flex;align-items:center;gap:6px;justify-content:space-between;"><span style="font-size:13.5px;font-weight:800;">${esc(l.name)}</span>${l.type ? levelTypeChipHtml(l.type) : ""}</div>
-      ${people.length ? people.map((x) => `<div style="display:flex;align-items:center;gap:6px;font-size:12px;"><span style="width:62px;flex-shrink:0;color:${SUBTLE};">${esc(roleName(x.roleId))}</span><span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:700;">${esc(x.name)}</span><span style="font-size:10.5px;font-weight:700;padding:2px 8px;border-radius:999px;white-space:nowrap;${personEffectivePin(x) ? `color:${GREEN};background:${GREEN_BG};` : `color:${DANGER};background:${DANGER_BG};`}">${personEffectivePin(x) ? "رقم سري ✓" : "بلا رقم"}</span></div>`).join("")
+    const on = !unit || unit.status !== "disabled";
+    const mini = (label, d, primary) => `<button type="button" data-action="ol-card-go" data-id="${esc(l.id)}" ${d} style="font-family:inherit;cursor:pointer;font-size:11.5px;font-weight:700;padding:6px 12px;border-radius:999px;border:1px solid ${primary ? "transparent" : BORDER};background:${primary ? "#f6e6eb" : "#fff"};color:${primary ? ROSE : "#5c4f55"};">${label}</button>`;
+    return `<div style="display:flex;flex-direction:column;gap:9px;padding:14px;border-radius:16px;min-height:130px;border:${dim ? "1.5px dashed #d9c9cf" : "1px solid " + (sel ? ROSE : BORDER)};background:${sel ? "#fbf3f5" : "#fff"};">
+      <div style="display:flex;align-items:center;gap:8px;"><span style="width:30px;height:30px;border-radius:50%;background:#f3e6ea;color:${ROSE};font-size:13px;font-weight:800;display:flex;align-items:center;justify-content:center;flex-shrink:0;">${esc((l.name || "؟").replace(/^وحدة\s*/, "").replace(/^ال/, "").charAt(0) || "؟")}</span>
+        <span style="flex:1;min-width:0;font-size:14px;font-weight:800;">${esc(l.name)}</span><i style="width:9px;height:9px;border-radius:50%;background:${on ? "#4aa37a" : "#b8aab0"};flex-shrink:0;"></i></div>
+      ${people.length ? people.map((x) => `<div style="display:flex;align-items:center;gap:6px;font-size:12px;"><span style="width:56px;flex-shrink:0;color:${SUBTLE};">${esc(roleName(x.roleId))}</span><span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:700;">${esc(x.name)}</span><span style="font-size:10.5px;font-weight:700;padding:2px 8px;border-radius:999px;white-space:nowrap;${personEffectivePin(x) ? `color:${GREEN};background:${GREEN_BG};` : `color:${DANGER};background:${DANGER_BG};`}">${personEffectivePin(x) ? "رقم سري ✓" : "بلا رقم"}</span></div>`).join("")
         : `<div style="font-size:12px;color:${SUBTLE};">لا يوجد أشخاص — يكتب التقرير حساب الوحدة نفسه</div>`}
-      <div style="margin-top:auto;font-size:11px;color:#7a6870;">${path && path.status === "active" ? `المسار: ${stages} ${stages === 1 ? "مرحلة" : "مراحل"}` : "المسار غير مفعّل"}${l.loginId ? " · له دخول خاص" : ""}</div>
-    </button>`;
+      <div style="margin-top:auto;display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end;padding-top:4px;">
+        ${mini("تعديل", `data-tab="info"`, true)}${mini(path && path.status === "active" ? `المسار ${stages} ${stages === 1 ? "مرحلة" : "مراحل"}` : "المسار غير مفعّل", `data-tab="info"`, false)}${mini("+ شخص", `data-tab="people" data-add="1"`, false)}</div>
+    </div>`;
   };
-  return groups.map((g) => `<div style="margin-bottom:16px;"><div style="font-size:14px;font-weight:800;color:${ROSE};margin-bottom:8px;">${esc(g.parent ? g.parent.name : "بلا قسم")} <span style="font-weight:600;color:${SUBTLE};font-size:11.5px;">${(() => { const m = g.parent && g.parent.linkKind ? personsList().find((x) => x.status !== "disabled" && (x.ownerKind === "department" ? "dept" : x.ownerKind) === g.parent.linkKind && x.ownerId === g.parent.linkId) : null; return (m ? "مديرة القسم: " + esc(m.name) + " · " : "") + g.units.length + (g.units.length === 1 ? " وحدة" : " وحدات"); })()}</span></div><div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:10px;">${g.units.map(card).join("")}</div></div>`).join("");
+  return groups.map((g) => `<div style="margin-bottom:16px;"><div style="font-size:14px;font-weight:800;color:${ROSE};margin-bottom:8px;">${esc(g.parent ? g.parent.name : "بلا قسم")} <span style="font-weight:600;color:${SUBTLE};font-size:11.5px;">${(() => { const m = g.parent && g.parent.linkKind ? personsList().find((x) => x.status !== "disabled" && (x.ownerKind === "department" ? "dept" : x.ownerKind) === g.parent.linkKind && x.ownerId === g.parent.linkId) : null; return (m ? "مديرة القسم: " + esc(m.name) + " · " : "") + g.units.length + (g.units.length === 1 ? " وحدة" : " وحدات"); })()}</span></div><div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(235px,1fr));gap:12px;">${g.units.map(card).join("")}</div></div>`).join("");
 }
 function renderOrgLevelsPage() {
   if (!canManageUsers()) return `<div class="page-wrap"><div class="page-inner"><div class="card" style="text-align:center;color:${SUBTLE};padding:36px;">هذه الصفحة غير ممنوحة لهذا الحساب.</div></div></div>`;
@@ -4805,7 +4809,8 @@ function renderOrgLevelsPage() {
           <div><div class="prs-title" style="font-size:15px;font-weight:800;display:flex;align-items:center;gap:8px;">${iconLayers(17, ROSE)} الهيكل المرن</div>
           <div style="font-size:11.5px;color:#6f5f66;margin-top:3px;">مستويات بلا حد — اضغطي أي مستوى لعرض تفاصيله</div></div>
           <div style="display:flex;gap:6px;flex-wrap:wrap;">
-            ${pillBtn(ui.view !== "tree" ? "عرض الشجرة" : "عرض بطاقات الوحدات", { variant: "soft", action: "ol-view" })}
+            ${pillBtn("إدخال شجرة من نص", { variant: "soft", action: "ol-paste-open" })}
+            ${pillBtn(ui.view !== "tree" ? "عرض الشجرة" : "عرض بطاقات الوحدات", { variant: "ghost", action: "ol-view" })}
             ${roots.length && ui.view === "tree" ? pillBtn("فتح الكل", { variant: "ghost", action: "ol-expand-all" }) : ""}
             ${pillBtn("إضافة مستوى", { icon: iconPlus(14, "#fff"), action: "ol-start-add", data: { parent: "" } })}
           </div>
@@ -4924,6 +4929,7 @@ function handleOrgLevelsAction(action, ds) {
   switch (action) {
     case "ol-select": ui.selected = ds.id; ui.form = null; ui.confirmDelete = null; S.ui.treeEditFor = null; S.ui.treeConfirmDel = null; break;
     case "ol-tab": ui.tab = ds.tab; break;
+    case "ol-card-go": { ui.selected = ds.id; ui.form = null; ui.confirmDelete = null; S.ui.treeEditFor = null; S.ui.treeConfirmDel = null; ui.tab = ds.tab || "info"; if (ds.add) { const l = olFind(ds.id); if (l && l.linkKind === "unit") { S.ui.structPersonAdd = "unit:" + l.linkId; S.ui.structPersonError = null; } } break; }
     case "ol-section": ui.section = ds.section || ""; break;
     case "ol-entity-status": { const e = treeEntity(ds.type === "exec" ? "unit" : ds.type, ds.id); if (e) treeSetEntity(ds.type === "exec" ? "unit" : ds.type, ds.id, { status: e.status === "disabled" ? "active" : "disabled" }); break; }
     case "ol-import-entities-ask": ui.importEntitiesConfirm = true; break;
