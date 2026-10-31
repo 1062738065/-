@@ -6801,7 +6801,7 @@ function renderSiteSettingsInner() {
           opts.forEach((f) => siteFontLoad(f.value));
           const optHtml = (sel) => opts.map((f) => `<option value="${esc(f.value)}" style="font-family:'${esc(f.value)}';" ${sel === f.value ? "selected" : ""}>${esc(f.label)}</option>`).join("");
           return `${fieldLabel("خط النصوص (يشمل الأزرار والجداول بكل الصفحات — عدا التقرير المطبوع نفسه)")}
-        <div class="st-tiles">${opts.map((f) => `<button type="button" class="st-tile${mainF === f.value ? " on" : ""}" data-action="font-pick" data-sel="site-font-family" data-v="${esc(f.value)}" style="font-family:'${esc(f.value)}';">${esc(f.label.replace(" (خط مرفوع)", ""))}</button>`).join("")}</div>
+        <div class="st-tiles">${opts.map((f) => `<button type="button" class="st-tile${mainF === f.value ? " on" : ""}" data-action="font-pick" data-sel="site-font-family" data-v="${esc(f.value)}" style="font-family:'${esc(f.value)}';"><span style="display:block;font-size:11px;opacity:.7;font-family:inherit;">${esc(f.label.replace(" (خط مرفوع)", ""))}</span><span style="display:block;font-size:18px;margin-top:4px;">تقرير الأداء</span></button>`).join("")}</div>
         <select class="input" id="site-font-family" style="display:none;">${optHtml(mainF)}</select>
         ${fieldLabel("خط العناوين")}
         <div class="st-tiles"><button type="button" class="st-tile${headF ? "" : " on"}" data-action="font-pick" data-sel="site-heading-font" data-v="">نفس خط النصوص</button>${opts.map((f) => `<button type="button" class="st-tile${headF === f.value ? " on" : ""}" data-action="font-pick" data-sel="site-heading-font" data-v="${esc(f.value)}" style="font-family:'${esc(f.value)}';">${esc(f.label.replace(" (خط مرفوع)", ""))}</button>`).join("")}</div>
