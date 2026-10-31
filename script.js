@@ -6341,6 +6341,23 @@ function handleReportsManageAction(action, ds) {
 }
 
 function renderSiteSettings() {
+  const t = document.createElement("template");
+  t.innerHTML = renderSiteSettingsInner();
+  const col = S.ui.siteCollapsed || {};
+  t.content.querySelectorAll(".card > .subhead:first-child").forEach((h) => {
+    const key = h.textContent.trim();
+    h.setAttribute("data-action", "site-card-toggle");
+    h.setAttribute("data-key", key);
+    h.style.cursor = "pointer";
+    h.style.display = "flex";
+    h.style.justifyContent = "space-between";
+    h.style.alignItems = "center";
+    h.innerHTML = `<span>${h.innerHTML}</span><span data-chev style="font-size:11px;color:#8a7b82;">${col[key] ? "◂ توسيع" : "▾ تضييق"}</span>`;
+    if (col[key]) { let n = h.nextElementSibling; while (n) { n.style.display = "none"; n = n.nextElementSibling; } }
+  });
+  return t.innerHTML;
+}
+function renderSiteSettingsInner() {
   const stTab = S.ui.siteTab || "look";
   const stH = (t) => (t === stTab ? "" : "display:none;");
   const current = S.siteSettings || dataStore.getSiteSettings();
@@ -11008,6 +11025,15 @@ function attachClickListener() {
         dataStore.saveDashboardConfig({});
         addPermLog("dashboard", "all", "كل الجهات", "إظهار كل عناصر لوحة المعلومات");
         render();
+        break;
+      }
+      case "site-card-toggle": {
+        const h = btn; const key = ds.key;
+        S.ui.siteCollapsed = S.ui.siteCollapsed || {};
+        const closed = !S.ui.siteCollapsed[key];
+        S.ui.siteCollapsed[key] = closed;
+        let n = h.nextElementSibling; while (n) { n.style.display = closed ? "none" : ""; n = n.nextElementSibling; }
+        const c = h.querySelector("[data-chev]"); if (c) c.textContent = closed ? "◂ توسيع" : "▾ تضييق";
         break;
       }
       case "site-tab": {
