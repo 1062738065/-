@@ -5839,15 +5839,15 @@ function rptLetterhead(s) {
   const uid = RPT_CTX && RPT_CTX.unitId;
   const ul = (uid && (((S.siteSettings || {}).theme || {}).unitLetterheads || {})[uid]) || {};
   const ok = (v) => (v && RPT_DATA_IMG_RE.test(v) ? v : "");
-  return { head: ok(ul.head) || ok(s.headImage), foot: ok(ul.foot) || ok(s.footImage) };
+  return { head: ok(ul.head) || ok(s.headImage), foot: ok(ul.foot) || ok(s.footImage), bg: ok(ul.bg) || ok(s.bgImage) };
 }
 function rptPageHtml(s, inner, n, total) {
   const lh = rptLetterhead(s);
-  const head = lh.head ? `<div class="rpt-runhead-img"><img src="${lh.head}" alt="" /></div>` : s.showHead ? `<div class="rpt-runhead"><span>${esc(s.headRight)}</span><span class="rpt-runhead-c">${s.headLogo ? `<img src="${ASSOCIATION_LOGO}" alt="" />` : ""}${s.headCenter ? `<b>${esc(s.headCenter)}</b>` : ""}</span><span>${esc(s.headLeft)}</span></div>` : "";
+  const head = lh.head ? `<div class="rpt-runhead-img" style="margin-bottom:4mm;"><img src="${lh.head}" alt="" style="display:block;width:100%;max-height:30mm;object-fit:contain;" /></div>` : s.showHead ? `<div class="rpt-runhead"><span>${esc(s.headRight)}</span><span class="rpt-runhead-c">${s.headLogo ? `<img src="${ASSOCIATION_LOGO}" alt="" />` : ""}${s.headCenter ? `<b>${esc(s.headCenter)}</b>` : ""}</span><span>${esc(s.headLeft)}</span></div>` : "";
   const num = rptPageNumText(s, n, total);
-  const footImg = lh.foot ? `<div class="rpt-runfoot-img"><img src="${lh.foot}" alt="" /></div>` : "";
+  const footImg = lh.foot ? `<div class="rpt-runfoot-img" style="position:absolute;bottom:14mm;left:var(--rpt-ml,15mm);right:var(--rpt-mr,15mm);"><img src="${lh.foot}" alt="" style="display:block;width:100%;max-height:20mm;object-fit:contain;" /></div>` : "";
   const foot = footImg + ((s.showFoot && s.footText) || num ? `<div class="rpt-runfoot"><span>${s.showFoot ? esc(s.footText) : ""}</span><span class="rpt-runfoot-num">${num}</span><span></span></div>` : "");
-  return `<section class="a4-page${s.spine ? " has-spine" : ""}">${s.spine ? `<div class="rpt-spine"></div>` : ""}${s.watermark ? `<div class="rpt-wm" style="background-image:url('${ASSOCIATION_LOGO}')"></div>` : ""}${head}${inner}${foot}</section>`;
+  return `<section class="a4-page${s.spine ? " has-spine" : ""}"${lh.bg ? ` style="background-image:url('${lh.bg}');background-size:cover;background-position:center;background-repeat:no-repeat;"` : ""}>${s.spine ? `<div class="rpt-spine"></div>` : ""}${s.watermark ? `<div class="rpt-wm" style="background-image:url('${ASSOCIATION_LOGO}')"></div>` : ""}${head}${inner}${foot}</section>`;
 }
 
 /* ---- سياق الرسم: نوع الرسوم وألوانها وحجمها والأعمدة المخفية — يقرؤه svgBarChart/svgPieChart/reportTable ---- */
