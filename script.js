@@ -4464,7 +4464,8 @@ function olAccountHtml(l) {
   return `<div style="border-top:1px solid ${BORDER};padding-top:12px;display:flex;flex-direction:column;gap:10px;">
     <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;"><span style="font-size:13.5px;font-weight:800;">حساب الجهة</span>${structPanelTagHtml(type === "exec" ? "exec" : type, e)}
       <span style="font-size:10.5px;font-weight:700;padding:3px 9px;border-radius:999px;color:${on ? "#2E7A5C" : DANGER};background:${on ? GREEN_BG : DANGER_BG};">${on ? "مفعّل" : "معطّل"}</span></div>
-    <div style="font-size:12.5px;line-height:1.9;"><span style="color:#6f5f66;">اسم الدخول:</span> <b>${esc(e.name)}</b>${e.email ? `<br><span style="color:#6f5f66;">الإيميل:</span> ${esc(e.email)}` : ""}</div>
+    <div style="font-size:12.5px;line-height:1.9;"><span style="color:#6f5f66;">اسم الدخول:</span> <b>${esc(e.name)}</b>
+      <br><span style="color:#6f5f66;">الرمز السري:</span> ${e.password ? `<b style="letter-spacing:2px;">••••••</b> <span style="font-size:10.5px;font-weight:700;padding:2px 8px;border-radius:999px;color:${GREEN};background:${GREEN_BG};">موجود</span>` : `<span style="font-size:10.5px;font-weight:700;padding:2px 8px;border-radius:999px;color:${DANGER};background:${DANGER_BG};">بلا رقم</span>`} ${pillBtn("تغيير الرمز", { variant: "ghost", action: "tree-edit-start", data: { type, id: e.id } })}${e.email ? `<br><span style="color:#6f5f66;">الإيميل:</span> ${esc(e.email)}` : ""}</div>
     ${treeEditFormHtml(type, e.id)}
     ${confirming ? `<div style="background:${DANGER_BG};border-radius:12px;padding:10px 12px;display:flex;gap:6px;flex-wrap:wrap;align-items:center;">
         <span style="font-size:12px;font-weight:800;color:${DANGER};">حذف حساب "${esc(e.name)}" نهائيًا${reportsN ? ` مع تقاريره (${reportsN})` : ""}؟ لا يمكن التراجع.</span>
@@ -4767,12 +4768,12 @@ function olCardsViewHtml() {
     const dim = !people.length;
     return `<button type="button" data-action="ol-select" data-id="${esc(l.id)}" style="text-align:right;font-family:inherit;color:${INK};cursor:pointer;display:flex;flex-direction:column;gap:8px;padding:12px 14px;border-radius:14px;min-height:120px;border:${dim ? "1.5px dashed #d9c9cf" : "1px solid " + BORDER};background:${sel ? "#f6e6eb" : dim ? "#faf6f7" : "#fff"};box-shadow:${sel ? `inset -3px 0 0 ${ROSE}` : "none"};">
       <div style="display:flex;align-items:center;gap:6px;justify-content:space-between;"><span style="font-size:13.5px;font-weight:800;">${esc(l.name)}</span>${l.type ? levelTypeChipHtml(l.type) : ""}</div>
-      ${people.length ? people.map((x) => `<div style="display:flex;align-items:center;gap:6px;font-size:12px;"><span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(x.name)} <span style="color:${SUBTLE};">· ${esc(roleName(x.roleId))}</span></span><span style="font-size:10.5px;font-weight:700;padding:2px 8px;border-radius:999px;white-space:nowrap;${x.pin ? `color:${GREEN};background:${GREEN_BG};` : `color:${DANGER};background:${DANGER_BG};`}">${x.pin ? "رقم سري ✓" : "بلا رقم"}</span></div>`).join("")
+      ${people.length ? people.map((x) => `<div style="display:flex;align-items:center;gap:6px;font-size:12px;"><span style="width:62px;flex-shrink:0;color:${SUBTLE};">${esc(roleName(x.roleId))}</span><span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:700;">${esc(x.name)}</span><span style="font-size:10.5px;font-weight:700;padding:2px 8px;border-radius:999px;white-space:nowrap;${personEffectivePin(x) ? `color:${GREEN};background:${GREEN_BG};` : `color:${DANGER};background:${DANGER_BG};`}">${personEffectivePin(x) ? "رقم سري ✓" : "بلا رقم"}</span></div>`).join("")
         : `<div style="font-size:12px;color:${SUBTLE};">لا يوجد أشخاص — يكتب التقرير حساب الوحدة نفسه</div>`}
       <div style="margin-top:auto;font-size:11px;color:#7a6870;">${path && path.status === "active" ? `المسار: ${stages} ${stages === 1 ? "مرحلة" : "مراحل"}` : "المسار غير مفعّل"}${l.loginId ? " · له دخول خاص" : ""}</div>
     </button>`;
   };
-  return groups.map((g) => `<div style="margin-bottom:16px;"><div style="font-size:13px;font-weight:800;color:${ROSE};margin-bottom:8px;">${esc(g.parent ? g.parent.name : "بلا قسم")} <span style="font-weight:600;color:${SUBTLE};font-size:11.5px;">(${g.units.length})</span></div><div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:10px;">${g.units.map(card).join("")}</div></div>`).join("");
+  return groups.map((g) => `<div style="margin-bottom:16px;"><div style="font-size:14px;font-weight:800;color:${ROSE};margin-bottom:8px;">${esc(g.parent ? g.parent.name : "بلا قسم")} <span style="font-weight:600;color:${SUBTLE};font-size:11.5px;">${(() => { const m = g.parent && g.parent.linkKind ? personsList().find((x) => x.status !== "disabled" && (x.ownerKind === "department" ? "dept" : x.ownerKind) === g.parent.linkKind && x.ownerId === g.parent.linkId) : null; return (m ? "مديرة القسم: " + esc(m.name) + " · " : "") + g.units.length + (g.units.length === 1 ? " وحدة" : " وحدات"); })()}</span></div><div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:10px;">${g.units.map(card).join("")}</div></div>`).join("");
 }
 function renderOrgLevelsPage() {
   if (!canManageUsers()) return `<div class="page-wrap"><div class="page-inner"><div class="card" style="text-align:center;color:${SUBTLE};padding:36px;">هذه الصفحة غير ممنوحة لهذا الحساب.</div></div></div>`;
@@ -4789,26 +4790,26 @@ function renderOrgLevelsPage() {
     ${ui.section === "roles" ? renderRolesManage() : ui.section === "paths" ? renderApprovalPathsSetup() : ui.section === "people" ? structSimplePeopleViewHtml() : `
     ${ui.msg ? `<div class="card" style="background:${GREEN_BG};color:${GREEN};font-size:12.5px;font-weight:700;margin-bottom:14px;display:flex;justify-content:space-between;gap:10px;align-items:center;"><span>${esc(ui.msg)}</span><button type="button" class="icon-btn" style="background:transparent;" data-action="ol-clear-msg" aria-label="إغلاق">${iconX(13, GREEN)}</button></div>` : ""}
     ${olTypesBarHtml()}
-    ${ui.view === "cards" && (ui.form || sel) ? `<div style="margin-bottom:14px;">${side}</div>` : ""}
     <div style="display:flex;flex-wrap:wrap;gap:16px;align-items:flex-start;">
       <div class="card card-lg" style="flex:999 1 520px;min-width:0;">
         <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-bottom:10px;">
           <div><div class="prs-title" style="font-size:15px;font-weight:800;display:flex;align-items:center;gap:8px;">${iconLayers(17, ROSE)} الهيكل المرن</div>
           <div style="font-size:11.5px;color:#6f5f66;margin-top:3px;">مستويات بلا حد — اضغطي أي مستوى لعرض تفاصيله</div></div>
           <div style="display:flex;gap:6px;flex-wrap:wrap;">
-            ${pillBtn(ui.view === "cards" ? "عرض الشجرة" : "عرض بطاقات الوحدات", { variant: "soft", action: "ol-view" })}
-            ${roots.length && ui.view !== "cards" ? pillBtn("فتح الكل", { variant: "ghost", action: "ol-expand-all" }) : ""}
+            ${pillBtn(ui.view !== "tree" ? "عرض الشجرة" : "عرض بطاقات الوحدات", { variant: "soft", action: "ol-view" })}
+            ${roots.length && ui.view === "tree" ? pillBtn("فتح الكل", { variant: "ghost", action: "ol-expand-all" }) : ""}
             ${pillBtn("إضافة مستوى", { icon: iconPlus(14, "#fff"), action: "ol-start-add", data: { parent: "" } })}
           </div>
         </div>
-        ${ui.view === "cards" ? olCardsViewHtml() : roots.length ? `<div style="display:flex;flex-direction:column;gap:2px;">${roots.map((r) => olRowHtml(r, 0)).join("")}</div>`
+        ${ui.view !== "tree" ? olCardsViewHtml() : roots.length ? `<div style="display:flex;flex-direction:column;gap:2px;">${roots.map((r) => olRowHtml(r, 0)).join("")}</div>`
           : `<div style="text-align:center;color:${SUBTLE};padding:30px 10px;font-size:13px;line-height:2;">الشجرة فاضية — ابدئي بـ"إضافة مستوى".</div>`}
         <div style="border-top:1px solid ${BORDER};margin-top:14px;padding-top:12px;display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
           ${pillBtn(portalEnabled() ? `بوابة الدخول: مفعّلة (${portalEntries().length}) — إيقاف` : "تفعيل بوابة الدخول", { variant: portalEnabled() ? "ghost" : "soft", icon: iconHome(13, portalEnabled() ? INK : GREEN), action: "ol-toggle-portal" })}
         </div>
       </div>
-      ${ui.view === "cards" ? "" : `<div style="flex:1 1 340px;min-width:0;display:flex;flex-direction:column;gap:14px;">${side}</div>`}
+      ${ui.view !== "tree" ? "" : `<div style="flex:1 1 340px;min-width:0;display:flex;flex-direction:column;gap:14px;">${side}</div>`}
     </div>
+    ${ui.view !== "tree" && (ui.form || sel) ? `<div style="margin-top:14px;">${side}</div>` : ""}
     ${olPasteCardHtml()}
     ${olUnlinkedCardHtml()}`}
   </div></div>`;
@@ -4935,7 +4936,7 @@ function handleOrgLevelsAction(action, ds) {
     case "ol-import-entities-cancel": ui.importEntitiesConfirm = false; break;
     case "ol-import-entities": { const n = olImportEntities(); ui.importEntitiesConfirm = false; ui.msg = n ? `أُضيفت ${n} جهة للشجرة بنفس ترتيبها — الحسابات والتقارير كما هي.` : "لا توجد جهات جديدة للإضافة."; break; }
     case "ol-add-entity": { const n = olImportEntities(ds.key); const [k, ...r] = String(ds.key).split(":"); const lv = olActive().find((l) => l.linkKind === k && l.linkId === r.join(":")); if (lv) { ui.selected = lv.id; ui.tab = "info"; } ui.msg = n ? "أُضيفت للشجرة — انقليها لمكانها الصحيح من «تعديل / نقل» إن لزم." : ""; break; }
-    case "ol-view": ui.view = ui.view === "cards" ? "" : "cards"; break;
+    case "ol-view": ui.view = ui.view !== "tree" ? "tree" : "cards"; break;
     case "ol-toggle": ui.collapsed = { ...ui.collapsed, [ds.id]: !ui.collapsed[ds.id] }; break;
     case "ol-expand-all": ui.collapsed = {}; break;
     case "ol-clear-msg": ui.msg = ""; break;
