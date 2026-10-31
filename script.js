@@ -3259,9 +3259,9 @@ function dashFiltersInner(kind, series) {
   // عدد التقارير اللي فيها بيانات لكل نوع فترة — يوضح وين البيانات
   const per = {};
   series.units.forEach((u) => ensureUnitReportsLoaded(u.id).forEach((r) => { if (reportHasContent(r)) { const p = reportPeriodType(r); if (p) per[p] = (per[p] || 0) + 1; } }));
-  const ptCard = (p) => { const n = per[p] || 0, on = series.period === p; return `<button type="button" class="ptc${on ? " on" : ""}${n ? "" : " z"}" data-action="dash-period" data-v="${esc(on && S.ui.dashPeriod === p ? "" : p)}"><span class="ptc-l">${esc(p)}</span><span class="ptc-n">${n}</span><span class="ptc-s">${n === 1 ? "تقرير" : "تقارير"}</span></button>`; };
+  const ptCard = (p) => { const n = per[p] || 0, on = S.ui.dashPeriod === p; return `<button type="button" class="ptc${on ? " on" : ""}${n ? "" : " z"}" data-action="dash-period" data-v="${esc(on ? "" : p)}"><span class="ptc-l">${esc(p)}</span><span class="ptc-n">${n}</span><span class="ptc-s">${n === 1 ? "تقرير" : "تقارير"}</span></button>`; };
   return `<div style="margin-bottom:18px;">
-    <div class="hint" style="margin:0 0 8px;">نوع الفترة: بطاقات تُضغط وتُظهر تقاريرها · إعادة الضغط تُلغي الفلتر</div>
+    <div class="hint" style="margin:0 0 8px;">نوع الفترة: اضغطي بطاقة لعرض لوحة هذا النوع فقط · إعادة الضغط ترجع للكل (الرسوم تعرض النوع الأكثر بيانات)</div>
     <div class="ptc-row">${PERIOD_TYPES.map(ptCard).join("")}</div>
     <div class="card" style="margin:10px 0 0;display:flex;gap:18px;flex-wrap:wrap;align-items:center;">
       <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;"><span style="font-size:12.5px;font-weight:800;">السنة</span>${pill("كل السنوات", series.year === "all", "dash-year", "all")}${years.map((y) => pill(hijriYearLabel(y), series.year === String(y), "dash-year", String(y))).join("")}</div>
@@ -11865,7 +11865,7 @@ function attachClickListener() {
         break;
       }
       case "font-pick": { const se = document.getElementById(ds.sel); if (se) { se.value = ds.v; se.dispatchEvent(new Event("change", { bubbles: true })); } break; }
-      case "us-tab": S.ui.usTab = ds.tab; break;
+      case "us-tab": S.ui.usTab = ds.tab; render(); break;
       case "site-tab": {
         S.ui.siteTab = ds.tab;
         document.querySelectorAll("[data-st]").forEach((el) => { el.style.display = el.getAttribute("data-st") === ds.tab ? "" : "none"; });
