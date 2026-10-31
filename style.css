@@ -319,7 +319,7 @@ table.prs-table td { padding: 8px 10px; border-top: 1px solid var(--border); }
 .rpt-spine { position: absolute; top: 0; bottom: 0; right: 0; width: 5mm; background: var(--rpt-burgundy); }
 
 /* ---- تنسيق الصفحة من «إدارة التقارير»: خلفية، علامة مائية، إطار، رأس وتذييل ---- */
-.rpt-bgimg .a4-page { background-image: var(--rpt-bg-img); background-size: cover; background-position: center; background-repeat: no-repeat; }
+.rpt-bgimg .a4-page { background-image: var(--rpt-bg-img); background-size: 100% 100%; background-position: center; background-repeat: no-repeat; }
 .rpt-frame .a4-page { outline: 1.5px solid var(--rpt-burgundy); outline-offset: -5mm; }
 .rpt-wm { position: absolute; inset: 0; background-repeat: no-repeat; background-position: center; background-size: 45%; opacity: 0.06; pointer-events: none; z-index: 0; }
 .rpt-runhead { display: flex; align-items: center; justify-content: space-between; gap: 10px; font-size: 10.5px; color: var(--rpt-gray); border-bottom: 2px solid var(--rpt-burgundy); padding-bottom: 6px; margin-bottom: 14px; position: relative; }
