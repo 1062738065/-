@@ -5334,19 +5334,21 @@ function dashSettingsCardHtml() {
       const shown = !dashHidden(k.id, b.key);
       return `<td style="text-align:center;"><button type="button" data-action="dash-toggle" data-kind="${esc(k.id)}" data-key="${esc(b.key)}" title="${shown ? "ظاهر — اضغطي للإخفاء" : "مخفي — اضغطي للإظهار"}" style="width:34px;height:30px;border-radius:9px;cursor:pointer;font-size:15px;font-weight:800;border:1px solid ${shown ? GREEN : BORDER};background:${shown ? GREEN_BG : "#fff"};color:${shown ? GREEN : DANGER};">${shown ? "✓" : "✗"}</button></td>`;
     };
-    return `<div style="margin-bottom:18px;">
+    return `<div style="margin-bottom:18px;flex:1 1 320px;min-width:0;">
       <div style="font-size:13px;font-weight:800;margin-bottom:8px;">${esc(title)}</div>
       <div class="table-wrap"><table class="prs-table"><thead><tr style="background:${GRAY_BG}"><th>العنصر</th>${kinds.map((k) => `<th style="text-align:center;">${esc(k.label)}</th>`).join("")}</tr></thead>
       <tbody>${blocks.map((b) => `<tr><td style="font-weight:600;">${esc(b.label)}</td>${kinds.map((k) => cell(k, b)).join("")}</tr>`).join("")}</tbody></table></div>
     </div>`;
   };
   const anyHidden = DASH_KINDS.some((k) => (dashConfig()[k.id] && (dashConfig()[k.id].hidden || []).length));
-  return `<div class="card" style="max-width:760px;margin-bottom:16px;">
+  return `<div class="card" style="margin-bottom:16px;">
     <div class="subhead" style="margin-top:0;">ما يظهر في لوحة المعلومات</div>
     <div class="hint" style="margin-bottom:14px;">✓ يظهر · ✗ مخفي. الاختيار لنوع الجهة كله (كل الأقسام ترى الشكل نفسه). يُحفظ فورًا. الأصل أن كل شيء ظاهر.</div>
+    <div style="display:flex;flex-wrap:wrap;gap:18px;align-items:flex-start;">
     ${group("لوحة مديرة النظام (متابعة التشغيل)", DASH_ADMIN_BLOCKS, ["admin"])}
     ${group("لوحة الوحدة والقسم والمكتب", DASH_STD_BLOCKS, DASH_STD_KINDS)}
-    ${group("لوحة الإشراف (الإدارة العليا، وصفحة لوحة المكتب القديمة)", DASH_EX_BLOCKS, DASH_EX_KINDS)}
+    ${group("لوحة إدارة التعليم النسائي", DASH_EX_BLOCKS, DASH_EX_KINDS)}
+    </div>
     <div>${pillBtn("إظهار كل العناصر للجميع", { variant: "ghost", icon: iconX(14, INK), action: "dash-reset", disabled: !anyHidden })}</div>
   </div>`;
 }
