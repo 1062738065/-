@@ -5775,7 +5775,7 @@ function rptStore() {
     sizes: Array.isArray(t.sizes) ? t.sizes.filter((z) => z && z.id && Number(z.w) >= 50 && Number(z.h) >= 50) : [] };
 }
 function rptNormalize(s) {
-  ["hidden", "titles", "hiddenCols", "colsShow", "levelHidden"].forEach((k) => { if (!s[k] || typeof s[k] !== "object" || Array.isArray(s[k])) s[k] = {}; });
+  ["hidden", "titles", "hiddenCols", "colsShow", "levelHidden", "levelCols"].forEach((k) => { if (!s[k] || typeof s[k] !== "object" || Array.isArray(s[k])) s[k] = {}; });
   if (!Array.isArray(s.order)) s.order = [];
   if (!s.excl || typeof s.excl !== "object" || Array.isArray(s.excl)) s.excl = {};
   ["units", "depts"].forEach((k) => { if (!Array.isArray(s.excl[k])) s.excl[k] = []; });
@@ -6305,9 +6305,24 @@ function rptViewerLevel() {
   if (S.currentUnitId && !S.isAdmin && !S.isDepartmentUser && !S.isOfficeUser && !S.isExecutive && !(typeof userInAnyApStage === "function" && userInAnyApStage())) return "unit";
   return "sec";
 }
+function rptHiddenColsForViewer(s) {
+  const lv = rptViewerLevel(), extra = (s.levelCols || {})[lv];
+  if (lv === "admin" || !extra) return s.hiddenCols;
+  const out = { ...(s.hiddenCols || {}) };
+  Object.keys(extra).forEach((sid) => { out[sid] = [...new Set([...(out[sid] || []), ...extra[sid]])]; });
+  return out;
+}
 function rptLevelHides(s, key) {
   const lv = rptViewerLevel(); if (lv === "admin") return false;
   return ((s.levelHidden || {})[lv] || []).includes(key);
+}
+function rptFieldMatrixHtml(sid, heads, d) {
+  const lc = d.levelCols || {};
+  const th = (t) => `<th style="padding:4px 4px;font-size:10.5px;font-weight:700;">${esc(t)}</th>`;
+  const rows = heads.map((h) => `<tr style="border-top:1px solid ${BORDER};"><td style="padding:5px 6px;font-size:12px;">${esc(h.label)}</td>
+    <td style="text-align:center;"><button type="button" class="rm-pill rm-pill-sm${h.on ? " on" : ""}" data-action="rm-col" data-sec="${esc(sid)}" data-col="${esc(h.label)}" data-def="${h.def ? 1 : 0}" aria-pressed="${h.on}">${h.on ? "✓" : "—"}</button></td>
+    ${RPT_LEVELS.map(([k]) => { const off = !h.on || ((lc[k] || {})[sid] || []).includes(h.label); return `<td style="text-align:center;"><button type="button" class="rm-pill rm-pill-sm${off ? "" : " on"}" ${h.on ? "" : "disabled"} data-action="rm-colv" data-lvl="${k}" data-sec="${esc(sid)}" data-col="${esc(h.label)}" aria-pressed="${!off}">${off ? "—" : "✓"}</button></td>`; }).join("")}</tr>`).join("");
+  return `<div style="overflow-x:auto;"><table style="width:100%;border-collapse:collapse;"><tr><th style="text-align:right;padding:4px 6px;font-size:11px;">الحقل</th>${th("الجميع")}${RPT_LEVELS.map(([, l]) => th(l)).join("")}</tr>${rows}</table></div>`;
 }
 function rptLevelTableHtml(d, defs) {
   const list = rptOrdered(defs, d);
@@ -6380,7 +6395,7 @@ function rmPanelHtml(st) {
       const colsHtml = open ? (c.sections || []).map((sid) => {
         const sc = SECTIONS.find((x) => x.id === sid);
         const heads = rptSectionColumns(sid, d, cols);
-        return `<div style="margin-top:8px;"><div class="rm-hint" style="font-weight:800;">${esc(sc ? sc.label : sid)}${rptSchemaFor(sid) && sid !== "review" ? " — من «إدارة حقول الأقسام»" : ""}</div>${heads.length ? `<div class="rm-pills">${heads.map((h) => `<button type="button" class="rm-pill rm-pill-sm${h.on ? " on" : ""}" data-action="rm-col" data-sec="${esc(sid)}" data-col="${esc(h.label)}" data-def="${h.def ? 1 : 0}" aria-pressed="${h.on}">${h.on ? "✓ " : ""}${esc(h.label)}</button>`).join("")}</div>` : `<div class="rm-hint">لا يحتوي جدولًا.</div>`}</div>`;
+        return `<div style="margin-top:8px;"><div class="rm-hint" style="font-weight:800;">${esc(sc ? sc.label : sid)}${rptSchemaFor(sid) && sid !== "review" ? " — من «إدارة حقول الأقسام»" : ""}</div>${heads.length ? rptFieldMatrixHtml(sid, heads, d) : `<div class="rm-hint">لا يحتوي جدولًا.</div>`}</div>`;
       }).join("") : "";
       return `<div class="rm-chapter${hid ? " off" : ""}">
         <div class="rm-row" style="flex-wrap:nowrap;">
@@ -6391,7 +6406,7 @@ function rmPanelHtml(st) {
           <input type="text" class="input" data-rm="title:${esc(c.key)}" value="${esc((d.titles || {})[c.key] || "")}" placeholder="${esc(c.title)}" style="flex:1;min-width:0;" aria-label="اسم الفصل" />
           <button type="button" class="rm-pill${hid ? "" : " on"}" data-action="rm-hide" data-key="${esc(c.key)}" aria-pressed="${!hid}">${hid ? "مخفي" : "ظاهر"}</button>
         </div>
-        ${isUnit && c.sections ? `<button type="button" class="rm-link" data-action="rm-cols" data-key="${esc(c.key)}">${open ? "إخفاء الأعمدة ▴" : "الأعمدة الظاهرة في جداوله ▾"}</button>${colsHtml}` : ""}
+        ${isUnit && c.sections ? `<button type="button" class="rm-link" data-action="rm-cols" data-key="${esc(c.key)}">${open ? "إخفاء حقول الفصل ▴" : "حقول الفصل لكل حساب ▾"}</button>${colsHtml}` : ""}
         ${c.custom ? `<button type="button" class="rm-link" data-action="rm-cols" data-key="${esc(c.key)}">${st.openCols === c.key ? "إغلاق الإعداد ▴" : "إعداد الفصل (القسم والحقول) ▾"}</button>${st.openCols === c.key ? rmCustomChapterEditor(c.custom) : ""}` : ""}
       </div>`;
     }).join("");
@@ -6482,10 +6497,9 @@ function renderReportsManage() {
   <div class="page-wrap"><div class="page-inner">
     ${topBarHtml({ title: "تنسيق وإنشاء التقارير", subtitle: "شكل كل تقرير وإنشاء تقارير مجمّعة جديدة — المعاينة ببيانات وهمية، بدون الاطلاع على أي تقرير حقيقي" })}
     <div class="rm-layout">
-      <div class="rm-list">
-        <div class="rm-label" style="padding:0 4px;">التقارير</div>
-        ${items.map((it) => `<button type="button" class="rm-item${st.sel === it.id ? " on" : ""}" data-action="rm-select" data-id="${esc(it.id)}"><span class="rm-item-name">${esc(it.name)}</span><span class="rm-item-kind">${esc(it.kind)}</span></button>`).join("")}
-        <button type="button" class="rm-new" data-action="rm-new">${iconPlus(14, ROSE)} تقرير مجمّع جديد</button>
+      <div class="rm-selectbar">
+        <label class="rm-label" for="rm-sel" style="margin:0;">التقرير</label>
+        <select id="rm-sel" class="input rm-sel">${items.map((it) => `<option value="${esc(it.id)}" ${st.sel === it.id ? "selected" : ""}>${esc(it.name)} — ${esc(it.kind)}</option>`).join("")}<option value="__new">＋ تقرير مجمّع جديد</option></select>
       </div>
       <div class="rm-panel card">
         <div class="rm-panel-head">
@@ -6515,6 +6529,7 @@ function handleReportsManageAction(action, ds) {
     case "rm-tab": st.tab = ds.tab; break;
     case "rm-set": rmSetField(ds.key, ds.value); break;
     case "rm-toggle": d[ds.key] = !d[ds.key]; break;
+    case "rm-colv": { const lv = ds.lvl, lc = { ...(d.levelCols || {}) }; const bySec = { ...(lc[lv] || {}) }; const cur = new Set(bySec[ds.sec] || []); if (cur.has(ds.col)) cur.delete(ds.col); else cur.add(ds.col); bySec[ds.sec] = [...cur]; lc[lv] = bySec; d.levelCols = lc; break; }
     case "rm-lvl": { const lv = ds.lvl, cur = new Set((d.levelHidden || {})[lv] || []); if (cur.has(ds.key)) cur.delete(ds.key); else cur.add(ds.key); d.levelHidden = { ...(d.levelHidden || {}), [lv]: [...cur] }; break; }
     case "rm-excl": { const ex = { units: [...((d.excl || {}).units || [])], depts: [...((d.excl || {}).depts || [])] }; const l = ex[ds.kind]; const k = l.indexOf(ds.id); if (k >= 0) l.splice(k, 1); else l.push(ds.id); d.excl = ex; break; }
     case "rm-hide": d.hidden = { ...d.hidden, [ds.key]: !d.hidden[ds.key] }; break;
@@ -10995,7 +11010,7 @@ function fullReportOrPreviewBody(unit, report, afterPage, opts) {
   const dept = S.departments.find((x) => x.id === unit.departmentId);
   const chapters = rptOrdered(unitChapterDefs(opts.capture ? null : report, unit.id), s).filter((c) => review || (!s.hidden[c.key] && !rptLevelHides(s, c.key) &&
     (s.showEmpty || opts.capture || c.special || c.sections.some((sid) => sectionHasData(report, sid)))));
-  return rptWithCtx({ ...rptChartCtx(s), hiddenCols: review ? null : s.hiddenCols, colsShow: s.colsShow, capture: opts.capture || null, unitId: unit.id }, () => {
+  return rptWithCtx({ ...rptChartCtx(s), hiddenCols: review ? null : rptHiddenColsForViewer(s), colsShow: s.colsShow, capture: opts.capture || null, unitId: unit.id }, () => {
     // «ملخص التقرير» بصفحة مستقلة، ثم الأقسام (عدد محدد بكل صفحة، 0 = متتابعة)، و«الإغلاق والاعتماد» مع آخر صفحة
     const per = Number(s.perPage) || 0;
     const pages = [];
@@ -11310,6 +11325,11 @@ function attachFormListeners() {
 
   appEl.addEventListener("change", (e) => {
     const el = e.target;
+    if (el.id === "rm-sel") {
+      const b = document.createElement("button"); b.type = "button"; b.style.display = "none";
+      if (el.value === "__new") b.dataset.action = "rm-new"; else { b.dataset.action = "rm-select"; b.dataset.id = el.value; }
+      appEl.appendChild(b); b.click(); b.remove(); return;
+    }
     if (el.dataset && el.dataset.ogTarget) {
       if (!S.isAdmin) return; const v = el.value === "" ? "" : Math.max(0, Math.min(100, Number(el.value) || 0)); const id = el.dataset.ogTarget;
       saveSiteTheme((th) => { const m = { ...((th || {}).ogTargets || {}) }; if (v === "") delete m[id]; else m[id] = v; return { ogTargets: m }; }); return;
