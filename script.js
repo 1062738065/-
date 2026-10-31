@@ -8022,9 +8022,10 @@ function structSimplePeopleViewHtml() {
     const pin = personEffectivePin(p);
     return `<div style="display:flex;align-items:center;gap:12px;padding:12px 4px;border-bottom:1px solid ${BORDER};flex-wrap:wrap;opacity:${on ? 1 : 0.6};">
       <span style="position:relative;width:40px;height:40px;border-radius:50%;background:#f3e6ea;color:${ROSE};font-size:16px;font-weight:800;display:flex;align-items:center;justify-content:center;flex-shrink:0;">${esc((p.name || "؟").charAt(0))}<i style="position:absolute;bottom:0;inset-inline-end:0;width:11px;height:11px;border-radius:50%;border:2px solid #fff;background:${on ? "#4aa37a" : "#b8aab0"};"></i></span>
-      <div style="flex:1 1 180px;min-width:0;"><div style="font-size:14.5px;font-weight:800;">${esc(p.name)} ${on ? "" : badgeHtml("موقوف", SUBTLE, GRAY_BG)}</div>
+      <div style="flex:1 1 180px;min-width:0;"><div style="font-size:14.5px;font-weight:800;">${esc(p.name)}</div>
         <div style="font-size:12px;color:${SUBTLE};">${esc(r ? r.name : "بلا دور")} · <button type="button" data-action="struct-open-entity" data-key="${esc(o.key)}" style="font-family:inherit;cursor:pointer;background:none;border:none;padding:0;font-size:12px;color:${ROSE};font-weight:700;">${esc(o.name)} ›</button></div></div>
       <select class="input" data-action="struct-person-role" data-id="${esc(p.id)}" style="width:auto;flex:0 1 150px;padding:5px 8px;font-size:12.5px;"><option value="">— بلا دور —</option>${roles.map((x) => `<option value="${esc(x.id)}" ${p.roleId === x.id ? "selected" : ""}>${esc(x.name)}</option>`).join("")}</select>
+      <button type="button" data-action="person-toggle" data-id="${esc(p.id)}" title="${on ? "اضغطي لإيقافه" : "اضغطي لتفعيله"}" aria-label="${on ? "فعّال — إيقاف" : "موقوف — تفعيل"}" style="display:inline-flex;align-items:center;gap:6px;cursor:pointer;font-family:inherit;font-size:11.5px;font-weight:700;padding:3px 10px 3px 4px;border-radius:999px;border:1px solid ${on ? "#bfe0cf" : BORDER};background:${on ? GREEN_BG : GRAY_BG};color:${on ? GREEN : SUBTLE};"><span style="width:30px;height:18px;border-radius:999px;background:${on ? "#4aa37a" : "#c9bcc2"};position:relative;display:inline-block;"><i style="position:absolute;top:2px;${on ? "inset-inline-start:2px" : "inset-inline-end:2px"};width:14px;height:14px;border-radius:50%;background:#fff;"></i></span>${on ? "فعّال" : "موقوف"}</button>
       <span style="font-size:10.5px;font-weight:700;padding:3px 9px;border-radius:999px;white-space:nowrap;${pin ? `color:${GREEN};background:${GREEN_BG};` : `color:${DANGER};background:${DANGER_BG};`}">${pin ? "رقم سري ✓" : "بلا رقم"}</span>
       ${S.ui.personConfirmDeleteId === p.id
         ? `<span style="font-size:12px;color:${DANGER};font-weight:700;">حذف «${esc(p.name)}»؟</span>${pillBtn("تأكيد", { variant: "danger", action: "person-delete", data: { id: p.id } })}${pillBtn("تراجع", { variant: "ghost", action: "person-delete-cancel" })}`
@@ -8032,8 +8033,11 @@ function structSimplePeopleViewHtml() {
       ${!r ? `<div style="flex-basis:100%;font-size:11.5px;color:#9a6420;font-weight:700;">⚠ بلا دور، فلا يرى أي صفحة.</div>` : ""}
     </div>`;
   }).join("");
-  return `<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:10px;"><input class="input" id="struct-people-q" value="${esc(S.ui.structPeopleQ || "")}" placeholder="ابحثي باسم الشخص أو الجهة…" autocomplete="off" style="flex:1 1 240px;max-width:420px;" />${stChip("all", "الكل")}${stChip("on", "فعّال")}${stChip("off", "موقوف")}<span style="font-size:12px;color:${SUBTLE};">${list.length} شخص</span></div>
-    <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px;">${chip("all", "كل الأدوار")}${roles.map((r) => chip(r.id, esc(r.name))).join("")}${chip("none", "بلا دور ⚠")}</div>
+  const selStyle = "width:auto;flex:0 1 190px;font-weight:700;";
+  return `<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:12px;"><input class="input" id="struct-people-q" value="${esc(S.ui.structPeopleQ || "")}" placeholder="ابحثي باسم الشخص أو الجهة…" autocomplete="off" style="flex:1 1 240px;max-width:420px;" />
+      <select class="input" data-action="struct-people-status-sel" aria-label="الحالة" style="${selStyle}"><option value="all" ${stF === "all" ? "selected" : ""}>كل الحالات</option><option value="on" ${stF === "on" ? "selected" : ""}>● فعّال</option><option value="off" ${stF === "off" ? "selected" : ""}>○ موقوف</option></select>
+      <select class="input" data-action="struct-people-filter-sel" aria-label="الدور" style="${selStyle}"><option value="all" ${filt === "all" ? "selected" : ""}>كل الأدوار</option>${roles.map((r) => `<option value="${esc(r.id)}" ${filt === r.id ? "selected" : ""}>${esc(r.name)}</option>`).join("")}<option value="none" ${filt === "none" ? "selected" : ""}>بلا دور ⚠</option></select>
+      <span style="font-size:12px;color:${SUBTLE};">${list.length} شخص</span></div>
     <div class="card" style="padding:4px 16px;">${cards || `<div class="card" style="text-align:center;color:${SUBTLE};padding:30px;border-style:dashed;grid-column:1/-1;">لا يوجد أشخاص بهذا الفلتر.</div>`}</div>
     <div style="font-size:11.5px;color:${SUBTLE};margin-top:10px;">لإضافة شخص جديد: «الهيكل»، ثم اختاري الجهة ← تبويب «الأشخاص».</div>`;
 }
@@ -10846,6 +10850,8 @@ function attachFormListeners() {
       render();
       return;
     }
+    if (el.dataset && el.dataset.action === "struct-people-status-sel") { S.ui.structPeopleStatus = el.value; render(); return; }
+    if (el.dataset && el.dataset.action === "struct-people-filter-sel") { S.ui.structPeopleFilter = el.value; render(); return; }
     if (el.dataset && el.dataset.action === "struct-person-role") {
       S.persons = personsList().map((p) => p.id === el.dataset.id ? { ...p, roleId: el.value || "" } : p);
       dataStore.savePersons(S.persons); render(); return;
