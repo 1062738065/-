@@ -1043,7 +1043,39 @@ const FONT_OPTIONS = [
   { value: "Noto Kufi Arabic", label: "Noto Kufi Arabic" },
   { value: "Reem Kufi", label: "Reem Kufi" },
   { value: "Amiri", label: "Amiri (خط كلاسيكي)" },
+  { value: "Noto Sans Arabic", label: "Noto Sans Arabic" },
+  { value: "Noto Naskh Arabic", label: "Noto Naskh Arabic (نسخ)" },
+  { value: "Readex Pro", label: "Readex Pro" },
+  { value: "Mada", label: "Mada" },
+  { value: "Vazirmatn", label: "Vazirmatn" },
+  { value: "El Messiri", label: "El Messiri" },
+  { value: "Harmattan", label: "Harmattan" },
+  { value: "Lateef", label: "Lateef (نسخ)" },
+  { value: "Scheherazade New", label: "Scheherazade New (نسخ)" },
+  { value: "Markazi Text", label: "Markazi Text" },
+  { value: "Lemonada", label: "Lemonada" },
+  { value: "Baloo Bhaijaan 2", label: "Baloo Bhaijaan 2" },
+  { value: "Aref Ruqaa", label: "Aref Ruqaa (رقعة)" },
+  { value: "Lalezar", label: "Lalezar (عناوين)" },
+  { value: "Rakkas", label: "Rakkas (عناوين)" },
+  { value: "Katibeh", label: "Katibeh (عناوين)" },
 ];
+const FONT_PRELOADED = ["IBM Plex Sans Arabic", "Cairo", "Tajawal", "Almarai", "Changa", "Noto Kufi Arabic", "Reem Kufi", "Amiri"];
+function siteFontLoad(f) {
+  if (!f || FONT_PRELOADED.indexOf(f) !== -1 || !/^[A-Za-z0-9 ]{2,40}$/.test(f)) return;
+  const id = "sitefont-" + f.replace(/ /g, "-");
+  if (document.getElementById(id)) return;
+  const l = document.createElement("link");
+  l.id = id; l.rel = "stylesheet";
+  l.href = "https://fonts.googleapis.com/css2?family=" + encodeURIComponent(f).replace(/%20/g, "+") + "&display=swap";
+  document.head.appendChild(l);
+}
+function siteCustomFontApply(cf) {
+  let st = document.getElementById("site-custom-font");
+  if (!cf || !cf.name || !cf.data) { if (st) st.remove(); return; }
+  if (!st) { st = document.createElement("style"); st.id = "site-custom-font"; document.head.appendChild(st); }
+  st.textContent = `@font-face{font-family:'${String(cf.name).replace(/[^A-Za-z0-9 \u0600-\u06FF_-]/g, "")}';src:url("${String(cf.data).replace(/"/g, "")}");font-display:swap;}`;
+}
 function siteLogoSrc(s) { return (s && s.logo) || ASSOCIATION_LOGO; }
 function siteBannerSrc(s) { return (s && s.bannerImage) || "hero-bg.jpg"; }
 function sidebarTaglineBlockHtml(site) {
@@ -6489,14 +6521,27 @@ function renderSiteSettingsInner() {
     <div class="card" data-st="look" style="${stH("look")}margin-bottom:16px;">
       <div class="subhead" style="margin-top:0;">الخط</div>
       <div>
-        ${fieldLabel("خط الموقع (يشمل النصوص والعناوين والأزرار بكل الصفحات — عدا التقرير المطبوع نفسه)")}
-        <select class="input" id="site-font-family" style="width:100%;margin-bottom:10px;">
-          ${FONT_OPTIONS.map((f) => `<option value="${esc(f.value)}" style="font-family:'${esc(f.value)}';" ${(current.fontFamily || DEFAULT_BRANDING.fontFamily) === f.value ? "selected" : ""}>${esc(f.label)}</option>`).join("")}
-        </select>
-        <div style="border:1px solid ${BORDER};border-radius:10px;padding:14px 16px;background:${GRAY_BG};font-family:'${esc(current.fontFamily || DEFAULT_BRANDING.fontFamily)}';">
-          <div style="font-size:16px;font-weight:800;margin-bottom:4px;">هذا مثال على شكل الخط المختار</div>
-          <div style="font-size:12.5px;color:${SUBTLE};">تقرير الأداء الدوري — وحدة الاختبارات — جمعية فرقان</div>
+        ${(() => {
+          const cf = theme.customFont && theme.customFont.name ? [{ value: theme.customFont.name, label: theme.customFont.name + " (خط مرفوع)" }] : [];
+          const opts = [...FONT_OPTIONS, ...cf];
+          const mainF = current.fontFamily || DEFAULT_BRANDING.fontFamily;
+          const headF = theme.headingFont || "";
+          opts.forEach((f) => siteFontLoad(f.value));
+          const optHtml = (sel) => opts.map((f) => `<option value="${esc(f.value)}" style="font-family:'${esc(f.value)}';" ${sel === f.value ? "selected" : ""}>${esc(f.label)}</option>`).join("");
+          return `${fieldLabel("خط النصوص (يشمل الأزرار والجداول بكل الصفحات — عدا التقرير المطبوع نفسه)")}
+        <select class="input" id="site-font-family" style="width:100%;margin-bottom:12px;">${optHtml(mainF)}</select>
+        ${fieldLabel("خط العناوين")}
+        <select class="input" id="site-heading-font" style="width:100%;margin-bottom:12px;"><option value="" ${headF ? "" : "selected"}>نفس خط النصوص</option>${optHtml(headF)}</select>
+        <div style="border:1px solid ${BORDER};border-radius:10px;padding:14px 16px;background:${GRAY_BG};font-family:'${esc(mainF)}';margin-bottom:12px;">
+          <div style="font-size:18px;font-weight:800;margin-bottom:4px;font-family:'${esc(headF || mainF)}';">عنوان تجريبي — تقرير الأداء الدوري</div>
+          <div style="font-size:13px;color:${SUBTLE};">هذا نص تجريبي بالخط المختار: وحدة الاختبارات — جمعية فرقان لتحفيظ القرآن الكريم ١٢٣٤٥٦٧٨٩٠</div>
         </div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
+          <label class="btn btn-ghost" style="cursor:pointer;min-height:40px;display:inline-flex;align-items:center;padding:0 14px;border:1px solid ${BORDER};border-radius:999px;font-size:13px;font-weight:700;">رفع خط (TTF / OTF / WOFF)<input type="file" id="site-font-upload" accept=".ttf,.otf,.woff,.woff2" style="display:none;" /></label>
+          ${theme.customFont && theme.customFont.name ? `<button type="button" data-action="site-font-remove" style="min-height:40px;padding:0 14px;border:1px solid ${BORDER};border-radius:999px;background:#fff;cursor:pointer;font-family:inherit;font-size:13px;">حذف الخط المرفوع (${esc(theme.customFont.name)})</button>` : ""}
+        </div>
+        <div class="hint" style="margin-top:6px;">الخط المرفوع حجمه أقل من ٤٠٠ كيلوبايت. يحتاج الموقع اتصال بالإنترنت لتحميل خطوط Google.</div>`;
+        })()}
       </div>
     </div>
 
@@ -10890,6 +10935,25 @@ function attachFormListeners() {
       render();
       return;
     }
+    if (el.id === "site-heading-font") {
+      S.siteSettings = S.siteSettings || dataStore.getSiteSettings();
+      S.siteSettings = { ...S.siteSettings, theme: { ...(S.siteSettings.theme || {}), headingFont: el.value } };
+      S.ui.siteSettingsSaved = false; applySiteColors(S.siteSettings); render(); return;
+    }
+    if (el.id === "site-font-upload") {
+      const f = el.files && el.files[0];
+      if (!f) return;
+      if (f.size > 400 * 1024) { alert("حجم الخط أكبر من ٤٠٠ كيلوبايت. اختاري خطًا أصغر."); el.value = ""; return; }
+      const rd = new FileReader();
+      rd.onload = () => {
+        const name = f.name.replace(/\.[^.]+$/, "").replace(/[^A-Za-z0-9 \u0600-\u06FF_-]/g, "").slice(0, 30) || "خط مرفوع";
+        S.siteSettings = S.siteSettings || dataStore.getSiteSettings();
+        S.siteSettings = { ...S.siteSettings, fontFamily: name, theme: { ...(S.siteSettings.theme || {}), customFont: { name, data: rd.result } } };
+        S.ui.siteSettingsSaved = false; applySiteColors(S.siteSettings); render();
+      };
+      rd.readAsDataURL(f);
+      return;
+    }
     if (el.id === "site-font-family") {
       S.siteSettings = S.siteSettings || dataStore.getSiteSettings();
       S.siteSettings = { ...S.siteSettings, fontFamily: el.value };
@@ -11059,6 +11123,15 @@ function attachClickListener() {
         dataStore.saveDashboardConfig({});
         addPermLog("dashboard", "all", "كل الجهات", "إظهار كل عناصر لوحة المعلومات");
         render();
+        break;
+      }
+      case "site-font-remove": {
+        S.siteSettings = S.siteSettings || dataStore.getSiteSettings();
+        const cf = (S.siteSettings.theme || {}).customFont;
+        const th2 = { ...(S.siteSettings.theme || {}) }; delete th2.customFont;
+        if (cf && th2.headingFont === cf.name) th2.headingFont = "";
+        S.siteSettings = { ...S.siteSettings, fontFamily: cf && S.siteSettings.fontFamily === cf.name ? DEFAULT_BRANDING.fontFamily : S.siteSettings.fontFamily, theme: th2 };
+        S.ui.siteSettingsSaved = false; applySiteColors(S.siteSettings); render();
         break;
       }
       case "restore-five-colors": {
@@ -12305,8 +12378,11 @@ function applySiteColors(settings) {
   const veil = Math.max(0, Math.min(90, Number(th.sidebarBgVeil) || 0)) / 100;
   root.style.setProperty("--sidebar-bg-image", th.sidebarBgImage ? `linear-gradient(rgba(255,255,255,${veil}),rgba(255,255,255,${veil})), url("${String(th.sidebarBgImage).replace(/"/g, "")}")` : "none");
   const font = settings.fontFamily || DEFAULT_BRANDING.fontFamily;
+  const hfont = th.headingFont || font;
+  siteCustomFontApply(th.customFont);
+  siteFontLoad(font); siteFontLoad(hfont);
   root.style.setProperty("--font-main", `'${font}'`);
-  root.style.setProperty("--font-heading", `'${font}'`);
+  root.style.setProperty("--font-heading", `'${hfont}'`);
 }
 function afterRender() {
   applyButtonPermissions();
