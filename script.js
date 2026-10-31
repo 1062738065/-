@@ -5444,6 +5444,26 @@ function pageTplCardHtml() {
     ${S.ui.pgMsg ? `<div class="hint" style="margin-top:10px;color:${GREEN};">${esc(S.ui.pgMsg)}</div>` : ""}
   </div>`;
 }
+/* ===== الأرشفة وDrive: إعدادات الروابط ومفاتيح التشغيل (تُحفظ مع إعدادات الموقع؛ التنفيذ الفعلي للحفظ في Drive في الدفعة ٤) ===== */
+function archiveCfg(theme) { return { enabled: false, drive: false, sheet: false, scriptUrl: "", rootFolder: "", unitFolders: false, senderEmail: "", ...((theme && theme.archive) || {}) }; }
+function archiveCardHtml(theme) {
+  const a = archiveCfg(theme);
+  const tog = (key, label) => `<button type="button" data-action="ar-toggle" data-key="${key}" aria-pressed="${a[key] ? "true" : "false"}" style="font-family:inherit;min-height:40px;padding:0 16px;border-radius:999px;cursor:pointer;font-size:13px;font-weight:700;border:1px solid ${a[key] ? GREEN : BORDER};background:${a[key] ? GREEN_BG : "#fff"};color:${a[key] ? GREEN : INK};">${a[key] ? "✓ " : ""}${label}</button>`;
+  const fld = (label, inner, hint) => `<div style="margin-bottom:14px;"><div style="font-size:13px;font-weight:700;margin-bottom:6px;">${label}</div>${inner}${hint ? `<div class="hint" style="margin-top:4px;">${hint}</div>` : ""}</div>`;
+  const inp = (key, ph, dir) => `<input type="text" class="input" data-ar="${key}" value="${esc(a[key] || "")}" placeholder="${esc(ph)}" ${dir ? `dir="${dir}"` : ""} style="width:100%;" />`;
+  const bad = (v) => v && !/^https:\/\/[^\s]+$/.test(v);
+  return `<div class="card" style="margin-bottom:16px;max-width:760px;">
+    <div class="subhead" style="margin-top:0;">الأرشفة وDrive</div>
+    <div class="hint" style="margin-bottom:14px;">هنا تُضبط الروابط ومفاتيح التشغيل. القاعدة تحفظ دائمًا؛ وDrive والشيت اختياريان، وفشلهما لا يمنع الاعتماد. يبدأ التنفيذ الفعلي للحفظ في Drive بعد ما نكمل دفعة Drive.</div>
+    ${fld("الأرشفة التلقائية عند الاعتماد النهائي", `<div style="display:flex;gap:8px;flex-wrap:wrap;">${tog("enabled", a.enabled ? "مفعّلة" : "متوقفة")}</div>`)}
+    ${fld("أماكن الحفظ", `<div style="display:flex;gap:8px;flex-wrap:wrap;"><span style="min-height:40px;display:inline-flex;align-items:center;padding:0 16px;border-radius:999px;border:1px solid ${GREEN};background:${GREEN_BG};color:${GREEN};font-size:13px;font-weight:700;">✓ القاعدة (دائمًا)</span>${tog("drive", "Google Drive")}${tog("sheet", "Google Sheet")}</div>`)}
+    ${a.drive ? `${fld("رابط سكربت Drive الوسيط (Apps Script)", inp("scriptUrl", "https://script.google.com/macros/s/…/exec", "ltr"), bad(a.scriptUrl) ? `<span style="color:${DANGER};">الرابط لازم يبدأ بـ https://</span>` : "الموقع الحقيقي والتجريبي يحتاجان سكربتًا وسيطًا يُنشر مرة واحدة.")}
+    ${fld("رابط المجلد المركزي للسكرتاريات", inp("rootFolder", "https://drive.google.com/drive/folders/…", "ltr"), bad(a.rootFolder) ? `<span style="color:${DANGER};">الرابط لازم يبدأ بـ https://</span>` : "تُحفظ النسخ داخله: القسم ← الوحدة ← الفترة.")}
+    ${fld("مجلد خاص لكل وحدة", `<div>${tog("unitFolders", a.unitFolders ? "مفعّل" : "متوقف")}</div>`, "يُشارَك المجلد كـ«محرر» مع حساب الإرسال.")}
+    ${a.unitFolders ? fld("بريد حساب الإرسال (محرر)", inp("senderEmail", "name@gmail.com", "ltr")) : ""}` : ""}
+    <div class="hint" style="margin-top:6px;">اضغطي «حفظ» أسفل الصفحة ليثبت التغيير.</div>
+  </div>`;
+}
 function dashOrderCardHtml() {
   const kind = DASH_KINDS.some((k) => k.id === S.ui.dashOrderKind) ? S.ui.dashOrderKind : "office";
   const list = dashOrderList(kind);
@@ -6551,7 +6571,7 @@ function renderSiteSettingsInner() {
   <div class="page-wrap"><div class="page-inner">
     ${topBarHtml({ title: "إعدادات الموقع", subtitle: "تخصيص هوية الموقع — الألوان، الشعار، البانر، والعبارات. التغيير يظهر فورًا هنا، ولازم الضغط على \"حفظ\" ليصير دائمًا" })}
 
-    ${(() => { const T = [["look", "المظهر"], ["brand", "الشعار والشريط"], ["dash", "لوحة المعلومات"], ["page", "قالب الصفحة"], ["report", "خيارات التقرير"]]; return `<div style="display:flex;flex-wrap:wrap;border-bottom:1px solid ${BORDER};margin-bottom:16px;">${T.map(([id, l]) => `<button type="button" data-action="site-tab" data-tab="${id}" data-st-btn="${id}" style="font-family:inherit;font-size:14px;cursor:pointer;padding:10px 4px;margin-inline-end:18px;background:none;border:none;border-bottom:2.5px solid ${stTab === id ? ROSE : "transparent"};margin-bottom:-1px;font-weight:${stTab === id ? 800 : 600};color:${stTab === id ? ROSE : "#8a7b82"};">${l}</button>`).join("")}</div>`; })()}
+    ${(() => { const T = [["look", "المظهر"], ["brand", "الشعار والشريط"], ["dash", "لوحة المعلومات"], ["page", "قالب الصفحة"], ["report", "خيارات التقرير"], ["archive", "الأرشفة وDrive"]]; return `<div style="display:flex;flex-wrap:wrap;border-bottom:1px solid ${BORDER};margin-bottom:16px;">${T.map(([id, l]) => `<button type="button" data-action="site-tab" data-tab="${id}" data-st-btn="${id}" style="font-family:inherit;font-size:14px;cursor:pointer;padding:10px 4px;margin-inline-end:18px;background:none;border:none;border-bottom:2.5px solid ${stTab === id ? ROSE : "transparent"};margin-bottom:-1px;font-weight:${stTab === id ? 800 : 600};color:${stTab === id ? ROSE : "#8a7b82"};">${l}</button>`).join("")}</div>`; })()}
     <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,420px),1fr));gap:16px;align-items:start;">
     <div class="card" data-st="look" style="${stH("look")}margin-bottom:16px;">
       <div class="subhead" style="margin-top:0;">الألوان الخمسة</div>
@@ -6744,6 +6764,7 @@ function renderSiteSettingsInner() {
 
     <div data-st="dash" style="${stH("dash")}">${dashSettingsCardHtml()}</div>
     <div data-st="page" style="${stH("page")}">${pageTplCardHtml()}</div>
+    <div data-st="archive" style="${stH("archive")}">${archiveCardHtml(theme)}</div>
 
     </div>
     <div class="card">
@@ -10739,6 +10760,13 @@ function liveUpdateComputed(el) {
 function attachFormListeners() {
   appEl.addEventListener("input", (e) => {
     const el = e.target;
+    if (el.dataset && el.dataset.ar) {
+      S.siteSettings = S.siteSettings || dataStore.getSiteSettings();
+      const th = S.siteSettings.theme || {};
+      S.siteSettings = { ...S.siteSettings, theme: { ...th, archive: { ...archiveCfg(th), [el.dataset.ar]: el.value.trim() } } };
+      S.ui.siteSettingsSaved = false;
+      return;
+    }
     if (el.dataset && el.dataset.pg) {
       pgDraft()[el.dataset.pg] = el.value;
       const pv = document.getElementById("pg-preview"); if (pv) pv.innerHTML = pgPreviewHtml();
@@ -11059,11 +11087,6 @@ function attachFormListeners() {
       render();
       return;
     }
-    if (el.dataset && el.dataset.pg) {
-      pgDraft()[el.dataset.pg] = el.value;
-      const pv = document.getElementById("pg-preview"); if (pv) pv.innerHTML = pgPreviewHtml();
-      return;
-    }
     if (el.id === "dash-order-kind") { S.ui.dashOrderKind = el.value; render(); return; }
     if (el.id === "site-heading-font") {
       S.siteSettings = S.siteSettings || dataStore.getSiteSettings();
@@ -11273,6 +11296,14 @@ function attachClickListener() {
         S.ui.siteSettingsSaved = false; applySiteColors(S.siteSettings); render();
         break;
       }
+      case "ar-toggle": {
+        if (!S.isAdmin) break;
+        S.siteSettings = S.siteSettings || dataStore.getSiteSettings();
+        const th = S.siteSettings.theme || {}; const cur = archiveCfg(th);
+        S.siteSettings = { ...S.siteSettings, theme: { ...th, archive: { ...cur, [ds.key]: !cur[ds.key] } } };
+        S.ui.siteSettingsSaved = false; render();
+        break;
+      }
       case "dash-move": {
         if (!S.isAdmin) break;
         const kind = ds.kind, i = Number(ds.i), j = ds.dir === "up" ? i - 1 : i + 1;
@@ -11314,7 +11345,7 @@ function attachClickListener() {
       }
       case "restore-five-colors": {
         const th0 = ((S.siteSettings || dataStore.getSiteSettings()).theme) || {};
-        const keep = {}; ["periodTypes", "levelTypes", "entityIcons", "portalEnabled", "reportStyle", "reportTemplates"].forEach((k) => { if (k in th0) keep[k] = th0[k]; });
+        const keep = {}; ["periodTypes", "levelTypes", "entityIcons", "portalEnabled", "reportStyle", "reportTemplates", "archive", "customFont"].forEach((k) => { if (k in th0) keep[k] = th0[k]; });
         S.siteSettings = { ...(S.siteSettings || dataStore.getSiteSettings()), ...DEFAULT_SITE_COLORS, theme: keep };
         applySiteColors(S.siteSettings);
         S.ui.siteSettingsSaved = false;
@@ -11355,7 +11386,7 @@ function attachClickListener() {
         // نرجّع الألوان فقط — ونحفظ إعدادات غير الألوان المخزّنة بنفس المكان (الفترات، أنواع المستويات،
         // أيقونات الجهات وروابطها، بوابة الدخول، شكل التقرير النهائي)
         const th0 = ((S.siteSettings || dataStore.getSiteSettings()).theme) || {};
-        const keep = {}; ["periodTypes", "levelTypes", "entityIcons", "portalEnabled", "reportStyle", "reportTemplates"].forEach((k) => { if (k in th0) keep[k] = th0[k]; });
+        const keep = {}; ["periodTypes", "levelTypes", "entityIcons", "portalEnabled", "reportStyle", "reportTemplates", "archive", "customFont"].forEach((k) => { if (k in th0) keep[k] = th0[k]; });
         S.siteSettings = { ...(S.siteSettings || dataStore.getSiteSettings()), theme: keep };
         applySiteColors(S.siteSettings);
         dataStore.saveSiteSettings(S.siteSettings);
