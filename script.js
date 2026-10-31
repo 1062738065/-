@@ -3662,9 +3662,10 @@ function renderDashboard() {
     // القسم التابعة هنا (ما تظهر ببطاقات الإحصاءات/الرسوم، ولا يُطلب من
     // القسم مراجعة تقريرها الخاص) — تقريرها يظهر فقط عبر "جميع التقارير"
     // لمن هو أعلى من القسم (مكتب الإشراف/الإدارة العليا/مديرة النظام).
-    const units = S.units.filter((u) => u.departmentId === dept.id && u.status === "active" && u.role !== "self_report");
+    const units = S.units.filter((u) => u.departmentId === dept.id && u.status === "active");
     return renderDashboardBody(units, {
       kind: "dept",
+      deptId: dept.id,
       title: dept.name,
       subtitle: `مرحبًا — نظرة شاملة على ${units.length} وحدة تابعة لهذا القسم`,
       topBarRight: adminDeptPreview && S.adminPreviewOrigin
@@ -3728,9 +3729,26 @@ function renderDashboardBody(activeUnits, opts) {
   const overallPct = totalSections ? Math.round((totalCompleted / totalSections) * 100) : 0;
   const avgGoalPct = allGoals.length ? Math.round(allGoals.reduce((s, g) => s + (Number(g.percentage) || 0), 0) / allGoals.length) : 0;
   const unitBarData = activeUnits.map((u) => ({ label: u.name, value: computeProgress(latestReportForUnit(u.id)).percent, color: ROSE }));
+  // ترتيب هرمي: كل قسم وتحته وحداته، ومعها تقرير القسم نفسه (الذاتي)
+  const selfOf = (d) => (S.units || []).find((x) => x.role === "self_report" && x.status === "active" && x.departmentId === d.id);
+  const hierBars = () => {
+    const deptIds = [...new Set(activeUnits.map((u) => u.departmentId).filter(Boolean))];
+    const depts = (S.departments || []).filter((d) => deptIds.includes(d.id) || (dkind === "dept" && opts.deptId === d.id));
+    const groupHtml = (title, items) => items.length ? `<div style="margin:${title ? "14px" : "0"} 0 8px;">${title ? `<div style="font-size:13px;font-weight:800;color:${ROSE};margin-bottom:8px;border-bottom:1px solid ${BORDER};padding-bottom:4px;">${esc(title)}</div>` : ""}${progressListHtml(items)}</div>` : "";
+    const item = (u, label) => ({ label: label || u.name, value: computeProgress(latestReportForUnit(u.id)).percent, color: ROSE });
+    let out = "";
+    depts.forEach((d) => {
+      const items = activeUnits.filter((u) => u.departmentId === d.id && u.role !== "self_report").map((u) => item(u));
+      const self = selfOf(d); if (self) items.push(item(self, "تقرير القسم نفسه — " + d.name));
+      out += groupHtml(d.name, items);
+    });
+    const loose = activeUnits.filter((u) => u.role !== "self_report" && (!u.departmentId || !depts.some((d) => d.id === u.departmentId))).map((u) => item(u));
+    out += groupHtml(depts.length ? "بدون قسم" : "", loose);
+    return out || `<div style="font-size:12.5px;color:${SUBTLE}">لا توجد وحدات بعد.</div>`;
+  };
   const barsHtml = unitBarData.length === 0
     ? `<div style="font-size:12.5px;color:${SUBTLE}">لا توجد وحدات بعد.</div>`
-    : progressListHtml(unitBarData);
+    : (dkind === "unit" ? progressListHtml(unitBarData) : hierBars());
 
   // Reports-wide counts (for the weekly stat and the "إجمالي التقارير" donut)
   const nowTs = Date.now(), weekMs = 7 * 24 * 60 * 60 * 1000;
