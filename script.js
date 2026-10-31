@@ -5429,7 +5429,7 @@ function pgPreviewHtml() {
   const d = pgDraft();
   const land = d.orient === "landscape";
   const w = land ? 300 : 212, h = land ? 212 : 300;
-  const m = RPT_MARGINS[d.margin] || RPT_MARGINS.normal;
+  const m = RPT_MARGINS[d.margin] || (d.margin === "custom" ? [Number(d.mt) || 0, Number(d.mb) || 0, Number(d.mr) || 0, Number(d.ml) || 0] : RPT_MARGINS.normal);
   const sc = w / (land ? 297 : 210);
   const num = rptPageNumText(d, 2, 8);
   return `<div style="position:relative;width:${w}px;height:${h}px;background:${/^#[0-9a-fA-F]{6}$/.test(d.paper) ? d.paper : "#fff"};border:1px solid ${BORDER};box-shadow:0 4px 14px rgba(0,0,0,.08);margin:0 auto;overflow:hidden;${d.frame ? `outline:2px solid ${ROSE};outline-offset:-8px;` : ""}">
