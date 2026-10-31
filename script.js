@@ -3121,6 +3121,9 @@ const DASH_ADMIN_BLOCKS = [
   { key: "opsCounts", label: "أعداد التقارير حسب الحالة" },
   { key: "opsKpis", label: "بطاقات: متأخرة، عالقة، معادة، نسبة الالتزام" },
   { key: "opsDeptCompliance", label: "الالتزام لكل قسم" },
+  { key: "opsHealth", label: "سلامة النظام" },
+  { key: "opsSections", label: "أقسام التقرير (تشغيل وإطفاء)" },
+  { key: "opsAggReports", label: "إدارة التقارير المجمّعة" },
   { key: "opsStuck", label: "تقارير واقفة في المسار" },
   { key: "opsMissing", label: "ما رفعت تقرير الفترة الحالية" },
   { key: "opsReturned", label: "تقارير معادة ما انعدّلت" },
@@ -3639,7 +3642,31 @@ function opsBlocksInner(kind, units) {
       deptH = dashCard("الالتزام لكل قسم", lc ? `«${series2.period}» · ${lc.label}` : "", rowsD.length && lc ? rowsD.map((x) => { const pc = Math.round((x.sent / x.n) * 100); return `<div style="padding:8px 0;border-top:1px solid ${BORDER};"><div style="display:flex;justify-content:space-between;font-size:13px;"><b>${esc(x.d.name)}</b><span style="color:${SUBTLE};">${x.sent} من ${x.n} · ${pc}٪</span></div><div style="height:8px;border-radius:999px;background:#f0e6e9;margin-top:6px;overflow:hidden;"><div style="height:100%;width:${pc}%;background:${pc >= 80 ? GREEN : pc >= 40 ? GOLD : DANGER};"></div></div></div>`; }).join("") : `<div class="hint">لا توجد بيانات للفترة الحالية بعد.</div>`);
     }
   }
-  html += dashB(kind, "opsKpis", kpiH) + dashB(kind, "opsDeptCompliance", deptH) + dashB(kind, "opsStuck", stuckH) + dashB(kind, "opsMissing", missingH) + dashB(kind, "opsReturned", returnedH) + dashB(kind, "opsSetup", setupH) + dashB(kind, "opsActivity", actH);
+  let healthH = "";
+  if (!dashHidden(kind, "opsHealth")) {
+    const pers = personsList();
+    const noPin = pers.filter((x) => x.status !== "disabled" && !personEffectivePin(x)).length;
+    const off = pers.filter((x) => x.status === "disabled").length;
+    const noPath = units.filter((u) => { const ap = autoPathObj(); return !ap || ap.status !== "active" || !apFlow(apStageList(ap, u)).length; }).length;
+    const noDept = units.filter((u) => !u.departmentId).length;
+    const row = (n, label, view, bad) => `<div style="display:flex;align-items:center;gap:10px;padding:9px 0;border-top:1px solid ${BORDER};"><span style="width:10px;height:10px;border-radius:50%;background:${n ? (bad ? DANGER : GOLD) : GREEN};flex:none;"></span><div style="flex:1;font-size:13px;"><b>${n}</b> ${esc(label)}</div>${n ? `<button type="button" class="pill-btn pill-soft" data-action="nav-to" data-view="${view}">فتح</button>` : `<span style="font-size:11.5px;color:${GREEN};">سليم</span>`}</div>`;
+    healthH = dashCard("سلامة النظام", "كل بند يفتح صفحة إصلاحه — لا تُعرض أي أرقام سرية", row(noPin, "أشخاص بلا رقم سري", "units-manage", true) + row(off, "أشخاص موقوفون", "units-manage", false) + row(noPath, "وحدات بلا مسار اعتماد فعّال", "units-manage", true) + row(noDept, "وحدات غير مربوطة بقسم", "units-manage", false));
+  }
+  let secH = "", aggH = "";
+  if (!dashHidden(kind, "opsSections")) {
+    const defs = sortedSectionDefs();
+    const off = defs.filter((d) => d.enabled === false).length;
+    secH = dashCard("أقسام التقرير", `المفعّل يظهر في كل التقارير، والمطفأ يختفي ويرجع بالتفعيل · ${defs.length - off} مفعّل · ${off} مطفأ`,
+      defs.map((d) => { const on = d.enabled !== false; return `<div style="display:flex;align-items:center;gap:10px;padding:9px 0;border-top:1px solid ${BORDER};"><span style="width:10px;height:10px;border-radius:50%;background:${on ? GREEN : SUBTLE};flex:none;"></span><div style="flex:1;font-size:13px;font-weight:700;${on ? "" : `color:${SUBTLE};text-decoration:line-through;`}">${esc(d.name || d.label || d.id)}</div><button type="button" class="pill-btn pill-soft" data-action="toggle-report-section" data-id="${esc(d.id)}">${on ? "إطفاء" : "تفعيل"}</button></div>`; }).join("")
+      + `<div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap;"><button type="button" class="pill-btn pill-ghost" data-action="nav-to" data-view="sections-manage">فتح إدارة أقسام التقرير</button></div>`);
+  }
+  if (!dashHidden(kind, "opsAggReports")) {
+    const list = (rptStore().custom || []);
+    aggH = dashCard("إدارة التقارير المجمّعة", "التقارير التي أنشأتِها من «تصميم وتنسيق التقارير»",
+      (list.length ? list.map((c) => `<div style="display:flex;align-items:center;gap:10px;padding:9px 0;border-top:1px solid ${BORDER};"><div style="flex:1;font-size:13px;font-weight:700;">${esc(c.name || "تقرير مجمّع")}</div></div>`).join("") : `<div class="hint">لا توجد تقارير مجمّعة بعد.</div>`)
+      + `<div style="margin-top:10px;"><button type="button" class="pill-btn pill-ghost" data-action="nav-to" data-view="reports-manage">فتح تصميم وتنسيق التقارير</button></div>`);
+  }
+  html += dashB(kind, "opsHealth", healthH) + dashB(kind, "opsSections", secH) + dashB(kind, "opsAggReports", aggH) + dashB(kind, "opsKpis", kpiH) + dashB(kind, "opsDeptCompliance", deptH) + dashB(kind, "opsStuck", stuckH) + dashB(kind, "opsMissing", missingH) + dashB(kind, "opsReturned", returnedH) + dashB(kind, "opsSetup", setupH) + dashB(kind, "opsActivity", actH);
   return html;
 }
 
