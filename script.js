@@ -6671,10 +6671,20 @@ function renderSiteSettingsInner() {
         ${fieldLabel("عنوان البانر")}
         ${textInput("site-banner-title", current.bannerTitle, DEFAULT_BRANDING.bannerTitle)}
       </div>
-      <div>
+      <div style="margin-bottom:14px;">
         ${fieldLabel("وصف البانر")}
         ${textInput("site-banner-sub", current.bannerSub, DEFAULT_BRANDING.bannerSub)}
       </div>
+      ${(() => {
+        const pill = (key, val, label, cur) => { const on = cur === val; return `<button type="button" data-action="site-banner-set" data-key="${key}" data-val="${val}" style="font-family:inherit;min-height:38px;padding:0 14px;border-radius:999px;cursor:pointer;font-size:13px;font-weight:700;border:1px solid ${on ? ROSE : BORDER};background:${on ? ROSE : "#fff"};color:${on ? "#fff" : INK};">${label}</button>`; };
+        const al = theme.bannerAlign || "center", ps = theme.bannerPos || "center";
+        return `<div style="margin-bottom:14px;">${fieldLabel("تفتيح الصورة (تخفيف لون الصورة ليظهر النص)")}
+          <div style="display:flex;align-items:center;gap:10px;"><input type="range" id="site-banner-veil" min="0" max="90" step="5" value="${Number(theme.bannerVeil) || 0}" style="flex:1;" /><span id="site-banner-veil-label" style="font-size:12px;color:${SUBTLE};font-family:monospace;min-width:44px;">${Number(theme.bannerVeil) || 0}%</span></div></div>
+        <div style="margin-bottom:14px;">${fieldLabel("محاذاة النص")}<div style="display:flex;gap:6px;flex-wrap:wrap;">${pill("bannerAlign", "right", "يمين", al)}${pill("bannerAlign", "center", "وسط", al)}${pill("bannerAlign", "left", "يسار", al)}</div></div>
+        <div style="margin-bottom:14px;">${fieldLabel("موضع النص")}<div style="display:flex;gap:6px;flex-wrap:wrap;">${pill("bannerPos", "top", "أعلى", ps)}${pill("bannerPos", "center", "وسط", ps)}${pill("bannerPos", "bottom", "أسفل", ps)}</div></div>
+        <div class="hint" style="margin-bottom:8px;">معاينة (تنطبق الإعدادات هذه على كل صفحة فيها بانر: لوحة المعلومات، ولوحة الوحدة، و«تقارير»):</div>
+        <div class="hero-banner" style="min-height:130px;margin-bottom:0;"><img class="hero-banner-bg" src="${esc(siteBannerSrc(current))}" alt="" /><div class="hero-banner-text"><div class="hero-banner-eyebrow">مرحبًا بك في</div><div class="prs-title hero-banner-title">${esc(current.bannerTitle || DEFAULT_BRANDING.bannerTitle || "منصة التقارير")}</div><div class="hero-banner-sub">${esc(current.bannerSub || DEFAULT_BRANDING.bannerSub || "")}</div></div></div>`;
+      })()}
     </div>
 
     <div class="card" data-st="brand" style="${stH("brand")}margin-bottom:16px;">
@@ -8013,7 +8023,7 @@ function renderUnitReportsHub() {
     ${scopedUnitSwitcherHtml()}
 
     <div class="hero-banner">
-      <img class="hero-banner-bg" src="hero-bg.jpg" alt="" />
+      <img class="hero-banner-bg" src="${esc(siteBannerSrc(currentSiteSettings()))}" alt="" />
       <div class="hero-banner-text">
         <div class="hero-banner-eyebrow">إدارة تقاريرك بسهولة وتنظيم</div>
         <div class="prs-title hero-banner-title">التقارير</div>
@@ -10849,6 +10859,13 @@ function attachFormListeners() {
       S.ui.fieldEditDraft[el.id === "field-draft-iconcolor" ? "iconColor" : "iconBg"] = el.value;
       return;
     }
+    if (el.id === "site-banner-veil") {
+      S.siteSettings = S.siteSettings || dataStore.getSiteSettings();
+      S.siteSettings = { ...S.siteSettings, theme: { ...(S.siteSettings.theme || {}), bannerVeil: Number(el.value) } };
+      S.ui.siteSettingsSaved = false; applySiteColors(S.siteSettings);
+      const lb = document.getElementById("site-banner-veil-label"); if (lb) lb.textContent = el.value + "%";
+      return;
+    }
     if (el.id === "site-sidebar-bg-veil") {
       S.siteSettings = S.siteSettings || dataStore.getSiteSettings();
       S.siteSettings = { ...S.siteSettings, theme: { ...(S.siteSettings.theme || {}), sidebarBgVeil: Number(el.value) } };
@@ -11248,6 +11265,13 @@ function attachClickListener() {
         ids.forEach((id) => { const cur = rptSettings(id); if (cur) { rptSave(id, { ...cur, ...patch }); n++; } });
         S.ui.pgMsg = "تم تطبيق قالب الصفحة على " + n + " من قوالب التقارير.";
         render(); break;
+      }
+      case "site-banner-set": {
+        if (!["bannerAlign", "bannerPos"].includes(ds.key)) break;
+        S.siteSettings = S.siteSettings || dataStore.getSiteSettings();
+        S.siteSettings = { ...S.siteSettings, theme: { ...(S.siteSettings.theme || {}), [ds.key]: ds.val } };
+        S.ui.siteSettingsSaved = false; applySiteColors(S.siteSettings); render();
+        break;
       }
       case "dash-move": {
         if (!S.isAdmin) break;
@@ -12527,6 +12551,12 @@ function applySiteColors(settings) {
     if (th[f.k + "Color"]) root.style.setProperty(cssName + "-color", th[f.k + "Color"]); else root.style.removeProperty(cssName + "-color");
     root.style.setProperty(cssName + "-size", (Number(th[f.k + "Size"]) || f.def) + "px");
   });
+  root.style.setProperty("--banner-veil", String(Math.max(0, Math.min(90, Number(th.bannerVeil) || 0)) / 100));
+  const bAlign = { right: "flex-start", left: "flex-end" }[th.bannerAlign] || "center";
+  root.style.setProperty("--banner-align", bAlign);
+  root.style.setProperty("--banner-shift", th.bannerAlign === "right" || th.bannerAlign === "left" ? "0%" : "-8%");
+  root.style.setProperty("--banner-vpos", { top: "flex-start", bottom: "flex-end" }[th.bannerPos] || "center");
+  root.style.setProperty("--banner-text-align", th.bannerAlign === "right" ? "right" : th.bannerAlign === "left" ? "left" : "center");
   ICON_OVERRIDE = th.iconColor || "";
   applyPeriodTypes(th.periodTypes);
   const veil = Math.max(0, Math.min(90, Number(th.sidebarBgVeil) || 0)) / 100;
