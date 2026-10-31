@@ -3197,7 +3197,7 @@ const DASH_REPORT_RANK = { approved: 3, completed: 2 };
 function dashRank(r) { return DASH_REPORT_RANK[r.status] || 1; }
 // نوع الفترة الافتراضي: الأكثر استخدامًا في تقارير النطاق (وإلا فصلي)
 // تقارير وحدة مفلترة بنوع الفترة المضغوط (إن وُجد) — تُستخدم في أرقام اللوحة وقوائمها
-function dashRepsOf(unitId) { const all = ensureUnitReportsLoaded(unitId); const pt = S.ui.dashPeriod; return pt ? all.filter((r) => reportPeriodType(r) === pt) : all; }
+function dashRepsOf(unitId) { const all = ensureUnitReportsLoaded(unitId); const pt = /dashboard/.test(String(S.view || "")) ? S.ui.dashPeriod : ""; return pt ? all.filter((r) => reportPeriodType(r) === pt) : all; }
 function dashPeriodFor(units) {
   if (S.ui.dashPeriod) return S.ui.dashPeriod;
   const n = {};
@@ -7465,7 +7465,7 @@ function latestReportsPerUnitByYear(units, years) {
   const out = {}; years.forEach((y) => { out[y] = []; });
   units.forEach((u) => {
     const best = {};
-    ensureUnitReportsLoaded(u.id).forEach((r) => {
+    dashRepsOf(u.id).forEach((r) => {
       const y = reportHijriYearNum(r);
       if (!(y in out) || !reportHasContent(r)) return; // التقارير الفاضية لا تُحسب
       if (!best[y] || (r.createdAt || 0) >= (best[y].createdAt || 0)) best[y] = r;
@@ -7617,7 +7617,7 @@ function collectProgramsForUnits(units, yearFilter) {
   const map = new Map();
   units.forEach((u) => {
     const dept = S.departments.find((d) => d.id === u.departmentId);
-    ensureUnitReportsLoaded(u.id).slice().sort((a, b) => (a.createdAt || 0) - (b.createdAt || 0)).forEach((r) => {
+    dashRepsOf(u.id).slice().sort((a, b) => (a.createdAt || 0) - (b.createdAt || 0)).forEach((r) => {
       const y = reportHijriYearNum(r);
       if (yearFilter && y !== yearFilter) return;
       (r.sections?.programs?.data?.programs || []).forEach((p) => {
@@ -7654,14 +7654,14 @@ function achievementStats(progs) {
 }
 function programsYearOptions(units) {
   const set = new Set(lastThreeHijriYears());
-  units.forEach((u) => ensureUnitReportsLoaded(u.id).forEach((r) => { if ((r.sections?.programs?.data?.programs || []).length) { const y = reportHijriYearNum(r); if (y) set.add(y); } }));
+  units.forEach((u) => dashRepsOf(u.id).forEach((r) => { if ((r.sections?.programs?.data?.programs || []).length) { const y = reportHijriYearNum(r); if (y) set.add(y); } }));
   return [...set].sort((a, b) => b - a);
 }
 // السنة المختارة لكتلتي البرامج والإحصائية: "all" = كل السنوات؛ افتراضيًا أحدث سنة
 // فيها أعمال مُدخلة فعلًا (وإن لم توجد أي أعمال: السنة الهجرية الحالية).
 function latestProgramsYear(units) {
   let best = null;
-  units.forEach((u) => ensureUnitReportsLoaded(u.id).forEach((r) => {
+  units.forEach((u) => dashRepsOf(u.id).forEach((r) => {
     if (!(r.sections?.programs?.data?.programs || []).some((p) => p && String(p.name || "").trim())) return;
     const y = reportHijriYearNum(r);
     if (y && (best == null || y > best)) best = y;
