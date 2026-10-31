@@ -4481,6 +4481,15 @@ function olAccountHtml(l) {
     ${type === "exec" ? `<div style="font-size:13px;font-weight:800;margin-top:4px;">صفحات هذا الحساب (من أدواره — بدون افتراضي)</div>${structSimpleRoleCardsHtml("unit", e)}${accountRolesPerms(e).count ? "" : `<div class="hint bad" style="margin:0;">بدون دور: هذا الحساب لا يرى أي صفحة.</div>`}` : ""}
   </div>`;
 }
+function olPathListHtml(l) {
+  const ref = olEntityRef(l);
+  const ap = autoPathObj();
+  if (!ref || ref.type !== "unit" || !ap || ap.status !== "active") return "";
+  const st = apFlow(apStageList(ap, ref.e));
+  if (!st.length) return "";
+  const rows = st.map((x, i) => `<div style="display:flex;align-items:center;gap:10px;"><span style="width:28px;height:28px;border-radius:50%;background:#f3e6ea;color:${ROSE};font-size:12.5px;font-weight:800;display:flex;align-items:center;justify-content:center;flex-shrink:0;">${i + 1}</span><span style="font-size:13px;font-weight:700;">${esc(x.name)}</span></div>`).join("");
+  return `<div style="border-top:1px solid ${BORDER};padding-top:12px;"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;"><span style="font-size:13.5px;font-weight:800;">مسار الاعتماد</span><span style="font-size:11px;color:${SUBTLE};">تلقائي من الهيكل · ${st.length} مراحل</span></div><div style="display:flex;flex-direction:column;gap:8px;">${rows}<div style="display:flex;align-items:center;gap:10px;"><span style="width:28px;height:28px;border-radius:50%;background:${GREEN_BG};color:${GREEN};font-size:13px;font-weight:800;display:flex;align-items:center;justify-content:center;flex-shrink:0;">✓</span><span style="font-size:13px;color:${GREEN};font-weight:700;">معتمد نهائيًا</span></div></div><div style="margin-top:8px;"><button type="button" data-action="ol-section" data-section="paths" style="font-family:inherit;font-size:12px;color:${ROSE};font-weight:700;background:none;border:none;cursor:pointer;padding:0;">تعديل المسار ›</button></div></div>`;
+}
 const OL_TABS = [{ id: "info", label: "البيانات والحساب" }, { id: "people", label: "الأشخاص" }, { id: "paths", label: "المسارات" }, { id: "link", label: "رابط الدخول" }];
 function olSidePanelHtml(l) {
   const ui = olUi();
@@ -4490,7 +4499,7 @@ function olSidePanelHtml(l) {
   const path = olPath(l.id);
   const needEntity = (what) => `<div style="font-size:12.5px;color:#6f5f66;line-height:2;padding:6px 2px;">${what} تكون للجهات اللي لها حساب (وحدة، قسم، مكتب). هذا المستوى ${ref && ref.type === "exec" ? "حساب إدارة عليا" : "بدون حساب جهة"}.<br>${ref ? "" : "لإنشاء حساب له: تبويب «البيانات والحساب» ← «تعديل / نقل» ← «+ إنشاء حساب جديد»."}</div>`;
   let body = "";
-  if (tab === "info") body = olDetailsHtml(l) + olAccountHtml(l);
+  if (tab === "info") body = olDetailsHtml(l) + olPathListHtml(l) + olAccountHtml(l);
   else if (tab === "people") body = ref && STRUCT_OWNER_KIND[ref.type]
     ? `${S.ui.structPersonAdd === ref.type + ":" + ref.e.id ? "" : `<div style="margin-bottom:10px;">${pillBtn("إضافة شخص", { icon: iconPlus(14, "#fff"), action: "struct-person-add-open", data: { key: ref.type + ":" + ref.e.id } })}</div>`}${structSimplePeopleHtml(ref.type, ref.e, ref.type + ":" + ref.e.id)}`
     : needEntity("الأشخاص");
@@ -4502,8 +4511,8 @@ function olSidePanelHtml(l) {
       <div style="min-width:0;"><div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">${levelTypeChipHtml(l.type)}<span style="font-size:17px;font-weight:900;line-height:1.5;">${esc(l.name)}</span></div>
       <div style="font-size:11.5px;color:#6f5f66;line-height:1.8;">${path.map((p) => esc(p.name)).join("  ›  ")}</div></div>
     </div>
-    <div role="tablist" style="display:flex;gap:4px;background:${GRAY_BG};padding:4px;border-radius:12px;flex-wrap:wrap;">
-      ${OL_TABS.map((t) => `<button type="button" role="tab" data-action="ol-tab" data-tab="${t.id}" style="flex:1;min-width:80px;min-height:38px;border:none;border-radius:9px;font-family:inherit;font-size:12.5px;cursor:pointer;font-weight:${tab === t.id ? 800 : 600};background:${tab === t.id ? "#fff" : "transparent"};color:${tab === t.id ? ROSE : "#5c4f55"};box-shadow:${tab === t.id ? "0 1px 3px rgba(107,35,55,.12)" : "none"};">${t.label}</button>`).join("")}
+    <div role="tablist" style="display:flex;flex-wrap:wrap;border-bottom:1px solid ${BORDER};">
+      ${OL_TABS.map((t) => `<button type="button" role="tab" data-action="ol-tab" data-tab="${t.id}" style="font-family:inherit;font-size:13px;cursor:pointer;padding:8px 2px;margin-inline-end:16px;background:none;border:none;border-bottom:2.5px solid ${tab === t.id ? ROSE : "transparent"};margin-bottom:-1px;font-weight:${tab === t.id ? 800 : 600};color:${tab === t.id ? ROSE : "#8a7b82"};">${t.label}</button>`).join("")}
     </div>
     ${body}
   </div>`;
@@ -4785,7 +4794,7 @@ function renderOrgLevelsPage() {
     : `<div class="card card-lg" style="color:${SUBTLE};font-size:12.5px;line-height:2;">اختاري مستوى من الشجرة لعرض تفاصيله، أو اضغطي "إضافة مستوى".<br>• الجهات الموجودة (مكاتب/أقسام/وحدات) تبقى بحساباتها وتقاريرها كما هي — تُربط بالشجرة فقط.<br>• كل مستوى له حساب دخول يرى ما تحته فقط.</div>`;
   return `
   <div class="page-wrap"><div class="page-inner" style="max-width:1400px;">
-    ${topBarHtml({ title: "المستخدمون", subtitle: "كل شيء في مكان واحد: الهيكل، الجهات وحساباتها، الأشخاص، الأدوار، والمسارات", icon: iconUser(18, ROSE), backAction: "nav-back-admin" })}
+    ${topBarHtml({ title: "المستخدمون", subtitle: "اضغطي على أي عنصر لفتحه", icon: iconUser(18, ROSE), backAction: "nav-back-admin" })}
     ${olSectionBarHtml()}
     ${ui.section === "roles" ? renderRolesManage() : ui.section === "paths" ? renderApprovalPathsSetup() : ui.section === "people" ? structSimplePeopleViewHtml() : `
     ${ui.msg ? `<div class="card" style="background:${GREEN_BG};color:${GREEN};font-size:12.5px;font-weight:700;margin-bottom:14px;display:flex;justify-content:space-between;gap:10px;align-items:center;"><span>${esc(ui.msg)}</span><button type="button" class="icon-btn" style="background:transparent;" data-action="ol-clear-msg" aria-label="إغلاق">${iconX(13, GREEN)}</button></div>` : ""}
@@ -4816,8 +4825,8 @@ function renderOrgLevelsPage() {
 }
 function olSectionBarHtml() {
   const cur = olUi().section || "";
-  const b = (id, label) => `<button type="button" data-action="ol-section" data-section="${id}" style="min-height:42px;padding:0 16px;border-radius:12px;font-family:inherit;font-size:13px;cursor:pointer;font-weight:${cur === id ? 800 : 600};border:1px solid ${cur === id ? ROSE : BORDER};background:${cur === id ? "#fbf3f5" : "#fff"};color:${cur === id ? ROSE : INK};">${label}</button>`;
-  return `<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px;">${b("", "الهيكل")}${b("people", "كل الأشخاص")}${b("roles", "الأدوار والصلاحيات")}${b("paths", "كل المسارات")}</div>`;
+  const b = (id, label) => `<button type="button" data-action="ol-section" data-section="${id}" style="font-family:inherit;font-size:14px;cursor:pointer;padding:10px 4px;margin-inline-end:18px;background:none;border:none;border-bottom:2.5px solid ${cur === id ? ROSE : "transparent"};margin-bottom:-1px;font-weight:${cur === id ? 800 : 600};color:${cur === id ? ROSE : "#8a7b82"};">${label}</button>`;
+  return `<div style="display:flex;flex-wrap:wrap;border-bottom:1px solid ${BORDER};margin-bottom:18px;">${b("", "الهيكل")}${b("people", "الأشخاص")}${b("roles", "الأدوار")}${b("paths", "المسارات")}</div>`;
 }
 function olReadForm() {
   const ui = olUi(); const f = ui.form; if (!f) return;
@@ -7999,32 +8008,23 @@ function structSimplePeopleViewHtml() {
   const cards = list.map((p) => {
     const o = ownerOf(p);
     const r = roles.find((x) => x.id === p.roleId);
-    const ap = autoPathObj();
-    const act = o.type === "unit" && o.ent && ap && ap.status === "active" && apFlow(apStageList(ap, o.ent)).length;
     const on = p.status !== "disabled";
-    return `<div class="card" style="padding:14px 16px;${r ? "" : "border:1.5px dashed #e3c9a1;"}opacity:${on ? 1 : 0.6};">
-      <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px;">
-        <span style="width:40px;height:40px;border-radius:50%;background:${ROSE};color:#fff;font-size:16px;font-weight:800;display:flex;align-items:center;justify-content:center;">${esc((p.name || "؟").charAt(0))}</span>
-        <div style="flex:1;min-width:0;"><div style="font-size:14.5px;font-weight:800;">${esc(p.name)}</div>
-          <button type="button" data-action="struct-open-entity" data-key="${esc(o.key)}" style="font-family:inherit;cursor:pointer;background:none;border:none;padding:0;font-size:12px;color:${ROSE};font-weight:700;">${esc(o.name)} ›</button></div>
-        <span style="font-size:10.5px;font-weight:700;padding:3px 9px;border-radius:999px;white-space:nowrap;${personEffectivePin(p) ? `color:${GREEN};background:${GREEN_BG};` : `color:${DANGER};background:${DANGER_BG};`}">${personEffectivePin(p) ? "رقم سري ✓" : "بلا رقم"}</span>${on ? "" : badgeHtml("موقوف", SUBTLE, GRAY_BG)}</div>
-      <div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;">
-        <div style="padding:9px 11px;background:${GRAY_BG};border:1px solid ${BORDER};border-radius:12px;"><div style="font-size:11px;color:${SUBTLE};">الدور</div>
-          <select class="input" data-action="struct-person-role" data-id="${esc(p.id)}" style="margin-top:4px;padding:5px 8px;font-size:12.5px;"><option value="">— بلا دور —</option>${roles.map((x) => `<option value="${esc(x.id)}" ${p.roleId === x.id ? "selected" : ""}>${esc(x.name)}</option>`).join("")}</select>
-          <div style="font-size:11px;color:${SUBTLE};margin-top:3px;">${r ? structSimpleRoleCountsText(r) : ""}</div></div>
-        <div style="padding:9px 11px;background:${act ? GRAY_BG : "#fdf7ec"};border:1px ${act ? "solid" : "dashed"} ${act ? BORDER : "#e3c9a1"};border-radius:12px;"><div style="font-size:11px;color:${SUBTLE};">مسار تقاريرها</div>
-          <div style="font-size:13px;font-weight:800;margin-top:4px;">${act ? "تلقائي من الهيكل" : "ما لها مسار"}</div>
-          <div style="font-size:11px;color:${act ? GREEN : "#9a6420"};margin-top:3px;font-weight:700;">${act ? "● " + apFlow(apStageList(ap, o.ent)).length + " مراحل" : "حطي الجهة في الهيكل"}</div></div>
-      </div>
-      ${!r ? `<div style="margin-top:8px;font-size:12px;color:#9a6420;font-weight:700;">⚠ بلا دور، فلا يرى أي صفحة. اختاري له دورًا.</div>` : ""}
-      <div style="margin-top:10px;display:flex;align-items:center;gap:8px;flex-wrap:wrap;justify-content:flex-end;">${S.ui.personConfirmDeleteId === p.id
-        ? `<span style="font-size:12px;color:${DANGER};font-weight:700;">حذف «${esc(p.name)}» نهائيًا؟</span>${pillBtn("تأكيد الحذف", { variant: "danger", action: "person-delete", data: { id: p.id } })}${pillBtn("تراجع", { variant: "ghost", action: "person-delete-cancel" })}`
-        : pillBtn("حذف الشخص", { variant: "danger", action: "person-delete-ask", data: { id: p.id } })}</div>
+    const pin = personEffectivePin(p);
+    return `<div style="display:flex;align-items:center;gap:12px;padding:12px 4px;border-bottom:1px solid ${BORDER};flex-wrap:wrap;opacity:${on ? 1 : 0.6};">
+      <span style="position:relative;width:40px;height:40px;border-radius:50%;background:#f3e6ea;color:${ROSE};font-size:16px;font-weight:800;display:flex;align-items:center;justify-content:center;flex-shrink:0;">${esc((p.name || "؟").charAt(0))}<i style="position:absolute;bottom:0;inset-inline-end:0;width:11px;height:11px;border-radius:50%;border:2px solid #fff;background:${on ? "#4aa37a" : "#b8aab0"};"></i></span>
+      <div style="flex:1 1 180px;min-width:0;"><div style="font-size:14.5px;font-weight:800;">${esc(p.name)} ${on ? "" : badgeHtml("موقوف", SUBTLE, GRAY_BG)}</div>
+        <div style="font-size:12px;color:${SUBTLE};">${esc(r ? r.name : "بلا دور")} · <button type="button" data-action="struct-open-entity" data-key="${esc(o.key)}" style="font-family:inherit;cursor:pointer;background:none;border:none;padding:0;font-size:12px;color:${ROSE};font-weight:700;">${esc(o.name)} ›</button></div></div>
+      <select class="input" data-action="struct-person-role" data-id="${esc(p.id)}" style="width:auto;flex:0 1 150px;padding:5px 8px;font-size:12.5px;"><option value="">— بلا دور —</option>${roles.map((x) => `<option value="${esc(x.id)}" ${p.roleId === x.id ? "selected" : ""}>${esc(x.name)}</option>`).join("")}</select>
+      <span style="font-size:10.5px;font-weight:700;padding:3px 9px;border-radius:999px;white-space:nowrap;${pin ? `color:${GREEN};background:${GREEN_BG};` : `color:${DANGER};background:${DANGER_BG};`}">${pin ? "رقم سري ✓" : "بلا رقم"}</span>
+      ${S.ui.personConfirmDeleteId === p.id
+        ? `<span style="font-size:12px;color:${DANGER};font-weight:700;">حذف «${esc(p.name)}»؟</span>${pillBtn("تأكيد", { variant: "danger", action: "person-delete", data: { id: p.id } })}${pillBtn("تراجع", { variant: "ghost", action: "person-delete-cancel" })}`
+        : `<button class="icon-btn" style="width:32px;height:32px;background:${DANGER_BG}" data-action="person-delete-ask" data-id="${esc(p.id)}" title="حذف الشخص" aria-label="حذف">${iconTrash(13, DANGER)}</button>`}
+      ${!r ? `<div style="flex-basis:100%;font-size:11.5px;color:#9a6420;font-weight:700;">⚠ بلا دور، فلا يرى أي صفحة.</div>` : ""}
     </div>`;
   }).join("");
   return `<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:10px;"><input class="input" id="struct-people-q" value="${esc(S.ui.structPeopleQ || "")}" placeholder="ابحثي باسم الشخص أو الجهة…" autocomplete="off" style="flex:1 1 240px;max-width:420px;" />${stChip("all", "الكل")}${stChip("on", "فعّال")}${stChip("off", "موقوف")}<span style="font-size:12px;color:${SUBTLE};">${list.length} شخص</span></div>
     <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px;">${chip("all", "كل الأدوار")}${roles.map((r) => chip(r.id, esc(r.name))).join("")}${chip("none", "بلا دور ⚠")}</div>
-    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:12px;">${cards || `<div class="card" style="text-align:center;color:${SUBTLE};padding:30px;border-style:dashed;grid-column:1/-1;">لا يوجد أشخاص بهذا الفلتر.</div>`}</div>
+    <div class="card" style="padding:4px 16px;">${cards || `<div class="card" style="text-align:center;color:${SUBTLE};padding:30px;border-style:dashed;grid-column:1/-1;">لا يوجد أشخاص بهذا الفلتر.</div>`}</div>
     <div style="font-size:11.5px;color:${SUBTLE};margin-top:10px;">لإضافة شخص جديد: «الهيكل»، ثم اختاري الجهة ← تبويب «الأشخاص».</div>`;
 }
 
@@ -8427,8 +8427,8 @@ function renderRolesManage() {
       ${ui.roleError ? `<div style="color:${DANGER};font-size:11.5px;font-weight:700;margin-top:8px;">${esc(ui.roleError)}</div>` : ""}
       <div style="display:flex;gap:6px;margin-top:10px;">${pillBtn(editRole ? "حفظ" : "إضافة", { action: "role-save" })}${pillBtn("إلغاء", { variant: "ghost", action: "role-cancel" })}</div>
     </div>` : (ui.roleError ? `<div style="color:${DANGER};font-size:11.5px;font-weight:700;margin-bottom:8px;">${esc(ui.roleError)}</div>` : "");
-  const roleRows = roles.map((r) => (ui.rolePermEditId === r.id ? rolePermsEditorHtml(r) : "") + `<div class="card" style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:8px;">
-      <div><div style="font-size:13.5px;font-weight:800;">${esc(r.name)}</div>
+  const roleRows = roles.map((r) => (ui.rolePermEditId === r.id ? `<div style="grid-column:1/-1;">${rolePermsEditorHtml(r)}</div>` : "") + `<div class="card" style="display:flex;flex-direction:column;justify-content:space-between;gap:10px;margin:0;border-radius:16px;">
+      <div><div style="font-size:15px;font-weight:800;color:${ROSE};">${esc(r.name)}</div><div style="font-size:26px;font-weight:900;margin-top:4px;">${persons.filter((p) => p.roleId === r.id).length} <span style="font-size:12px;font-weight:600;color:${SUBTLE};">أشخاص</span></div>
       <div style="font-size:11px;color:${SUBTLE};margin-top:2px;">${r.pin ? "برمز" : "بدون رمز"}${r.description ? " • " + esc(r.description) : ""} • ${persons.filter((p) => p.roleId === r.id).length} شخص • الصلاحيات: ${rolePermsOf(r).pages.length || rolePermsOf(r).actions.length || rolePermsOf(r).buttons.length ? esc(permSummaryText(rolePermsOf(r))) : "ترث صلاحيات الجهة"}</div></div>
       <div style="display:flex;gap:6px;align-items:center;">${ui.roleConfirmDeleteId === r.id
         ? `${pillBtn("تأكيد الحذف", { variant: "danger", action: "role-delete", data: { id: r.id } })}${pillBtn("تراجع", { variant: "ghost", action: "role-delete-cancel" })}`
@@ -8468,7 +8468,7 @@ function renderRolesManage() {
         <div style="font-size:15px;font-weight:800;">الأدوار</div>${pillBtn("إضافة دور", { icon: iconPlus(15, "#fff"), action: "role-show-add" })}
       </div>
       <div style="font-size:11px;color:${SUBTLE};margin-bottom:12px;">الدور يحدد واجهة الدخول، والرمز (PIN) اختياري تحددينه أنتِ لكل دور أو لكل شخص (رمز الشخص يغلب رمز الدور).</div>
-      ${roleForm}${roleRows}
+      ${roleForm}<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:10px;">${roleRows}</div>
     </div>
     <div class="card" style="background:${BLUE_BG};border:1px solid #cfe0f5;">
       <div style="font-size:12px;color:#3a5a85;">الأشخاص يُدارون من «الهيكل»: اختاري الجهة ← تبويب «الأشخاص». (${personsList().length} شخص مسجّل حاليًا)</div>
