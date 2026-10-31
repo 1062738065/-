@@ -5775,8 +5775,10 @@ function rptStore() {
     sizes: Array.isArray(t.sizes) ? t.sizes.filter((z) => z && z.id && Number(z.w) >= 50 && Number(z.h) >= 50) : [] };
 }
 function rptNormalize(s) {
-  ["hidden", "titles", "hiddenCols", "colsShow"].forEach((k) => { if (!s[k] || typeof s[k] !== "object" || Array.isArray(s[k])) s[k] = {}; });
+  ["hidden", "titles", "hiddenCols", "colsShow", "levelHidden"].forEach((k) => { if (!s[k] || typeof s[k] !== "object" || Array.isArray(s[k])) s[k] = {}; });
   if (!Array.isArray(s.order)) s.order = [];
+  if (!s.excl || typeof s.excl !== "object" || Array.isArray(s.excl)) s.excl = {};
+  ["units", "depts"].forEach((k) => { if (!Array.isArray(s.excl[k])) s.excl[k] = []; });
   if (!s.charts || typeof s.charts !== "object" || Array.isArray(s.charts)) s.charts = {};
   if (s.breakEach) { s.perPage = 1; delete s.breakEach; } // إعداد قديم: «كل فصل بصفحة»
   s.perPage = Math.max(0, Math.min(6, Number(s.perPage) || 0));
@@ -5956,10 +5958,12 @@ function aggReportData(s) {
   let units = scopeUnitsFilter(S.units.filter((u) => u.status === "active"));
   const scoped = !!(s.scopeLevelId && olFind(s.scopeLevelId));
   if (scoped) { const ids = olScopeUnitIds(s.scopeLevelId); units = units.filter((u) => ids.has(u.id)); }
+  const exU = new Set((s.excl && s.excl.units) || []), exD = new Set((s.excl && s.excl.depts) || []);
+  if (exU.size || exD.size) units = units.filter((u) => !exU.has(u.id) && !exD.has(u.departmentId));
   const year = aggReportYear(s);
   let flat = collectReportsFlatForUnits(units);
   if (year) flat = flat.filter((x) => reportHijriYearNum(x.report) === year);
-  let depts = scopeDeptsFilter(S.departments.filter((d) => d.status === "active"));
+  let depts = scopeDeptsFilter(S.departments.filter((d) => d.status === "active" && !exD.has(d.id)));
   if (scoped) depts = depts.filter((d) => units.some((u) => u.departmentId === d.id));
   const latest = (uid) => {
     if (!year) return latestReportForUnit(uid);
@@ -6076,7 +6080,7 @@ function aggChapterBody(key, data, s) {
 // مستند التقرير المجمّع كاملًا (غلاف + فصول) حسب التنسيق
 function aggReportDocHtml(s, data) {
   return rptWithCtx({ ...rptChartCtx(s), hiddenCols: s.hiddenCols }, () => {
-    const chapters = rptOrdered(aggChapterDefs(s), s).filter((c) => !s.hidden[c.key] && (s.showEmpty || (c.custom ? aggCustomChapterRows(c.custom, data).length : aggChapterHasData(c.key, data))));
+    const chapters = rptOrdered(aggChapterDefs(s), s).filter((c) => !s.hidden[c.key] && !rptLevelHides(s, c.key) && (s.showEmpty || (c.custom ? aggCustomChapterRows(c.custom, data).length : aggChapterHasData(c.key, data))));
     const pages = [];
     const per = Number(s.perPage) || 0;
     chapters.forEach((c, i) => {
@@ -6290,6 +6294,34 @@ function rmCustomChapterEditor(ch) {
 function rmTabsFor(sel) {
   return [["page", "الصفحة"], ["head", "الكليشة"], ["cover", "الغلاف والاعتماد"], ["chapters", "الفصول"], ["visuals", "الرسوم والجداول"], ["fonts", "الخطوط والألوان"], ["access", sel === "final" || sel === "unit" ? "من يشوفه" : "النطاق ومن يشوفه"]];
 }
+
+/* ===== «ما يظهر لكل حساب» في التقرير الموحّد ===== */
+const RPT_LEVELS = [["unit", "الوحدة"], ["dept", "القسم"], ["office", "المكتب"], ["exec", "إدارة التعليم النسائي"], ["sec", "السكرتارية"]];
+function rptViewerLevel() {
+  if (S.isAdmin) return "admin";
+  if (S.isExecutive) return "exec";
+  if (S.isOfficeUser) return "office";
+  if (S.isDepartmentUser) return "dept";
+  if (S.currentUnitId && !S.isAdmin && !S.isDepartmentUser && !S.isOfficeUser && !S.isExecutive && !(typeof userInAnyApStage === "function" && userInAnyApStage())) return "unit";
+  return "sec";
+}
+function rptLevelHides(s, key) {
+  const lv = rptViewerLevel(); if (lv === "admin") return false;
+  return ((s.levelHidden || {})[lv] || []).includes(key);
+}
+function rptLevelTableHtml(d, defs) {
+  const list = rptOrdered(defs, d);
+  const head = `<tr><th style="text-align:right;padding:6px 8px;">الفصل</th>${RPT_LEVELS.map(([, l]) => `<th style="padding:6px 6px;font-size:11px;">${esc(l)}</th>`).join("")}</tr>`;
+  const rows = list.map((c) => `<tr style="border-top:1px solid ${BORDER};"><td style="padding:6px 8px;font-size:12.5px;">${esc(rptChapterTitle(c, d))}</td>${RPT_LEVELS.map(([k]) => { const off = ((d.levelHidden || {})[k] || []).includes(c.key); return `<td style="text-align:center;"><button type="button" class="rm-pill${off ? "" : " on"}" data-action="rm-lvl" data-lvl="${k}" data-key="${esc(c.key)}" aria-pressed="${!off}" style="min-width:34px;padding:2px 8px;">${off ? "—" : "✓"}</button></td>`; }).join("")}</tr>`).join("");
+  return rmFieldHtml("ما يظهر لكل حساب", `<div style="overflow-x:auto;"><table style="width:100%;border-collapse:collapse;">${head}${rows}</table></div>`, "✓ = الفصل يظهر لهذا الحساب في العرض وPDF، و«—» = مخفي عنه. مديرة النظام ترى كل الفصول دائمًا. لا يغيّر شيئًا في التعبئة.");
+}
+function rptExclHtml(d) {
+  const ex = d.excl || { units: [], depts: [] };
+  const depts = (S.departments || []).filter((x) => x.status === "active");
+  const units = (S.units || []).filter((u) => u.status === "active" && u.role !== "admin" && u.role !== "executive");
+  const chip = (kind, id, name, off) => `<button type="button" class="rm-pill${off ? "" : " on"}" data-action="rm-excl" data-kind="${kind}" data-id="${esc(id)}" aria-pressed="${!off}" style="margin:2px;">${off ? "مستبعد: " : ""}${esc(name)}</button>`;
+  return rmFieldHtml("الأقسام والوحدات داخل التقرير", `<div class="rm-hint" style="margin-bottom:6px;font-weight:800;">الأقسام</div><div class="rm-pills">${depts.map((x) => chip("depts", x.id, x.name, ex.depts.includes(x.id))).join("") || "—"}</div><div class="rm-hint" style="margin:10px 0 6px;font-weight:800;">الوحدات</div><div class="rm-pills">${units.map((u) => chip("units", u.id, u.name, ex.units.includes(u.id))).join("") || "—"}</div>`, "المستبعد لا يظهر في هذا التقرير الشامل، ويبقى تقريره عند صاحبه كما هو.");
+}
 function rmPanelHtml(st) {
   const d = st.draft, sel = st.sel, tab = st.tab;
   const isUnit = sel === "unit";
@@ -6412,8 +6444,8 @@ function rmPanelHtml(st) {
       rmFieldHtml("خلفية عناوين الفصول", rmColor("chapterBg", d.chapterBg)) + `<div class="rm-sep"></div>` + fontsMgr;
   }
   if (tab === "access") {
-    if (sel === "unit") return `<div class="rm-hint" style="font-size:12.5px;line-height:1.9;">«عرض التقرير كاملًا» يظهر بنفس صلاحيات التقارير الحالية (صاحبة التقرير، القسم، المكتب، مراحل مسار الاعتماد…). هنا يتغيّر الشكل فقط، لكل تقارير الوحدات.</div>`;
-    if (sel === "final") return rmRolesHtml("executive-final-report", "التقرير الإداري النهائي");
+    if (sel === "unit") return `<div class="rm-hint" style="font-size:12.5px;line-height:1.9;">«عرض التقرير كاملًا» يظهر بنفس صلاحيات التقارير الحالية (صاحبة التقرير، القسم، المكتب، مراحل مسار الاعتماد…). هنا يتغيّر الشكل فقط، لكل تقارير الوحدات.</div>` + `<div class="rm-sep"></div>` + rptLevelTableHtml(d, unitChapterDefs());
+    if (sel === "final") return rmRolesHtml("executive-final-report", "التقرير الإداري النهائي") + `<div class="rm-sep"></div>` + rptLevelTableHtml(d, aggChapterDefs(d)) + `<div class="rm-sep"></div>` + rptExclHtml(d);
     const levels = olActive();
     const depth = (l) => { let n = 0, p = l; while (p && p.parentId && n < 12) { p = olFind(p.parentId); n++; } return n; };
     const ordered = [];
@@ -6483,6 +6515,8 @@ function handleReportsManageAction(action, ds) {
     case "rm-tab": st.tab = ds.tab; break;
     case "rm-set": rmSetField(ds.key, ds.value); break;
     case "rm-toggle": d[ds.key] = !d[ds.key]; break;
+    case "rm-lvl": { const lv = ds.lvl, cur = new Set((d.levelHidden || {})[lv] || []); if (cur.has(ds.key)) cur.delete(ds.key); else cur.add(ds.key); d.levelHidden = { ...(d.levelHidden || {}), [lv]: [...cur] }; break; }
+    case "rm-excl": { const ex = { units: [...((d.excl || {}).units || [])], depts: [...((d.excl || {}).depts || [])] }; const l = ex[ds.kind]; const k = l.indexOf(ds.id); if (k >= 0) l.splice(k, 1); else l.push(ds.id); d.excl = ex; break; }
     case "rm-hide": d.hidden = { ...d.hidden, [ds.key]: !d.hidden[ds.key] }; break;
     case "rm-move": {
       const defs = st.sel === "unit" ? unitChapterDefs() : aggChapterDefs(d);
@@ -10959,7 +10993,7 @@ function fullReportOrPreviewBody(unit, report, afterPage, opts) {
   const s = opts.settings || rptUnitSettings(unit);
   const review = !!afterPage;
   const dept = S.departments.find((x) => x.id === unit.departmentId);
-  const chapters = rptOrdered(unitChapterDefs(opts.capture ? null : report, unit.id), s).filter((c) => review || (!s.hidden[c.key] &&
+  const chapters = rptOrdered(unitChapterDefs(opts.capture ? null : report, unit.id), s).filter((c) => review || (!s.hidden[c.key] && !rptLevelHides(s, c.key) &&
     (s.showEmpty || opts.capture || c.special || c.sections.some((sid) => sectionHasData(report, sid)))));
   return rptWithCtx({ ...rptChartCtx(s), hiddenCols: review ? null : s.hiddenCols, colsShow: s.colsShow, capture: opts.capture || null, unitId: unit.id }, () => {
     // «ملخص التقرير» بصفحة مستقلة، ثم الأقسام (عدد محدد بكل صفحة، 0 = متتابعة)، و«الإغلاق والاعتماد» مع آخر صفحة
