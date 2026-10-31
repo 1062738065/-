@@ -537,5 +537,6 @@ table.prs-table td { padding: 8px 10px; border-top: 1px solid var(--border); }
 .rpt-runfoot-img img { display: block; width: 100%; max-height: 20mm; object-fit: contain; }
 
 .hero-banner-eyebrow, .hero-banner-title, .hero-banner-sub { width: fit-content; max-width: 100%; position: relative; text-align: center; }
-.hero-banner-eyebrow, .hero-banner-title { right: var(--bt-pos, 50%); transform: translateX(var(--bt-pos, 50%)); }
+.hero-banner-eyebrow { right: var(--be-pos, 50%); transform: translateX(var(--be-pos, 50%)); }
+.hero-banner-title { right: var(--bt-pos, 50%); transform: translateX(var(--bt-pos, 50%)); }
 .hero-banner-sub { right: var(--bs-pos, 50%); transform: translateX(var(--bs-pos, 50%)); }

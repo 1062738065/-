@@ -1078,6 +1078,7 @@ function siteCustomFontApply(cf) {
 }
 function siteLogoSrc(s) { return (s && s.logo) || ASSOCIATION_LOGO; }
 function bannerPos(th, which) {
+  if (which === "e") { const ev = th.bannerEyebrowPos; if (ev !== undefined && ev !== null && ev !== "" && !isNaN(Number(ev))) return Math.max(0, Math.min(100, Number(ev))); return bannerPos(th, "t"); }
   const v = th[which === "t" ? "bannerTitlePos" : "bannerSubPos"];
   if (v !== undefined && v !== null && v !== "" && !isNaN(Number(v))) return Math.max(0, Math.min(100, Number(v)));
   const old = which === "t" ? th.bannerTitleAlign : th.bannerSubAlign;
@@ -6791,7 +6792,7 @@ function renderSiteSettingsInner() {
         const al0 = ["right", "left"].includes(theme.bannerAlign) ? theme.bannerAlign : "center", alT = theme.bannerTitleAlign || al0, alS = theme.bannerSubAlign || al0, ps = theme.bannerPos || "center";
         return `<div style="margin-bottom:14px;">${fieldLabel("تفتيح الصورة (تخفيف لون الصورة ليظهر النص)")}
           <div style="display:flex;align-items:center;gap:10px;"><input type="range" id="site-banner-veil" min="0" max="90" step="5" value="${Number(theme.bannerVeil) || 0}" style="flex:1;" /><span id="site-banner-veil-label" style="font-size:12px;color:${SUBTLE};font-family:monospace;min-width:44px;">${Number(theme.bannerVeil) || 0}%</span></div></div>
-        ${(() => { const row = (label, id, key, val) => `<div style="margin-bottom:14px;">${fieldLabel(label)}<div style="display:flex;align-items:center;gap:10px;"><span style="font-size:12px;color:${SUBTLE};">يمين</span><input type="range" id="${id}" min="0" max="100" step="1" value="${val}" style="flex:1;" /><span style="font-size:12px;color:${SUBTLE};">يسار</span><span id="${id}-label" style="font-size:12px;color:${SUBTLE};font-family:monospace;min-width:40px;">${val}%</span></div><div style="display:flex;gap:6px;margin-top:6px;">${[[0, "يمين"], [50, "وسط"], [100, "يسار"]].map(([v, l]) => `<button type="button" data-action="site-banner-set" data-key="${key}" data-val="${v}" style="font-family:inherit;min-height:34px;padding:0 12px;border-radius:999px;cursor:pointer;font-size:12px;font-weight:700;border:1px solid ${BORDER};background:#fff;color:${INK};">${l}</button>`).join("")}</div></div>`; return row("مكان العنوان (مع «مرحبًا بك في»): اسحبي المؤشر للمكان اللي تبينه", "site-banner-tpos", "bannerTitlePos", bannerPos(theme, "t")) + row("مكان الوصف", "site-banner-spos", "bannerSubPos", bannerPos(theme, "s")); })()}
+        ${(() => { const row = (label, id, key, val) => `<div style="margin-bottom:14px;">${fieldLabel(label)}<div style="display:flex;align-items:center;gap:10px;"><span style="font-size:12px;color:${SUBTLE};">يمين</span><input type="range" id="${id}" min="0" max="100" step="1" value="${val}" style="flex:1;" /><span style="font-size:12px;color:${SUBTLE};">يسار</span><span id="${id}-label" style="font-size:12px;color:${SUBTLE};font-family:monospace;min-width:40px;">${val}%</span></div><div style="display:flex;gap:6px;margin-top:6px;">${[[0, "يمين"], [50, "وسط"], [100, "يسار"]].map(([v, l]) => `<button type="button" data-action="site-banner-set" data-key="${key}" data-val="${v}" style="font-family:inherit;min-height:34px;padding:0 12px;border-radius:999px;cursor:pointer;font-size:12px;font-weight:700;border:1px solid ${BORDER};background:#fff;color:${INK};">${l}</button>`).join("")}</div></div>`; return row("مكان «مرحبًا بك في»", "site-banner-epos", "bannerEyebrowPos", bannerPos(theme, "e")) + row("مكان العنوان: اسحبي المؤشر للمكان اللي تبينه", "site-banner-tpos", "bannerTitlePos", bannerPos(theme, "t")) + row("مكان الوصف", "site-banner-spos", "bannerSubPos", bannerPos(theme, "s")); })()}
         <div style="margin-bottom:14px;">${fieldLabel("موضع النص")}<div style="display:flex;gap:6px;flex-wrap:wrap;">${pill("bannerPos", "top", "أعلى", ps)}${pill("bannerPos", "center", "وسط", ps)}${pill("bannerPos", "bottom", "أسفل", ps)}</div></div>
         <div class="hint" style="margin-bottom:8px;">معاينة (تنطبق الإعدادات هذه على كل صفحة فيها بانر: لوحة المعلومات، ولوحة الوحدة، و«تقارير»):</div>
         <div class="hero-banner" style="min-height:130px;margin-bottom:0;"><img class="hero-banner-bg" src="${esc(siteBannerSrc(current))}" alt="" /><div class="hero-banner-text"><div class="hero-banner-eyebrow">مرحبًا بك في</div><div class="prs-title hero-banner-title">${esc(current.bannerTitle || DEFAULT_BRANDING.bannerTitle || "منصة التقارير")}</div><div class="hero-banner-sub">${esc(current.bannerSub || DEFAULT_BRANDING.bannerSub || "")}</div></div></div>`;
@@ -10978,8 +10979,8 @@ function attachFormListeners() {
       S.ui.fieldEditDraft[el.id === "field-draft-iconcolor" ? "iconColor" : "iconBg"] = el.value;
       return;
     }
-    if (el.id === "site-banner-tpos" || el.id === "site-banner-spos") {
-      const key = el.id === "site-banner-tpos" ? "bannerTitlePos" : "bannerSubPos";
+    if (el.id === "site-banner-tpos" || el.id === "site-banner-spos" || el.id === "site-banner-epos") {
+      const key = { "site-banner-tpos": "bannerTitlePos", "site-banner-spos": "bannerSubPos", "site-banner-epos": "bannerEyebrowPos" }[el.id];
       S.siteSettings = S.siteSettings || dataStore.getSiteSettings();
       S.siteSettings = { ...S.siteSettings, theme: { ...(S.siteSettings.theme || {}), [key]: Number(el.value) } };
       S.ui.siteSettingsSaved = false; applySiteColors(S.siteSettings);
@@ -11409,7 +11410,7 @@ function attachClickListener() {
         render(); break;
       }
       case "site-banner-set": {
-        if (!["bannerAlign", "bannerTitleAlign", "bannerSubAlign", "bannerPos", "bannerTitlePos", "bannerSubPos"].includes(ds.key)) break;
+        if (!["bannerAlign", "bannerTitleAlign", "bannerSubAlign", "bannerPos", "bannerTitlePos", "bannerSubPos", "bannerEyebrowPos"].includes(ds.key)) break;
         S.siteSettings = S.siteSettings || dataStore.getSiteSettings();
         S.siteSettings = { ...S.siteSettings, theme: { ...(S.siteSettings.theme || {}), [ds.key]: /Pos$/.test(ds.key) && ds.key !== "bannerPos" ? Number(ds.val) : ds.val } };
         S.ui.siteSettingsSaved = false; applySiteColors(S.siteSettings); render();
@@ -12713,10 +12714,11 @@ function applySiteColors(settings) {
     root.style.setProperty(cssName + "-size", (Number(th[f.k + "Size"]) || f.def) + "px");
   });
   root.style.setProperty("--banner-veil", String(Math.max(0, Math.min(90, Number(th.bannerVeil) || 0)) / 100));
-  const pT = bannerPos(th, "t"), pS = bannerPos(th, "s");
+  const pT = bannerPos(th, "t"), pS = bannerPos(th, "s"), pE = bannerPos(th, "e");
+  root.style.setProperty("--be-pos", pE + "%");
   root.style.setProperty("--bt-pos", pT + "%");
   root.style.setProperty("--bs-pos", pS + "%");
-  root.style.setProperty("--banner-shift", pT === 50 && pS === 50 ? "-8%" : "0%");
+  root.style.setProperty("--banner-shift", pT === 50 && pS === 50 && pE === 50 ? "-8%" : "0%");
   root.style.setProperty("--banner-vpos", { top: "flex-start", bottom: "flex-end" }[th.bannerPos] || "center");
   ICON_OVERRIDE = th.iconColor || "";
   applyPeriodTypes(th.periodTypes);
