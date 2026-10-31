@@ -5488,13 +5488,12 @@ function pageTplCardHtml() {
       <div style="flex:1 1 360px;min-width:0;">
         ${fld("اتجاه الصفحة", pills("orient", [["portrait", "طولي"], ["landscape", "عرضي"]]))}
         ${fld("الهوامش", pills("margin", [["narrow", "ضيقة"], ["normal", "عادية"], ["wide", "واسعة"]]))}
-        ${fld("لون الورقة", `<input type="color" data-pg="paper" value="${/^#[0-9a-fA-F]{6}$/.test(d.paper) ? esc(d.paper) : "#ffffff"}" style="width:56px;height:40px;border:1px solid ${BORDER};border-radius:10px;padding:2px;background:#fff;" />`)}
+        ${fld("الخلفية", `<div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:8px;"><span style="font-size:12.5px;">لون</span><input type="color" data-pg="paper" value="${/^#[0-9a-fA-F]{6}$/.test(d.paper) ? esc(d.paper) : "#ffffff"}" style="width:56px;height:40px;border:1px solid ${BORDER};border-radius:10px;padding:2px;background:#fff;" /></div>${pgImgRow("pg-img-bg", d.bgImage, "pg-img-clear", "bgImage")}`, "اللون وحده، أو صورة تغطي الصفحة كاملة (وتتقدم على اللون). منفصلة عن الكليشة: استخدمي أحدهما أو الاثنين.")}
         ${fld("زخارف", `<div style="display:flex;gap:6px;flex-wrap:wrap;">${tog("watermark", "علامة مائية (الشعار)")}${tog("frame", "إطار حول الصفحة")}</div>`)}
         ${fld("الترويسة (أعلى الصفحة)", `<div style="margin-bottom:8px;">${tog("showHead", d.showHead ? "ظاهرة" : "مخفية")}</div>${d.showHead ? `<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:8px;">${txt("headRight", "يمين: اسم الجمعية")}${txt("headCenter", "وسط: نص اختياري")}${txt("headLeft", "يسار: اسم الإدارة")}</div><div style="margin-top:8px;">${tog("headLogo", "الشعار في الوسط")}</div>` : ""}`)}
         ${fld("صورة الكليشة (ترويسة جاهزة بعرض الصفحة)", pgImgRow("pg-img-head", d.headImage, "pg-img-clear", "headImage"), "إذا رفعتي صورة تحل محل نص الترويسة. الأفضل عرضها ٢١٠ مم تقريبًا وارتفاعها أقل من ٣٠ مم.")}
         ${fld("صورة التذييل", pgImgRow("pg-img-foot", d.footImage, "pg-img-clear", "footImage"))}
-        ${fld("صورة خلفية للصفحات", pgImgRow("pg-img-bg", d.bgImage, "pg-img-clear", "bgImage"), "خيار منفصل عن الكليشة: تقدرين تستخدمين أحدهما أو الاثنين معًا. تغطي الصفحة كاملة خلف النص.")}
-        ${fld("التذييل (أسفل الصفحة)", `<div style="margin-bottom:8px;">${tog("showFoot", d.showFoot ? "ظاهر" : "مخفي")}</div>${d.showFoot ? txt("footText", "مثال: سري — للاستخدام الداخلي") : ""}`)}
+                ${fld("التذييل (أسفل الصفحة)", `<div style="margin-bottom:8px;">${tog("showFoot", d.showFoot ? "ظاهر" : "مخفي")}</div>${d.showFoot ? txt("footText", "مثال: سري — للاستخدام الداخلي") : ""}`)}
         ${fld("ترقيم الصفحات", pills("pageNum", [["none", "بدون"], ["paren", "(٢)"], ["num", "٢"], ["of", "٢ من ٨"]]))}
       </div>
       <div style="flex:0 0 330px;max-width:100%;"><div style="font-size:12px;color:${SUBTLE};margin-bottom:8px;text-align:center;">معاينة A4 (شكل تقريبي)</div><div id="pg-preview">${pgPreviewHtml()}</div></div>
@@ -6280,11 +6279,10 @@ function rmPanelHtml(st) {
       rmFieldHtml("الاتجاه", rmPills("orient", d.orient, [["portrait", "طولي"], ["landscape", "عرضي"]])) +
       rmFieldHtml("الهوامش", rmPills("margin", d.margin, [["narrow", "ضيقة"], ["normal", "عادية"], ["wide", "واسعة"], ["custom", "بالمليمتر"]]) +
         (d.margin === "custom" ? `<div class="rm-row">${[["mt", "أعلى"], ["mb", "أسفل"], ["mr", "يمين"], ["ml", "يسار"]].map(([k, l]) => `<label class="rm-mini">${l}${rmNum(k, d[k], 0, 50)}</label>`).join("")}</div>` : "")) +
-      rmFieldHtml("لون الورقة", rmColor("paper", d.paper)) +
-      rmFieldHtml("صورة خلفية للصفحات", `<div class="rm-row">
+      rmFieldHtml("الخلفية", `<div class="rm-row" style="margin-bottom:8px;"><span style="font-size:12.5px;">لون</span>${rmColor("paper", d.paper)}</div><div class="rm-row">
         <label class="pill-btn pill-ghost" style="margin:0;">${iconPlus(14, INK)} اختيار صورة<input type="file" accept="image/*" id="rm-bg-file" style="display:none;" /></label>
         ${d.bgImage ? `<img src="${esc(d.bgImage)}" alt="الخلفية" style="width:44px;height:58px;object-fit:cover;border-radius:6px;border:1px solid ${BORDER};" />${pillBtn("إزالة", { variant: "ghost", icon: iconX(14, INK), action: "rm-bg-remove" })}` : ""}
-      </div>`, "أقل من 800 كيلوبايت. تُغطي الصفحة كاملة خلف النص.") +
+      </div>`, "اللون وحده، أو صورة (أقل من 800 كيلوبايت) تغطي الصفحة كاملة خلف النص وتتقدم على اللون.") +
       rmFieldHtml("زخارف الصفحة", `<div class="rm-pills">${rmToggle("watermark", "علامة مائية (الشعار)", d.watermark)}${rmToggle("frame", "إطار حول الصفحة", d.frame)}${rmToggle("spine", "شريط ملوّن جانبي", d.spine)}</div>`);
   }
   if (tab === "head") {
