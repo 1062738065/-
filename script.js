@@ -4312,15 +4312,21 @@ function olRowHtml(l, depth) {
   const sel = ui.selected === l.id;
   const linked = olLinkedEntity(l);
   const desc = olDescendantIds(l.id).length;
-  return `<div style="display:flex;align-items:center;gap:4px;border-radius:10px;padding:2px 4px;padding-right:${4 + depth * 24}px;background:${sel ? "#f6e6eb" : "transparent"};box-shadow:${sel ? `inset -3px 0 0 ${ROSE}` : "none"};">
-      ${kids.length ? `<button type="button" class="icon-btn" style="width:30px;height:30px;background:transparent;" data-action="ol-toggle" data-id="${esc(l.id)}" aria-label="فتح أو إغلاق ما تحته"><span style="display:inline-flex;transition:transform .15s;transform:rotate(${open ? 0 : 90}deg);">${iconChevronDown(13, SUBTLE)}</span></button>` : `<span style="width:30px;flex-shrink:0;text-align:center;color:#d6c3ca;">•</span>`}
-      <button type="button" data-action="ol-select" data-id="${esc(l.id)}" style="flex:1;min-width:0;min-height:40px;display:flex;align-items:center;gap:8px;border:none;background:transparent;text-align:right;cursor:pointer;padding:0 4px;font-family:inherit;color:${INK};">
-        ${levelTypeChipHtml(l.type)}
-        <span style="font-size:13px;font-weight:${kids.length || depth < 1 ? 800 : 600};overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(l.name)}</span>
-        ${linked ? `<span style="font-size:10px;font-weight:700;color:#2E7A5C;background:${GREEN_BG};padding:2px 8px;border-radius:999px;white-space:nowrap;">${esc(linked.kind)} موجود</span>` : ""}
-        ${l.loginId ? (l.status === "disabled" ? `<span style="font-size:10px;font-weight:700;color:${DANGER};background:${DANGER_BG};padding:2px 8px;border-radius:999px;white-space:nowrap;">الدخول معطّل</span>` : `<span title="له حساب دخول" style="display:inline-flex;">${iconKey(13, SUBTLE)}</span>`) : ""}
-        <span style="margin-right:auto;font-size:11px;color:#7a6870;white-space:nowrap;">${desc ? desc + " تحته" : ""}</span>
+  const ownerKind = l.linkKind === "dept" ? "department" : l.linkKind;
+  const owners = l.linkKind ? personsList().filter((x) => x.status !== "disabled" && (x.ownerKind || "unit") === ownerKind && x.ownerId === l.linkId) : [];
+  const sub = l.linkKind === "unit" || l.linkKind === "office" || l.linkKind === "dept"
+    ? (owners.length ? (l.linkKind === "dept" ? "مديرة القسم: " : "") + owners.map((x) => x.name).slice(0, 2).join("، ") : (l.type || "بلا أشخاص"))
+    : (l.type || "");
+  const initial = (l.name || "؟").replace(/^(وحدة|قسم|مكتب|مركز|إدارة)\s*/, "").replace(/^ال/, "").charAt(0) || "؟";
+  const strong = kids.length > 0 || depth < 1;
+  return `<div style="display:flex;align-items:stretch;gap:8px;margin-bottom:8px;margin-inline-start:${depth * 26}px;${depth ? `border-inline-start:2px solid #eadde2;padding-inline-start:10px;` : ""}">
+      <button type="button" data-action="ol-select" data-id="${esc(l.id)}" style="flex:1;min-width:0;min-height:54px;display:flex;align-items:center;gap:10px;text-align:right;cursor:pointer;padding:8px 12px;font-family:inherit;color:${INK};border-radius:14px;border:1px solid ${sel ? ROSE : BORDER};background:${sel ? "#fbe9ee" : "#fff"};">
+        <span style="width:34px;height:34px;border-radius:50%;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:800;background:${strong ? "#f3e6ea" : "#f6f1f3"};color:${ROSE};">${esc(initial)}</span>
+        <span style="flex:1;min-width:0;"><span style="display:block;font-size:13.5px;font-weight:${strong ? 800 : 700};overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(l.name)}</span>
+          <span style="display:block;font-size:11px;color:${SUBTLE};overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(sub)}${l.loginId ? " · له دخول" : ""}${l.status === "disabled" ? " · الدخول معطّل" : ""}${linked || !l.linkKind ? "" : ""}</span></span>
+        ${desc ? `<span style="font-size:11px;font-weight:700;color:#7a6870;background:#f6f1f3;padding:2px 9px;border-radius:999px;white-space:nowrap;">${desc}</span>` : ""}
       </button>
+      ${kids.length ? `<button type="button" class="icon-btn" style="width:40px;border:1px solid ${BORDER};border-radius:12px;background:#fff;" data-action="ol-toggle" data-id="${esc(l.id)}" aria-label="فتح أو إغلاق ما تحته"><span style="display:inline-flex;transition:transform .15s;transform:rotate(${open ? 0 : 90}deg);">${iconChevronDown(13, SUBTLE)}</span></button>` : ""}
     </div>
     ${kids.length && open ? kids.map((c) => olRowHtml(c, depth + 1)).join("") : ""}`;
 }
@@ -4431,8 +4437,8 @@ function olDetailsHtml(l) {
     <div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;">${box(kids.length, "تحته مباشرة")}${box(desc, "كل ما تحته")}${box(unitCount, "وحدة تصلها تقاريرها")}</div>
     <div style="border-top:1px solid ${BORDER};padding-top:10px;display:flex;flex-direction:column;gap:8px;">
       ${kv("يتبع", esc(parent))}
-      ${kv("مربوط بـ", linked ? `${esc(linked.kind)}: ${esc(linked.name)}` : "مستوى جديد — بدون جهة سابقة")}
-      ${kv("دخول خاص", l.loginId ? `اسم المستخدم: ${esc(l.loginId)}${l.status === "disabled" ? ` <span style="color:${DANGER};">(معطّل)</span>` : ""}` : "لا يوجد")}
+      ${linked ? "" : kv("مربوط بـ", "مستوى جديد — بدون جهة سابقة")}
+      ${l.loginId ? kv("دخول خاص", `اسم المستخدم: ${esc(l.loginId)}${l.status === "disabled" ? ` <span style="color:${DANGER};">(معطّل)</span>` : ""}`) : ""}
       ${l.loginId ? kv("الصلاحيات", (() => { const rs = levelRoleSummary(l.roleId); return rs ? `حسب دور: ${esc(rs.name)}` : "بدون دور — لا يرى شيئًا"; })()) : ""}
     </div>
     ${confirm ? `<div style="background:${DANGER_BG};border-radius:12px;padding:12px;display:flex;flex-direction:column;gap:8px;">
@@ -4674,9 +4680,7 @@ function olApplyPaste(text) {
 }
 function olPasteCardHtml() {
   const ui = olUi();
-  if (!ui.pasteOpen) return `<div class="card" style="margin-top:14px;display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;">
-      <div><div style="font-size:14px;font-weight:800;">إدخال شجرة من نص</div><div style="font-size:11.5px;color:#6f5f66;margin-top:3px;">تلصقين الهيكل كامل مرة وحدة بدل ما تضيفين مستوى مستوى — وبعدها تعدّلين وتحذفين عادي.</div></div>
-      ${pillBtn("فتح", { variant: "soft", icon: iconLayers(13, GREEN), action: "ol-paste-open" })}</div>`;
+  if (!ui.pasteOpen) return "";
   const pv = ui.pastePreview;
   const row = (p) => {
     if (p.pinOnly) return `<div style="border-top:1px solid ${BORDER};padding:7px 0;font-size:12.5px;line-height:1.8;"><b>${esc(p.name)}</b> <span style="font-size:11px;color:#6f5f66;">رقم سري فقط: ${"•".repeat(Math.min(String(p.pin).length, 8))}</span><div style="font-size:11.5px;color:${p.pinTarget ? GREEN : DANGER};">${p.pinTarget ? "يُغيَّر رقمه فقط — لا يُنقل ولا يتغير شيء آخر" : ""}</div>${p.warn ? `<div style="font-size:11.5px;color:${DANGER};">${esc(p.warn)}</div>` : ""}</div>`;
@@ -4815,7 +4819,7 @@ function renderOrgLevelsPage() {
             ${pillBtn("إضافة مستوى", { icon: iconPlus(14, "#fff"), action: "ol-start-add", data: { parent: "" } })}
           </div>
         </div>
-        ${ui.view !== "tree" ? olCardsViewHtml() : roots.length ? `<div style="display:flex;flex-direction:column;gap:2px;">${roots.map((r) => olRowHtml(r, 0)).join("")}</div>`
+        ${ui.view !== "tree" ? olCardsViewHtml() : roots.length ? `<div>${roots.map((r) => olRowHtml(r, 0)).join("")}</div>`
           : `<div style="text-align:center;color:${SUBTLE};padding:30px 10px;font-size:13px;line-height:2;">الشجرة فاضية — ابدئي بـ"إضافة مستوى".</div>`}
         <div style="border-top:1px solid ${BORDER};margin-top:14px;padding-top:12px;display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
           ${pillBtn(portalEnabled() ? `بوابة الدخول: مفعّلة (${portalEntries().length}) — إيقاف` : "تفعيل بوابة الدخول", { variant: portalEnabled() ? "ghost" : "soft", icon: iconHome(13, portalEnabled() ? INK : GREEN), action: "ol-toggle-portal" })}
