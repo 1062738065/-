@@ -1991,6 +1991,7 @@ function render() {
   const sbOld = appEl.querySelector(".sidebar");
   const sbTop = sbOld ? sbOld.scrollTop : 0;
   appEl.innerHTML = html;
+  try { bkInject(); } catch (e) {}
   afterRender();
   if (sbTop) { const sbNew = appEl.querySelector(".sidebar"); if (sbNew) sbNew.scrollTop = sbTop; }
 }
@@ -3979,9 +3980,21 @@ function renderUnitSettings() {
     ${body}
   </div></div>`;
 }
+function usPageCardHtml(unit) {
+  const cur = ((((S.siteSettings || {}).theme || {}).unitLetterheads) || {})[unit.id] || {};
+  const row = (label, key, opts) => `<div style="margin-bottom:12px;"><div style="font-size:12.5px;font-weight:700;margin-bottom:6px;">${label}</div><div style="display:flex;gap:6px;flex-wrap:wrap;">${[["", "حسب القالب"]].concat(opts).map(([v, l]) => { const on = (cur[key] || "") === v; return `<button type="button" data-action="us-page-set" data-key="${key}" data-val="${v}" style="font-family:inherit;min-height:38px;padding:0 14px;border-radius:999px;cursor:pointer;font-size:13px;font-weight:700;border:1px solid ${on ? ROSE : BORDER};background:${on ? ROSE : "#fff"};color:${on ? "#fff" : INK};">${l}</button>`; }).join("")}</div></div>`;
+  return `<div class="card" style="margin-bottom:14px;">
+    <div style="font-size:14px;font-weight:800;margin-bottom:4px;">شكل صفحات تقارير الوحدة</div>
+    <div class="hint" style="margin-bottom:12px;">اتجاه الصفحة والهوامش والترقيم لتقارير «${esc(unit.name)}». «حسب القالب» يعني تأخذ من قالب الجمعية. تُحفظ فورًا.</div>
+    ${row("اتجاه الصفحة", "orient", [["portrait", "طولي"], ["landscape", "عرضي"]])}
+    ${row("الهوامش", "margin", [["narrow", "ضيقة"], ["normal", "عادية"], ["wide", "واسعة"], ["custom", "بالمليمتر"]])}
+    ${cur.margin === "custom" ? `<div style="display:flex;gap:8px;flex-wrap:wrap;margin:-4px 0 12px;">${[["mt", "أعلى"], ["mb", "أسفل"], ["mr", "يمين"], ["ml", "يسار"]].map(([k, l]) => `<label style="font-size:12px;">${l}<input type="number" class="input" data-us-m="${k}" min="0" max="50" inputmode="numeric" value="${Number(cur[k]) || 0}" style="width:78px;" /></label>`).join("")}</div>` : ""}
+    ${row("ترقيم الصفحات", "pageNum", [["none", "بدون"], ["paren", "(٢)"], ["num", "٢"], ["of", "٢ من ٨"]])}
+  </div>`;
+}
 function usLetterheadCardHtml(unit) {
   const cur = ((((S.siteSettings || {}).theme || {}).unitLetterheads) || {})[unit.id] || {};
-  return `<div class="card" style="margin-bottom:14px;">
+  return usPageCardHtml(unit) + `<div class="card" style="margin-bottom:14px;">
     <div style="font-size:14px;font-weight:800;margin-bottom:4px;">كليشة الوحدة</div>
     <div class="hint" style="margin-bottom:12px;">ارفعي كليشة (ترويسة) وتذييل وخلفية الوحدة كصور، وتظهر في تقارير «${esc(unit.name)}» في العرض والطباعة وPDF. إذا ما رفعتي شيئًا تظهر كليشة الجمعية الافتراضية. تُحفظ فورًا.</div>
     <div style="display:flex;flex-direction:column;gap:12px;">
@@ -3993,7 +4006,7 @@ function usLetterheadCardHtml(unit) {
   </div>`;
 }
 function ulSetImage(uid, key, url) {
-  saveSiteTheme((th) => { const all = { ...((th || {}).unitLetterheads || {}) }; const cur = { ...(all[uid] || {}) }; if (url) cur[key] = url; else delete cur[key]; if (cur.head || cur.foot || cur.bg || cur.coverBg) all[uid] = cur; else delete all[uid]; return { unitLetterheads: all }; });
+  saveSiteTheme((th) => { const all = { ...((th || {}).unitLetterheads || {}) }; const cur = { ...(all[uid] || {}) }; if (url !== "" && url != null) cur[key] = url; else delete cur[key]; if (Object.keys(cur).length) all[uid] = cur; else delete all[uid]; return { unitLetterheads: all }; });
 }
 function usSectionsCardHtml(unit) {
   const pt = PERIOD_TYPES.includes(S.ui.usPeriod) ? S.ui.usPeriod : PERIOD_TYPES[0];
@@ -5497,7 +5510,7 @@ function pageTplCardHtml() {
     <div style="display:flex;flex-wrap:wrap;gap:24px;align-items:flex-start;">
       <div style="flex:1 1 360px;min-width:0;">
         ${fld("اتجاه الصفحة", pills("orient", [["portrait", "طولي"], ["landscape", "عرضي"]]))}
-        ${fld("الهوامش", pills("margin", [["narrow", "ضيقة"], ["normal", "عادية"], ["wide", "واسعة"], ["custom", "بالمليمتر"]]) + (d.margin === "custom" ? `<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px;">${[["mt", "أعلى"], ["mb", "أسفل"], ["mr", "يمين"], ["ml", "يسار"]].map(([k, l]) => `<label style="font-size:12px;">${l}<input type="number" class="input" data-pg="${k}" min="0" max="80" inputmode="numeric" value="${Number(d[k]) || 0}" style="width:78px;" /></label>`).join("")}</div><div class="hint" style="margin-top:6px;">لو الكليشة صورة كبيرة، كبّري الهامش الأعلى (مثلًا ٤٠) عشان المحتوى ما يغطيها.</div>` : ""))}
+        ${fld("الهوامش", pills("margin", [["narrow", "ضيقة"], ["normal", "عادية"], ["wide", "واسعة"], ["custom", "بالمليمتر"]]) + (d.margin === "custom" ? `<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px;">${[["mt", "أعلى"], ["mb", "أسفل"], ["mr", "يمين"], ["ml", "يسار"]].map(([k, l]) => `<label style="font-size:12px;">${l}<input type="number" class="input" data-pg="${k}" min="0" max="50" inputmode="numeric" value="${Number(d[k]) || 0}" style="width:78px;" /></label>`).join("")}</div><div class="hint" style="margin-top:6px;">لو الكليشة صورة كبيرة، كبّري الهامش الأعلى (مثلًا ٤٠) عشان المحتوى ما يغطيها.</div>` : ""))}
         ${fld("الخلفية", `<div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:8px;"><span style="font-size:12.5px;">لون</span><input type="color" data-pg="paper" value="${/^#[0-9a-fA-F]{6}$/.test(d.paper) ? esc(d.paper) : "#ffffff"}" style="width:56px;height:40px;border:1px solid ${BORDER};border-radius:10px;padding:2px;background:#fff;" /></div>${pgImgRow("pg-img-bg", d.bgImage, "pg-img-clear", "bgImage")}`, "اللون وحده، أو صورة تغطي الصفحة كاملة (وتتقدم على اللون). منفصلة عن الكليشة: استخدمي أحدهما أو الاثنين.")}
         ${fld("حجم صورة الخلفية", pills("bgFit", [["stretch", "تملأ الصفحة كاملة (الصورة كلها تظهر)"], ["cover", "تغطية بدون تمديد (قد يُقص جزء منها)"]]), "الصور المصمَّمة بمقاس A4 تناسب الخيار الأول.")}
         ${fld("خلفية الصفحة الأولى (الغلاف) — اختيارية", pgImgRow("pg-img-cover", d.coverBg, "pg-img-clear", "coverBg"), "إذا ما رفعتي شيئًا يأخذ الغلاف الخلفية العامة.")}
@@ -5845,7 +5858,11 @@ function rptPageNumText(s, n, total) {
 function rptUnitSettings(unit) {
   const s = rptSettings("unit");
   const ul = ((((S.siteSettings || {}).theme || {}).unitLetterheads) || {})[unit && unit.id] || {};
-  return ul.bg && RPT_DATA_IMG_RE.test(ul.bg) ? { ...s, bgImage: ul.bg } : s;
+  const out = ul.bg && RPT_DATA_IMG_RE.test(ul.bg) ? { ...s, bgImage: ul.bg } : { ...s };
+  if (ul.orient === "portrait" || ul.orient === "landscape") out.orient = ul.orient;
+  if (ul.margin && (RPT_MARGINS[ul.margin] || ul.margin === "custom")) { out.margin = ul.margin; if (ul.margin === "custom") ["mt", "mb", "mr", "ml"].forEach((k) => { out[k] = Number(ul[k]) || 0; }); }
+  if (["none", "paren", "num", "of"].includes(ul.pageNum)) out.pageNum = ul.pageNum;
+  return out;
 }
 function rptBgSize(s) { return s && s.bgFit === "cover" ? "cover" : "100% 100%"; }
 function rptCoverStyle(s, unitId) {
@@ -9311,6 +9328,64 @@ function radioSub(arr, id, subarr, subid, field, value, options) {
 function readonlyBox(text) { return `<div class="readonly-box">${esc(text)}</div>`; }
 function removeBtn(arr, id) { return `<button type="button" class="icon-remove" data-action="remove-item" data-arr="${esc(arr)}" data-id="${esc(id)}">${iconX(12, DANGER)}</button>`; }
 
+
+/* ===== إدخال من نص داخل أقسام التقرير ===== */
+function bkSchema(arr) { return Object.values(SECTION_FIELD_SCHEMAS).find((x) => x.arrayKey === arr) || null; }
+function bkFields(schema) {
+  return schema.fields.filter((f) => ["text", "textarea", "number", "select", "radio", "expandableSelect", "date"].includes(f.type) && !/link/i.test(f.id));
+}
+function bkNum(v) { return String(v).replace(/[٠-٩]/g, (c) => "٠١٢٣٤٥٦٧٨٩".indexOf(c)).replace(/[٫,]/g, ".").trim(); }
+function bkParse(arr, text) {
+  const schema = bkSchema(arr); if (!schema) return null;
+  const fields = bkFields(schema), existing = (getItemList(arr) || []).length;
+  const rows = String(text || "").split(/\r?\n/).map((l) => l.trim()).filter(Boolean).map((line) => {
+    const parts = line.split("|").map((x) => x.trim()); const item = EMPTY_ITEM_FACTORY[arr](); const errs = [];
+    fields.forEach((f, i) => {
+      const raw = parts[i] || ""; if (!raw) { if (f.required) errs.push(`«${f.label}» ناقص`); return; }
+      if (f.type === "number") { const n = bkNum(raw); if (n === "" || isNaN(Number(n))) errs.push(`«${f.label}» لازم رقم`); else item[f.id] = n; }
+      else if (f.type === "select" || f.type === "radio" || f.type === "expandableSelect") {
+        const opts = (f.options || f.baseOptions || []).map((o) => (typeof o === "string" ? o : o.label || o.value));
+        const hit = opts.find((o) => o === raw) || opts.find((o) => o.includes(raw) || raw.includes(o));
+        if (hit) item[f.id] = typeof (f.options || f.baseOptions || [])[opts.indexOf(hit)] === "string" ? hit : ((f.options || f.baseOptions)[opts.indexOf(hit)].value || hit);
+        else if (f.type === "expandableSelect") item[f.id] = raw;
+        else errs.push(`«${f.label}»: «${raw}» ليس من الخيارات`);
+      } else item[f.id] = raw;
+    });
+    if (parts.length > fields.length) errs.push("حقول زائدة عن المطلوب");
+    return { line, item, errs };
+  });
+  const room = schema.maxItems != null ? Math.max(0, schema.maxItems - existing) : Infinity;
+  return { schema, fields, rows, room };
+}
+function bkPanelHtml(arr) {
+  const b = (S.ui.bulk || {}); if (b.arr !== arr) return "";
+  const schema = bkSchema(arr); if (!schema) return "";
+  const fields = bkFields(schema), pv = b.preview;
+  const order = fields.map((f, i) => `<span style="display:inline-block;margin:2px 3px;padding:2px 9px;border-radius:999px;background:#fff;border:1px solid ${BORDER};font-size:12px;">${i + 1}. ${esc(f.label)}${f.required ? " *" : ""}</span>`).join("");
+  const pvHtml = pv ? `<div style="margin-top:10px;">${pv.rows.map((r, i) => `<div style="padding:8px 10px;margin-bottom:6px;border-radius:10px;border:1px solid ${r.errs.length ? "#e7b4b4" : "#b9dcc4"};background:${r.errs.length ? "#fdf2f2" : "#f1faf4"};font-size:12.5px;line-height:1.8;"><b>${i + 1}.</b> ${esc(r.line.slice(0, 90))}${r.errs.length ? `<div style="color:#b03030;">يحتاج تصحيح: ${esc(r.errs.join("، "))}</div>` : `<div style="color:#1f7a45;">جاهز للإضافة</div>`}</div>`).join("")}</div>` : "";
+  const ok = pv ? pv.rows.filter((r) => !r.errs.length).length : 0;
+  return `<div id="bk-panel" style="margin:12px 0;padding:14px;border-radius:14px;background:${GRAY_BG};border:1px solid ${BORDER};">
+    <div style="font-weight:800;font-size:14px;margin-bottom:6px;">إدخال ${esc(schema.itemLabel)} من نص</div>
+    <div class="hint" style="margin-bottom:6px;">اكتبي سطرًا لكل عنصر، وافصلي الحقول بـ «|» بهذا الترتيب (الحقل الفارغ اتركيه فاضي، والأخيرة تقدرين تحذفينها):</div>
+    <div style="margin-bottom:8px;">${order}</div>
+    ${fields.some((f) => f.options || f.baseOptions) ? `<details style="margin-bottom:8px;"><summary style="cursor:pointer;font-size:12.5px;font-weight:700;">الخيارات المسموحة للحقول المحدّدة</summary>${fields.map((f, i) => (f.options || f.baseOptions) ? `<div style="font-size:12px;line-height:1.8;margin-top:4px;"><b>${i + 1}. ${esc(f.label)}:</b> ${esc((f.options || f.baseOptions).map((x) => (typeof x === "string" ? x : x.label || x.value)).join(" ، "))}</div>` : "").join("")}</details>` : ""}
+    <textarea class="input" id="bk-text" rows="7" style="font-family:inherit;line-height:1.9;min-height:140px;">${esc(b.text || "")}</textarea>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px;">${pillBtn("معاينة", { action: "bk-preview", data: { arr } })}${ok ? pillBtn(`إضافة ${ok} عنصر`, { variant: "soft", action: "bk-apply", data: { arr } }) : ""}${pillBtn("إغلاق", { variant: "ghost", action: "bk-close" })}</div>
+    ${pvHtml}
+    <div class="hint" style="margin-top:8px;">يضيف بعد الموجود فقط، ولا يغيّر ولا يحذف أي عنصر. السطر اللي يحتاج تصحيح ما ينضاف قبل ما تصححينه. الجداول والصور والروابط تبقى يدوية.</div>
+  </div>`;
+}
+function bkInject() {
+  document.querySelectorAll('[data-action="add-item"]').forEach((btn) => {
+    const arr = btn.dataset.arr; if (!arr || btn.dataset.bkDone || !bkSchema(arr) || !EMPTY_ITEM_FACTORY[arr]) return;
+    btn.dataset.bkDone = "1";
+    const holder = document.createElement("div");
+    holder.innerHTML = pillBtn("إدخال من نص", { variant: "soft", action: "bk-open", data: { arr } });
+    const b2 = holder.firstElementChild; b2.style.marginInlineStart = "8px"; b2.style.marginTop = "6px";
+    btn.after(b2);
+    if ((S.ui.bulk || {}).arr === arr) { const pn = document.createElement("div"); pn.innerHTML = bkPanelHtml(arr); b2.after(pn.firstElementChild); }
+  });
+}
 function getItemList(arr) { return S.sectionDraft[arr] || (S.sectionDraft[arr] = []); }
 function findById(list, id) { return list.find((x) => x.id === id); }
 
@@ -10729,7 +10804,7 @@ function reportApprovalHtml(report, title, boxes, extra) {
    (unitChapterDefs = أقسام التعبئة نفسها). في وضع المراجعة (afterPage) تظهر كل الفصول والأعمدة دائمًا. */
 function fullReportOrPreviewBody(unit, report, afterPage, opts) {
   opts = opts || {};
-  const s = opts.settings || rptSettings("unit");
+  const s = opts.settings || rptUnitSettings(unit);
   const review = !!afterPage;
   const dept = S.departments.find((x) => x.id === unit.departmentId);
   const chapters = rptOrdered(unitChapterDefs(opts.capture ? null : report, unit.id), s).filter((c) => review || (!s.hidden[c.key] &&
@@ -10853,6 +10928,11 @@ function liveUpdateComputed(el) {
 function attachFormListeners() {
   appEl.addEventListener("input", (e) => {
     const el = e.target;
+    if (el.dataset && el.dataset.usM) {
+      const uid = S.currentUnitId; if (!uid || !(S.isAdmin || isUnitInUserScope(uid))) return;
+      ulSetImage(uid, el.dataset.usM, Math.max(0, Math.min(50, Number(el.value) || 0)));
+      return;
+    }
     if (el.dataset && el.dataset.ar) {
       S.siteSettings = S.siteSettings || dataStore.getSiteSettings();
       const th = S.siteSettings.theme || {};
@@ -11404,7 +11484,7 @@ function attachClickListener() {
         const m = RPT_MARGINS[d.margin];
         const patch = {}; PG_KEYS.forEach((k) => { patch[k] = d[k]; });
         if (m) { patch.mt = m[0]; patch.mb = m[1]; patch.mr = m[2]; patch.ml = m[3]; }
-        else ["mt", "mb", "mr", "ml"].forEach((k) => { patch[k] = Math.max(0, Math.min(80, Number(d[k]) || 0)); });
+        else ["mt", "mb", "mr", "ml"].forEach((k) => { patch[k] = Math.max(0, Math.min(50, Number(d[k]) || 0)); });
         const ids = ["final", "unit"].concat(rptStore().custom.map((c) => c.id));
         let n = 0;
         ids.forEach((id) => { const cur = rptSettings(id); if (cur) { rptSave(id, { ...cur, ...patch }); n++; } });
@@ -11431,6 +11511,14 @@ function attachClickListener() {
         if (!S.isAdmin) break;
         const uid = S.ui.ulUnit; if (!uid) break;
         saveSiteTheme((th) => { const all = { ...((th || {}).unitLetterheads || {}) }; const cur = { ...(all[uid] || {}) }; delete cur[ds.key]; if (cur.head || cur.foot || cur.bg || cur.coverBg) all[uid] = cur; else delete all[uid]; return { unitLetterheads: all }; });
+        render(); break;
+      }
+      case "us-page-set": {
+        const uid = S.currentUnitId; if (!uid || !(S.isAdmin || isUnitInUserScope(uid))) break;
+        if (!["orient", "margin", "pageNum"].includes(ds.key)) break;
+        ulSetImage(uid, ds.key, ds.val || "");
+        if (ds.key === "margin" && RPT_MARGINS[ds.val]) { const m = RPT_MARGINS[ds.val]; ["mt", "mb", "mr", "ml"].forEach((k, i) => ulSetImage(uid, k, m[i])); }
+        if (ds.key === "margin" && ds.val === "") ["mt", "mb", "mr", "ml"].forEach((k) => ulSetImage(uid, k, ""));
         render(); break;
       }
       case "us-img-clear": {
@@ -12578,6 +12666,18 @@ function handleReportEditorAction(action, ds) {
       S.ui.expandedRepeatItem[ds.arr] = current === ds.id ? null : ds.id;
       render();
       return true;
+    }
+    case "bk-open": { S.ui.bulk = { arr: ds.arr, text: "", preview: null }; render(); return true; }
+    case "bk-close": { S.ui.bulk = null; render(); return true; }
+    case "bk-preview": { const el = document.getElementById("bk-text"); const b = S.ui.bulk || { arr: ds.arr }; b.text = el ? el.value : b.text; b.preview = bkParse(ds.arr, b.text); S.ui.bulk = b; render(); return true; }
+    case "bk-apply": {
+      const el = document.getElementById("bk-text"); const b = S.ui.bulk || { arr: ds.arr }; if (el) b.text = el.value;
+      const pv = bkParse(ds.arr, b.text); if (!pv) return true;
+      const good = pv.rows.filter((r) => !r.errs.length).slice(0, pv.room);
+      good.forEach((r) => getItemList(ds.arr).push(r.item));
+      const bad = pv.rows.filter((r) => r.errs.length).map((r) => r.line);
+      S.ui.bulk = bad.length ? { arr: ds.arr, text: bad.join("\n"), preview: null } : null;
+      render(); return true;
     }
     case "remove-item": {
       const list = S.sectionDraft[ds.arr];
