@@ -841,7 +841,7 @@ const REPORT_TABS_DEFAULT = [
   { id: "draft", label: "مسوداتي", special: "", statuses: ["draft"], adminStatuses: [], enabled: true },
   { id: "returned", label: "بحاجة إلى تعديل", special: "", statuses: ["returned"], adminStatuses: [], enabled: true },
   { id: "needs_completion", label: "بحاجة إلى استكمال", special: "", statuses: ["needs_completion"], adminStatuses: [], enabled: true },
-  { id: "custom_pending", label: "قيد المراجعة", special: "", statuses: ["custom_pending"], adminStatuses: [], enabled: true },
+  { id: "custom_pending", label: "المرسلة", special: "", statuses: ["custom_pending"], adminStatuses: [], enabled: true },
   { id: "completed", label: "التقارير الكاملة", special: "", statuses: ["completed"], adminStatuses: [], enabled: true },
   { id: "approved", label: "معتمد", special: "", statuses: ["approved"], adminStatuses: [], enabled: true },
   { id: "archived", label: "أرشيف التقارير", special: "archived", statuses: [], adminStatuses: [], enabled: true },
@@ -854,7 +854,8 @@ const MINE_TAB_ID = "pending_mine";
 const MINE_TAB = { id: MINE_TAB_ID, label: "بانتظار مراجعتي", special: "mine", statuses: [], adminStatuses: [], enabled: true };
 function reportTabsList() {
   if (!S.reportTabs) S.reportTabs = dataStore.getReportTabs();
-  const base = S.reportTabs.length ? S.reportTabs : REPORT_TABS_DEFAULT;
+  const base0 = S.reportTabs.length ? S.reportTabs : REPORT_TABS_DEFAULT;
+  const base = base0.map((t) => (t.id === "custom_pending" && t.label === "قيد المراجعة" ? { ...t, label: "المرسلة" } : t));
   if (base.some((t) => t.id === MINE_TAB_ID)) return base;
   const i = base.length && base[0].special === "all" ? 1 : 0;
   return [...base.slice(0, i), MINE_TAB, ...base.slice(i)];
@@ -8139,11 +8140,20 @@ function renderAllReports() {
 }
 
 /* =============================== Unit reports hub: "منصة توثيق الأداء" ======== */
+// «أرشيف التقارير» = المعتمد فقط، ولا علاقة له بتاريخ نهاية الفترة (المسودة تبقى في «مسوداتي» و«الكل» دائمًا)
 function isReportArchived(report) {
-  const endDate = report.sections?.basic?.data?.endDate;
-  if (!endDate) return false;
-  const end = new Date(endDate).getTime();
-  return !isNaN(end) && end < Date.now();
+  return report.status === "approved";
+}
+// «عند: ...» — الجهة اللي يقف عندها التقرير المرسل في المسار
+function opsAtChipHtml(report, unit) {
+  try {
+    const ref = apRefOf(report.customStageId); const p = ref && apPathById(ref.pathId);
+    const st = p && apStagesNamed(p, unit).find((x) => x.id === ref.stageId);
+    if (!st) return "";
+    const lvl = String(st.approver || "").indexOf(AP_TREE_UP) === 0 ? apStageTreeLevel(st, unit) : null;
+    const who = lvl ? lvl.name : apApproverLabel(st.approver);
+    return who && who !== "—" ? `<span style="display:inline-block;margin-inline-start:6px;padding:3px 10px;border-radius:999px;background:#fbefd9;color:#8a5a00;font-size:11.5px;font-weight:800;">عند: ${esc(who)}</span>` : "";
+  } catch (e) { return ""; }
 }
 function reportCardHtml(unit, entry) {
   const meta = reportStatusMeta(entry.status);
@@ -8191,7 +8201,7 @@ function reportCardHtml(unit, entry) {
         <div style="width:30px;height:30px;border-radius:9px;background:${DANGER_BG};display:flex;align-items:center;justify-content:center;flex-shrink:0;">${iconDocument(14, ROSE)}</div>
         <div><div style="font-size:14px;font-weight:800;">${esc(entry.label || "تقرير")}</div><div style="font-size:10.5px;color:${SUBTLE};margin-top:2px;">${esc(dateStr)}</div></div>
       </div>
-      ${badgeHtml(meta.label, meta.color, meta.bg)}
+      ${badgeHtml(meta.label, meta.color, meta.bg)}${entry.status === "custom_pending" ? opsAtChipHtml(entry, unit) : ""}
     </div>
     <div style="margin-bottom:10px;">${progressBarHtml(progress.percent, meta.color)}<div style="font-size:10.5px;color:${SUBTLE};margin-top:4px;">${progress.completed} من ${progress.total} أقسام مكتملة</div></div>
     ${actionsHtml}
