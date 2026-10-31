@@ -3668,7 +3668,7 @@ function renderDashboardBody(activeUnits, opts) {
 
   const site = currentSiteSettings();
   return `
-  <div class="page-wrap"><div class="page-inner">
+  <div class="page-wrap"><div class="page-inner dash-wide">
     ${topBarHtml({ title: opts.title || "لوحة المعلومات", subtitle: opts.subtitle || `مرحبًا ${esc(S.currentUser.name)} — نظرة شاملة على كل الوحدات`, right: opts.topBarRight })}
     ${opts.extraTop || ""}
 
@@ -3814,7 +3814,7 @@ function renderUnitDashboard() {
 
   const site = currentSiteSettings();
   return `
-  <div class="page-wrap"><div class="page-inner">
+  <div class="page-wrap"><div class="page-inner dash-wide">
     ${topBarHtml({ title: "لوحة المعلومات", subtitle: `مرحبًا ${esc(S.currentUser.name)} — نظرة عامة على تقارير ${esc(unit.name)}` })}
     ${scopedUnitSwitcherHtml()}
 
@@ -6340,6 +6340,36 @@ function handleReportsManageAction(action, ds) {
   return true;
 }
 
+const FIVE_COLORS = [
+  { k: "primary", label: "الأساسي", hint: "الصفحة المحددة والأزرار والعناوين وترويسة التقارير والأيقونات" },
+  { k: "secondary", label: "الثاني", hint: "التدرجات وبطاقات الهيكل الخمسة (تُشتق منه)" },
+  { k: "accent", label: "التمييز", hint: "إطار الحقل عند الكتابة فيه والروابط الصغيرة" },
+  { k: "text", label: "النصوص", hint: "النصوص الأساسية، والفرعية والحدود تُشتق منه" },
+  { k: "background", label: "الخلفية", hint: "خلفية الصفحة والشريط الجانبي" },
+];
+function fiveColorValue(k, current, theme) {
+  if (k === "primary") return current.primary;
+  if (k === "background") return current.background;
+  if (k === "text") return theme.ink;
+  if (k === "secondary") return theme.blue;
+  return theme.accent || current.primary;
+}
+function applyFiveColor(k, v) {
+  if (!/^#[0-9a-fA-F]{6}$/.test(v)) return false;
+  const cur = S.siteSettings || dataStore.getSiteSettings();
+  const th = { ...(cur.theme || {}) };
+  let next = { ...cur };
+  if (k === "primary") { next.primary = v; th.navActive = v; }
+  else if (k === "background") { next.background = v; th.sidebarBg = mixHex(v, "#ffffff", 0.5); }
+  else if (k === "text") { th.ink = v; th.subtle = mixHex(v, "#ffffff", 0.5); th.border = mixHex(v, "#ffffff", 0.88); }
+  else if (k === "secondary") { th.blue = v; th.bs = [0.72, 0.58, 0.44, 0.3, 0.16].map((t) => mixHex(v, "#ffffff", t)); }
+  else if (k === "accent") { th.accent = v; }
+  next.theme = th;
+  S.siteSettings = next;
+  S.ui.siteSettingsSaved = false;
+  applySiteColors(next);
+  return true;
+}
 function renderSiteSettings() {
   const t = document.createElement("template");
   t.innerHTML = renderSiteSettingsInner();
@@ -6352,8 +6382,9 @@ function renderSiteSettings() {
     h.style.display = "flex";
     h.style.justifyContent = "space-between";
     h.style.alignItems = "center";
-    h.innerHTML = `<span>${h.innerHTML}</span><span data-chev style="font-size:11px;color:#8a7b82;">${col[key] ? "◂ توسيع" : "▾ تضييق"}</span>`;
-    if (col[key]) { let n = h.nextElementSibling; while (n) { n.style.display = "none"; n = n.nextElementSibling; } }
+    h.innerHTML = `<span>${h.innerHTML}</span><span data-chev style="font-size:11px;color:#8a7b82;">${(key.indexOf("ألوان متقدمة") === 0 && col[key] === undefined) || col[key] ? "◂ توسيع" : "▾ تضييق"}</span>`;
+    const closed = key.indexOf("ألوان متقدمة") === 0 && col[key] === undefined ? true : !!col[key];
+    if (closed) { let n = h.nextElementSibling; while (n) { n.style.display = "none"; n = n.nextElementSibling; } }
   });
   return t.innerHTML;
 }
@@ -6388,22 +6419,14 @@ function renderSiteSettingsInner() {
     ${(() => { const T = [["look", "المظهر"], ["brand", "الشعار والشريط"], ["dash", "لوحة المعلومات"], ["report", "خيارات التقرير"]]; return `<div style="display:flex;flex-wrap:wrap;border-bottom:1px solid ${BORDER};margin-bottom:16px;">${T.map(([id, l]) => `<button type="button" data-action="site-tab" data-tab="${id}" data-st-btn="${id}" style="font-family:inherit;font-size:14px;cursor:pointer;padding:10px 4px;margin-inline-end:18px;background:none;border:none;border-bottom:2.5px solid ${stTab === id ? ROSE : "transparent"};margin-bottom:-1px;font-weight:${stTab === id ? 800 : 600};color:${stTab === id ? ROSE : "#8a7b82"};">${l}</button>`).join("")}</div>`; })()}
     <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,420px),1fr));gap:16px;align-items:start;">
     <div class="card" data-st="look" style="${stH("look")}margin-bottom:16px;">
-      <div class="subhead" style="margin-top:0;">الألوان</div>
-      <div style="margin-bottom:20px;">
-        ${fieldLabel("اللون الأساسي (الأزرار، العناوين، التحديد)")}
-        <div style="display:flex;align-items:center;gap:12px;">
-          <input type="color" id="site-primary-color" value="${esc(current.primary)}" style="width:52px;height:40px;border:1px solid ${BORDER};border-radius:8px;cursor:pointer;padding:2px;" />
-          <span style="font-size:12.5px;color:${SUBTLE};font-family:monospace;">${esc(current.primary)}</span>
-        </div>
-      </div>
-      <div style="margin-bottom:16px;">
-        ${fieldLabel("لون خلفية الموقع")}
-        <div style="display:flex;align-items:center;gap:12px;">
-          <input type="color" id="site-bg-color" value="${esc(current.background)}" style="width:52px;height:40px;border:1px solid ${BORDER};border-radius:8px;cursor:pointer;padding:2px;" />
-          <span style="font-size:12.5px;color:${SUBTLE};font-family:monospace;">${esc(current.background)}</span>
-        </div>
-      </div>
-      <div>${pillBtn("استعادة الألوان الافتراضية", { variant: "ghost", icon: iconX(14, INK), action: "restore-site-settings-defaults", disabled: isColorDefault })}</div>
+      <div class="subhead" style="margin-top:0;">الألوان الخمسة</div>
+      <div class="hint" style="margin-bottom:12px;">خمسة ألوان فقط تتحكم بكل الموقع، والباقي يُشتق منها. ألوان الحالة (أخضر، ذهبي، أحمر) منفصلة لأن لكل منها معنى، وتجدينها في «ألوان متقدمة».</div>
+      ${FIVE_COLORS.map((f) => { const v = fiveColorValue(f.k, current, theme); return `<div style="display:flex;align-items:center;gap:12px;margin-bottom:12px;flex-wrap:wrap;">
+        <input type="color" id="site-c5-${f.k}" value="${esc(v)}" style="width:52px;height:40px;border:1px solid ${BORDER};border-radius:8px;cursor:pointer;padding:2px;" />
+        <input type="text" class="input" id="site-c5-${f.k}-hex" value="${esc(v)}" maxlength="7" dir="ltr" style="width:100px;font-family:monospace;" aria-label="رمز اللون" />
+        <div style="flex:1 1 160px;min-width:0;"><div style="font-size:13px;font-weight:800;">${f.label}</div><div style="font-size:11.5px;color:${SUBTLE};">${f.hint}</div></div></div>`; }).join("")}
+      <div style="display:flex;gap:6px;margin:6px 0 14px;" aria-label="معاينة">${["primary", "secondary", "accent", "text", "background"].map((k) => `<span id="site-c5-prev-${k}" style="flex:1;height:26px;border-radius:8px;border:1px solid ${BORDER};background:${fiveColorValue(k, current, theme)};"></span>`).join("")}</div>
+      <div>${pillBtn("رجوع لألوان الشعار", { variant: "ghost", icon: iconX(14, INK), action: "restore-five-colors" })}</div>
     </div>
 
     <div class="card" data-st="look" style="${stH("look")}margin-bottom:16px;">
@@ -10616,6 +10639,15 @@ function attachFormListeners() {
       return;
     }
     if (el.id === "login-username") { S.ui.loginUsernameVal = el.value; return; }
+    if (el.id && /^site-c5-(primary|secondary|accent|text|background)(-hex)?$/.test(el.id)) {
+      const m = el.id.match(/^site-c5-(\w+?)(-hex)?$/);
+      let v = el.value.trim(); if (v && v[0] !== "#") v = "#" + v;
+      if (applyFiveColor(m[1], v)) {
+        const pk = document.getElementById("site-c5-" + m[1]), hx = document.getElementById("site-c5-" + m[1] + "-hex"), pv = document.getElementById("site-c5-prev-" + m[1]);
+        if (pk && pk !== el) pk.value = v; if (hx && hx !== el) hx.value = v; if (pv) pv.style.background = v;
+      }
+      return;
+    }
     if (el.id === "site-primary-color" || el.id === "site-bg-color") {
       S.siteSettings = S.siteSettings || dataStore.getSiteSettings();
       S.siteSettings = { ...S.siteSettings, [el.id === "site-primary-color" ? "primary" : "background"]: el.value };
@@ -11027,10 +11059,19 @@ function attachClickListener() {
         render();
         break;
       }
+      case "restore-five-colors": {
+        const th0 = ((S.siteSettings || dataStore.getSiteSettings()).theme) || {};
+        const keep = {}; ["periodTypes", "levelTypes", "entityIcons", "portalEnabled", "reportStyle", "reportTemplates"].forEach((k) => { if (k in th0) keep[k] = th0[k]; });
+        S.siteSettings = { ...(S.siteSettings || dataStore.getSiteSettings()), ...DEFAULT_SITE_COLORS, theme: keep };
+        applySiteColors(S.siteSettings);
+        S.ui.siteSettingsSaved = false;
+        render();
+        break;
+      }
       case "site-card-toggle": {
         const h = btn; const key = ds.key;
         S.ui.siteCollapsed = S.ui.siteCollapsed || {};
-        const closed = !S.ui.siteCollapsed[key];
+        const cs = S.ui.siteCollapsed[key]; const closed = cs === undefined ? (key.indexOf("ألوان متقدمة") === 0 ? false : true) : !cs;
         S.ui.siteCollapsed[key] = closed;
         let n = h.nextElementSibling; while (n) { n.style.display = closed ? "none" : ""; n = n.nextElementSibling; }
         const c = h.querySelector("[data-chev]"); if (c) c.textContent = closed ? "◂ توسيع" : "▾ تضييق";
@@ -12243,6 +12284,7 @@ function applySiteColors(settings) {
   root.style.setProperty("--rose-dark", settings.primary);
   root.style.setProperty("--blush-bg", settings.background);
   const th = themeOf(settings);
+  root.style.setProperty("--accent", th.accent || settings.primary);
   INK = th.ink; SUBTLE = th.subtle; BORDER = th.border; GREEN = th.green; GOLD = th.gold; DANGER = th.danger; BLUE = th.blue;
   GREEN_BG = th.green === DEFAULT_THEME.green ? DEFAULT_THEME_BG.green : mixHex(th.green, "#ffffff", 0.88);
   GOLD_BG = th.gold === DEFAULT_THEME.gold ? DEFAULT_THEME_BG.gold : mixHex(th.gold, "#ffffff", 0.88);
