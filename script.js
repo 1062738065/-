@@ -6717,31 +6717,36 @@ function renderSiteSettingsInner() {
   <div class="page-wrap"><div class="page-inner">
     ${topBarHtml({ title: "إعدادات الموقع", subtitle: "تخصيص هوية الموقع — الألوان، الشعار، البانر، والعبارات. التغيير يظهر فورًا هنا، ولازم الضغط على \"حفظ\" ليصير دائمًا" })}
 
-    ${(() => { const T = [["look", "المظهر"], ["brand", "الشعار والشريط"], ["dash", "لوحة المعلومات"], ["page", "قالب الصفحة"], ["report", "خيارات التقرير"], ["archive", "الأرشفة وDrive"]]; return `<div style="display:flex;flex-wrap:wrap;border-bottom:1px solid ${BORDER};margin-bottom:16px;">${T.map(([id, l]) => `<button type="button" data-action="site-tab" data-tab="${id}" data-st-btn="${id}" style="font-family:inherit;font-size:14px;cursor:pointer;padding:10px 4px;margin-inline-end:18px;background:none;border:none;border-bottom:2.5px solid ${stTab === id ? ROSE : "transparent"};margin-bottom:-1px;font-weight:${stTab === id ? 800 : 600};color:${stTab === id ? ROSE : "#8a7b82"};">${l}</button>`).join("")}</div>`; })()}
+    ${(() => { const T = [["look", "المظهر"], ["brand", "الشعار والشريط"], ["dash", "لوحة المعلومات"], ["page", "قالب الصفحة"], ["report", "خيارات التقرير"], ["archive", "الأرشفة وDrive"]]; return `<div class="st-tabs">${T.map(([id, l]) => `<button type="button" class="st-tab${stTab === id ? " on" : ""}" data-action="site-tab" data-tab="${id}" data-st-btn="${id}">${l}</button>`).join("")}</div>`; })()}
     <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,420px),1fr));gap:16px;align-items:start;">
-    <div class="card" data-st="look" style="${stH("look")}margin-bottom:16px;">
-      <div class="subhead" style="margin-top:0;">الألوان الخمسة</div>
-      <div class="hint" style="margin-bottom:12px;">خمسة ألوان فقط تتحكم بكل الموقع، والباقي يُشتق منها. ألوان الحالة (أخضر، ذهبي، أحمر) منفصلة لأن لكل منها معنى، وتجدينها في «ألوان متقدمة».</div>
-      ${FIVE_COLORS.map((f) => { const v = fiveColorValue(f.k, current, theme); return `<div style="display:flex;align-items:center;gap:12px;margin-bottom:12px;flex-wrap:wrap;">
-        <input type="color" id="site-c5-${f.k}" value="${esc(v)}" style="width:52px;height:40px;border:1px solid ${BORDER};border-radius:8px;cursor:pointer;padding:2px;" />
-        <input type="text" class="input" id="site-c5-${f.k}-hex" value="${esc(v)}" maxlength="7" dir="ltr" style="width:100px;font-family:monospace;" aria-label="رمز اللون" />
-        <div style="flex:1 1 160px;min-width:0;"><div style="font-size:13px;font-weight:800;">${f.label}</div><div style="font-size:11.5px;color:${SUBTLE};">${f.hint}</div></div></div>`; }).join("")}
-      <div style="display:flex;gap:6px;margin:6px 0 14px;" aria-label="معاينة">${["primary", "secondary", "accent", "text", "background"].map((k) => `<span id="site-c5-prev-${k}" style="flex:1;height:26px;border-radius:8px;border:1px solid ${BORDER};background:${fiveColorValue(k, current, theme)};"></span>`).join("")}</div>
-      <div>${pillBtn("رجوع لألوان الشعار", { variant: "ghost", icon: iconX(14, INK), action: "restore-five-colors" })}</div>
-    </div>
-
-    <div class="card" data-st="look" style="${stH("look")}margin-bottom:16px;">
-      <div class="subhead" style="margin-top:0;">ألوان متقدمة (كل ألوان الموقع)</div>
-      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:14px;margin-bottom:16px;">
-        ${THEME_COLOR_FIELDS.map((f) => `<div>${fieldLabel(f.label)}<div style="display:flex;align-items:center;gap:10px;">
-          <input type="color" id="site-x-${f.key}" value="${esc(theme[f.key])}" style="width:46px;height:36px;border:1px solid ${BORDER};border-radius:8px;cursor:pointer;padding:2px;" />
-          <span id="site-x-${f.key}-hex" style="font-size:12px;color:${SUBTLE};font-family:monospace;">${esc(theme[f.key])}</span></div></div>`).join("")}
+    <div data-st="look" style="${stH("look")}grid-column:1/-1;">
+      <div class="hint" style="margin-bottom:10px;">اضغطي على المربع الملوّن لتغيير اللون، أو اكتبي الرمز. التغيير يظهر فورًا ولازم «حفظ».</div>
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,300px),1fr));gap:16px;">
+        ${(() => {
+          const row = (id, label, hint, v, c5) => `<div class="st-row"><label class="st-sw"><input type="color" id="${id}" value="${esc(v)}" /></label><div class="st-tx"><div class="st-lb">${esc(label)}</div>${hint ? `<div class="st-hn">${esc(hint)}</div>` : ""}</div>${c5 ? `<input type="text" class="st-hex" id="${id}-hex" value="${esc(v)}" maxlength="7" dir="ltr" aria-label="رمز اللون" />` : `<span class="st-hex" id="${id}-hex" dir="ltr">${esc(v)}</span>`}</div>`;
+          const c5r = (k, label, hint) => row("site-c5-" + k, label, hint, fiveColorValue(k, current, theme) || DEFAULT_SITE_COLORS[k] || "#6a1b25", true);
+          const xr = (k, label, hint) => row("site-x-" + k, label, hint, theme[k], false);
+          const card = (t, body) => `<div class="card st-card"><div class="st-ct">${t}</div>${body}</div>`;
+          return card("ألوان الهوية", c5r("primary", "اللون الأساسي", "الأزرار والعناوين وترويسة التقارير") + c5r("secondary", "اللون الثاني", "التدرجات والأشرطة") + c5r("accent", "لون التمييز", "إطار الحقل والروابط الصغيرة"))
+          + card("ألوان الحالة", xr("green", "الأخضر", "مكتمل ونجاح") + xr("gold", "الذهبي", "قيد المراجعة") + xr("danger", "الأحمر", "تنبيه وحذف") + xr("blue", "الثانوي", "بنفسجي"))
+          + card("النصوص والحدود", c5r("text", "النصوص الأساسية", "") + xr("subtle", "النصوص الفرعية", "") + xr("border", "الحدود والخطوط", "") + c5r("background", "خلفية الصفحة", ""));
+        })()}
       </div>
-      <div class="subhead">ألوان بطاقات تصفّح الهيكل</div>
-      <div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:16px;">
-        ${theme.bs.map((c, i) => `<div style="text-align:center;"><input type="color" id="site-bs-${i}" value="${esc(c)}" style="width:52px;height:40px;border:1px solid ${BORDER};border-radius:8px;cursor:pointer;padding:2px;" /><div style="font-size:10.5px;color:${SUBTLE};margin-top:4px;">اللون ${i + 1}</div></div>`).join("")}
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,300px),1fr));gap:16px;margin-top:16px;">
+        <div class="card st-card"><div class="st-ct">الشريط الجانبي</div>
+          <div class="st-row"><label class="st-sw"><input type="color" id="site-x-sidebarBg" value="${esc(theme.sidebarBg)}" /></label><div class="st-tx"><div class="st-lb">خلفية الشريط</div></div><span class="st-hex" id="site-x-sidebarBg-hex" dir="ltr">${esc(theme.sidebarBg)}</span></div>
+          <div class="st-row"><label class="st-sw"><input type="color" id="site-x-navActive" value="${esc(theme.navActive)}" /></label><div class="st-tx"><div class="st-lb">الصفحة المحددة</div><div class="st-hn">مثل «جميع تقارير الوحدة»</div></div><span class="st-hex" id="site-x-navActive-hex" dir="ltr">${esc(theme.navActive)}</span></div>
+          <div class="st-lb" style="margin:12px 0 8px;">بطاقات الهيكل (٥)</div>
+          <div style="display:flex;gap:10px;flex-wrap:wrap;">${theme.bs.map((c, i) => `<label class="st-sw"><input type="color" id="site-bs-${i}" value="${esc(c)}" /></label>`).join("")}</div>
+        </div>
+        <div class="card st-card"><div class="st-ct">معاينة مباشرة</div>
+          <div class="st-prev" style="background:${esc(current.primary)};color:#fff;"><div>ترويسة التقرير</div><span style="display:inline-block;margin-top:8px;padding:4px 14px;border-radius:10px;background:${esc(theme.accent || current.primary)};font-weight:800;">زر</span></div>
+          <div class="st-prev" style="background:${esc(current.background)};color:${esc(theme.ink)};border:1px solid ${esc(theme.border)};margin-top:10px;"><div>بطاقة بنص أساسي</div><div style="color:${esc(theme.subtle)};font-size:12px;">نص فرعي</div></div>
+          <div class="st-prev" style="background:${esc(theme.green)}22;color:${esc(theme.green)};margin-top:10px;">حالة: مكتمل</div>
+        </div>
       </div>
-      <div style="display:flex;gap:8px;flex-wrap:wrap;">
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:14px;">
+        ${pillBtn("رجوع لألوان الشعار", { variant: "ghost", icon: iconX(14, INK), action: "restore-five-colors" })}
         ${pillBtn("استعادة الألوان المتقدمة الافتراضية", { variant: "ghost", icon: iconX(14, INK), action: "restore-theme-defaults" })}
       </div>
     </div>
@@ -6796,9 +6801,11 @@ function renderSiteSettingsInner() {
           opts.forEach((f) => siteFontLoad(f.value));
           const optHtml = (sel) => opts.map((f) => `<option value="${esc(f.value)}" style="font-family:'${esc(f.value)}';" ${sel === f.value ? "selected" : ""}>${esc(f.label)}</option>`).join("");
           return `${fieldLabel("خط النصوص (يشمل الأزرار والجداول بكل الصفحات — عدا التقرير المطبوع نفسه)")}
-        <select class="input" id="site-font-family" style="width:100%;margin-bottom:12px;">${optHtml(mainF)}</select>
+        <div class="st-tiles">${opts.map((f) => `<button type="button" class="st-tile${mainF === f.value ? " on" : ""}" data-action="font-pick" data-sel="site-font-family" data-v="${esc(f.value)}" style="font-family:'${esc(f.value)}';">${esc(f.label.replace(" (خط مرفوع)", ""))}</button>`).join("")}</div>
+        <select class="input" id="site-font-family" style="display:none;">${optHtml(mainF)}</select>
         ${fieldLabel("خط العناوين")}
-        <select class="input" id="site-heading-font" style="width:100%;margin-bottom:12px;"><option value="" ${headF ? "" : "selected"}>نفس خط النصوص</option>${optHtml(headF)}</select>
+        <div class="st-tiles"><button type="button" class="st-tile${headF ? "" : " on"}" data-action="font-pick" data-sel="site-heading-font" data-v="">نفس خط النصوص</button>${opts.map((f) => `<button type="button" class="st-tile${headF === f.value ? " on" : ""}" data-action="font-pick" data-sel="site-heading-font" data-v="${esc(f.value)}" style="font-family:'${esc(f.value)}';">${esc(f.label.replace(" (خط مرفوع)", ""))}</button>`).join("")}</div>
+        <select class="input" id="site-heading-font" style="display:none;"><option value="" ${headF ? "" : "selected"}>نفس خط النصوص</option>${optHtml(headF)}</select>
         <div style="border:1px solid ${BORDER};border-radius:10px;padding:14px 16px;background:${GRAY_BG};font-family:'${esc(mainF)}';margin-bottom:12px;">
           <div style="font-size:18px;font-weight:800;margin-bottom:4px;font-family:'${esc(headF || mainF)}';">عنوان تجريبي — تقرير الأداء الدوري</div>
           <div style="font-size:13px;color:${SUBTLE};">هذا نص تجريبي بالخط المختار: وحدة الاختبارات — جمعية فرقان لتحفيظ القرآن الكريم ١٢٣٤٥٦٧٨٩٠</div>
@@ -11822,10 +11829,11 @@ function attachClickListener() {
         const c = h.querySelector("[data-chev]"); if (c) c.textContent = closed ? "◂ توسيع" : "▾ تضييق";
         break;
       }
+      case "font-pick": { const se = document.getElementById(ds.sel); if (se) { se.value = ds.v; se.dispatchEvent(new Event("change", { bubbles: true })); } break; }
       case "site-tab": {
         S.ui.siteTab = ds.tab;
         document.querySelectorAll("[data-st]").forEach((el) => { el.style.display = el.getAttribute("data-st") === ds.tab ? "" : "none"; });
-        document.querySelectorAll("[data-st-btn]").forEach((b) => { const on = b.getAttribute("data-st-btn") === ds.tab; b.style.borderBottomColor = on ? ROSE : "transparent"; b.style.color = on ? ROSE : "#8a7b82"; b.style.fontWeight = on ? 800 : 600; });
+        document.querySelectorAll("[data-st-btn]").forEach((b) => { b.classList.toggle("on", b.getAttribute("data-st-btn") === ds.tab); });
         break;
       }
       case "save-site-settings": {
