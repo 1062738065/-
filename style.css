@@ -500,8 +500,8 @@ table.prs-table td { padding: 8px 10px; border-top: 1px solid var(--border); }
   .page-inner.narrow { max-width: 900px; }
   .page-inner.dash-wide { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px; align-items: start; }
   .page-inner.dash-wide > * { margin-top: 0 !important; margin-bottom: 0 !important; min-width: 0; }
-  .page-inner.dash-wide > :not(.card) { grid-column: 1 / -1; }
-  .page-inner.dash-wide > .card:has(.table-wrap) { grid-column: 1 / -1; }
+  .page-inner.dash-wide > .topbar, .page-inner.dash-wide > .hero-banner, .page-inner.dash-wide > .stat-grid, .page-inner.dash-wide > .dash-recent-grid { grid-column: 1 / -1; }
+  .page-inner.dash-wide .table-wrap { overflow-x: auto; }
 }
 @media (min-width: 1500px) {
   .page-inner { max-width: 1500px; }
