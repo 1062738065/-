@@ -509,3 +509,21 @@ table.prs-table td { padding: 8px 10px; border-top: 1px solid var(--border); }
 }
 
 .input:focus, input:focus, select:focus, textarea:focus { outline: 2px solid var(--accent, var(--rose)); outline-offset: 1px; }
+
+/* ترتيب عناصر لوحة المعلومات: الحاوية عمود مرن، وكل عنصر له order */
+.page-inner.dash-wide { display: flex; flex-direction: column; }
+.dash-blk { min-width: 0; }
+@media (min-width: 1100px) {
+  .page-inner.dash-wide { display: grid; }
+  .page-inner.dash-wide > .dash-blk > * { margin-top: 0 !important; margin-bottom: 0 !important; }
+  .page-inner.dash-wide > .dash-blk:has(> .hero-banner, > .stat-grid, > .search-bar, > .card[style*="flex-wrap"]), .page-inner.dash-wide > .dash-blk[data-dk="periodFilter"], .page-inner.dash-wide > .dash-blk[data-dk="exKpis"], .page-inner.dash-wide > .dash-blk[data-dk="exHeat"], .page-inner.dash-wide > .dash-blk[data-dk="opsCounts"], .page-inner.dash-wide > .dash-blk[data-dk="exStats"], .page-inner.dash-wide > .dash-blk[data-dk="recent"] { grid-column: 1 / -1; }
+  .page-inner.dash-wide > nav.card { grid-column: 1 / -1; }
+}
+
+@media (min-width: 1100px) {
+  .page-inner.dash-wide { align-items: stretch; }
+  .page-inner.dash-wide > .dash-blk > .card { height: 100%; box-sizing: border-box; }
+  .page-inner.dash-wide > .dash-blk[data-dk="opsSetup"], .page-inner.dash-wide > .dash-blk[data-dk="indicators"], .page-inner.dash-wide > .dash-blk[data-dk="goals"],
+  .page-inner.dash-wide > .dash-blk[data-dk="indMatrix"], .page-inner.dash-wide > .dash-blk[data-dk="goalMatrix"], .page-inner.dash-wide > .dash-blk[data-dk="programs"],
+  .page-inner.dash-wide > .dash-blk[data-dk="exCompare"], .page-inner.dash-wide > .dash-blk[data-dk="exUnitPerf"], .page-inner.dash-wide > .dash-blk[data-dk="bars"] { grid-column: 1 / -1; }
+}
