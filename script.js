@@ -3557,6 +3557,12 @@ function exBlocksInner(kind, units) {
 const OPS_STUCK_DAYS = 5;
 function opsDays(ts) { return ts ? Math.floor((Date.now() - ts) / 86400000) : 0; }
 function opsBlocksHtml(kind, units) { return dashMarkWrap(kind, opsBlocksInner(kind, units)); }
+// «رفعت تقرير الفترة»: تقرير أُرسل فعلًا (في المسار أو مكتمل/معتمد) — المسودة والمعاد للتعديل لا يُحسبان
+const OPS_SENT_STATUSES = ["custom_pending", "completed", "approved"];
+function opsUnitSent(u, series, lc) {
+  if (!lc) return false;
+  return ensureUnitReportsLoaded(u.id).some((r) => reportHasContent(r) && reportPeriodType(r) === series.period && reportTermInfo(r).key === lc.key && OPS_SENT_STATUSES.includes(r.status));
+}
 function opsBlocksInner(kind, units) {
   const flat = [];
   units.forEach((u) => dashRepsOf(u.id).forEach((r) => flat.push({ unit: u, report: r })));
@@ -3581,8 +3587,8 @@ function opsBlocksInner(kind, units) {
   if (!dashHidden(kind, "opsMissing")) { html += "\u0001opsMissing\u0002";
     const series = dashSeries(units);
     const lastCol = series.cols[series.cols.length - 1];
-    const miss = lastCol ? units.filter((u) => !(series.byUnit[u.id] || {})[lastCol.key]) : [];
-    missingH = dashCard("ما رفعت تقرير الفترة الحالية", lastCol ? `«${series.period}» · ${lastCol.label}` : "", lastCol ? (miss.length ? `<div style="display:flex;flex-wrap:wrap;gap:8px;">${miss.map((u) => badgeHtml(u.name, "#7a4d16", GOLD_BG)).join("")}</div>` : emptyHint("كل الوحدات رفعت تقريرها.")) : emptyHint("لا توجد تقارير بعد."));
+    const miss = lastCol ? units.filter((u) => !opsUnitSent(u, series, lastCol)) : [];
+    missingH = dashCard("ما رفعت تقرير الفترة الحالية", lastCol ? `«${series.period}» · ${lastCol.label} · المسودة والمعاد للتعديل يُحسبان غير مرفوع` : "", lastCol ? (miss.length ? `<div style="display:flex;flex-wrap:wrap;gap:8px;">${miss.map((u) => badgeHtml(u.name, "#7a4d16", GOLD_BG)).join("")}</div>` : emptyHint("كل الوحدات رفعت تقريرها.")) : emptyHint("لا توجد تقارير بعد."));
     html += "\u0003";
   }
   if (!dashHidden(kind, "opsReturned")) { html += "\u0001opsReturned\u0002";
@@ -3617,7 +3623,7 @@ function opsBlocksInner(kind, units) {
   // بطاقات أرقام وقراءة الالتزام لكل قسم (لوحة مديرة النظام)
   let kpiH = "", deptH = "";
   { const series2 = dashSeries(units); const lc = series2.cols[series2.cols.length - 1];
-    const miss2 = lc ? units.filter((u) => !(series2.byUnit[u.id] || {})[lc.key]) : [];
+    const miss2 = lc ? units.filter((u) => !opsUnitSent(u, series2, lc)) : [];
     const pct = units.length && lc ? Math.round(((units.length - miss2.length) / units.length) * 100) : null;
     const stuckN = flat.filter((x) => x.report.status === "custom_pending").length;
     const retN = flat.filter((x) => x.report.status === "returned" || x.report.status === "needs_completion").length;
@@ -3625,7 +3631,10 @@ function opsBlocksInner(kind, units) {
     if (!dashHidden(kind, "opsKpis")) kpiH = `<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(min(170px,100%),1fr));gap:12px;margin-bottom:18px;">${kc(lc ? miss2.length : "—", "تقارير متأخرة", DANGER, lc ? "ما رفعت تقرير " + lc.label : "")}${kc(stuckN, "تقارير عالقة بانتظار مراجعة", GOLD)}${kc(retN, "تقرير معاد للتعديل", ROSE)}${kc(pct == null ? "—" : pct + "٪", "نسبة الالتزام", GREEN, units.length ? `(${units.length - miss2.length} من ${units.length} وحدات)` : "")}</div>`;
     if (!dashHidden(kind, "opsDeptCompliance")) {
       const depts = (S.departments || []).filter((d) => d.status !== "inactive");
-      const rowsD = depts.map((d) => { const us = units.filter((u) => u.departmentId === d.id); if (!us.length) return null; const sent = lc ? us.filter((u) => (series2.byUnit[u.id] || {})[lc.key]).length : 0; return { d, n: us.length, sent }; }).filter(Boolean);
+      const deptIds = new Set(depts.map((d) => d.id));
+      const groups = depts.map((d) => ({ d, us: units.filter((u) => u.departmentId === d.id) }));
+      groups.push({ d: { id: "_none", name: "بدون قسم (غير مربوطة بالهيكل)" }, us: units.filter((u) => !u.departmentId || !deptIds.has(u.departmentId)) });
+      const rowsD = groups.map(({ d, us }) => { if (!us.length) return null; const sent = lc ? us.filter((u) => opsUnitSent(u, series2, lc)).length : 0; return { d, n: us.length, sent }; }).filter(Boolean);
       deptH = dashCard("الالتزام لكل قسم", lc ? `«${series2.period}» · ${lc.label}` : "", rowsD.length && lc ? rowsD.map((x) => { const pc = Math.round((x.sent / x.n) * 100); return `<div style="padding:8px 0;border-top:1px solid ${BORDER};"><div style="display:flex;justify-content:space-between;font-size:13px;"><b>${esc(x.d.name)}</b><span style="color:${SUBTLE};">${x.sent} من ${x.n} · ${pc}٪</span></div><div style="height:8px;border-radius:999px;background:#f0e6e9;margin-top:6px;overflow:hidden;"><div style="height:100%;width:${pc}%;background:${pc >= 80 ? GREEN : pc >= 40 ? GOLD : DANGER};"></div></div></div>`; }).join("") : `<div class="hint">لا توجد بيانات للفترة الحالية بعد.</div>`);
     }
   }
