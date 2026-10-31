@@ -5395,6 +5395,55 @@ function portalPreload() {
 }
 
 /* =============================== Site settings (admin) ======================= */
+/* ===== قالب الصفحة العام: ترويسة وتذييل وترقيم وعلامة مائية وهوامش — يُطبَّق على كل التقارير بزر ===== */
+const PG_KEYS = ["orient", "margin", "paper", "watermark", "frame", "showHead", "headRight", "headCenter", "headLeft", "headLogo", "showFoot", "footText", "pageNum"];
+function pgDraft() {
+  if (!S.ui.pgDraft) { const f = rptSettings("final"); S.ui.pgDraft = {}; PG_KEYS.forEach((k) => { S.ui.pgDraft[k] = f[k]; }); }
+  return S.ui.pgDraft;
+}
+function pgPreviewHtml() {
+  const d = pgDraft();
+  const land = d.orient === "landscape";
+  const w = land ? 300 : 212, h = land ? 212 : 300;
+  const m = RPT_MARGINS[d.margin] || RPT_MARGINS.normal;
+  const sc = w / (land ? 297 : 210);
+  const num = rptPageNumText(d, 2, 8);
+  return `<div style="position:relative;width:${w}px;height:${h}px;background:${/^#[0-9a-fA-F]{6}$/.test(d.paper) ? d.paper : "#fff"};border:1px solid ${BORDER};box-shadow:0 4px 14px rgba(0,0,0,.08);margin:0 auto;overflow:hidden;${d.frame ? `outline:2px solid ${ROSE};outline-offset:-8px;` : ""}">
+    ${d.watermark ? `<div style="position:absolute;inset:0;background:url('${ASSOCIATION_LOGO}') center/45% no-repeat;opacity:.08;"></div>` : ""}
+    <div style="position:absolute;top:${Math.round(m[0] * sc)}px;bottom:${Math.round(m[1] * sc)}px;right:${Math.round(m[2] * sc)}px;left:${Math.round(m[3] * sc)}px;display:flex;flex-direction:column;border:1px dashed #d8c9c1;">
+      ${d.showHead ? `<div style="display:flex;justify-content:space-between;align-items:center;font-size:7px;padding:3px 4px;border-bottom:1px solid ${BORDER};color:${INK};"><span>${esc(d.headRight)}</span><span style="display:flex;gap:3px;align-items:center;">${d.headLogo ? `<img src="${ASSOCIATION_LOGO}" alt="" style="height:12px;" />` : ""}<b>${esc(d.headCenter)}</b></span><span>${esc(d.headLeft)}</span></div>` : ""}
+      <div style="flex:1;padding:8px 6px;">${[70, 90, 55, 80, 40].map((x) => `<div style="height:5px;width:${x}%;background:#e9dfda;border-radius:3px;margin-bottom:7px;"></div>`).join("")}</div>
+      ${(d.showFoot && d.footText) || num ? `<div style="display:flex;justify-content:space-between;font-size:7px;padding:3px 4px;border-top:1px solid ${BORDER};color:${SUBTLE};"><span>${d.showFoot ? esc(d.footText) : ""}</span><span>${num}</span><span></span></div>` : ""}
+    </div></div>`;
+}
+function pageTplCardHtml() {
+  const d = pgDraft();
+  const pills = (key, opts) => `<div style="display:flex;gap:6px;flex-wrap:wrap;">${opts.map(([v, l]) => { const on = d[key] === v; return `<button type="button" data-action="pg-set" data-key="${key}" data-val="${v}" style="font-family:inherit;min-height:38px;padding:0 14px;border-radius:999px;cursor:pointer;font-size:13px;font-weight:700;border:1px solid ${on ? ROSE : BORDER};background:${on ? ROSE : "#fff"};color:${on ? "#fff" : INK};">${l}</button>`; }).join("")}</div>`;
+  const tog = (key, label) => `<button type="button" data-action="pg-toggle" data-key="${key}" aria-pressed="${d[key] ? "true" : "false"}" style="font-family:inherit;min-height:38px;padding:0 14px;border-radius:999px;cursor:pointer;font-size:13px;font-weight:700;border:1px solid ${d[key] ? GREEN : BORDER};background:${d[key] ? GREEN_BG : "#fff"};color:${d[key] ? GREEN : INK};">${d[key] ? "✓ " : ""}${label}</button>`;
+  const txt = (key, ph) => `<input type="text" class="input" data-pg="${key}" value="${esc(d[key] || "")}" placeholder="${esc(ph)}" style="width:100%;" />`;
+  const fld = (label, inner) => `<div style="margin-bottom:14px;"><div style="font-size:13px;font-weight:700;margin-bottom:6px;">${label}</div>${inner}</div>`;
+  return `<div class="card" style="margin-bottom:16px;">
+    <div class="subhead" style="margin-top:0;">قالب الصفحة (لكل التقارير)</div>
+    <div class="hint" style="margin-bottom:14px;">اضبطي الشكل هنا ثم اضغطي «تطبيق على كل التقارير». يبقى لكل تقرير بعدها تعديله وحده من «تنسيق وإنشاء التقارير».</div>
+    <div style="display:flex;flex-wrap:wrap;gap:24px;align-items:flex-start;">
+      <div style="flex:1 1 360px;min-width:0;">
+        ${fld("اتجاه الصفحة", pills("orient", [["portrait", "طولي"], ["landscape", "عرضي"]]))}
+        ${fld("الهوامش", pills("margin", [["narrow", "ضيقة"], ["normal", "عادية"], ["wide", "واسعة"]]))}
+        ${fld("لون الورقة", `<input type="color" data-pg="paper" value="${/^#[0-9a-fA-F]{6}$/.test(d.paper) ? esc(d.paper) : "#ffffff"}" style="width:56px;height:40px;border:1px solid ${BORDER};border-radius:10px;padding:2px;background:#fff;" />`)}
+        ${fld("زخارف", `<div style="display:flex;gap:6px;flex-wrap:wrap;">${tog("watermark", "علامة مائية (الشعار)")}${tog("frame", "إطار حول الصفحة")}</div>`)}
+        ${fld("الترويسة (أعلى الصفحة)", `<div style="margin-bottom:8px;">${tog("showHead", d.showHead ? "ظاهرة" : "مخفية")}</div>${d.showHead ? `<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:8px;">${txt("headRight", "يمين: اسم الجمعية")}${txt("headCenter", "وسط: نص اختياري")}${txt("headLeft", "يسار: اسم الإدارة")}</div><div style="margin-top:8px;">${tog("headLogo", "الشعار في الوسط")}</div>` : ""}`)}
+        ${fld("التذييل (أسفل الصفحة)", `<div style="margin-bottom:8px;">${tog("showFoot", d.showFoot ? "ظاهر" : "مخفي")}</div>${d.showFoot ? txt("footText", "مثال: سري — للاستخدام الداخلي") : ""}`)}
+        ${fld("ترقيم الصفحات", pills("pageNum", [["none", "بدون"], ["paren", "(٢)"], ["num", "٢"], ["of", "٢ من ٨"]]))}
+      </div>
+      <div style="flex:0 0 330px;max-width:100%;"><div style="font-size:12px;color:${SUBTLE};margin-bottom:8px;text-align:center;">معاينة A4 (شكل تقريبي)</div><div id="pg-preview">${pgPreviewHtml()}</div></div>
+    </div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:6px;">
+      ${pillBtn("تطبيق على كل التقارير", { action: "pg-apply" })}
+      ${pillBtn("إعادة من التقرير الحالي", { variant: "ghost", icon: iconX(14, INK), action: "pg-reload" })}
+    </div>
+    ${S.ui.pgMsg ? `<div class="hint" style="margin-top:10px;color:${GREEN};">${esc(S.ui.pgMsg)}</div>` : ""}
+  </div>`;
+}
 function dashOrderCardHtml() {
   const kind = DASH_KINDS.some((k) => k.id === S.ui.dashOrderKind) ? S.ui.dashOrderKind : "office";
   const list = dashOrderList(kind);
@@ -6502,7 +6551,7 @@ function renderSiteSettingsInner() {
   <div class="page-wrap"><div class="page-inner">
     ${topBarHtml({ title: "إعدادات الموقع", subtitle: "تخصيص هوية الموقع — الألوان، الشعار، البانر، والعبارات. التغيير يظهر فورًا هنا، ولازم الضغط على \"حفظ\" ليصير دائمًا" })}
 
-    ${(() => { const T = [["look", "المظهر"], ["brand", "الشعار والشريط"], ["dash", "لوحة المعلومات"], ["report", "خيارات التقرير"]]; return `<div style="display:flex;flex-wrap:wrap;border-bottom:1px solid ${BORDER};margin-bottom:16px;">${T.map(([id, l]) => `<button type="button" data-action="site-tab" data-tab="${id}" data-st-btn="${id}" style="font-family:inherit;font-size:14px;cursor:pointer;padding:10px 4px;margin-inline-end:18px;background:none;border:none;border-bottom:2.5px solid ${stTab === id ? ROSE : "transparent"};margin-bottom:-1px;font-weight:${stTab === id ? 800 : 600};color:${stTab === id ? ROSE : "#8a7b82"};">${l}</button>`).join("")}</div>`; })()}
+    ${(() => { const T = [["look", "المظهر"], ["brand", "الشعار والشريط"], ["dash", "لوحة المعلومات"], ["page", "قالب الصفحة"], ["report", "خيارات التقرير"]]; return `<div style="display:flex;flex-wrap:wrap;border-bottom:1px solid ${BORDER};margin-bottom:16px;">${T.map(([id, l]) => `<button type="button" data-action="site-tab" data-tab="${id}" data-st-btn="${id}" style="font-family:inherit;font-size:14px;cursor:pointer;padding:10px 4px;margin-inline-end:18px;background:none;border:none;border-bottom:2.5px solid ${stTab === id ? ROSE : "transparent"};margin-bottom:-1px;font-weight:${stTab === id ? 800 : 600};color:${stTab === id ? ROSE : "#8a7b82"};">${l}</button>`).join("")}</div>`; })()}
     <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,420px),1fr));gap:16px;align-items:start;">
     <div class="card" data-st="look" style="${stH("look")}margin-bottom:16px;">
       <div class="subhead" style="margin-top:0;">الألوان الخمسة</div>
@@ -6684,6 +6733,7 @@ function renderSiteSettingsInner() {
 
 
     <div data-st="dash" style="${stH("dash")}">${dashSettingsCardHtml()}</div>
+    <div data-st="page" style="${stH("page")}">${pageTplCardHtml()}</div>
 
     </div>
     <div class="card">
@@ -10679,6 +10729,11 @@ function liveUpdateComputed(el) {
 function attachFormListeners() {
   appEl.addEventListener("input", (e) => {
     const el = e.target;
+    if (el.dataset && el.dataset.pg) {
+      pgDraft()[el.dataset.pg] = el.value;
+      const pv = document.getElementById("pg-preview"); if (pv) pv.innerHTML = pgPreviewHtml();
+      return;
+    }
     if (el.id && (el.id.indexOf("cp-sec-") === 0 || el.id.indexOf("cp-notes-") === 0)) {
       // حفظ مسودة ملاحظات المراجِعة محليًا (تبقى عند التنقل بين الوارد وعرض التقرير)
       const m = el.id.indexOf("cp-sec-") === 0 ? el.id.slice(7) : el.id.slice(9);
@@ -10987,6 +11042,11 @@ function attachFormListeners() {
       render();
       return;
     }
+    if (el.dataset && el.dataset.pg) {
+      pgDraft()[el.dataset.pg] = el.value;
+      const pv = document.getElementById("pg-preview"); if (pv) pv.innerHTML = pgPreviewHtml();
+      return;
+    }
     if (el.id === "dash-order-kind") { S.ui.dashOrderKind = el.value; render(); return; }
     if (el.id === "site-heading-font") {
       S.siteSettings = S.siteSettings || dataStore.getSiteSettings();
@@ -11169,6 +11229,25 @@ function attachClickListener() {
         addPermLog("dashboard", kind, kl, (nowHidden ? "إخفاء «" : "إظهار «") + (blk ? blk.label : key) + "» من لوحة المعلومات");
         render();
         break;
+      }
+      case "pg-set": {
+        const d = pgDraft(); d[ds.key] = ds.val;
+        if (ds.key === "margin" && RPT_MARGINS[ds.val]) { const m = RPT_MARGINS[ds.val]; d.mt = m[0]; d.mb = m[1]; d.mr = m[2]; d.ml = m[3]; }
+        S.ui.pgMsg = ""; render(); break;
+      }
+      case "pg-toggle": { const d = pgDraft(); d[ds.key] = !d[ds.key]; S.ui.pgMsg = ""; render(); break; }
+      case "pg-reload": { S.ui.pgDraft = null; S.ui.pgMsg = ""; render(); break; }
+      case "pg-apply": {
+        if (!S.isAdmin) break;
+        const d = pgDraft();
+        const m = RPT_MARGINS[d.margin];
+        const patch = {}; PG_KEYS.forEach((k) => { patch[k] = d[k]; });
+        if (m) { patch.mt = m[0]; patch.mb = m[1]; patch.mr = m[2]; patch.ml = m[3]; }
+        const ids = ["final", "unit"].concat(rptStore().custom.map((c) => c.id));
+        let n = 0;
+        ids.forEach((id) => { const cur = rptSettings(id); if (cur) { rptSave(id, { ...cur, ...patch }); n++; } });
+        S.ui.pgMsg = "تم تطبيق قالب الصفحة على " + n + " من قوالب التقارير.";
+        render(); break;
       }
       case "dash-move": {
         if (!S.isAdmin) break;
