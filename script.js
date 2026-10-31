@@ -5420,7 +5420,7 @@ function portalPreload() {
 
 /* =============================== Site settings (admin) ======================= */
 /* ===== قالب الصفحة العام: ترويسة وتذييل وترقيم وعلامة مائية وهوامش — يُطبَّق على كل التقارير بزر ===== */
-const PG_KEYS = ["bgFit", "coverBg", "bgImage", "headImage", "footImage", "orient", "margin", "paper", "watermark", "frame", "showHead", "headRight", "headCenter", "headLeft", "headLogo", "showFoot", "footText", "pageNum"];
+const PG_KEYS = ["mt", "mb", "mr", "ml", "bgFit", "coverBg", "bgImage", "headImage", "footImage", "orient", "margin", "paper", "watermark", "frame", "showHead", "headRight", "headCenter", "headLeft", "headLogo", "showFoot", "footText", "pageNum"];
 function pgDraft() {
   if (!S.ui.pgDraft) { const f = rptSettings("final"); S.ui.pgDraft = {}; PG_KEYS.forEach((k) => { S.ui.pgDraft[k] = f[k]; }); if (!S.ui.pgDraft.bgFit) S.ui.pgDraft.bgFit = "stretch"; }
   return S.ui.pgDraft;
@@ -5497,7 +5497,7 @@ function pageTplCardHtml() {
     <div style="display:flex;flex-wrap:wrap;gap:24px;align-items:flex-start;">
       <div style="flex:1 1 360px;min-width:0;">
         ${fld("اتجاه الصفحة", pills("orient", [["portrait", "طولي"], ["landscape", "عرضي"]]))}
-        ${fld("الهوامش", pills("margin", [["narrow", "ضيقة"], ["normal", "عادية"], ["wide", "واسعة"]]))}
+        ${fld("الهوامش", pills("margin", [["narrow", "ضيقة"], ["normal", "عادية"], ["wide", "واسعة"], ["custom", "بالمليمتر"]]) + (d.margin === "custom" ? `<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px;">${[["mt", "أعلى"], ["mb", "أسفل"], ["mr", "يمين"], ["ml", "يسار"]].map(([k, l]) => `<label style="font-size:12px;">${l}<input type="number" class="input" data-pg="${k}" min="0" max="80" inputmode="numeric" value="${Number(d[k]) || 0}" style="width:78px;" /></label>`).join("")}</div><div class="hint" style="margin-top:6px;">لو الكليشة صورة كبيرة، كبّري الهامش الأعلى (مثلًا ٤٠) عشان المحتوى ما يغطيها.</div>` : ""))}
         ${fld("الخلفية", `<div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:8px;"><span style="font-size:12.5px;">لون</span><input type="color" data-pg="paper" value="${/^#[0-9a-fA-F]{6}$/.test(d.paper) ? esc(d.paper) : "#ffffff"}" style="width:56px;height:40px;border:1px solid ${BORDER};border-radius:10px;padding:2px;background:#fff;" /></div>${pgImgRow("pg-img-bg", d.bgImage, "pg-img-clear", "bgImage")}`, "اللون وحده، أو صورة تغطي الصفحة كاملة (وتتقدم على اللون). منفصلة عن الكليشة: استخدمي أحدهما أو الاثنين.")}
         ${fld("حجم صورة الخلفية", pills("bgFit", [["stretch", "تملأ الصفحة كاملة (الصورة كلها تظهر)"], ["cover", "تغطية بدون تمديد (قد يُقص جزء منها)"]]), "الصور المصمَّمة بمقاس A4 تناسب الخيار الأول.")}
         ${fld("خلفية الصفحة الأولى (الغلاف) — اختيارية", pgImgRow("pg-img-cover", d.coverBg, "pg-img-clear", "coverBg"), "إذا ما رفعتي شيئًا يأخذ الغلاف الخلفية العامة.")}
@@ -5832,7 +5832,7 @@ function rptWrap(s, inner, isPreview) {
   if (s.bgImage && RPT_DATA_IMG_RE.test(s.bgImage)) vars += `--rpt-bg-img:url("${s.bgImage}");`;
   const cls = ["rpt-wrap", s.zebra ? "rpt-zebra" : "", s.tableBorders === "grid" ? "rpt-tgrid" : s.tableBorders === "none" ? "rpt-tnone" : "", s.frame ? "rpt-frame" : "", vars.indexOf("--rpt-bg-img") !== -1 ? "rpt-bgimg" : ""].filter(Boolean).join(" ");
   ensureReportFontsLoaded();
-  const pageCss = isPreview ? "" : `<style>@page{size:${w}mm ${h}mm;margin:0}</style>`;
+  const pageCss = (isPreview ? "" : `<style>@page{size:${w}mm ${h}mm;margin:0}</style>`) + `<style>.a4-page.rpt-hasbg{min-height:${h}mm}@media print{.a4-page.rpt-hasbg{min-height:100vh}}</style>`;
   return `${pageCss}<div class="${cls}" style="${vars}">${inner}</div>`;
 }
 function rptPageNumText(s, n, total) {
@@ -5850,8 +5850,9 @@ function rptUnitSettings(unit) {
 function rptBgSize(s) { return s && s.bgFit === "cover" ? "cover" : "100% 100%"; }
 function rptCoverStyle(s, unitId) {
   const ul = (unitId && (((S.siteSettings || {}).theme || {}).unitLetterheads || {})[unitId]) || {};
-  const v = (ul.coverBg && RPT_DATA_IMG_RE.test(ul.coverBg) && ul.coverBg) || (s.coverBg && RPT_DATA_IMG_RE.test(s.coverBg) && s.coverBg) || "";
-  return v ? ` style="background-image:url('${v}');background-size:${rptBgSize(s)};background-position:center;background-repeat:no-repeat;"` : "";
+  const okb = (x) => (x && RPT_DATA_IMG_RE.test(x) ? x : "");
+  const v = okb(ul.coverBg) || okb(s.coverBg) || okb(ul.bg) || okb(s.bgImage);
+  return v ? ` class-hasbg style="background-image:url('${v}');background-size:${rptBgSize(s)};background-position:center;background-repeat:no-repeat;"` : "";
 }
 function rptLetterhead(s) {
   const uid = RPT_CTX && RPT_CTX.unitId;
@@ -5865,7 +5866,7 @@ function rptPageHtml(s, inner, n, total) {
   const num = rptPageNumText(s, n, total);
   const footImg = lh.foot ? `<div class="rpt-runfoot-img" style="position:absolute;bottom:14mm;left:var(--rpt-ml,15mm);right:var(--rpt-mr,15mm);"><img src="${lh.foot}" alt="" style="display:block;width:100%;max-height:20mm;object-fit:contain;" /></div>` : "";
   const foot = footImg + ((s.showFoot && s.footText) || num ? `<div class="rpt-runfoot"><span>${s.showFoot ? esc(s.footText) : ""}</span><span class="rpt-runfoot-num">${num}</span><span></span></div>` : "");
-  return `<section class="a4-page${s.spine ? " has-spine" : ""}"${lh.bg ? ` style="background-image:url('${lh.bg}');background-size:${rptBgSize(s)};background-position:center;background-repeat:no-repeat;"` : ""}>${s.spine ? `<div class="rpt-spine"></div>` : ""}${s.watermark ? `<div class="rpt-wm" style="background-image:url('${ASSOCIATION_LOGO}')"></div>` : ""}${head}${inner}${foot}</section>`;
+  return `<section class="a4-page${s.spine ? " has-spine" : ""}${lh.bg ? " rpt-hasbg" : ""}"${lh.bg ? ` style="background-image:url('${lh.bg}');background-size:${rptBgSize(s)};background-position:center;background-repeat:no-repeat;"` : ""}>${s.spine ? `<div class="rpt-spine"></div>` : ""}${s.watermark ? `<div class="rpt-wm" style="background-image:url('${ASSOCIATION_LOGO}')"></div>` : ""}${head}${inner}${foot}</section>`;
 }
 
 /* ---- سياق الرسم: نوع الرسوم وألوانها وحجمها والأعمدة المخفية — يقرؤه svgBarChart/svgPieChart/reportTable ---- */
@@ -6071,7 +6072,7 @@ function aggReportDocHtml(s, data) {
     const hasCover = !!s.showCover;
     const total = pages.length + (hasCover ? 1 : 0);
     const cover = hasCover ? `
-    <section class="a4-page rpt-cover"${rptCoverStyle(s, "")}>
+    <section class="a4-page rpt-cover${rptCoverStyle(s, "") ? " rpt-hasbg" : ""}"${rptCoverStyle(s, "").replace(" class-hasbg", "")}>
       ${s.watermark ? `<div class="rpt-wm" style="background-image:url('${ASSOCIATION_LOGO}')"></div>` : ""}
       <div class="rpt-cover-inner">
         <img src="${ASSOCIATION_LOGO}" class="rpt-cover-logo" alt="شعار الجمعية" />
@@ -10689,7 +10690,7 @@ function reportCoverPageHtml(unit, report, dept, s, totalPages) {
   const yearLabel = d.hijriYear || hijriYearLabel(hijriYearFromTs(report.createdAt || Date.now()));
   const num = rptPageNumText(s, 1, totalPages);
   return `
-  <section class="a4-page rpt-cover-v4"${rptCoverStyle(s, unit && unit.id)}>
+  <section class="a4-page rpt-cover-v4${rptCoverStyle(s, unit && unit.id) ? " rpt-hasbg" : ""}"${rptCoverStyle(s, unit && unit.id).replace(" class-hasbg", "")}>
     ${s.watermark ? `<div class="rpt-wm" style="background-image:url('${ASSOCIATION_LOGO}')"></div>` : ""}
     <img src="${ASSOCIATION_LOGO}" class="rpt-cover-v4-logo" alt="شعار الجمعية" />
     <div class="rpt-cover-v4-text">
@@ -11403,6 +11404,7 @@ function attachClickListener() {
         const m = RPT_MARGINS[d.margin];
         const patch = {}; PG_KEYS.forEach((k) => { patch[k] = d[k]; });
         if (m) { patch.mt = m[0]; patch.mb = m[1]; patch.mr = m[2]; patch.ml = m[3]; }
+        else ["mt", "mb", "mr", "ml"].forEach((k) => { patch[k] = Math.max(0, Math.min(80, Number(d[k]) || 0)); });
         const ids = ["final", "unit"].concat(rptStore().custom.map((c) => c.id));
         let n = 0;
         ids.forEach((id) => { const cur = rptSettings(id); if (cur) { rptSave(id, { ...cur, ...patch }); n++; } });
