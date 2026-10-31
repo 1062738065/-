@@ -9361,29 +9361,31 @@ function bkPanelHtml(arr) {
   const b = (S.ui.bulk || {}); if (b.arr !== arr) return "";
   const schema = bkSchema(arr); if (!schema) return "";
   const fields = bkFields(schema), pv = b.preview;
-  const order = fields.map((f, i) => `<span style="display:inline-block;margin:2px 3px;padding:2px 9px;border-radius:999px;background:#fff;border:1px solid ${BORDER};font-size:12px;">${i + 1}. ${esc(f.label)}${f.required ? " *" : ""}</span>`).join("");
-  const pvHtml = pv ? `<div style="margin-top:10px;">${pv.rows.map((r, i) => `<div style="padding:8px 10px;margin-bottom:6px;border-radius:10px;border:1px solid ${r.errs.length ? "#e7b4b4" : "#b9dcc4"};background:${r.errs.length ? "#fdf2f2" : "#f1faf4"};font-size:12.5px;line-height:1.8;"><b>${i + 1}.</b> ${esc(r.line.slice(0, 90))}${r.errs.length ? `<div style="color:#b03030;">يحتاج تصحيح: ${esc(r.errs.join("، "))}</div>` : `<div style="color:#1f7a45;">جاهز للإضافة</div>`}</div>`).join("")}</div>` : "";
+  const order = fields.map((f, i) => `<span style="white-space:nowrap;">${i + 1}) ${esc(f.label)}${f.required ? " *" : ""}</span>`).join(" &nbsp;|&nbsp; ");
+  const pvHtml = pv ? `<div style="margin-top:14px;">${pv.rows.map((r, i) => `<div style="padding:10px 12px;margin-bottom:8px;border-radius:10px;border:1px solid ${r.errs.length ? "#e7b4b4" : "#b9dcc4"};background:${r.errs.length ? "#fdf2f2" : "#f1faf4"};font-size:13px;line-height:1.8;"><div style="font-weight:700;">${i + 1}. ${esc(r.line.slice(0, 90))}</div>${r.errs.length ? `<div style="color:#b03030;">يحتاج تصحيح: ${esc(r.errs.join("، "))}</div>` : `<div style="color:#1f7a45;">جاهز للإضافة</div>`}</div>`).join("")}</div>` : "";
   const ok = pv ? pv.rows.filter((r) => !r.errs.length).length : 0;
-  return `<div id="bk-panel" style="margin:12px 0;padding:14px;border-radius:14px;background:${GRAY_BG};border:1px solid ${BORDER};">
-    <div style="font-weight:800;font-size:14px;margin-bottom:6px;">إدخال ${esc(schema.itemLabel)} من نص</div>
-    <div class="hint" style="margin-bottom:6px;">اكتبي سطرًا لكل عنصر، وافصلي الحقول بـ «|» بهذا الترتيب (الحقل الفارغ اتركيه فاضي، والأخيرة تقدرين تحذفينها):</div>
-    <div style="margin-bottom:8px;">${order}</div>
-    ${fields.some((f) => f.options || f.baseOptions) ? `<details style="margin-bottom:8px;"><summary style="cursor:pointer;font-size:12.5px;font-weight:700;">الخيارات المسموحة للحقول المحدّدة</summary>${fields.map((f, i) => (f.options || f.baseOptions) ? `<div style="font-size:12px;line-height:1.8;margin-top:4px;"><b>${i + 1}. ${esc(f.label)}:</b> ${esc((f.options || f.baseOptions).map((x) => (typeof x === "string" ? x : x.label || x.value)).join(" ، "))}</div>` : "").join("")}</details>` : ""}
-    <textarea class="input" id="bk-text" rows="7" style="font-family:inherit;line-height:1.9;min-height:140px;">${esc(b.text || "")}</textarea>
-    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px;">${pillBtn("معاينة", { action: "bk-preview", data: { arr } })}${ok ? pillBtn(`إضافة ${ok} عنصر`, { variant: "soft", action: "bk-apply", data: { arr } }) : ""}${pillBtn("إغلاق", { variant: "ghost", action: "bk-close" })}</div>
+  const optsHtml = fields.some((f) => f.options || f.baseOptions) ? `<details style="margin:10px 0 0;"><summary style="cursor:pointer;font-size:13px;font-weight:700;color:var(--rose);">الخيارات المسموحة</summary>${fields.map((f, i) => (f.options || f.baseOptions) ? `<div class="hint" style="margin-top:6px;"><b>${i + 1}. ${esc(f.label)}:</b> ${esc((f.options || f.baseOptions).map((x) => (typeof x === "string" ? x : x.label || x.value)).join(" ، "))}</div>` : "").join("")}</details>` : "";
+  return `<div id="bk-panel" class="repeat-item" style="margin-top:14px;">
+    <div class="repeat-item-head"><span class="repeat-item-title">إدخال ${esc(schema.itemLabel)} من نص</span></div>
+    <div class="hint" style="margin-bottom:8px;">اكتبي سطرًا لكل عنصر، وافصلي بين الحقول بـ «|» بهذا الترتيب. الحقل الفارغ اتركيه فاضي، والحقول الأخيرة تقدرين تحذفينها. (* = مطلوب)</div>
+    <div class="hint" style="background:${GRAY_BG};border-radius:10px;padding:9px 12px;line-height:2;">${order}</div>
+    ${optsHtml}
+    <textarea class="input" id="bk-text" rows="6" style="margin-top:12px;font-family:inherit;line-height:1.9;min-height:140px;">${esc(b.text || "")}</textarea>
+    <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:12px;">${pillBtn("معاينة", { variant: "ghost", action: "bk-preview", data: { arr } })}${ok ? pillBtn(`إضافة ${ok} عنصر`, { action: "bk-apply", data: { arr } }) : ""}${pillBtn("إغلاق", { variant: "ghost", action: "bk-close" })}</div>
     ${pvHtml}
-    <div class="hint" style="margin-top:8px;">يضيف بعد الموجود فقط، ولا يغيّر ولا يحذف أي عنصر. السطر اللي يحتاج تصحيح ما ينضاف قبل ما تصححينه. الجداول والصور والروابط تبقى يدوية.</div>
+    <div class="hint" style="margin-top:12px;">يضيف بعد الموجود فقط، ولا يغيّر ولا يحذف أي عنصر. السطر اللي يحتاج تصحيح ما ينضاف قبل تصحيحه. الجداول والصور والروابط تبقى يدوية.</div>
   </div>`;
 }
 function bkInject() {
   document.querySelectorAll('[data-action="add-item"]').forEach((btn) => {
     const arr = btn.dataset.arr; if (!arr || btn.dataset.bkDone || !bkSchema(arr) || !EMPTY_ITEM_FACTORY[arr]) return;
     btn.dataset.bkDone = "1";
+    const row = document.createElement("div"); row.style.cssText = "display:flex;gap:10px;flex-wrap:wrap;align-items:center;";
+    btn.before(row); row.appendChild(btn);
     const holder = document.createElement("div");
-    holder.innerHTML = pillBtn("إدخال من نص", { variant: "soft", action: "bk-open", data: { arr } });
-    const b2 = holder.firstElementChild; b2.style.marginInlineStart = "8px"; b2.style.marginTop = "6px";
-    btn.after(b2);
-    if ((S.ui.bulk || {}).arr === arr) { const pn = document.createElement("div"); pn.innerHTML = bkPanelHtml(arr); b2.after(pn.firstElementChild); }
+    holder.innerHTML = pillBtn("إدخال من نص", { variant: "ghost", icon: iconLayers(15, ROSE), action: "bk-open", data: { arr } });
+    row.appendChild(holder.firstElementChild);
+    if ((S.ui.bulk || {}).arr === arr) { const pn = document.createElement("div"); pn.innerHTML = bkPanelHtml(arr); row.after(pn.firstElementChild); }
   });
 }
 function getItemList(arr) { return S.sectionDraft[arr] || (S.sectionDraft[arr] = []); }
