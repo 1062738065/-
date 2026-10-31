@@ -6088,27 +6088,14 @@ function aggReportDocHtml(s, data) {
     });
     const hasCover = !!s.showCover;
     const total = pages.length + (hasCover ? 1 : 0);
-    const cover = hasCover ? `
-    <section class="a4-page rpt-cover${rptCoverStyle(s, "") ? " rpt-hasbg" : ""}"${rptCoverStyle(s, "").replace(" class-hasbg", "")}>
-      ${s.watermark ? `<div class="rpt-wm" style="background-image:url('${ASSOCIATION_LOGO}')"></div>` : ""}
-      <div class="rpt-cover-inner">
-        <img src="${ASSOCIATION_LOGO}" class="rpt-cover-logo" alt="شعار الجمعية" />
-        <div class="rpt-cover-assoc">${esc(s.assocName)}</div>
-        ${s.preparedBy ? `<div class="rpt-cover-unit">${esc(s.preparedBy)}</div>` : ""}
-        <div class="rpt-cover-divider"></div>
-        <h1 class="rpt-cover-title">${esc(s.coverTitle || s.name || "تقرير")}</h1>
-        ${s.coverSub ? `<div class="rpt-cover-sub">${esc(s.coverSub)}</div>` : ""}
-        ${s.showCoverMeta ? `<div class="rpt-cover-meta">
-          <div><span>عدد الأقسام:</span> ${data.deptCount}</div>
-          <div><span>عدد الوحدات:</span> ${data.unitCount}</div>
-          <div><span>عدد التقارير:</span> ${data.total}</div>
-          ${data.yearText ? `<div><span>السنة:</span> ${esc(data.yearText)}</div>` : ""}
-          ${data.periodText ? `<div><span>الفترة:</span> ${esc(data.periodText)}</div>` : ""}
-        </div>` : ""}
-        ${s.preparedBy ? `<div class="rpt-cover-prepared"><div>إعداد: ${esc(s.preparedBy)}</div></div>` : ""}
-      </div>
-      ${rptPageNumText(s, 1, total) ? `<div class="rpt-runfoot"><span></span><span class="rpt-runfoot-num">${rptPageNumText(s, 1, total)}</span><span></span></div>` : ""}
-    </section>` : "";
+    const cover = hasCover ? rptUnifiedCoverHtml(s, {
+      title: (s.coverTitle || s.name || "تقرير").trim(),
+      sub: [data.yearText, data.periodText].filter(Boolean).join(" — ") || (s.coverSub || ""),
+      line: s.coverSub && (data.yearText || data.periodText) ? s.coverSub : "",
+      unitLine: `${data.deptCount} قسم — ${data.unitCount} وحدة — ${data.total} تقرير`,
+      prepared: [s.preparedBy ? "إعداد: " + s.preparedBy : ""],
+      unitId: "", total,
+    }) : "";
     return cover + pages.map((p, i) => rptPageHtml(s, p, i + 1 + (hasCover ? 1 : 0), total)).join("");
   });
 }
@@ -9330,9 +9317,23 @@ function removeBtn(arr, id) { return `<button type="button" class="icon-remove" 
 
 
 /* ===== إدخال من نص داخل أقسام التقرير ===== */
-function bkSchema(arr) { return Object.values(SECTION_FIELD_SCHEMAS).find((x) => x.arrayKey === arr) || null; }
+function bkSchema(arr) {
+  if (arr === "indicators") return { arrayKey: "indicators", itemLabel: "المؤشر", fields: [
+    { id: "name", type: "select", label: "اسم المؤشر", required: true, options: (S.indicatorDefinitions || []).map((x) => x.name) },
+    { id: "actual", type: "number", label: "القيمة الفعلية" },
+    { id: "deviationReason", type: "text", label: "سبب الانحراف" },
+    { id: "correctiveAction", type: "text", label: "الإجراء التصحيحي" },
+    { id: "responsiblePerson", type: "text", label: "المسؤولة" }] };
+  if (arr === "goals") {
+    const st = (S.goalsDefinitions.strategic && S.goalsDefinitions.strategic.length ? S.goalsDefinitions.strategic.map((g) => g.name) : STRATEGIC_GOALS_FALLBACK);
+    return { arrayKey: "goals", itemLabel: "الهدف", fields: [
+      { id: "strategicGoal", type: "select", label: "الهدف الاستراتيجي", required: true, options: st },
+      { id: "operationalGoals", type: "multi", label: "الأهداف التشغيلية (افصلي بينها بـ «؛»)", required: true }] };
+  }
+  return Object.values(SECTION_FIELD_SCHEMAS).find((x) => x.arrayKey === arr) || null;
+}
 function bkFields(schema) {
-  return schema.fields.filter((f) => ["text", "textarea", "number", "select", "radio", "expandableSelect", "date"].includes(f.type) && !/link/i.test(f.id));
+  return schema.fields.filter((f) => ["text", "textarea", "number", "select", "radio", "expandableSelect", "date", "multi"].includes(f.type) && !/link/i.test(f.id));
 }
 function bkNum(v) { return String(v).replace(/[٠-٩]/g, (c) => "٠١٢٣٤٥٦٧٨٩".indexOf(c)).replace(/[٫,]/g, ".").trim(); }
 function bkParse(arr, text) {
@@ -9342,7 +9343,13 @@ function bkParse(arr, text) {
     const parts = line.split("|").map((x) => x.trim()); const item = EMPTY_ITEM_FACTORY[arr](); const errs = [];
     fields.forEach((f, i) => {
       const raw = parts[i] || ""; if (!raw) { if (f.required) errs.push(`«${f.label}» ناقص`); return; }
-      if (f.type === "number") { const n = bkNum(raw); if (n === "" || isNaN(Number(n))) errs.push(`«${f.label}» لازم رقم`); else item[f.id] = n; }
+      if (f.type === "multi") {
+        const allowed = (S.goalsDefinitions.operational && S.goalsDefinitions.operational.length ? operationalGoalsFor(item.strategicGoal) : OPERATIONAL_GOALS_FALLBACK);
+        const names = raw.split(/[؛;]/).map((x) => x.trim()).filter(Boolean);
+        const bad = names.filter((n) => !allowed.includes(n));
+        if (bad.length) errs.push(`هدف تشغيلي غير موجود في القائمة: «${bad.join("، ")}»`);
+        else item.operationalGoals = names.map((name) => ({ id: uid("og"), name, level: "", percentage: "", evidenceType: "", evidenceAnswer: "", explanation: "" }));
+      } else if (f.type === "number") { const n = bkNum(raw); if (n === "" || isNaN(Number(n))) errs.push(`«${f.label}» لازم رقم`); else item[f.id] = n; }
       else if (f.type === "select" || f.type === "radio" || f.type === "expandableSelect") {
         const opts = (f.options || f.baseOptions || []).map((o) => (typeof o === "string" ? o : o.label || o.value));
         const hit = opts.find((o) => o === raw) || opts.find((o) => o.includes(raw) || raw.includes(o));
@@ -9377,15 +9384,16 @@ function bkPanelHtml(arr) {
   </div>`;
 }
 function bkInject() {
-  document.querySelectorAll('[data-action="add-item"]').forEach((btn) => {
-    const arr = btn.dataset.arr; if (!arr || btn.dataset.bkDone || !bkSchema(arr) || !EMPTY_ITEM_FACTORY[arr]) return;
+  document.querySelectorAll('[data-action="add-item"],[data-action="add-indicator"],[data-action="add-goal"]').forEach((btn) => {
+    const arr = btn.dataset.arr || (btn.dataset.action === "add-indicator" ? "indicators" : btn.dataset.action === "add-goal" ? "goals" : ""); if (!arr || btn.dataset.bkDone || !bkSchema(arr) || !EMPTY_ITEM_FACTORY[arr]) return;
     btn.dataset.bkDone = "1";
-    const row = document.createElement("div"); row.style.cssText = "display:flex;gap:10px;flex-wrap:wrap;align-items:center;";
-    btn.before(row); row.appendChild(btn);
+    let row = btn.parentElement, anchor;
+    if (row && row.classList.contains("bk-row")) anchor = row.parentElement;
+    else { row = document.createElement("div"); row.style.cssText = "display:flex;gap:10px;flex-wrap:wrap;align-items:center;"; btn.before(row); row.appendChild(btn); anchor = row; }
     const holder = document.createElement("div");
     holder.innerHTML = pillBtn("إدخال من نص", { variant: "ghost", icon: iconLayers(15, ROSE), action: "bk-open", data: { arr } });
     row.appendChild(holder.firstElementChild);
-    if ((S.ui.bulk || {}).arr === arr) { const pn = document.createElement("div"); pn.innerHTML = bkPanelHtml(arr); row.after(pn.firstElementChild); }
+    if ((S.ui.bulk || {}).arr === arr) { const pn = document.createElement("div"); pn.innerHTML = bkPanelHtml(arr); anchor.after(pn.firstElementChild); }
   });
 }
 function getItemList(arr) { return S.sectionDraft[arr] || (S.sectionDraft[arr] = []); }
@@ -9965,7 +9973,7 @@ function kpiSectionHtml(d, report) {
   return `
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;">
       <span style="font-size:13px;font-weight:800;">مؤشرات الأداء (${indicators.length})</span>
-      ${pillBtn("إضافة مؤشر", { icon: iconPlus(15, "#fff"), action: "add-indicator" })}
+      <span class="bk-row" style="display:flex;gap:10px;flex-wrap:wrap;">${pillBtn("إضافة مؤشر", { icon: iconPlus(15, "#fff"), action: "add-indicator" })}</span>
     </div>
     ${rows}
     ${notesFieldHtml(d)}`;
@@ -10762,26 +10770,34 @@ function arabicDigits(n) {
 // إذا حبيتِ إضافة شارة/حملة معيّنة بزاوية الغلاف، عطيني رابط الصورة وأحطه هنا.
 const RPT_COVER_BADGE_LOGO = "";
 
-function reportCoverPageHtml(unit, report, dept, s, totalPages) {
-  const d = report.sections?.basic?.data || {};
-  const yearLabel = d.hijriYear || hijriYearLabel(hijriYearFromTs(report.createdAt || Date.now()));
-  const num = rptPageNumText(s, 1, totalPages);
+function rptUnifiedCoverHtml(s, c) {
+  const num = rptPageNumText(s, 1, c.total);
+  const bg = rptCoverStyle(s, c.unitId || "");
   return `
-  <section class="a4-page rpt-cover-v4${rptCoverStyle(s, unit && unit.id) ? " rpt-hasbg" : ""}"${rptCoverStyle(s, unit && unit.id).replace(" class-hasbg", "")}>
+  <section class="a4-page rpt-cover-v4${bg ? " rpt-hasbg" : ""}"${bg.replace(" class-hasbg", "")}>
     ${s.watermark ? `<div class="rpt-wm" style="background-image:url('${ASSOCIATION_LOGO}')"></div>` : ""}
     <img src="${ASSOCIATION_LOGO}" class="rpt-cover-v4-logo" alt="شعار الجمعية" />
     <div class="rpt-cover-v4-text">
-      <h1 class="rpt-cover-v4-title">${esc((s.coverTitle || "").trim() || report.label || "التقرير الدوري للأداء")}</h1>
-      <div class="rpt-cover-v4-sub">${esc(yearLabel)}${d.startDate ? ` (${esc(d.startDate)} – ${esc(d.endDate || "—")})` : ""}</div>
-      <div class="rpt-cover-v4-unit">${dept ? esc(dept.name) + " — " : ""}${esc(unit.name)}</div>
+      <h1 class="rpt-cover-v4-title">${esc(c.title)}</h1>
+      ${c.sub ? `<div class="rpt-cover-v4-sub">${esc(c.sub)}</div>` : ""}
+      ${c.line ? `<div class="rpt-cover-v4-unit" style="font-size:.8em;opacity:.85;">${esc(c.line)}</div>` : ""}
+      ${c.unitLine ? `<div class="rpt-cover-v4-unit">${esc(c.unitLine)}</div>` : ""}
     </div>
     ${RPT_COVER_BADGE_LOGO ? `<img src="${RPT_COVER_BADGE_LOGO}" class="rpt-cover-v4-badge-logo" alt="شارة" />` : ""}
-    <div class="rpt-cover-v4-prepared">
-      <div>إعداد: ${esc(d.preparerName || "—")} ${d.preparerTitle ? "— " + esc(d.preparerTitle) : ""}</div>
-      <div>الرئيسة المباشرة: ${esc(d.managerName || "—")}</div>
-    </div>
+    <div class="rpt-cover-v4-prepared">${(c.prepared || []).filter(Boolean).map((x) => `<div>${esc(x)}</div>`).join("")}</div>
     ${num ? `<div class="rpt-runfoot"><span></span><span class="rpt-runfoot-num">${num}</span><span></span></div>` : ""}
   </section>`;
+}
+function reportCoverPageHtml(unit, report, dept, s, totalPages) {
+  const d = report.sections?.basic?.data || {};
+  const yearLabel = d.hijriYear || hijriYearLabel(hijriYearFromTs(report.createdAt || Date.now()));
+  return rptUnifiedCoverHtml(s, {
+    title: (s.coverTitle || "").trim() || report.label || "التقرير الدوري للأداء",
+    sub: `${yearLabel}${d.startDate ? ` (${d.startDate} – ${d.endDate || "—"})` : ""}`,
+    unitLine: `${dept ? dept.name + " — " : ""}${unit.name}`,
+    prepared: [`إعداد: ${d.preparerName || "—"}${d.preparerTitle ? " — " + d.preparerTitle : ""}`, `الرئيسة المباشرة: ${d.managerName || "—"}`],
+    unitId: unit && unit.id, total: totalPages,
+  });
 }
 
 function reportApprovalHtml(report, title, boxes, extra) {
