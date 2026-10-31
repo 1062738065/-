@@ -8345,14 +8345,15 @@ function apAutoCardHtml() {
       <span style="width:26px;height:26px;border-radius:50%;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:800;background:${off ? "#f1ecee" : "#f3e6ea"};color:${off ? "#a99" : ROSE};">${off ? "–" : info ? "ⓘ" : num}</span>
       <div style="flex:1 1 200px;min-width:0;"><div style="font-size:13px;font-weight:800;${off ? "color:#a3949a;text-decoration:line-through;" : ""}">${esc(r.name)}${info ? ` ${badgeHtml("للعلم فقط", SUBTLE, GRAY_BG)}` : ""}</div><div style="font-size:11px;color:${SUBTLE};">${esc(r.sub)}</div>${r.why ? `<div style="font-size:11px;font-weight:700;color:${r.whyOk ? SUBTLE : r.state === "auto" ? "#7a4d16" : DANGER};">${esc(r.why)}</div>` : ""}</div>
       <div style="display:flex;gap:6px;flex-wrap:wrap;">${acts}</div>
-      ${r.state === "on" && r.pk ? permChips(r) : ""}</div>`;
+      ${r.state === "on" && r.pk ? `<details style="width:100%;"><summary style="font-size:11.5px;color:${ROSE};font-weight:700;cursor:pointer;">صلاحيات هذه المرحلة</summary>${permChips(r)}</details>` : ""}</div>`;
   };
-  return `<div class="card card-lg" style="margin-bottom:14px;border:1.5px solid ${active ? GREEN : BORDER};">
+  return `<div class="card card-lg" style="margin-bottom:14px;border:1px solid ${BORDER};">
     <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:10px;flex-wrap:wrap;">
       <div><div style="font-size:15px;font-weight:800;">المسار التلقائي من الهيكل ${badgeHtml(active ? "مفعّل" : path ? "موقف" : "غير مفعّل", active ? GREEN : SUBTLE, active ? GREEN_BG : GRAY_BG)}</div>
       <div style="font-size:12px;color:#6f5f66;margin-top:4px;line-height:1.9;">كل وحدة يطلع لها مسارها لحاله: أدوار الوحدة (مساعدة ← رئيسة) ثم كل مستوى له دخول فوقها في الهيكل باسمه.<br>اللي تكتب = أصغر دور موجود بالوحدة. المرحلة اللي ما فيها أحد تُتخطّى لحالها. المسار الخاص بجهة معيّنة (لو سويتيه) يتقدّم عليه.</div></div>
       ${pillBtn(active ? "إيقاف" : "تفعيل", { variant: active ? "ghost" : "primary", action: "ap-auto-toggle" })}
     </div>
+    <details style="margin-top:12px;border:1px solid ${BORDER};border-radius:14px;padding:4px 12px;"><summary style="font-size:13px;font-weight:800;color:${ROSE};cursor:pointer;padding:8px 0;">إعدادات المسار (الأدوار، الصلاحيات التلقائية، من يكتب)</summary>
     <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;margin-top:12px;background:${GRAY_BG};border-radius:12px;padding:10px 12px;">
       ${roleSel("idr", "دور الإدارية")}${roleSel("ast", "دور المساعدة")}${roleSel("head", "دور الرئيسة")}${roleSel("sec", "دور السكرتارية (مرحلة قبل الاعتماد النهائي)")}
       ${pillBtn("حفظ الأدوار", { variant: "soft", action: "ap-auto-roles-save" })}
@@ -8366,6 +8367,7 @@ function apAutoCardHtml() {
       <span style="font-size:11.5px;color:${SUBTLE};">اللي تكتب ما يمر التقرير عليها ولا على اللي أقل منها. لو ولا وحدة منهن موجودة بالوحدة يكتب أصغر دور موجود.</span></div>
     <details style="margin-top:10px;"><summary style="font-size:12.5px;font-weight:800;color:${ROSE};cursor:pointer;">وش معنى كل خيار؟</summary>
       <div style="display:flex;flex-direction:column;gap:4px;margin-top:8px;font-size:12px;line-height:1.8;"><div><b>تراجع وترسل:</b> تشوفه وترسله للي بعدها بدون اعتماد.</div><div><b>تعتمد:</b> تعتمد وترسل — ولو هي آخر مرحلة يصير «معتمد».</div>${AUTO_PERM_OPTS.map((o) => `<div><b>${esc(o.label)}:</b> ${esc(o.t)}</div>`).join("")}</div></details>
+    </details>
     <div style="margin-top:14px;">
       <div style="font-size:11.5px;color:${SUBTLE};margin-bottom:6px;">الخيارات تحت كل مرحلة تنطبق عليها في كل الوحدات (دور الوحدة لكل الوحدات، والمستوى لكل وحداته).</div>
       <div style="font-size:13px;font-weight:800;margin-bottom:8px;">اختاري وحدة لترين مسارها:</div>
