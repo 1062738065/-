@@ -3194,6 +3194,8 @@ function reportTermInfo(r) {
 const DASH_REPORT_RANK = { approved: 3, completed: 2 };
 function dashRank(r) { return DASH_REPORT_RANK[r.status] || 1; }
 // نوع الفترة الافتراضي: الأكثر استخدامًا في تقارير النطاق (وإلا فصلي)
+// تقارير وحدة مفلترة بنوع الفترة المضغوط (إن وُجد) — تُستخدم في أرقام اللوحة وقوائمها
+function dashRepsOf(unitId) { const all = ensureUnitReportsLoaded(unitId); const pt = S.ui.dashPeriod; return pt ? all.filter((r) => reportPeriodType(r) === pt) : all; }
 function dashPeriodFor(units) {
   if (S.ui.dashPeriod) return S.ui.dashPeriod;
   const n = {};
@@ -3555,7 +3557,7 @@ function opsDays(ts) { return ts ? Math.floor((Date.now() - ts) / 86400000) : 0;
 function opsBlocksHtml(kind, units) { return dashMarkWrap(kind, opsBlocksInner(kind, units)); }
 function opsBlocksInner(kind, units) {
   const flat = [];
-  units.forEach((u) => ensureUnitReportsLoaded(u.id).forEach((r) => flat.push({ unit: u, report: r })));
+  units.forEach((u) => dashRepsOf(u.id).forEach((r) => flat.push({ unit: u, report: r })));
   let html = "";
   if (!dashHidden(kind, "opsCounts")) { html += "\u0001opsCounts\u0002";
     const c = (st) => flat.filter((x) => st.includes(x.report.status)).length;
@@ -3687,7 +3689,7 @@ function renderDashboardBody(activeUnits, opts) {
   const series = dashSeries(activeUnits);
   activeUnits.forEach((u) => {
     const dept = S.departments.find((d) => d.id === u.departmentId);
-    ensureUnitReportsLoaded(u.id).forEach((r) => allReportsFlat.push({ unit: u, dept, report: r }));
+    dashRepsOf(u.id).forEach((r) => allReportsFlat.push({ unit: u, dept, report: r }));
     const p = computeProgress(latestReportForUnit(u.id));
     totalCompleted += p.completed; totalSections += p.total;
   });
@@ -3847,7 +3849,7 @@ function renderUnitDashboard() {
   const unit = S.units.find((u) => u.id === S.currentUnitId);
   if (!unit && S.isAdmin) return unitNotFoundPageHtml();
   const dept = S.departments.find((d) => d.id === unit?.departmentId);
-  const reports = ensureUnitReportsLoaded(S.currentUnitId);
+  const reports = dashRepsOf(S.currentUnitId);
   // المؤشرات والأهداف من آخر تقرير فيه بيانات في الفترة المختارة (المعتمد أولًا)
   const series = dashSeries(unit ? [unit] : []);
   const latest = unit ? dashUnitLatest(series, unit.id) : null;
