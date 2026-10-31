@@ -518,7 +518,7 @@ table.prs-table td { padding: 8px 10px; border-top: 1px solid var(--border); }
 @media (min-width: 1100px) {
   .page-inner.dash-wide { display: grid; }
   .page-inner.dash-wide > .dash-blk > * { margin-top: 0 !important; margin-bottom: 0 !important; }
-  .page-inner.dash-wide > .dash-blk:has(> .hero-banner, > .stat-grid, > .search-bar, > .card[style*="flex-wrap"]), .page-inner.dash-wide > .dash-blk[data-dk="periodFilter"], .page-inner.dash-wide > .dash-blk[data-dk="exKpis"], .page-inner.dash-wide > .dash-blk[data-dk="exHeat"], .page-inner.dash-wide > .dash-blk[data-dk="opsCounts"], .page-inner.dash-wide > .dash-blk[data-dk="exStats"], .page-inner.dash-wide > .dash-blk[data-dk="recent"] { grid-column: 1 / -1; }
+  .page-inner.dash-wide > .dash-blk:has(> .hero-banner, > .stat-grid, > .search-bar, > .card[style*="flex-wrap"]), .page-inner.dash-wide > .dash-blk[data-dk="periodFilter"], .page-inner.dash-wide > .dash-blk[data-dk="exKpis"], .page-inner.dash-wide > .dash-blk[data-dk="exHeat"], .page-inner.dash-wide > .dash-blk[data-dk="opsCounts"], .page-inner.dash-wide > .dash-blk[data-dk="opsKpis"], .page-inner.dash-wide > .dash-blk[data-dk="exStats"], .page-inner.dash-wide > .dash-blk[data-dk="recent"] { grid-column: 1 / -1; }
   .page-inner.dash-wide > nav.card { grid-column: 1 / -1; }
 }
 

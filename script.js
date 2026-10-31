@@ -3118,6 +3118,8 @@ const DASH_ADMIN_BLOCKS = [
   { key: "banner", label: "البانر والبحث" },
   { key: "periodFilter", label: "فلتر نوع الفترة (لـ«ما رفعت تقرير الفترة الحالية»)" },
   { key: "opsCounts", label: "أعداد التقارير حسب الحالة" },
+  { key: "opsKpis", label: "بطاقات: متأخرة، عالقة، معادة، نسبة الالتزام" },
+  { key: "opsDeptCompliance", label: "الالتزام لكل قسم" },
   { key: "opsStuck", label: "تقارير واقفة في المسار" },
   { key: "opsMissing", label: "ما رفعت تقرير الفترة الحالية" },
   { key: "opsReturned", label: "تقارير معادة ما انعدّلت" },
@@ -3612,7 +3614,22 @@ function opsBlocksInner(kind, units) {
     actH = dashCard("آخر الحركات", "", log.length ? log.slice(0, 8).map((l) => `<div style="display:flex;gap:10px;align-items:flex-start;padding:8px 0;border-top:1px solid ${BORDER};"><span style="width:10px;height:10px;border-radius:50%;margin-top:5px;flex-shrink:0;background:${col[l.kind] || ROSE}"></span><div style="flex:1;min-width:0;"><div style="font-size:12.5px;line-height:1.7;"><b>${esc(l.unit.name)}</b> — ${esc(l.text || "")}</div><div style="font-size:11px;color:${SUBTLE};">${esc(l.by || "")}${l.by ? " · " : ""}${l.at ? new Date(l.at).toLocaleString("ar-SA-u-ca-islamic", { day: "numeric", month: "short", hour: "numeric", minute: "2-digit" }) : ""}</div></div></div>`).join("") : emptyHint("لا توجد حركات بعد."));
     html += "\u0003";
   }
-  html += dashB(kind, "opsStuck", stuckH) + dashB(kind, "opsMissing", missingH) + dashB(kind, "opsReturned", returnedH) + dashB(kind, "opsSetup", setupH) + dashB(kind, "opsActivity", actH);
+  // بطاقات أرقام وقراءة الالتزام لكل قسم (لوحة مديرة النظام)
+  let kpiH = "", deptH = "";
+  { const series2 = dashSeries(units); const lc = series2.cols[series2.cols.length - 1];
+    const miss2 = lc ? units.filter((u) => !(series2.byUnit[u.id] || {})[lc.key]) : [];
+    const pct = units.length && lc ? Math.round(((units.length - miss2.length) / units.length) * 100) : null;
+    const stuckN = flat.filter((x) => x.report.status === "custom_pending").length;
+    const retN = flat.filter((x) => x.report.status === "returned" || x.report.status === "needs_completion").length;
+    const kc = (n, l, col, sub) => `<div class="card" style="padding:14px 16px;text-align:start;"><div style="font-size:28px;font-weight:800;color:${col};">${n}</div><div style="font-size:12.5px;color:${SUBTLE};">${esc(l)}</div>${sub ? `<div style="font-size:11px;color:${SUBTLE};margin-top:2px;">${esc(sub)}</div>` : ""}</div>`;
+    if (!dashHidden(kind, "opsKpis")) kpiH = `<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(min(170px,100%),1fr));gap:12px;margin-bottom:18px;">${kc(lc ? miss2.length : "—", "تقارير متأخرة", DANGER, lc ? "ما رفعت تقرير " + lc.label : "")}${kc(stuckN, "تقارير عالقة بانتظار مراجعة", GOLD)}${kc(retN, "تقرير معاد للتعديل", ROSE)}${kc(pct == null ? "—" : pct + "٪", "نسبة الالتزام", GREEN, units.length ? `(${units.length - miss2.length} من ${units.length} وحدات)` : "")}</div>`;
+    if (!dashHidden(kind, "opsDeptCompliance")) {
+      const depts = (S.departments || []).filter((d) => d.status !== "inactive");
+      const rowsD = depts.map((d) => { const us = units.filter((u) => u.departmentId === d.id); if (!us.length) return null; const sent = lc ? us.filter((u) => (series2.byUnit[u.id] || {})[lc.key]).length : 0; return { d, n: us.length, sent }; }).filter(Boolean);
+      deptH = dashCard("الالتزام لكل قسم", lc ? `«${series2.period}» · ${lc.label}` : "", rowsD.length && lc ? rowsD.map((x) => { const pc = Math.round((x.sent / x.n) * 100); return `<div style="padding:8px 0;border-top:1px solid ${BORDER};"><div style="display:flex;justify-content:space-between;font-size:13px;"><b>${esc(x.d.name)}</b><span style="color:${SUBTLE};">${x.sent} من ${x.n} · ${pc}٪</span></div><div style="height:8px;border-radius:999px;background:#f0e6e9;margin-top:6px;overflow:hidden;"><div style="height:100%;width:${pc}%;background:${pc >= 80 ? GREEN : pc >= 40 ? GOLD : DANGER};"></div></div></div>`; }).join("") : `<div class="hint">لا توجد بيانات للفترة الحالية بعد.</div>`);
+    }
+  }
+  html += dashB(kind, "opsKpis", kpiH) + dashB(kind, "opsDeptCompliance", deptH) + dashB(kind, "opsStuck", stuckH) + dashB(kind, "opsMissing", missingH) + dashB(kind, "opsReturned", returnedH) + dashB(kind, "opsSetup", setupH) + dashB(kind, "opsActivity", actH);
   return html;
 }
 
