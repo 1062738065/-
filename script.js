@@ -5935,7 +5935,7 @@ function rptWrap(s, inner, isPreview) {
     `--rpt-th-align:${["right", "center", "left"].includes(s.thAlign) ? s.thAlign : "right"};--rpt-td-align:${["right", "center", "left"].includes(s.tdAlign) ? s.tdAlign : "right"};` +
     `--rpt-th-bg:${rptCssSafe(s.thBg)};--rpt-th-color:${rptCssSafe(s.thColor || main)};--rpt-table-fs:${Math.max(9, Math.min(16, Number(s.tableFs) || 12))}px;`;
   if (s.bgImage && RPT_DATA_IMG_RE.test(s.bgImage)) vars += `--rpt-bg-img:url("${s.bgImage}");`;
-  const cls = ["rpt-wrap", s.zebra ? "rpt-zebra" : "", s.tableBorders === "grid" ? "rpt-tgrid" : s.tableBorders === "none" ? "rpt-tnone" : "", s.frame ? "rpt-frame" : "", vars.indexOf("--rpt-bg-img") !== -1 ? "rpt-bgimg" : ""].filter(Boolean).join(" ");
+  const cls = ["rpt-wrap", s.oldLook ? "" : "rpt-v5", s.zebra ? "rpt-zebra" : "", s.tableBorders === "grid" ? "rpt-tgrid" : s.tableBorders === "none" ? "rpt-tnone" : "", s.frame ? "rpt-frame" : "", vars.indexOf("--rpt-bg-img") !== -1 ? "rpt-bgimg" : ""].filter(Boolean).join(" ");
   ensureReportFontsLoaded();
   const pageCss = (isPreview ? "" : `<style>@page{size:${w}mm ${h}mm;margin:0}</style>`) + `<style>.a4-page.rpt-hasbg{min-height:${h}mm}@media print{.a4-page.rpt-hasbg{min-height:100vh}}</style>`;
   return `${pageCss}<div class="${cls}" style="${vars}">${inner}</div>`;
@@ -6144,7 +6144,7 @@ function aggChapterBody(key, data, s) {
   if (key === "summary") {
     return `<div class="stat-grid" style="margin-bottom:14px;">
         ${statIconCardHtml("إجمالي التقارير", data.total, iconDocument(18, "var(--rpt-burgundy)"), "#f4ece4")}
-        ${statIconCardHtml("نسبة الإنجاز", data.completionPct + "٪", iconGauge("var(--rpt-burgundy)", 18), "#f4ece4")}
+        ${statIconCardHtml("نسبة الإنجاز", data.completionPct + "٪", iconGauge("var(--rpt-burgundy)", 18), "#fff")}
         ${statIconCardHtml("عدد الأقسام", data.deptCount, iconBuilding("var(--rpt-burgundy)", 18), "#f4ece4")}
         ${statIconCardHtml("عدد الوحدات", data.unitCount, iconLayers(18, "var(--rpt-burgundy)"), "#f4ece4")}
       </div>
@@ -11041,7 +11041,7 @@ function reportSummaryHtml(report, title) {
       <h2 class="rpt-chapter-title">${esc(title || "ملخص التقرير")}</h2>
     </div>
     <div class="stat-grid" style="margin-bottom:16px;">
-      ${statIconCardHtml("نسبة إنجاز التقرير", progress.percent + "٪", iconGauge("var(--rpt-burgundy)", 18), "#f4ece4")}
+      ${statIconCardHtml("نسبة إنجاز التقرير", progress.percent + "٪", iconGauge("var(--rpt-burgundy)", 18), "#fff")}
       ${statIconCardHtml("عدد المؤشرات", indicators.length, iconDocument(18, "var(--rpt-burgundy)"), "#f4ece4")}
       ${statIconCardHtml("عدد الأهداف التشغيلية", goalsFlat.length, iconLayers(18, "var(--rpt-burgundy)"), "#f4ece4")}
       ${statIconCardHtml("متوسط نسبة تحقق الأهداف", avgGoalPct + "٪", iconCheckCircle(18, "var(--rpt-burgundy)"), "#f4ece4")}
