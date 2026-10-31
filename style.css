@@ -578,3 +578,10 @@ table.prs-table td { padding: 8px 10px; border-top: 1px solid var(--border); }
 .sw-tg i{position:absolute;top:3px;inset-inline-end:3px;width:18px;height:18px;border-radius:50%;background:#fff;box-shadow:0 1px 3px rgba(0,0,0,.25);transition:.15s}
 .sw-tg.on{background:#8aa894}.sw-tg.on i{inset-inline-end:auto;inset-inline-start:3px}
 .sw-tg.lk{opacity:.6}
+/* s26: بطاقات نوع الفترة */
+.ptc-row{display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:10px}
+.ptc{display:flex;flex-direction:column;align-items:center;gap:2px;padding:14px 8px;border:1px solid #e6d9dd;border-radius:16px;background:#fff;cursor:pointer;font-family:inherit;color:#4a3a40}
+.ptc .ptc-l{font-size:13px;color:#7a6a71}.ptc .ptc-n{font-size:26px;font-weight:800;color:var(--primary,#6a1b25)}.ptc .ptc-s{font-size:12px;color:#8a7b82}
+.ptc.on{background:#fdf1f2;border-color:#c98a93}
+.ptc.z{opacity:.55}
+@media(max-width:700px){.ptc-row{display:flex;overflow-x:auto;gap:10px}.ptc{min-width:120px}}

@@ -3255,10 +3255,14 @@ function dashFiltersInner(kind, series) {
   // عدد التقارير اللي فيها بيانات لكل نوع فترة — يوضح وين البيانات
   const per = {};
   series.units.forEach((u) => ensureUnitReportsLoaded(u.id).forEach((r) => { if (reportHasContent(r)) { const p = reportPeriodType(r); if (p) per[p] = (per[p] || 0) + 1; } }));
-  return `<div class="card" style="margin-bottom:18px;display:flex;gap:18px;flex-wrap:wrap;align-items:center;">
-    <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;"><span style="font-size:12.5px;font-weight:800;">نوع الفترة</span>${PERIOD_TYPES.map((p) => pill(p + (per[p] ? ` (${per[p]})` : ""), series.period === p, "dash-period", p)).join("")}</div>
-    <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;"><span style="font-size:12.5px;font-weight:800;">السنة</span>${pill("كل السنوات", series.year === "all", "dash-year", "all")}${years.map((y) => pill(hijriYearLabel(y), series.year === String(y), "dash-year", String(y))).join("")}</div>
-    <div class="hint" style="margin:0;">${series.cols.length} ${series.cols.length === 1 ? "فترة" : "فترات"} · التقارير الفاضية لا تُحسب</div>
+  const ptCard = (p) => { const n = per[p] || 0, on = series.period === p; return `<button type="button" class="ptc${on ? " on" : ""}${n ? "" : " z"}" data-action="dash-period" data-v="${esc(on && S.ui.dashPeriod === p ? "" : p)}"><span class="ptc-l">${esc(p)}</span><span class="ptc-n">${n}</span><span class="ptc-s">${n === 1 ? "تقرير" : "تقارير"}</span></button>`; };
+  return `<div style="margin-bottom:18px;">
+    <div class="hint" style="margin:0 0 8px;">نوع الفترة: بطاقات تُضغط وتُظهر تقاريرها · إعادة الضغط تُلغي الفلتر</div>
+    <div class="ptc-row">${PERIOD_TYPES.map(ptCard).join("")}</div>
+    <div class="card" style="margin:10px 0 0;display:flex;gap:18px;flex-wrap:wrap;align-items:center;">
+      <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;"><span style="font-size:12.5px;font-weight:800;">السنة</span>${pill("كل السنوات", series.year === "all", "dash-year", "all")}${years.map((y) => pill(hijriYearLabel(y), series.year === String(y), "dash-year", String(y))).join("")}</div>
+      <div class="hint" style="margin:0;">${series.cols.length} ${series.cols.length === 1 ? "فترة" : "فترات"} · التقارير الفاضية لا تُحسب</div>
+    </div>
   </div>`;
 }
 
