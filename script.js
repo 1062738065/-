@@ -8847,6 +8847,50 @@ function readIndicatorDefForm(stateKey) {
   };
 }
 
+
+/* ===== إدخال المؤشرات المعتمدة من نص (إدارة مؤشرات الأداء) ===== */
+const IND_IMP_FIELDS = [
+  { id: "name", label: "الاسم", required: true },
+  { id: "category", label: "التصنيف", opts: INDICATOR_CATEGORIES },
+  { id: "direction", label: "الاتجاه", opts: INDICATOR_DIRECTIONS },
+  { id: "frequency", label: "الدورية", opts: MEASUREMENT_FREQUENCIES },
+  { id: "unit", label: "وحدة القياس", opts: MEASUREMENT_UNITS },
+  { id: "target", label: "المستهدف", num: true, required: true },
+  { id: "dataSource", label: "مصدر البيانات" },
+];
+function indImpParse(text) {
+  const exist = (S.indicatorDefinitions || []).map((d) => String(d.name || "").trim());
+  return String(text || "").split(/\r?\n/).map((l) => l.trim()).filter(Boolean).map((line) => {
+    const parts = line.split("|").map((x) => x.trim()); const rec = {}; const errs = [];
+    IND_IMP_FIELDS.forEach((f, i) => {
+      const raw = parts[i] || "";
+      if (!raw) { if (f.required) errs.push(`«${f.label}» ناقص`); return; }
+      if (f.num) { const n = bkNum(raw); if (n === "" || isNaN(Number(n))) errs.push(`«${f.label}» لازم رقم`); else rec[f.id] = n; }
+      else if (f.opts) { const hit = f.opts.find((o) => o === raw) || f.opts.find((o) => o.includes(raw) || raw.includes(o)); if (hit) rec[f.id] = hit; else errs.push(`«${f.label}»: «${raw}» ليس من الخيارات`); }
+      else rec[f.id] = raw;
+    });
+    if (parts.length > IND_IMP_FIELDS.length) errs.push("حقول زائدة عن المطلوب");
+    return { line, rec, errs, isNew: !exist.includes(String(rec.name || "").trim()) };
+  });
+}
+function indImpPanelHtml() {
+  const b = S.ui.indImp; if (!b) return "";
+  const pv = b.preview;
+  const order = IND_IMP_FIELDS.map((f, i) => `<span style="white-space:nowrap;">${i + 1}) ${esc(f.label)}${f.required ? " *" : ""}</span>`).join(" &nbsp;|&nbsp; ");
+  const optsHtml = `<details style="margin:10px 0 0;"><summary style="cursor:pointer;font-size:13px;font-weight:700;color:var(--rose);">الخيارات المسموحة</summary>${IND_IMP_FIELDS.filter((f) => f.opts).map((f) => `<div class="hint" style="margin-top:6px;"><b>${esc(f.label)}:</b> ${esc(f.opts.join(" ، "))}</div>`).join("")}</details>`;
+  const pvHtml = pv ? `<div style="margin-top:14px;">${pv.map((r, i) => `<div style="padding:10px 12px;margin-bottom:8px;border-radius:10px;border:1px solid ${r.errs.length ? "#e7b4b4" : "#b9dcc4"};background:${r.errs.length ? "#fdf2f2" : "#f1faf4"};font-size:13px;line-height:1.8;"><div style="font-weight:700;">${i + 1}. ${esc(r.line.slice(0, 90))}</div>${r.errs.length ? `<div style="color:#b03030;">يحتاج تصحيح: ${esc(r.errs.join("، "))}</div>` : `<div style="color:#1f7a45;">${r.isNew ? "جديد — يُضاف" : "موجود — يُحدَّث"}</div>`}</div>`).join("")}</div>` : "";
+  const ok = pv ? pv.filter((r) => !r.errs.length).length : 0;
+  return `<div class="card" style="margin-bottom:22px;">
+    <div style="font-size:12.5px;font-weight:800;color:${ROSE};margin-bottom:8px;">إدخال المؤشرات من نص</div>
+    <div class="hint" style="margin-bottom:8px;">سطر لكل مؤشر، وافصلي الحقول بـ «|» بهذا الترتيب. الحقل الفارغ اتركيه فاضي، والأخيرة تقدرين تحذفينها. (* = مطلوب)</div>
+    <div class="hint" style="background:${GRAY_BG};border-radius:10px;padding:9px 12px;line-height:2;">${order}</div>
+    ${optsHtml}
+    <textarea class="input" id="ind-imp-text" rows="6" style="margin-top:12px;font-family:inherit;line-height:1.9;min-height:140px;">${esc(b.text || "")}</textarea>
+    <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:12px;">${pillBtn("معاينة", { variant: "ghost", action: "ind-imp-preview" })}${ok ? pillBtn(`تطبيق (${ok})`, { action: "ind-imp-apply" }) : ""}${pillBtn("إغلاق", { variant: "ghost", action: "ind-imp-close" })}</div>
+    ${pvHtml}
+    <div class="hint" style="margin-top:12px;">يضيف الجديد ويحدّث الموجود (بنفس الاسم) فقط، ولا يحذف أبدًا. السطر اللي يحتاج تصحيح ما يُطبّق قبل تصحيحه.</div>
+  </div>`;
+}
 function renderIndicatorsManage() {
   const ui = S.ui;
   return `
@@ -8856,8 +8900,9 @@ function renderIndicatorsManage() {
     <div class="card" style="margin-bottom:22px;">
       <div style="font-size:12.5px;font-weight:800;color:${ROSE};margin-bottom:12px;">إضافة مؤشر جديد</div>
       ${indicatorDefFieldsHtml("new-ind", indicatorFormState("new-ind"))}
-      ${pillBtn("إضافة مؤشر", { icon: iconPlus(15, "#fff"), action: "add-indicator-def" })}
+      <div style="display:flex;gap:10px;flex-wrap:wrap;">${pillBtn("إضافة مؤشر", { icon: iconPlus(15, "#fff"), action: "add-indicator-def" })}${pillBtn("إدخال من نص", { variant: "ghost", icon: iconLayers(15, ROSE), action: "ind-imp-open" })}</div>
     </div>
+    ${indImpPanelHtml()}
 
     <div style="font-size:12.5px;font-weight:800;color:${ROSE};margin-bottom:10px;">المؤشرات المعتمدة (${S.indicatorDefinitions.length})</div>
     ${S.indicatorDefinitions.length === 0 ? `<div class="card" style="text-align:center;color:${SUBTLE};padding:36px 20px;border-style:dashed;">لا توجد مؤشرات معتمدة بعد — أضيفي أول مؤشر من الأعلى، أو أضيفيها لاحقًا من داخل نموذج التقرير.</div>` :
@@ -12320,6 +12365,22 @@ function attachClickListener() {
         break;
       }
       /* ---------- indicators management ---------- */
+      case "ind-imp-open": S.ui.indImp = { text: "", preview: null }; render(); break;
+      case "ind-imp-close": S.ui.indImp = null; render(); break;
+      case "ind-imp-preview": { const el = document.getElementById("ind-imp-text"); const b = S.ui.indImp || {}; b.text = el ? el.value : b.text; b.preview = indImpParse(b.text); S.ui.indImp = b; render(); break; }
+      case "ind-imp-apply": {
+        const el = document.getElementById("ind-imp-text"); const b = S.ui.indImp || {}; if (el) b.text = el.value;
+        const rows = indImpParse(b.text); let list = [...S.indicatorDefinitions];
+        rows.filter((r) => !r.errs.length).forEach((r) => {
+          const nm = String(r.rec.name).trim(); const i = list.findIndex((d) => String(d.name || "").trim() === nm);
+          if (i >= 0) list[i] = { ...list[i], ...r.rec, name: nm };
+          else list.push({ id: uid("ind"), nature: "", calculationMethod: "", category: "", direction: "", frequency: "", unit: "", target: "", dataSource: "", ...r.rec, name: nm });
+        });
+        S.indicatorDefinitions = list; dataStore.saveIndicatorDefinitions(list);
+        const bad = rows.filter((r) => r.errs.length).map((r) => r.line);
+        S.ui.indImp = bad.length ? { text: bad.join("\n"), preview: null } : null;
+        render(); break;
+      }
       case "add-indicator-def": {
         const form = readIndicatorDefForm("new-ind");
         if (!form.name.trim()) break;
