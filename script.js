@@ -3131,6 +3131,7 @@ const DASH_STD_BLOCKS = [
   { key: "highlights", label: "أبرز ما يُعرض" },
   { key: "programs", label: "جدول الأعمال والبرامج" },
   { key: "routed", label: "المرفوع إليّ (صعوبات وتوصيات وغيرها)", not: ["unit"] },
+  { key: "sharedInd", label: "المؤشرات المشتركة بين وحدات" },
 ];
 const DASH_STD_KINDS = ["office", "dept", "unit"];
 // لوحة مديرة النظام: متابعة تشغيل الموقع فقط
@@ -3162,6 +3163,7 @@ const DASH_EX_BLOCKS = [
   { key: "exBenef", label: "المستفيدون حسب نوع العمل" },
   { key: "exChal", label: "الصعوبات القائمة حسب المستوى" },
   { key: "routed", label: "المرفوع إليّ (صعوبات وتوصيات وغيرها)" },
+  { key: "sharedInd", label: "المؤشرات المشتركة بين وحدات" },
   { key: "exSubm", label: "رفع التقارير واعتمادها" },
   { key: "exTopBottom", label: "أفضل 5 وأضعف 5 وحدات" },
   { key: "followUp", label: "يحتاج متابعة" },
@@ -3195,32 +3197,61 @@ function dashCatalog(kind) {
   if (at >= 0) base.splice(at + 1, 0, ...tools); else rest.unshift(...tools);
   return base.concat(rest);
 }
+const DASH_SEC_VIEW = {
+  tools: { title: "name", meta: ["toolType", "relatedProgram"], badges: ["resultQuality"], dist: ["toolType", "resultQuality"], stats: [{ k: "count", l: "أداة" }, { k: "sum", f: "sampleSize", l: "إجمالي العينات" }, { k: "sum", f: "respondentsCount", l: "المستجيبات" }, { k: "rate", f: "respondentsCount", of: "sampleSize", l: "نسبة الاستجابة" }] },
+  recommendations: { title: "text", meta: ["responsibleParty", "proposedDuration"], badges: ["priority", "level"], dist: ["priority", "level", "source"], stats: [{ k: "count", l: "توصية" }, { k: "is", f: "priority", v: /عاجل|عالي/, l: "أولوية عالية" }] },
+  challenges: { title: "name", meta: ["area"], badges: ["severity", "scope"], dist: ["severity", "area"], stats: [{ k: "count", l: "صعوبة" }, { k: "is", f: "severity", v: /حرج|مرتفع/, l: "حرجة أو مرتفعة" }, { k: "is", f: "stillOngoing", v: /نعم|قائم/, l: "ما زالت قائمة" }] },
+  improvement: { title: "name", meta: ["field", "responsiblePerson"], badges: ["priority", "ease"], dist: ["priority", "ease"], stats: [{ k: "count", l: "فرصة" }, { k: "is", f: "priority", v: /عاجل|عالي/, l: "أولوية عالية" }] },
+  initiatives: { title: "name", meta: ["targetGroup"], badges: ["entryType", "stage"], dist: ["stage", "entryType"], stats: [{ k: "count", l: "مبادرة" }, { k: "sum", f: "beneficiariesCount", l: "مستفيدة" }] },
+  impact: { title: "title", meta: ["change"], badges: ["impactType"], dist: ["impactType"], stats: [{ k: "count", l: "قصة أثر" }, { k: "sum", f: "beneficiariesCount", l: "مستفيدة" }] },
+  strengths: { title: "name", meta: ["description"], badges: ["area", "continuity"], dist: ["area", "continuity"], stats: [{ k: "count", l: "نقطة قوة" }, { k: "is", f: "transferable", v: /نعم/, l: "قابلة للنقل لوحدات أخرى" }] },
+  programs: { title: "name", meta: ["targetGroup", "location"], badges: ["workType", "executionStatus"], dist: ["workType", "executionStatus", "deliveryMode"], stats: [{ k: "count", l: "عمل/برنامج" }, { k: "sum", f: "actualBeneficiaries", l: "مستفيدة فعليًا" }, { k: "sum", f: "attendeesCount", l: "حاضرات" }, { k: "avg", f: "completionPercent", l: "متوسط الإنجاز", pct: 1 }] },
+  evidence: { title: "name", meta: ["description"], badges: ["evidenceType", "confidentiality"], dist: ["evidenceType"], stats: [{ k: "count", l: "شاهد" }] },
+  kpiDeviation: { title: "deviationReason", meta: ["responsiblePerson", "correctiveAction"], badges: ["causeType"], dist: ["causeType"], stats: [{ k: "count", l: "تحليل انحراف" }] },
+  analysisComparisons: { title: "topic", meta: ["resultValue"], badges: ["judgment", "changeReason"], dist: ["judgment"], stats: [{ k: "count", l: "مقارنة" }] },
+  nextplan: { title: "name", meta: ["responsiblePerson", "expectedDate"], badges: [], dist: [], stats: [{ k: "count", l: "عمل مخطط" }] },
+};
+const DASH_SEV_COL = [[/عاجل|حرج/, "#b03a3a"], [/عالي|مرتفع|متعثر/, "#c9863a"], [/متوسط|مؤجل/, "#b89a5a"], [/منخفض|سهل|مكتمل/, "#5f8a6a"]];
+const DASH_PAL = ["#6b2337", "#c9863a", "#5f8a6a", "#a05a72", "#7d8fa8", "#b89a5a"];
 function dashFieldBlockHtml(kind, sid, units) {
   const sc = SECTION_FIELD_SCHEMAS[sid]; if (!sc) return "";
   const owner = DASH_FLD_OWNER[sid] || sid;
-  const rows = []; let reports = 0;
-  units.forEach((u) => dashRepsOf(u.id).forEach((r) => { const d = r && r.sections && r.sections[owner] && r.sections[owner].data; const arr = d && d[sc.arrayKey]; if (Array.isArray(arr)) { const ok = arr.filter((x) => x && typeof x === "object" && rptHasValue(x)); if (ok.length) { reports++; ok.forEach((x) => rows.push(x)); } } }));
+  const rows = [], unitOf = new Map(); let reports = 0;
+  units.forEach((u) => dashRepsOf(u.id).forEach((r) => { const d = r && r.sections && r.sections[owner] && r.sections[owner].data; const arr = d && d[sc.arrayKey]; if (Array.isArray(arr)) { const ok = arr.filter((x) => x && typeof x === "object" && rptHasValue(x)); if (ok.length) { reports++; ok.forEach((x) => { rows.push(x); unitOf.set(x, u.name); }); } } }));
   if (!rows.length) return "";
-  const cards = sc.fields.map((f) => {
-    const vals = rows.map((x) => x[f.id]).filter((v) => v != null && String(v).trim() !== "" && !(Array.isArray(v) && !v.length));
-    if (!vals.length) return "";
-    const t = f.type;
-    if (t === "number") {
-      const nums = vals.map((v) => Number(String(v).replace(/[٠-٩]/g, (c) => "٠١٢٣٤٥٦٧٨٩".indexOf(c)))).filter((n) => isFinite(n));
-      if (!nums.length) return "";
-      const sum = nums.reduce((a, b) => a + b, 0);
-      if (/نسبة|٪|%/.test(f.label)) { const av = Math.round((sum / nums.length) * 10) / 10; return `<div class="card" style="padding:12px 14px;"><div style="font-size:12px;color:${SUBTLE};margin-bottom:4px;">${esc(f.label)} (المتوسط)</div><div style="font-size:24px;font-weight:800;color:${ROSE};">${fmtNum(av)}٪</div><div style="font-size:11px;color:${SUBTLE};">${nums.length} إدخال</div></div>`; }
-      return `<div class="card" style="padding:12px 14px;"><div style="font-size:12px;color:${SUBTLE};margin-bottom:4px;">${esc(f.label)}</div><div style="font-size:24px;font-weight:800;color:${ROSE};">${fmtNum(Math.round(sum * 100) / 100)}</div><div style="font-size:11px;color:${SUBTLE};">المتوسط ${fmtNum(Math.round((sum / nums.length) * 10) / 10)} · ${nums.length} إدخال</div></div>`;
-    }
-    if (["select", "radio", "expandableSelect", "checkbox", "checkboxes", "multiselect"].includes(t)) {
-      const cnt = {}; vals.forEach((v) => (Array.isArray(v) ? v : [v]).forEach((x) => { const k = String(x); cnt[k] = (cnt[k] || 0) + 1; }));
-      const ent = Object.entries(cnt).sort((a, b) => b[1] - a[1]).slice(0, 6); const mx = ent[0][1];
-      return `<div class="card" style="padding:12px 14px;"><div style="font-size:12px;font-weight:700;margin-bottom:8px;">${esc(f.label)}</div>${ent.map(([k, n]) => `<div style="display:flex;align-items:center;gap:8px;font-size:11.5px;margin-bottom:5px;"><span style="flex:0 0 38%;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(k)}</span><span style="flex:1;height:8px;border-radius:6px;background:${GRAY_BG};"><i style="display:block;height:100%;width:${Math.round((n / mx) * 100)}%;background:${ROSE};border-radius:6px;"></i></span><b style="min-width:22px;text-align:left;">${n}</b></div>`).join("")}</div>`;
-    }
-    return `<div class="card" style="padding:12px 14px;"><div style="font-size:12px;color:${SUBTLE};margin-bottom:4px;">${esc(f.label)}</div><div style="font-size:22px;font-weight:800;color:${INK};">${vals.length}</div><div style="font-size:11px;color:${SUBTLE};">إدخال مكتوب</div></div>`;
-  }).filter(Boolean).join("");
-  if (!cards) return "";
-  return dashCard(dashFieldSecLabel(sid), `${rows.length} ${esc(sc.itemLabel || "إدخال")} من ${reports} تقرير — الفترة المختارة`, `<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(min(210px,100%),1fr));gap:10px;">${cards}</div>`);
+  const fld = (id) => sc.fields.find((f) => f.id === id);
+  const txt = (x, id) => { const v = x[id]; return v == null ? "" : schemaFieldText(v).trim(); };
+  const num = (v) => { const n = Number(String(v == null ? "" : v).replace(/[٠-٩]/g, (c) => "٠١٢٣٤٥٦٧٨٩".indexOf(c))); return isFinite(n) && String(v).trim() !== "" ? n : null; };
+  let cfg = DASH_SEC_VIEW[sid];
+  if (!cfg) { const ts = sc.fields.filter((f) => f.type === "text" || f.type === "textarea"), ss = sc.fields.filter((f) => ["select", "radio", "expandableSelect"].includes(f.type)); cfg = { title: (ts[0] || {}).id, meta: [], badges: ss.slice(0, 2).map((f) => f.id), dist: ss.slice(0, 2).map((f) => f.id), stats: [{ k: "count", l: esc(sc.itemLabel || "إدخال") }] }; }
+  const tile = (n, l) => `<div style="flex:1;min-width:110px;background:#faf5f3;border-radius:14px;padding:10px 12px;"><div style="font-size:22px;font-weight:800;color:${ROSE};line-height:1.2;">${n}</div><div style="font-size:11.5px;color:${SUBTLE};margin-top:2px;">${l}</div></div>`;
+  const tiles = cfg.stats.map((s) => {
+    if (s.k === "count") return tile(fmtNum(rows.length), s.l);
+    if (s.k === "is") { const n = rows.filter((x) => s.v.test(txt(x, s.f))).length; return tile(fmtNum(n), s.l); }
+    if (s.k === "sum" || s.k === "avg") { const ns = rows.map((x) => num(x[s.f])).filter((n) => n != null); if (!ns.length) return ""; const sm = ns.reduce((a, b) => a + b, 0); return tile(s.k === "sum" ? fmtNum(Math.round(sm * 100) / 100) : fmtNum(Math.round((sm / ns.length) * 10) / 10) + (s.pct ? "٪" : ""), s.l); }
+    if (s.k === "rate") { const a = rows.reduce((t, x) => t + (num(x[s.f]) || 0), 0), b = rows.reduce((t, x) => t + (num(x[s.of]) || 0), 0); return b ? tile(fmtNum(Math.round((a / b) * 100)) + "٪", s.l) : ""; }
+    return "";
+  }).join("");
+  const distH = (cfg.dist || []).map((id) => {
+    const f = fld(id); if (!f) return "";
+    const cnt = {}; let tot = 0;
+    rows.forEach((x) => { const v = x[id]; (Array.isArray(v) ? v : [v]).forEach((y) => { const k = schemaFieldText(y).trim(); if (k) { cnt[k] = (cnt[k] || 0) + 1; tot++; } }); });
+    const ent = Object.entries(cnt).sort((a, b) => b[1] - a[1]).slice(0, 6); if (!tot || (ent.length < 2 && rows.length < 3)) return "";
+    const colOf = (k, i) => { const m = DASH_SEV_COL.find(([re]) => re.test(k)); return (id === "severity" || id === "priority" || id === "executionStatus") && m ? m[1] : DASH_PAL[i % DASH_PAL.length]; };
+    return `<div style="margin-top:12px;"><div style="font-size:12px;font-weight:800;margin-bottom:6px;">${esc(f.label)}</div>
+      <div style="display:flex;height:12px;border-radius:8px;overflow:hidden;background:${GRAY_BG};">${ent.map(([k, n], i) => `<i title="${esc(k)}" style="display:block;width:${(n / tot) * 100}%;background:${colOf(k, i)};"></i>`).join("")}</div>
+      <div style="display:flex;flex-wrap:wrap;gap:4px 14px;margin-top:6px;font-size:11.5px;">${ent.map(([k, n], i) => `<span style="display:inline-flex;align-items:center;gap:5px;"><i style="width:9px;height:9px;border-radius:50%;background:${colOf(k, i)};display:inline-block;"></i>${esc(k.length > 28 ? k.slice(0, 28) + "…" : k)} <b>${fmtNum(Math.round((n / tot) * 100))}٪</b></span>`).join("")}</div></div>`;
+  }).join("");
+  const badge = (id, v) => { const m = DASH_SEV_COL.find(([re]) => re.test(v)); const c = (id === "severity" || id === "priority" || id === "executionStatus") && m ? m[1] : ROSE; return `<span style="font-size:10.5px;font-weight:700;color:${c};background:${c}1a;border-radius:999px;padding:2px 9px;white-space:nowrap;">${esc(v.length > 24 ? v.slice(0, 24) + "…" : v)}</span>`; };
+  const items = rows.filter((x) => txt(x, cfg.title)).slice(0, 6);
+  const listH = items.length ? `<div style="margin-top:14px;border-top:1px solid ${BORDER};">${items.map((x) => {
+    const meta = [unitOf.get(x), ...(cfg.meta || []).map((id) => txt(x, id)).filter(Boolean)].filter(Boolean).map((m) => m.length > 60 ? m.slice(0, 60) + "…" : m).join(" · ");
+    const bs = (cfg.badges || []).map((id) => { const v = txt(x, id); return v ? badge(id, v) : ""; }).join("");
+    const t = txt(x, cfg.title);
+    return `<div style="display:flex;align-items:flex-start;justify-content:space-between;gap:10px;padding:9px 0;border-bottom:1px solid ${BORDER};"><div style="min-width:0;"><div style="font-size:13px;font-weight:700;line-height:1.6;">${esc(t.length > 110 ? t.slice(0, 110) + "…" : t)}</div><div style="font-size:11.5px;color:${SUBTLE};">${esc(meta)}</div></div><div style="display:flex;gap:4px;flex-wrap:wrap;justify-content:flex-end;flex:none;max-width:45%;">${bs}</div></div>`;
+  }).join("")}${rows.length > items.length ? `<div style="font-size:11.5px;color:${SUBTLE};padding-top:8px;">و ${fmtNum(rows.length - items.length)} أخرى — تجدينها في التقارير</div>` : ""}</div>` : "";
+  if (!tiles && !distH && !listH) return "";
+  return dashCard(dashFieldSecLabel(sid), `${rows.length} ${esc(sc.itemLabel || "إدخال")} من ${reports} تقرير — الفترة المختارة`, `<div style="display:flex;gap:8px;flex-wrap:wrap;">${tiles}</div>${distH}${listH}`);
 }
 
 const ROUTE_SECS = ["challenges", "recommendations", "improvement", "initiatives", "impact", "strengths"];
@@ -3247,7 +3278,7 @@ function dashRoutedHtml(kind, units) {
   const list = rows.slice(0, 40).map((x) => `<tr><td style="padding:8px 6px;font-size:12px;color:${SUBTLE};white-space:nowrap;">${esc(dashFieldSecLabel(x.sid))}</td><td style="padding:8px 6px;font-size:12.5px;font-weight:700;">${esc(ttl(x))}</td><td style="padding:8px 6px;font-size:12px;color:${SUBTLE};">${esc(x.u.name)}</td></tr>`).join("");
   return dashCard(lab, `${rows.length} بند — يظهر هنا ما يخصّ هذا المستوى فقط`, `<div style="overflow:auto;"><table style="width:100%;border-collapse:collapse;"><tbody>${list}</tbody></table></div>`);
 }
-function dashFieldBlocksHtml(kind, units) { return dashB(kind, "routed", dashRoutedHtml(kind, units)) + dashFieldSecIds().map((id) => dashHidden(kind, "fld_" + id) ? "" : dashB(kind, "fld_" + id, dashFieldBlockHtml(kind, id, units))).join(""); }
+function dashFieldBlocksHtml(kind, units) { return dashB(kind, "sharedInd", dashSharedIndHtml(kind, units)) + dashB(kind, "routed", dashRoutedHtml(kind, units)) + dashFieldSecIds().map((id) => dashHidden(kind, "fld_" + id) ? "" : dashB(kind, "fld_" + id, dashFieldBlockHtml(kind, id, units))).join(""); }
 function dashOrderList(kind) {
   const keys = dashCatalog(kind).map((b) => b.key);
   const saved = ((dashConfig()[kind] || {}).order) || [];
@@ -9270,10 +9301,63 @@ function renderIndicatorsManage() {
 
     ${uiCard(`<div style="font-size:16px;font-weight:800;margin-bottom:12px;cursor:pointer;" data-action="ind-form-toggle">إضافة مؤشر بالنموذج المعتاد ${S.ui.indFormOpen ? "▴" : "▾"}</div>${S.ui.indFormOpen ? `${indicatorDefFieldsHtml("new-ind", indicatorFormState("new-ind"))}${pillBtn("إضافة مؤشر", { icon: iconPlus(15, "#fff"), action: "add-indicator-def" })}` : ""}`)}
 
+    ${sharedIndManageHtml()}
+
     ${uiCard(`<div style="font-size:17px;font-weight:800;color:#7a2a3a;margin-bottom:6px;">ماذا ترى الوحدة؟</div>${see || `<div class="hint">لا توجد وحدات.</div>`}<div style="margin-top:12px;background:#fbefc9;border-radius:12px;padding:12px 16px;font-size:12.5px;color:#7a5a00;">الأهداف التشغيلية تعمل بنفس الطريقة: الهدف الاستراتيجي للجميع، والتشغيلي لوحدة أو أكثر.</div>`)}
   </div></div>`;
 }
 
+
+/* ---- المؤشرات المشتركة بين وحدات (تُحفظ في إعدادات الموقع: theme.sharedInds) ---- */
+function sharedIndList() { return ((S.siteSettings && S.siteSettings.theme && S.siteSettings.theme.sharedInds) || []).filter((x) => x && x.indName && (x.units || []).length); }
+function sharedIndNum(v) { const n = Number(String(v == null ? "" : v).replace(/[٠-٩]/g, (c) => "٠١٢٣٤٥٦٧٨٩".indexOf(c))); return isFinite(n) && String(v).trim() !== "" ? n : null; }
+function sharedIndCompute(cfg) {
+  const def = findIndicatorDef(cfg.indName);
+  const parts = [];
+  (cfg.units || []).forEach((uid) => {
+    const u = (S.units || []).find((x) => x.id === uid); if (!u) return;
+    let best = null;
+    dashRepsOf(uid).forEach((r) => { const rows = (r.sections && r.sections.kpi && r.sections.kpi.data && r.sections.kpi.data.indicators) || []; const row = rows.find((x) => String(x.name || "").trim() === cfg.indName); const a = row ? sharedIndNum(row.actual) : null; if (a != null && (!best || (r.createdAt || 0) >= (best.t || 0))) best = { t: r.createdAt || 0, a }; });
+    parts.push({ name: u.name, actual: best ? best.a : null });
+  });
+  const have = parts.filter((x) => x.actual != null);
+  const total = have.length ? have.reduce((a, b) => a + b.actual, 0) : null;
+  const actual = total == null ? null : (cfg.mode === "avg" ? Math.round((total / have.length) * 100) / 100 : total);
+  const target = cfg.target !== "" && cfg.target != null ? cfg.target : (def ? def.target : "");
+  const st = computeIndicatorStatus({ target, actual: actual == null ? "" : actual, direction: def ? def.direction : "" });
+  return { parts, actual, target, st, missing: parts.length - have.length };
+}
+function dashSharedIndHtml(kind, units) {
+  if (kind === "admin") return "";
+  const ids = new Set((units || []).map((u) => u.id));
+  const list = sharedIndList().filter((c) => (c.units || []).some((id) => ids.has(id)));
+  if (!list.length) return "";
+  const cards = list.map((c) => {
+    const r = sharedIndCompute(c);
+    return `<div class="card" style="padding:14px 16px;"><div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:6px;"><b style="font-size:13.5px;">${esc(c.indName)}</b><span style="font-size:11px;font-weight:800;color:${r.st.color};background:${r.st.bg};border-radius:999px;padding:2px 10px;">${esc(r.st.label)}</span></div>
+      <div style="font-size:11.5px;color:${SUBTLE};margin-bottom:8px;">مؤشر مشترك — ${c.mode === "avg" ? "المتوسط" : "المجموع"} · المستهدف ${esc(String(r.target === "" || r.target == null ? "—" : r.target))}</div>
+      <div style="font-size:26px;font-weight:800;color:${ROSE};">${r.actual == null ? "—" : fmtNum(r.actual)}</div>
+      ${r.parts.map((p) => `<div style="display:flex;justify-content:space-between;font-size:12px;padding:5px 0;border-top:1px solid ${BORDER};"><span>${esc(p.name)}</span><b>${p.actual == null ? "لم يُدخل" : fmtNum(p.actual)}</b></div>`).join("")}</div>`;
+  }).join("");
+  return dashCard("المؤشرات المشتركة", "هدف واحد تشترك فيه أكثر من وحدة", `<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(min(260px,100%),1fr));gap:10px;">${cards}</div>`);
+}
+function sharedIndManageHtml() {
+  const f = S.ui.shInd || (S.ui.shInd = { indName: "", units: [], mode: "sum", target: "" });
+  const defs = S.indicatorDefinitions || [];
+  const units = (S.units || []).filter((u) => u.status === "active" && u.role !== "admin" && u.role !== "executive");
+  const all = (S.siteSettings && S.siteSettings.theme && S.siteSettings.theme.sharedInds) || [];
+  const chip = (on, label, attrs) => `<button type="button" ${attrs} style="border:1px solid ${on ? ROSE : BORDER};background:${on ? ROSE : "#fff"};color:${on ? "#fff" : INK};border-radius:999px;padding:6px 14px;font-size:12.5px;font-weight:700;cursor:pointer;">${esc(label)}</button>`;
+  return uiCard(`<div style="font-size:17px;font-weight:800;color:#7a2a3a;margin-bottom:6px;">المؤشرات المشتركة بين وحدات</div>
+    <div class="hint" style="margin-bottom:12px;">مؤشر واحد بمستهدف واحد تشترك فيه عدة وحدات؛ يُجمع (أو يُتوسَّط) إنجازها ويظهر في لوحات القسم والإدارة.</div>
+    ${all.map((c) => `<div style="display:flex;align-items:center;gap:10px;padding:10px 0;border-top:1px solid ${BORDER};"><div style="flex:1;font-size:13px;"><b>${esc(c.indName)}</b><div class="hint" style="margin:2px 0 0;">${(c.units || []).map((id) => esc((units.find((u) => u.id === id) || {}).name || id)).join("، ")} — ${c.mode === "avg" ? "المتوسط" : "المجموع"}${c.target !== "" && c.target != null ? " — المستهدف " + esc(String(c.target)) : ""}</div></div>${pillBtn("حذف", { variant: "ghost", action: "shind-del", data: { id: c.id } })}</div>`).join("")}
+    <div style="border-top:1px solid ${BORDER};padding-top:12px;margin-top:6px;">
+      ${fieldWrap("المؤشر", `<select class="input" data-shind="indName"><option value="">اختاري المؤشر</option>${defs.map((d) => `<option value="${esc(d.name)}" ${f.indName === d.name ? "selected" : ""}>${esc(d.name)}</option>`).join("")}</select>`)}
+      ${fieldWrap("الوحدات المشتركة", `<div style="display:flex;gap:6px;flex-wrap:wrap;">${units.map((u) => chip(f.units.includes(u.id), u.name, `data-action="shind-unit" data-id="${esc(u.id)}"`)).join("")}</div>`)}
+      ${fieldWrap("طريقة الدمج", `<div style="display:flex;gap:6px;">${chip(f.mode === "sum", "المجموع", 'data-action="shind-mode" data-m="sum"')}${chip(f.mode === "avg", "المتوسط", 'data-action="shind-mode" data-m="avg"')}</div>`)}
+      ${fieldWrap("المستهدف المشترك (اختياري — وإلا يُؤخذ من المؤشر)", `<input class="input" data-shind="target" value="${esc(f.target)}" inputmode="decimal" />`)}
+      <div style="margin-top:10px;">${pillBtn("إضافة المؤشر المشترك", { action: "shind-add", disabled: !f.indName || f.units.length < 2 })}</div>
+    </div>`);
+}
 function indicatorDefRowHtml(def) {
   const editing = S.ui.editingIndicatorId === def.id;
   const confirming = S.ui.confirmDeleteIndicatorId === def.id;
@@ -11721,6 +11805,8 @@ function attachFormListeners() {
     if (el.dataset && el.dataset.field && el.tagName !== "SELECT") {
       setFieldFromEl(el);
       liveUpdateComputed(el);
+    } else if (el.dataset && el.dataset.shind) {
+      (S.ui.shInd = S.ui.shInd || { indName: "", units: [], mode: "sum", target: "" })[el.dataset.shind] = el.value;
     } else if (el.dataset && el.dataset.newind) {
       const key = `newIndicatorForm_${el.dataset.newind}`;
       (S.ui[key] = S.ui[key] || {})[el.dataset.newindField] = el.value;
@@ -12979,6 +13065,10 @@ function attachClickListener() {
         S.ui.goalImp = (() => { const out = []; let hd = null, hdDone = true, st = null, stDone = true; rows.forEach((r) => { if (r.heading) { hd = r.line; hdDone = false; } else if (r.kind === "strategic") { st = r.line; stDone = false; } else if (r.errs.length) { if (hd && !hdDone) { out.push(hd); hdDone = true; } if (st && !stDone) { out.push(st); stDone = true; } out.push(r.line); } }); return out.length ? { text: out.join("\n"), preview: null } : null; })();
         render(); break;
       }
+      case "shind-unit": { const f = S.ui.shInd; f.units = f.units.includes(ds.id) ? f.units.filter((x) => x !== ds.id) : [...f.units, ds.id]; render(); break; }
+      case "shind-mode": S.ui.shInd.mode = ds.m; render(); break;
+      case "shind-add": { const f = S.ui.shInd; const cur = (S.siteSettings.theme && S.siteSettings.theme.sharedInds) || []; saveSiteTheme({ sharedInds: [...cur, { id: uid("shind"), indName: f.indName, units: f.units.slice(), mode: f.mode, target: f.target }] }); S.ui.shInd = null; render(); break; }
+      case "shind-del": { const cur = (S.siteSettings.theme && S.siteSettings.theme.sharedInds) || []; saveSiteTheme({ sharedInds: cur.filter((x) => x.id !== ds.id) }); render(); break; }
       case "ind-tab": S.ui.indTab = ds.tab; render(); break;
       case "scope-toggle": { const k = ds.kind + ":" + ds.id; S.ui.scopeOpen = S.ui.scopeOpen === k ? null : k; render(); break; }
       case "ind-add-toggle": saveSiteTheme({ indAddFromReport: !indAddFromReportOn() }); render(); break;
