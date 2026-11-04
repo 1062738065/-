@@ -2934,7 +2934,7 @@ async function refreshReportsFromDb(unitId) {
 // ===== بدون صفحات افتراضية لمديرة النظام والإدارة العليا (قرار نجود) =====
 // كل حساب يأخذ صفحاته وأزراره من أدواره (اتحاد كل الأدوار المختارة له).
 // مديرة النظام لها دائمًا "المستخدمون" و"إعدادات الموقع" فقط، حتى لا يُقفل النظام.
-const ADMIN_FIXED_PAGES = ["units-manage", "site-settings", "reports-manage"];
+const ADMIN_FIXED_PAGES = ["units-manage", "site-settings", "reports-manage", "shapes-library"];
 function accountRolesPerms(entity) {
   const out = { pages: [], actions: [], buttons: [], count: 0 };
   baseRoleIdsOf(entity).forEach((id) => {
@@ -10749,6 +10749,7 @@ function indicatorCardHtml(row, index, def, report, isOpen, d) {
       ${row.name ? fieldWrap("خط الأساس", false, prevBase
         ? `<div class="readonly-box">${esc(prevBase.value)}</div><div class="hint">من المتحقق في تقرير «${esc(prevBase.report.label || "سابق")}» المعتمد للوحدة.</div>`
         : inp("indicators", row.id, "baseline", row.baseline, "اختياري — اتركيه فارغًا إذا ما فيه قيمة سابقة", "number")) : ""}
+      ${fieldWrap("البرنامج المرتبط (اختياري)", false, sel("indicators", row.id, "relatedProgram", row.relatedProgram, rptProgramNames(report), "بدون ربط") + `<div class="hint">يظهر هذا المؤشر داخل بطاقة البرنامج في التقرير.</div>`)}
       ${fieldWrap("المتحقق", true, inp("indicators", row.id, "actual", row.actual, "0", "number") + `<div style="font-size:10px;color:#c9863a;margin-top:4px;">🔧 لا يوجد مصدر بيانات مربوط — يحتاج إدخالًا يدويًا</div>`)}
     </div>` : ""}
     ${showDetails ? `<div style="margin-top:14px;padding-top:14px;border-top:1px dashed ${BORDER}">
@@ -10935,7 +10936,7 @@ function toolsSectionHtml(d) {
       <div class="subhead">بيانات الأداة</div>
       ${fieldWrap("اسم الأداة", true, inp("tools", t.id, "name", t.name, "اسم أداة القياس"))}
       ${fieldWrap("الهدف من استخدامها", txt("tools", t.id, "purpose", t.purpose, "لماذا استُخدمت هذه الأداة؟"))}
-      ${fieldWrap("الجهة أو البرنامج المرتبط بها", inp("tools", t.id, "relatedProgram", t.relatedProgram, "مثال: دورة إدارة الوقت"))}
+      ${fieldWrap("الجهة أو البرنامج المرتبط بها", (rptProgramNames().length ? sel("tools", t.id, "relatedProgram", t.relatedProgram, [...new Set([...rptProgramNames(), ...(t.relatedProgram ? [t.relatedProgram] : [])])], "بدون ربط") : inp("tools", t.id, "relatedProgram", t.relatedProgram, "مثال: دورة إدارة الوقت")))}
       ${fieldWrap("الفئة التي طبقت عليها", inp("tools", t.id, "targetGroup", t.targetGroup, "مثال: الموظفات"))}
       <div class="row-flex">
         ${fieldWrap("حجم المجتمع", inp("tools", t.id, "populationSize", t.populationSize, "0", "number"))}
@@ -11534,6 +11535,26 @@ function shapeBlocksEditorInner(d) {
   return `<div class="subhead" style="margin-top:14px;">الأشكال والرسوم</div>${rows}<div style="margin-top:8px;">${pillBtn("اختيار من المكتبة", { variant: "ghost", action: "shp-open" })}</div>`;
 }
 
+function rptProgramNames(report) {
+  const r = report || (typeof getCurrentReportEntry === "function" ? getCurrentReportEntry() : null);
+  const list = ((S.sectionDraft && S.activeSectionId === "programs" && S.sectionDraft.programs) || (r && r.sections && r.sections.programs && r.sections.programs.data && r.sections.programs.data.programs) || []);
+  return [...new Set(list.map((p) => (p.name || "").trim()).filter(Boolean))];
+}
+function rptProgramCardsHtml(report) {
+  const progs = (report.sections?.programs?.data?.programs || []).filter((p) => (p.name || "").trim());
+  const inds = (report.sections?.kpi?.data?.indicators || []).filter((r) => r.name && r.relatedProgram);
+  const tools = (report.sections?.tools?.data?.tools || []).filter((t) => t.relatedProgram);
+  const cards = progs.map((p) => {
+    const nm = p.name.trim();
+    const pi = inds.filter((r) => String(r.relatedProgram).trim() === nm), pt = tools.filter((t) => String(t.relatedProgram).trim() === nm);
+    if (!pi.length && !pt.length) return "";
+    const indHtml = pi.map((r) => { const st = computeIndicatorStatus(resolveIndicatorRow(r, findIndicatorDef(r.name))); const pc = dashIndPct(r); return `<div class="rpt-pc-row"><span>${esc(r.name)}</span><b style="color:${st.color}">${pc == null ? esc(st.label) : pc + "٪ — " + esc(st.label)}</b></div>`; }).join("");
+    const toolHtml = pt.map((t) => { const rr = computeResponseRate(t.sampleSize, t.respondentsCount); return `<div class="rpt-pc-row"><span>${esc(t.name || t.toolType || "أداة")}</span><b>${rr != null && rr !== "" ? "استجابة " + esc(String(rr)) + (String(rr).includes("%") ? "" : "٪") : esc(t.resultQuality || "")}</b></div>`; }).join("");
+    return `<div class="rpt-pc"><div class="rpt-pc-h"><b>${esc(nm)}</b>${p.executionStatus ? `<span>${esc(p.executionStatus)}</span>` : ""}${p.actualBeneficiaries ? `<span>${esc(p.actualBeneficiaries)} مستفيدة</span>` : ""}</div>
+      ${indHtml ? `<div class="rpt-pc-s">المؤشرات</div>${indHtml}` : ""}${toolHtml ? `<div class="rpt-pc-s">أدوات القياس</div>${toolHtml}` : ""}</div>`;
+  }).join("");
+  return cards ? `<div class="rpt-subheading">بطاقات البرامج (المؤشرات والأدوات المرتبطة)</div><div class="rpt-pcs">${cards}</div>` : "";
+}
 function sectionBodyOnly(section, saved, report) {
   const d = (saved && saved.data) || {};
   let body = "";
@@ -11698,6 +11719,7 @@ function sectionBodyOnly(section, saved, report) {
     body = textBlock("المحتوى", d.content) || emptyHint("لم يُدخل محتوى بعد.");
   }
   if (d.notes) body += textBlock("ملاحظات", d.notes);
+  if (section.id === "programs" && report) body += rptProgramCardsHtml(report);
   if (d.shapeBlocks && d.shapeBlocks.length) body += rptShapeBlocksHtml(d.shapeBlocks);
   return body;
 }
