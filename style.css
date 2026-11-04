@@ -808,3 +808,13 @@ table.prs-table td { padding: 8px 10px; border-top: 1px solid var(--border); }
 .shp-prev{pointer-events:none;max-height:170px;overflow:hidden;transform-origin:top right}.shp-prev .shp{margin:0;font-size:11px}.shp-nm{margin-top:8px;font-weight:800;font-size:12.5px}
 .shp-live{margin-top:8px;background:#fff;border:1px dashed #eadfdb;border-radius:10px;padding:8px}
 @media print{.shp{break-inside:avoid}}
+.shp-swot{display:grid;grid-template-columns:1fr 1fr;gap:8px}.shp-swot>div{background:#faf6f5;border-radius:10px;padding:8px 10px}
+.shp-stairs{display:flex;align-items:flex-end;gap:8px;justify-content:center}.shp-stairs>div{text-align:center;flex:1}.shp-stairs .b{background:var(--rpt-burgundy,#7a2145);border-radius:8px 8px 0 0;display:flex;align-items:flex-start;justify-content:center;color:#fff;padding-top:4px}.shp-stairs span{font-size:10.5px;color:#8a7d7a}
+.shp-it{display:flex;gap:12px;align-items:flex-start}.shp-it .p{width:34%;min-width:90px;aspect-ratio:4/3;border-radius:10px;overflow:hidden;flex-shrink:0}
+.shp-gal{display:grid;grid-template-columns:repeat(3,1fr);gap:6px}.shp-gal.c2{grid-template-columns:1fr 1fr}.shp-gal>div{aspect-ratio:4/3;border-radius:10px;overflow:hidden}
+.shp-cap{text-align:center;font-size:10.5px;color:#8a7d7a;margin-top:5px}.shp-big{aspect-ratio:16/9;border-radius:12px;overflow:hidden}
+.shp-tli{width:70px;height:52px;border-radius:8px;overflow:hidden;margin:4px auto}
+.shp-prof{display:inline-flex;flex-direction:column;align-items:center;gap:3px;background:#faf3f1;border-radius:14px;padding:12px 22px}.shp-prof .a{width:64px;height:64px;border-radius:50%;overflow:hidden}.shp-prof span{font-size:10.5px;color:#8a7d7a}
+.rpt-hero{display:flex;gap:16px;align-items:flex-start;margin-bottom:16px;background:#fff;border:1px solid #eadfdb;border-radius:14px;padding:12px 14px}
+.rpt-hero-d{flex:0 0 130px}.rpt-hero-t{flex:1;min-width:0}.rpt-insight{margin-top:10px;background:#faf3f1;border-right:4px solid var(--rpt-burgundy);border-radius:8px;padding:8px 12px;font-size:12px;font-weight:700;line-height:1.8}
+.rpt-pdf .rpt-hero{break-inside:avoid}

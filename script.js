@@ -6667,6 +6667,14 @@ function rmState() {
   return st;
 }
 function rmDirty(st) { return JSON.stringify(st.draft) !== JSON.stringify(rptSettings(st.sel)); }
+const RPT_PRESETS = [
+  { name: "عنابي كلاسيكي", main: "#6b2337", chapterBg: "#f3e8dd", thBg: "#f3e8dd" },
+  { name: "أزرق هادئ", main: "#24527a", chapterBg: "#e6eef6", thBg: "#e6eef6" },
+  { name: "أخضر", main: "#2E6B52", chapterBg: "#e4f1ea", thBg: "#e4f1ea" },
+  { name: "ذهبي بني", main: "#7a4d16", chapterBg: "#f6ecd9", thBg: "#f6ecd9" },
+  { name: "بنفسجي", main: "#5b3a73", chapterBg: "#eee6f4", thBg: "#eee6f4" },
+  { name: "رمادي رسمي", main: "#374151", chapterBg: "#eceff2", thBg: "#eceff2" },
+];
 function rmSetField(key, value) {
   const st = rmState(), d = st.draft;
   if (key.indexOf("chart|") === 0 || key.indexOf("chartc|") === 0) {
@@ -6928,6 +6936,7 @@ function rmPanelHtml(st) {
       <div class="rm-row"><input type="text" class="input" id="rm-font-new" placeholder="اسم الخط بالإنجليزي، مثل: Lalezar" style="width:230px;" dir="ltr" />${pillBtn("إضافة خط", { variant: "ghost", icon: iconPlus(14, INK), action: "rm-font-add" })}</div>`,
       "اكتبي الاسم كما في موقع fonts.google.com بالضبط. يُضاف لقوائم الخطوط في كل التقارير.");
     return `<div class="rm-grid3">${rmFieldHtml("خط النصوص", rmFont("fontBody", d.fontBody))}${rmFieldHtml("خط عنوان الغلاف", rmFont("fontTitle", d.fontTitle))}${rmFieldHtml("خط عناوين الفصول", rmFont("fontHeading", d.fontHeading))}</div>` +
+      rmFieldHtml("ألوان جاهزة للتقرير", `<div class="rm-row">${RPT_PRESETS.map((p, i) => `<button type="button" class="pill-btn pill-ghost" data-action="rm-preset" data-p="${i}" style="gap:6px;"><span style="display:inline-block;width:14px;height:14px;border-radius:50%;background:${p.main};"></span><span style="display:inline-block;width:14px;height:14px;border-radius:50%;background:${p.chapterBg};border:1px solid #ddd;"></span>${esc(p.name)}</button>`).join("")}</div>`, "يغيّر اللون الرئيسي وخلفية العناوين ورأس الجدول دفعة واحدة.") +
       rmFieldHtml("اللون الرئيسي", `<div class="rm-row">${["#6b2337", "#24527a", "#2E6B52", "#7a4d16", "#5b3a73"].map((c) => `<button type="button" class="rm-swatch${d.mainColor === c ? " on" : ""}" data-action="rm-set" data-key="mainColor" data-value="${c}" style="background:${c};" aria-label="لون ${c}"></button>`).join("")}${rmColor("mainColor", d.mainColor)}</div>`) +
       rmFieldHtml("خلفية عناوين الفصول", rmColor("chapterBg", d.chapterBg)) + `<div class="rm-sep"></div>` + fontsMgr;
   }
@@ -7001,6 +7010,7 @@ function handleReportsManageAction(action, ds) {
     case "rm-select": st.sel = ds.id; st.draft = null; st.confirmDel = false; st.openCols = null; break;
     case "rm-tab": st.tab = ds.tab; break;
     case "rm-set": rmSetField(ds.key, ds.value); break;
+    case "rm-preset": { const pr = RPT_PRESETS[Number(ds.p)]; if (pr) { rmSetField("mainColor", pr.main); rmSetField("chapterBg", pr.chapterBg); rmSetField("thBg", pr.thBg); rmSetField("thColor", pr.main); } break; }
     case "rm-toggle": d[ds.key] = !d[ds.key]; break;
     case "rm-colv": { const lv = ds.lvl, lc = { ...(d.levelCols || {}) }; const bySec = { ...(lc[lv] || {}) }; const cur = new Set(bySec[ds.sec] || []); if (cur.has(ds.col)) cur.delete(ds.col); else cur.add(ds.col); bySec[ds.sec] = [...cur]; lc[lv] = bySec; d.levelCols = lc; break; }
     case "rm-lvl": { const lv = ds.lvl, cur = new Set((d.levelHidden || {})[lv] || []); if (cur.has(ds.key)) cur.delete(ds.key); else cur.add(ds.key); d.levelHidden = { ...(d.levelHidden || {}), [lv]: [...cur] }; break; }
@@ -10545,7 +10555,7 @@ function sectionEditorHtml(unit, report) {
       ${shared.preparerName ? `<span>· أعدّته: <strong style="color:${INK}">${esc(shared.preparerName)}</strong></span>` : ""}
     </div>` : "";
 
-  const fieldsHtml = renderSectionFields(section, d, unit, report) + (section.id === "review" ? "" : shapeBlocksEditorHtml(S.sectionDraft || d)) + (S.ui.shpOpen ? shapePickerHtml() : "");
+  const fieldsHtml = renderSectionFields(section, d, unit, report) + (section.id === "review" ? "" : shapeBlocksEditorHtml(S.sectionDraft || d, section.id)) + (S.ui.shpOpen ? shapePickerHtml() : "");
 
   return `
   <div class="card card-lg">
@@ -11414,11 +11424,13 @@ function rptSectionColumns(sid, s, captured) {
 /* =============================== مكتبة الأشكال والرسوم =============================== */
 const shpLines = (v) => String(v || "").split("\n").map((x) => x.trim()).filter(Boolean);
 const shpPairs = (v) => shpLines(v).map((l) => l.split("|").map((p) => p.trim()));
+const shpN = (v) => parseFloat(String(v == null ? "" : v).replace(/[٠-٩]/g, (d) => "٠١٢٣٤٥٦٧٨٩".indexOf(d)));
 const shpE = (v) => esc(String(v == null ? "" : v));
 const shpNum = (v) => { const n = parseFloat(String(v).replace(/[٠-٩]/g, (d) => "٠١٢٣٤٥٦٧٨٩".indexOf(d)).replace("%", "")); return isFinite(n) ? Math.max(0, Math.min(100, n)) : 0; };
-const SHP_CATS = [["text", "نصوص"], ["stats", "أرقام وإحصاءات"], ["list", "قوائم"], ["time", "خطوط زمنية"], ["flow", "مخططات انسيابية"], ["table", "جداول"]];
+const SHP_CATS = [["text", "نصوص"], ["photo", "صور"], ["stats", "أرقام وإحصاءات"], ["list", "قوائم"], ["time", "خطوط زمنية"], ["flow", "مخططات انسيابية"], ["table", "جداول"]];
+const SHP_IMG = (k, label) => ({ k, label, type: "i" });
 const SHP_F = { // حقول مشتركة
-  t: (k, label, ph) => ({ k, label, type: "t", ph }), a: (k, label, ph) => ({ k, label, type: "a", ph }),
+  t: (k, label, ph) => ({ k, label, type: "t", ph }), i: (k, label) => ({ k, label, type: "i" }), a: (k, label, ph) => ({ k, label, type: "a", ph }),
 };
 const SHP_TABLE = (cols) => ({ cat: "table", fields: [SHP_F.t("title", "عنوان الجدول"), SHP_F.t("head", "رؤوس الأعمدة (افصلي بـ |)", Array.from({ length: cols }, (_, i) => "عمود " + (i + 1)).join(" | ")), SHP_F.a("rows", "الصفوف (سطر لكل صف، افصلي الخلايا بـ |)")],
   sample: { title: "جدول", head: Array.from({ length: cols }, (_, i) => "عمود " + (i + 1)).join("|"), rows: Array.from({ length: 3 }, (_, r) => Array.from({ length: cols }, (_, i) => "قيمة " + (r + 1) + "-" + (i + 1)).join("|")).join("\n") },
@@ -11449,8 +11461,46 @@ const SHAPES_LIB = {
   "f4": { cat: "flow", name: "انسيابي ف٤ (قرار)", fields: [SHP_F.t("q", "السؤال/الشرط"), SHP_F.t("yes", "إذا نعم"), SHP_F.t("no", "إذا لا")], sample: { q: "هل اكتمل التقرير؟", yes: "اعتماد", no: "إعادة للمراجعة" }, render: (x) => `<div class="shp-dec"><div class="q">${shpE(x.q)}</div><div class="br"><div class="y"><small>نعم</small>${shpE(x.yes)}</div><div class="n"><small>لا</small>${shpE(x.no)}</div></div></div>` },
   "t2": { ...SHP_TABLE(2), name: "جدول عمودان" }, "t3": { ...SHP_TABLE(3), name: "جدول ٣ أعمدة" }, "t4": { ...SHP_TABLE(4), name: "جدول ٤ أعمدة" },
 };
+
+Object.assign(SHAPES_LIB, {
+  "t5": { ...SHP_TABLE(5), name: "جدول ٥ أعمدة" },
+  "t6": { ...SHP_TABLE(6), name: "جدول ٦ أعمدة" },
+  "tstat": { cat: "table", name: "جدول مؤشرات بحالة", fields: [SHP_F.t("title", "العنوان"), SHP_F.a("rows", "سطر لكل مؤشر: المؤشر|المستهدف|المتحقق|الحالة (تحقق/جزئي/لم يتحقق)")], sample: { title: "المؤشرات", rows: "رضا المستفيدات|٩٠٪|٩٣٪|تحقق\nزمن الإنجاز|٣ أيام|٤ أيام|جزئي\nعدد الدورات|١٠|٦|لم يتحقق" }, render: (x) => { const c = (v) => /^تحقق/.test(v) ? "#1f8a52;background:#e4f6ec" : /جزئ/.test(v) ? "#a87b00;background:#fff3d6" : "#c0392b;background:#fde6e6"; return `${x.title ? `<div class="shp-ttl">${shpE(x.title)}</div>` : ""}<table class="shp-tbl"><thead><tr><th>المؤشر</th><th>المستهدف</th><th>المتحقق</th><th>الحالة</th></tr></thead><tbody>${shpPairs(x.rows).map((r) => `<tr><td>${shpE(r[0])}</td><td>${shpE(r[1])}</td><td>${shpE(r[2])}</td><td><span style="white-space:nowrap;padding:2px 9px;border-radius:99px;font-weight:700;color:${c(r[3] || "")}">${shpE(r[3])}</span></td></tr>`).join("")}</tbody></table>`; } },
+  "ttask": { cat: "table", name: "جدول مهام ومسؤولات", fields: [SHP_F.t("title", "العنوان"), SHP_F.a("rows", "سطر لكل مهمة: المهمة|المسؤولة|الموعد")], sample: { title: "المهام", rows: "إعداد الخطة|نجود|١ محرم\nالمراجعة|علوة|٥ محرم" }, render: (x) => `${x.title ? `<div class="shp-ttl">${shpE(x.title)}</div>` : ""}<table class="shp-tbl"><thead><tr><th>المهمة</th><th>المسؤولة</th><th>الموعد</th></tr></thead><tbody>${shpPairs(x.rows).map((r) => `<tr><td>${shpE(r[0])}</td><td>${shpE(r[1])}</td><td>${shpE(r[2])}</td></tr>`).join("")}</tbody></table>` },
+  "tcmp": { cat: "table", name: "جدول مقارنة بالفترة السابقة", fields: [SHP_F.t("title", "العنوان"), SHP_F.a("rows", "سطر لكل بند: البند|السابقة|الحالية")], sample: { title: "مقارنة", rows: "المستفيدات|٨٠|١٢٠\nالأنشطة|٣٠|٢٥" }, render: (x) => `${x.title ? `<div class="shp-ttl">${shpE(x.title)}</div>` : ""}<table class="shp-tbl"><thead><tr><th>البند</th><th>السابقة</th><th>الحالية</th><th>التغير</th></tr></thead><tbody>${shpPairs(x.rows).map((r) => { const a = parseFloat(String(r[1]).replace(/[٠-٩]/g, (d) => "٠١٢٣٤٥٦٧٨٩".indexOf(d))), b = parseFloat(String(r[2]).replace(/[٠-٩]/g, (d) => "٠١٢٣٤٥٦٧٨٩".indexOf(d))); const ok = isFinite(a) && isFinite(b); const up = ok && b >= a; return `<tr><td>${shpE(r[0])}</td><td>${shpE(r[1])}</td><td>${shpE(r[2])}</td><td style="color:${!ok ? "#8a7d7a" : up ? "#1f8a52" : "#c0392b"};font-weight:800">${!ok ? "—" : (up ? "▲ " : "▼ ") + Math.abs(Math.round((b - a) * 10) / 10)}</td></tr>`; }).join("")}</tbody></table>` },
+  "swot": { cat: "list", name: "تحليل SWOT", fields: [SHP_F.a("s", "القوة"), SHP_F.a("w", "الضعف"), SHP_F.a("o", "الفرص"), SHP_F.a("t", "التهديدات")], sample: { s: "فريق متعاون", w: "ضيق الوقت", o: "دعم الإدارة", t: "تغيّر الأنظمة" }, render: (x) => `<div class="shp-swot">${[["القوة", x.s, "#1f8a52"], ["الضعف", x.w, "#c0392b"], ["الفرص", x.o, "#2563eb"], ["التهديدات", x.t, "#a87b00"]].map(([n, v, c]) => `<div style="border-top:4px solid ${c}"><b style="color:${c}">${n}</b><ul class="shp-ul">${shpLines(v).map((l) => `<li>${shpE(l)}</li>`).join("")}</ul></div>`).join("")}</div>` },
+  "cards3": { cat: "list", name: "ثلاث بطاقات", fields: [SHP_F.a("items", "سطر لكل بطاقة: العنوان|الوصف")], sample: { items: "الجودة|رفع مستوى الأداء\nالسرعة|تقليل زمن الإنجاز\nالتميز|نتائج متقدمة" }, render: (x) => `<div class="shp-nums c3" style="text-align:right">${shpPairs(x.items).slice(0, 3).map((p) => `<div style="text-align:right"><b style="font-size:13px">${shpE(p[0])}</b><span style="font-size:11px">${shpE(p[1])}</span></div>`).join("")}</div>` },
+  "badges": { cat: "list", name: "وسوم", fields: [SHP_F.a("items", "سطر لكل وسم")], sample: { items: "تعاون\nإبداع\nجودة\nالتزام" }, render: (x) => `<div style="display:flex;gap:6px;flex-wrap:wrap">${shpLines(x.items).map((l) => `<span style="background:#faf3f1;border:1px solid #ecd9d4;color:var(--rpt-burgundy,#7a2145);padding:4px 12px;border-radius:99px;font-weight:700">${shpE(l)}</span>`).join("")}</div>` },
+  "gauge": { cat: "stats", name: "عدّاد نصف دائري", fields: [SHP_F.t("pct", "النسبة (٠-١٠٠)"), SHP_F.t("label", "الوصف")], sample: { pct: "65", label: "مستوى الإنجاز" }, render: (x) => { const p = shpNum(x.pct), L = Math.PI * 40; return `<div class="shp-donut"><svg width="140" height="84" viewBox="0 0 100 60"><path d="M10 50a40 40 0 0 1 80 0" fill="none" stroke="#efe5e3" stroke-width="12" stroke-linecap="round"/><path d="M10 50a40 40 0 0 1 80 0" fill="none" stroke="var(--rpt-burgundy)" stroke-width="12" stroke-linecap="round" stroke-dasharray="${(L * p / 100).toFixed(1)} ${L.toFixed(1)}"/><text x="50" y="48" text-anchor="middle" font-size="16" font-weight="800" fill="var(--rpt-ink)">${Math.round(p)}%</text></svg><span>${shpE(x.label)}</span></div>`; } },
+  "stairs": { cat: "stats", name: "درج تصاعدي", fields: [SHP_F.a("items", "سطر لكل درجة: العنوان|القيمة")], sample: { items: "الربع ١|٢٠\nالربع ٢|٤٥\nالربع ٣|٧٠\nالربع ٤|٩٠" }, render: (x) => { const r = shpPairs(x.items); const mx = Math.max(1, ...r.map((p) => shpN(p[1]) || 0)); return `<div class="shp-stairs">${r.map((p) => `<div><div class="b" style="height:${Math.max(8, ((shpN(p[1]) || 0) / mx) * 100)}px"><b>${shpE(p[1])}</b></div><span>${shpE(p[0])}</span></div>`).join("")}</div>`; } },
+  "kpi": { cat: "stats", name: "مؤشر مع سهم", fields: [SHP_F.t("label", "المؤشر"), SHP_F.t("value", "القيمة"), SHP_F.t("delta", "التغير (مثل +٥٪ أو -٣٪)")], sample: { label: "رضا المستفيدات", value: "٩٣٪", delta: "+٥٪" }, render: (x) => { const up = !/^[-−]/.test(String(x.delta || "")); return `<div class="shp-num1" style="align-items:flex-start"><span>${shpE(x.label)}</span><b>${shpE(x.value)}</b><span style="color:${up ? "#1f8a52" : "#c0392b"};font-weight:800">${up ? "▲" : "▼"} ${shpE(x.delta)}</span></div>`; } },
+  "tlstep": { cat: "time", name: "مراحل بأرقام", fields: [SHP_F.a("items", "سطر لكل مرحلة: العنوان|الوصف")], sample: { items: "التخطيط|وضع الأهداف\nالتنفيذ|تطبيق الخطة\nالتقييم|قياس النتائج" }, render: (x) => `<div class="shp-ol">${shpPairs(x.items).map((p, i) => `<div><b>${i + 1}</b><span><b style="display:inline;background:none;color:inherit;width:auto;height:auto">${shpE(p[0])}</b> — ${shpE(p[1])}</span></div>`).join("")}</div>` },
+  "f5": { ...SHP_FLOW(5), name: "انسيابي ف٥ (٥ خطوات)" },
+  "f6": { cat: "flow", name: "انسيابي ف٦ (مدخلات ← عمليات ← مخرجات)", fields: [SHP_F.a("in", "المدخلات"), SHP_F.a("proc", "العمليات"), SHP_F.a("out", "المخرجات")], sample: { in: "بيانات الوحدات", proc: "المراجعة والتحليل", out: "التقرير النهائي" }, render: (x) => `<div class="shp-flow" style="justify-content:center">${[["المدخلات", x.in], ["العمليات", x.proc], ["المخرجات", x.out]].map(([n, v], i) => `${i ? `<div class="shp-arr">◂</div>` : ""}<div class="shp-step" style="flex-direction:column;align-items:flex-start"><small style="color:#8a7d7a">${n}</small>${shpLines(v).map((l) => `<span>${shpE(l)}</span>`).join("")}</div>`).join("")}</div>` },
+  "f7": { cat: "flow", name: "انسيابي ف٧ (تفرّع)", fields: [SHP_F.t("root", "البداية"), SHP_F.a("branches", "الفروع (سطر لكل فرع)")], sample: { root: "الهدف العام", branches: "هدف فرعي ١\nهدف فرعي ٢\nهدف فرعي ٣" }, render: (x) => `<div class="shp-dec"><div class="q">${shpE(x.root)}</div><div style="width:2px;height:12px;background:#e6c98a;margin:0 auto"></div><div class="br">${shpLines(x.branches).map((b) => `<div style="background:#faf3f1;border:1px solid #ecd9d4">${shpE(b)}</div>`).join("")}</div></div>` },
+  "sep": { cat: "text", name: "فاصل بعنوان", fields: [SHP_F.t("text", "العنوان")], sample: { text: "المرحلة الثانية" }, render: (x) => `<div style="display:flex;align-items:center;gap:10px"><i style="flex:1;height:2px;background:#ecd9d4"></i><b style="color:var(--rpt-burgundy,#7a2145)">${shpE(x.text)}</b><i style="flex:1;height:2px;background:#ecd9d4"></i></div>` },
+  "thanks": { cat: "text", name: "شكر وتقدير", fields: [SHP_F.t("title", "العنوان"), SHP_F.a("text", "النص")], sample: { title: "شكر وتقدير", text: "نشكر كل من ساهم في إنجاح هذه الفترة." }, render: (x) => `<div class="shp-head" style="text-align:center"><div>${shpE(x.title)}</div><small>${shpE(x.text)}</small></div>` },
+});
+
+const shpImg = (v, st) => v ? `<img src="${esc(v)}" style="${st || "width:100%;height:100%;object-fit:cover;"}" alt="" />` : `<div style="width:100%;height:100%;min-height:60px;background:linear-gradient(135deg,#f3e8dd,#ecd9d4);display:flex;align-items:center;justify-content:center;color:#b89a94;font-size:11px">صورة</div>`;
+Object.assign(SHAPES_LIB, {
+  "imgtext": { cat: "photo", name: "صورة مع نص", fields: [SHP_F.i("img", "الصورة"), SHP_F.t("title", "العنوان"), SHP_F.a("text", "النص")], sample: { title: "عنوان", text: "وصف مختصر للصورة أو النشاط." }, render: (x) => `<div class="shp-it"><div class="p">${shpImg(x.img)}</div><div><div class="shp-ttl">${shpE(x.title)}</div><div style="line-height:1.8">${shpE(x.text).replace(/\n/g, "<br>")}</div></div></div>` },
+  "gal3": { cat: "photo", name: "معرض ٣ صور", fields: [SHP_F.i("i1", "الصورة ١"), SHP_F.i("i2", "الصورة ٢"), SHP_F.i("i3", "الصورة ٣"), SHP_F.t("cap", "تعليق")], sample: { cap: "تعليق على الصور" }, render: (x) => `<div class="shp-gal">${["i1", "i2", "i3"].map((k) => `<div>${shpImg(x[k])}</div>`).join("")}</div>${x.cap ? `<div class="shp-cap">${shpE(x.cap)}</div>` : ""}` },
+  "gal2": { cat: "photo", name: "صورتان متجاورتان", fields: [SHP_F.i("i1", "الصورة ١"), SHP_F.i("i2", "الصورة ٢"), SHP_F.t("cap", "تعليق")], sample: { cap: "قبل وبعد" }, render: (x) => `<div class="shp-gal c2">${["i1", "i2"].map((k) => `<div>${shpImg(x[k])}</div>`).join("")}</div>${x.cap ? `<div class="shp-cap">${shpE(x.cap)}</div>` : ""}` },
+  "bigimg": { cat: "photo", name: "صورة كبيرة بتعليق", fields: [SHP_F.i("img", "الصورة"), SHP_F.t("cap", "التعليق")], sample: { cap: "تعليق الصورة" }, render: (x) => `<div class="shp-big">${shpImg(x.img)}</div>${x.cap ? `<div class="shp-cap">${shpE(x.cap)}</div>` : ""}` },
+  "tlimg": { cat: "photo", name: "خط زمني بالصور", fields: [SHP_F.i("i1", "صورة ١"), SHP_F.t("t1", "عنوان ١"), SHP_F.i("i2", "صورة ٢"), SHP_F.t("t2", "عنوان ٢"), SHP_F.i("i3", "صورة ٣"), SHP_F.t("t3", "عنوان ٣")], sample: { t1: "البداية", t2: "التنفيذ", t3: "الختام" }, render: (x) => `<div class="shp-tl" style="padding-top:0">${[1, 2, 3].map((n) => `<div><i></i><div class="shp-tli">${shpImg(x["i" + n])}</div><b>${shpE(x["t" + n])}</b></div>`).join("")}</div>` },
+  "storyimg": { cat: "photo", name: "قصة نجاح بصورة", fields: [SHP_F.i("img", "الصورة"), SHP_F.t("title", "العنوان"), SHP_F.a("text", "القصة")], sample: { title: "قصة نجاح", text: "بدأنا بتحدٍّ واضح وحققنا نتيجة تستحق الذكر." }, render: (x) => `<div class="shp-story shp-it"><div class="p">${shpImg(x.img)}</div><div><div class="shp-ttl">★ ${shpE(x.title)}</div><div style="line-height:1.8">${shpE(x.text).replace(/\n/g, "<br>")}</div></div></div>` },
+  "profile": { cat: "photo", name: "بطاقة شخص", fields: [SHP_F.i("img", "الصورة"), SHP_F.t("name", "الاسم"), SHP_F.t("role", "الدور")], sample: { name: "الاسم", role: "المسمى" }, render: (x) => `<div class="shp-prof"><div class="a">${shpImg(x.img)}</div><b>${shpE(x.name)}</b><span>${shpE(x.role)}</span></div>` },
+});
 function shapeRender(shapeId, data) { const s = SHAPES_LIB[shapeId]; if (!s) return ""; try { return `<div class="shp">${s.render(data || {})}</div>`; } catch (e) { return ""; } }
 function rptShapeBlocksHtml(blocks) { return (blocks || []).map((b) => shapeRender(b.shapeId, b)).join(""); }
+function shapeDefaultsPanelHtml() {
+  const secs = SECTIONS;
+  const cur = ((S.siteSettings || {}).theme || {}).shapeDefaults || {};
+  const opts = Object.entries(SHAPES_LIB).map(([id, sh]) => `<option value="${id}">${esc(sh.name)}</option>`).join("");
+  const rows = secs.filter((x) => x.id !== "review").map((x) => `<div style="display:flex;align-items:center;gap:10px;padding:6px 0;border-top:1px solid ${BORDER};"><div style="flex:1;font-weight:700;font-size:13px;">${esc(x.label)}</div><select class="input" style="max-width:240px;" data-shp-def="${esc(x.id)}"><option value="">بدون</option>${opts.replace(`value="${cur[x.id]}"`, `value="${cur[x.id]}" selected`)}</select></div>`).join("");
+  return `<details class="card" style="margin-bottom:14px;"><summary style="font-weight:800;cursor:pointer;">الشكل المقترح لكل قسم</summary><div class="hint" style="margin-top:6px;">يظهر زر «إضافته» داخل القسم لما يكون بلا أشكال.</div>${rows}</details>`;
+}
 function renderShapesLibraryPage() {
   const cat = S.ui.shpCat || "";
   const tabs = [["", "الكل"], ...SHP_CATS].map(([id, n]) => `<button type="button" class="flt-chip${cat === id ? " on" : ""}" data-action="shp-cat" data-cat="${id}">${n}</button>`).join("");
@@ -11458,6 +11508,7 @@ function renderShapesLibraryPage() {
   return `<div class="page-wrap"><div class="page-inner">
     ${topBarHtml({ title: "مكتبة الأشكال والرسوم", subtitle: `${Object.keys(SHAPES_LIB).length} شكلًا — للاستعراض. لإضافة شكل لتقرير: افتحي أي قسم ← «اختيار من المكتبة».`, right: "" })}
     <div style="display:flex;gap:6px;flex-wrap:wrap;margin:6px 0 14px;">${tabs}</div>
+    ${S.isAdmin ? shapeDefaultsPanelHtml() : ""}
     <div class="shp-grid">${list.map(([id, s]) => `<div class="shp-card" style="cursor:default;"><div class="shp-prev rpt-v5">${shapeRender(id, s.sample)}</div><div class="shp-nm">${esc(s.name)}</div></div>`).join("")}</div>
   </div></div>`;
 }
@@ -11470,9 +11521,15 @@ function shapePickerHtml(target) {
     <div class="shp-grid">${list.map(([id, s]) => `<button type="button" class="shp-card" data-action="shp-add" data-shape="${id}"><div class="shp-prev rpt-v5">${shapeRender(id, s.sample)}</div><div class="shp-nm">${esc(s.name)}</div></button>`).join("")}</div>
     <div style="margin-top:12px;">${pillBtn("إغلاق", { variant: "ghost", action: "shp-close" })}</div></div></div>`;
 }
-function shapeBlocksEditorHtml(d) {
+function shapeDefaultFor(sectionId) { const m = ((S.siteSettings || {}).theme || {}).shapeDefaults || {}; const id = m[sectionId]; return id && SHAPES_LIB[id] ? id : ""; }
+function shapeBlocksEditorHtml(d, sectionId) {
+  const defId = (!(d.shapeBlocks || []).length && sectionId) ? shapeDefaultFor(sectionId) : "";
+  const sug = defId ? `<div class="hint" style="margin-top:8px;">الشكل المقترح لهذا القسم: <b>${esc(SHAPES_LIB[defId].name)}</b> ${pillBtn("إضافته", { variant: "ghost", action: "shp-add", data: { shape: defId } })}</div>` : "";
+  return shapeBlocksEditorInner(d) + sug;
+}
+function shapeBlocksEditorInner(d) {
   const rows = (d.shapeBlocks || []).map((b) => { const s = SHAPES_LIB[b.shapeId]; if (!s) return ""; return `<div class="repeat-item"><div class="repeat-item-head"><span class="repeat-item-title">${esc(s.name)}</span>${removeBtn("shapeBlocks", b.id)}</div>
-    ${s.fields.map((f) => fieldWrap(f.label, false, f.type === "a" ? txt("shapeBlocks", b.id, f.k, b[f.k], f.ph || "", 70) : inp("shapeBlocks", b.id, f.k, b[f.k], f.ph || ""))).join("")}
+    ${s.fields.map((f) => fieldWrap(f.label, false, f.type === "i" ? `<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;"><input type="file" accept="image/*" data-shp-img="${esc(b.id)}" data-shp-key="${esc(f.k)}" />${b[f.k] ? `<img src="${esc(b[f.k])}" style="height:44px;border-radius:6px;" alt="" /><button type="button" class="pill-btn pill-ghost" data-action="shp-img-clear" data-id="${esc(b.id)}" data-key="${esc(f.k)}">حذف الصورة</button>` : ""}</div>` : f.type === "a" ? txt("shapeBlocks", b.id, f.k, b[f.k], f.ph || "", 70) : inp("shapeBlocks", b.id, f.k, b[f.k], f.ph || ""))).join("")}
     <div class="shp-live rpt-v5">${shapeRender(b.shapeId, b)}</div></div>`; }).join("");
   return `<div class="subhead" style="margin-top:14px;">الأشكال والرسوم</div>${rows}<div style="margin-top:8px;">${pillBtn("اختيار من المكتبة", { variant: "ghost", action: "shp-open" })}</div>`;
 }
@@ -11665,7 +11722,15 @@ function improvementPriorityMeta(priority) {
   return { color: SUBTLE, bg: GRAY_BG };
 }
 
-function reportSummaryHtml(report, title) {
+function rptSummaryHeroHtml(progress, nInd, st, nGoals, avgGoal, basicHtml) {
+  const parts = [];
+  if (nInd) { const ok = st.achieved || 0; parts.push(`تحقق ${ok} من ${nInd} مؤشرًا (${Math.round((ok / nInd) * 100)}٪)`); }
+  if (nGoals) parts.push(`وبلغ متوسط تحقق الأهداف التشغيلية ${avgGoal}٪`);
+  const tail = (st.needsAction || 0) + (st.struggling || 0);
+  const sentence = `اكتمل ${progress.percent}٪ من التقرير${parts.length ? "؛ " + parts.join("، ") : ""}${tail ? `. ويحتاج ${tail} من المؤشرات إلى متابعة` : ""}.`;
+  return `<div class="rpt-hero"><div class="rpt-hero-d">${shapeRender("donut", { pct: String(progress.percent), label: "اكتمال التقرير" })}</div><div class="rpt-hero-t"><div class="rpt-subheading" style="margin-top:0;">البيانات الأساسية</div>${basicHtml}<div class="rpt-insight">${esc(sentence)}</div></div></div>`;
+}
+function reportSummaryHtml(report, title, basicHtml) {
   const progress = computeProgress(report);
   const indicators = (report.sections?.kpi?.data?.indicators || []).filter((r) => r.name);
   const statusCounts = { achieved: 0, close: 0, needsAction: 0, struggling: 0, noData: 0 };
@@ -11697,6 +11762,7 @@ function reportSummaryHtml(report, title) {
       <h2 class="rpt-chapter-title">${esc(title || "ملخص التقرير")}</h2>
     </div>
     ${rptChSubHtml("summary")}
+    ${basicHtml ? rptSummaryHeroHtml(progress, indicators.length, statusCounts, goalsFlat.length, avgGoalPct, basicHtml) : ""}
     <div class="stat-grid" style="margin-bottom:16px;">
       ${statIconCardHtml("نسبة إنجاز التقرير", progress.percent + "٪", iconGauge("var(--rpt-burgundy)", 18), "#fff")}
       ${statIconCardHtml("عدد المؤشرات", indicators.length, iconDocument(18, "var(--rpt-burgundy)"), "#f4ece4")}
@@ -11891,7 +11957,8 @@ function fullReportOrPreviewBody(unit, report, afterPage, opts) {
   const dept = S.departments.find((x) => x.id === unit.departmentId);
   const chapters = rptOrdered(unitChapterDefs(opts.capture ? null : report, unit.id), s).filter((c) => review || (!s.hidden[c.key] && !rptLevelHides(s, c.key) &&
     (s.showEmpty || opts.capture || c.special || c.sections.some((sid) => sectionHasData(report, sid)))));
-  const grouped = opts.capture ? chapters : rptGroupChapters(chapters, report);
+  const mergeBasic = !review && !opts.capture && s.mergeBasic !== false && chapters.some((c) => c.special === "summary") && chapters.some((c) => c.key === "basic");
+  const grouped = opts.capture ? chapters : rptGroupChapters(chapters.filter((c) => !(mergeBasic && c.key === "basic")), report);
   return rptWithCtx({ ...rptChartCtx(s), hiddenCols: review ? null : rptHiddenColsForViewer(s), colsShow: s.colsShow, capture: opts.capture || null, unitId: unit.id }, () => {
     // «ملخص التقرير» بصفحة مستقلة، ثم الأقسام (عدد محدد بكل صفحة، 0 = متتابعة)، و«الإغلاق والاعتماد» مع آخر صفحة
     const per = Number(s.perPage) || 0;
@@ -11903,7 +11970,10 @@ function fullReportOrPreviewBody(unit, report, afterPage, opts) {
       if (newPage) { pages.push({ html: "", ids: [], summary: c.special === "summary" }); inPage = 0; }
       const pg = pages[pages.length - 1];
       const extra = rptCustomChartsFor(s, c.key, [{ unit, report }], false); // رسوم مضافة لهذا الفصل
-      if (c.special === "summary") pg.html += reportSummaryHtml(report, title) + extra;
+      if (c.special === "summary") {
+        const mb = mergeBasic ? sectionBodyOnly({ id: "basic", label: "البيانات الأساسية" }, report.sections && report.sections.basic, report) : "";
+        pg.html += reportSummaryHtml(report, title, mb) + extra; if (mb) pg.ids.push("basic");
+      }
       else if (c.special === "approval") pg.html += reportApprovalHtml(report, title, s.approvalBoxes, extra);
       else if (c.group) { pg.html += rptGroupChapterHtml(c, rptIcon(c.icon), title, report, extra); pg.ids.push(...c.sections); inPage++; }
       else { pg.html += reportChapterHtml(rptIcon(c.icon), title, c.sections, report, extra); pg.ids.push(...c.sections); inPage++; }
@@ -12467,6 +12537,17 @@ function attachFormListeners() {
 
   appEl.addEventListener("change", (e) => {
     const el = e.target;
+    if (el.dataset && el.dataset.shpDef) {
+      const sid = el.dataset.shpDef, v = el.value;
+      saveSiteTheme((th) => { const m = { ...((th || {}).shapeDefaults || {}) }; if (v) m[sid] = v; else delete m[sid]; return { shapeDefaults: m }; });
+      return;
+    }
+    if (el.dataset && el.dataset.shpImg) {
+      const f = el.files && el.files[0]; if (!f) return;
+      const item = findById(getItemList("shapeBlocks"), el.dataset.shpImg); const key = el.dataset.shpKey; if (!item) return;
+      evdResizeImage(f, 800, 0.72).then((url) => { item[key] = url; autoSaveSchedule(); render(); }).catch((err) => alert((err && err.message) || "تعذّر تحميل الصورة"));
+      return;
+    }
     if (el.dataset && el.dataset.evdImg) {
       const f = el.files && el.files[0]; if (!f) return;
       const list = getItemList("evidenceItems"); const item = findById(list, el.dataset.evdImg); if (!item) return;
@@ -14221,6 +14302,7 @@ function handleReportEditorAction(action, ds) {
       S.ui.bulk = bad.length ? { arr: ds.arr, text: bad.join("\n"), preview: null } : null;
       render(); return true;
     }
+    case "shp-img-clear": { const it = findById(getItemList("shapeBlocks"), ds.id); if (it) { delete it[ds.key]; autoSaveSchedule(); } render(); return true; }
     case "shp-open": S.ui.shpOpen = true; render(); return true;
     case "shp-close": S.ui.shpOpen = false; render(); return true;
     case "shp-cat": S.ui.shpCat = ds.cat || ""; render(); return true;
