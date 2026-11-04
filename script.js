@@ -12174,7 +12174,7 @@ function reportFileBase(unit, report) {
   return clean(unit.name + " - " + (report.label || "تقرير") + (yr ? " " + yr : ""));
 }
 // PDF بدقة عالية من نفس صفحات A4 المعروضة (يُبنى خارج الشاشة فلا يتأثر بالعرض الحالي)
-async function reportPdfBlob(unit, report) {
+async function reportPdfBlob(unit, report, fast) {
   await loadHtml2Pdf();
   const host = document.createElement("div");
   host.style.cssText = "width:794px;background:#fff;direction:rtl;";
@@ -12204,14 +12204,14 @@ async function reportPdfBlob(unit, report) {
     const h2c = await loadHtml2Canvas(); // يُرسم العنصر الأصلي مباشرة (نسخ html2pdf للعنصر يقصّ الصفحة على الآيباد)
     for (let i = 0; i < pages.length; i++) {
       let canvas;
-      if (h2c) canvas = await window.html2canvas(pages[i], { scale: 2, useCORS: true, backgroundColor: "#ffffff", windowWidth: 794 });
+      if (h2c) canvas = await window.html2canvas(pages[i], { scale: fast ? 1.35 : 2, useCORS: true, backgroundColor: "#ffffff", windowWidth: 794 });
       else {
         pages.forEach((pg, j) => { pg.style.display = j === i ? "" : "none"; });
         canvas = await window.html2pdf().from(host).set({ html2canvas: { scale: 2, useCORS: true, backgroundColor: "#ffffff", windowWidth: 794 } }).toCanvas().get("canvas");
       }
       if (i > 0) pdf.addPage();
       const hMm = Math.min(297, 210 * canvas.height / canvas.width);
-      pdf.addImage(canvas.toDataURL("image/jpeg", 0.92), "JPEG", 0, 0, 210, hMm);
+      pdf.addImage(canvas.toDataURL("image/jpeg", fast ? 0.7 : 0.92), "JPEG", 0, 0, 210, hMm);
       canvas.width = canvas.height = 0;
       await new Promise((r) => setTimeout(r, 30));
     }
@@ -12246,7 +12246,7 @@ async function archiveRunTarget(target, unit, report, pdfBlob) {
   try {
     if (target === "drive") {
       if (!archiveFolderId(a.rootFolder)) return { ok: false, error: "رابط المجلد المركزي غير مضبوط" };
-      const pdf = await blobToBase64(pdfBlob || await reportPdfBlob(unit, report));
+      const pdf = await blobToBase64(pdfBlob || await reportPdfBlob(unit, report, true));
       const out = await archivePost(a, { action: "saveReport", pdf, rootFolderId: archiveFolderId(a.rootFolder), unitFolders: !!a.unitFolders, shareEmail: a.senderEmail || "", ...meta });
       return { ok: true, url: out.url || "" };
     }
@@ -12263,7 +12263,7 @@ async function archiveRun(unitId, reportId, only) {
   const st = S.ui.arRun && S.ui.arRun.reportId === reportId ? S.ui.arRun : { unitId, reportId, res: {} };
   S.ui.arRun = st; targets.forEach((t) => { st.res[t] = { wait: true }; }); st.busy = true; if (S.ui.arOpen) render();
   let blob = null;
-  if (targets.includes("drive")) { try { blob = await reportPdfBlob(unit, report); } catch (e) { st.res.drive = { ok: false, error: e.message }; targets.splice(targets.indexOf("drive"), 1); } }
+  if (targets.includes("drive")) { try { blob = await reportPdfBlob(unit, report, true); } catch (e) { st.res.drive = { ok: false, error: e.message }; targets.splice(targets.indexOf("drive"), 1); } }
   for (const t of targets) { st.res[t] = await archiveRunTarget(t, unit, report, blob); if (S.ui.arOpen) render(); }
   st.busy = false;
   try { const cur = ((S.reports || {})[unitId] || []).find((r) => r.id === reportId); if (cur) saveReportEntry(unitId, { ...cur, archive: { at: Date.now(), drive: st.res.drive ? { ok: !!st.res.drive.ok, url: st.res.drive.url || "" } : (cur.archive || {}).drive, sheet: st.res.sheet ? { ok: !!st.res.sheet.ok } : (cur.archive || {}).sheet } }); } catch (e) { /* تجاهل */ }
