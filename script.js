@@ -394,7 +394,7 @@ const SECTION_FIELD_SCHEMAS = {
   evidence: {
     arrayKey: "evidenceItems",
     itemLabel: "شاهد",
-    hint: "لا تُدرج الصور أو الملفات داخل التقرير نفسه — تُحفظ بالمستودع الخاص بها ويُكتفى برابطها هنا.",
+    hint: "يمكنك رفع صورة الشاهد هنا لتظهر في التقرير (حتى ٨ صور)، أما الملفات الكبيرة فتُحفظ بالمستودع الخاص بها ويُكتفى برابطها هنا.",
     fields: [
       { id: "evidenceType", type: "select", label: "نوع الشاهد", required: true, options: EVIDENCE_TYPES_LIST, placeholder: "اختاري نوع الشاهد" },
       { id: "name", type: "text", label: "اسم الشاهد", required: true, subheadBefore: "بيانات الشاهد" },
@@ -1999,6 +1999,8 @@ function render() {
     html = shellWrap(renderApprovalPathTracking());
   } else if (S.view === "office-dashboard") {
     html = shellWrap(renderOfficeDashboard());
+  } else if (S.view === "shapes-library") {
+    html = shellWrap(renderShapesLibraryPage());
   } else if (S.view === "office-archive") {
     html = shellWrap(renderOfficeArchive());
   } else if (S.view === "office-summary") {
@@ -2107,6 +2109,7 @@ const SIDEBAR_PAGES = [
   { id: "site-settings", label: "إعدادات الموقع", group: "الرئيسية", icon: "gauge" },
   { id: "all-reports", label: "جميع التقارير", group: "standalone", icon: "document" },
   { id: "indicators-manage", label: "إدارة مؤشرات الأداء", group: "إدارة التقارير", icon: "gauge" },
+  { id: "shapes-library", label: "مكتبة الأشكال والرسوم", group: "إدارة التقارير", icon: "layers" },
   { id: "goals-manage", label: "إدارة الأهداف والمستهدفات", group: "إدارة التقارير", icon: "target" },
   { id: "sections-manage", label: "إدارة أقسام التقرير", group: "إدارة التقارير", icon: "layers" },
   { id: "report-tabs-manage", label: "إدارة أزرار التقارير", group: "إدارة التقارير", icon: "layers" },
@@ -7715,19 +7718,32 @@ function renderOfficeArchive() {
       <div class="arc-folder-meta"><b>${f.count}</b> تقرير</div>
     </button>`).join("")}</div>` : "";
 
+  const acfg = archiveCfg(themeOf(S.siteSettings || {}));
+  const busyMap = S.ui.arcBusy || {};
+  const stCell = (ok, url, busy) => busy ? `<span class="arc-st wait">جارٍ…</span>` : ok === true ? `<span class="arc-st ok">أُرسل ✓</span>${url ? ` <a href="${esc(url)}" target="_blank" rel="noopener" class="arc-lnk">فتح ↗</a>` : ""}` : ok === false ? `<span class="arc-st bad">فشل</span>` : `<span class="arc-st none">لم يُرفع</span>`;
   const filesHtml = items.length === 0
     ? `<div class="card" style="text-align:center;color:${SUBTLE};padding:36px;">لا توجد تقارير معتمدة بعد.</div>`
-    : `<div class="arc-files" id="archive-grid">${items.map(({ unit, report }) => {
+    : `<div class="arc-tbl-wrap" id="archive-grid"><table class="arc-tbl"><thead><tr><th>التقرير</th><th>الوحدة</th><th>الفترة</th><th>تاريخ الاعتماد</th><th>PDF</th><th>Drive المركزي</th>${acfg.unitFolders ? "<th>Drive الوحدة</th>" : ""}<th>الإجراءات</th></tr></thead><tbody>${items.map(({ unit, report }) => {
         const meta = reportStatusMeta(report.status);
-        const dateStr = new Date(report.createdAt).toLocaleDateString("ar-SA-u-ca-islamic", { year: "numeric", month: "short", day: "numeric" });
+        const dateStr = new Date(report.updatedAt || report.createdAt).toLocaleDateString("ar-SA-u-ca-islamic", { year: "numeric", month: "short", day: "numeric" });
         const title = report.label || "تقرير";
-        return `<button type="button" class="arc-file" data-search="${esc((title + " " + unit.name + " " + meta.label).toLowerCase())}" data-action="view-report-pdf" data-unit-id="${esc(unit.id)}" data-report-id="${esc(report.id)}" title="عرض PDF">
-          ${archiveFileSvg(meta.color)}
-          <div class="arc-file-name">${esc(title)}</div>
-          <div class="arc-file-unit">${esc(unit.name)}</div>
-          <div class="arc-file-foot"><span>${esc(dateStr)}</span><span class="arc-dot" style="background:${meta.color};" title="${esc(meta.label)}"></span></div>
-        </button>`;
-      }).join("")}</div>`;
+        const basic = (report.sections && report.sections.basic && report.sections.basic.data) || {};
+        const per = basic.periodType || "—";
+        const dr = (report.archive && report.archive.drive) || null;
+        const busy = busyMap[report.id];
+        const ids = `data-unit-id="${esc(unit.id)}" data-report-id="${esc(report.id)}"`;
+        return `<tr class="arc-row" data-search="${esc((title + " " + unit.name + " " + meta.label).toLowerCase())}">
+          <td><b>${esc(title)}</b></td><td>${esc(unit.name)}</td><td>${esc(per)}</td><td>${esc(dateStr)}</td>
+          <td><span class="arc-st ok" style="background:${meta.bg};color:${meta.color};">${esc(meta.label)}</span></td>
+          <td>${stCell(dr ? !!dr.ok : null, dr && dr.url, busy === "drive")}</td>
+          ${acfg.unitFolders ? `<td>${stCell(dr ? !!dr.ok : null, dr && dr.url, busy === "drive")}</td>` : ""}
+          <td><div class="arc-acts">
+            <button type="button" class="pill-btn pill-ghost" data-action="view-report-pdf" ${ids}>فتح</button>
+            <button type="button" class="pill-btn pill-ghost" data-action="arc-dl" ${ids}>${busy === "dl" ? "جارٍ…" : "تنزيل"}</button>
+            <button type="button" class="pill-btn pill-ghost" data-action="arc-up" ${ids}>${dr && dr.ok === false ? "إعادة المحاولة" : "رفع إلى Drive"}</button>
+            <button type="button" class="pill-btn pill-ghost" data-action="arc-wa" ${ids}>واتساب</button>
+          </div></td></tr>`;
+      }).join("")}</tbody></table></div>`;
 
   // العمود الجانبي: إحصاءات المستوى الحالي (إجمالي + توزيع الحالات).
   const total = items.length;
@@ -7745,7 +7761,7 @@ function renderOfficeArchive() {
       <div class="arc-card-label" style="margin:6px 0 0;">${approved} معتمد (${pct}٪)</div>
     </div>
     ${chips ? `<div class="arc-card arc-chips">${chips}</div>` : ""}
-    <div class="arc-card arc-tip">${iconDocument(26, ROSE)}<div>اضغطي على أي تقرير لعرضه بصيغة PDF، أو على أي مجلد لفتحه.</div></div>
+    <div class="arc-card arc-tip">${iconDocument(26, ROSE)}<div>من الجدول: فتح، تنزيل PDF، رفع إلى Drive، أو إرسال رابطه بالواتساب (بعد الرفع).</div></div>
   </div>`;
 
   return `
@@ -10529,7 +10545,7 @@ function sectionEditorHtml(unit, report) {
       ${shared.preparerName ? `<span>· أعدّته: <strong style="color:${INK}">${esc(shared.preparerName)}</strong></span>` : ""}
     </div>` : "";
 
-  const fieldsHtml = renderSectionFields(section, d, unit, report);
+  const fieldsHtml = renderSectionFields(section, d, unit, report) + (section.id === "review" ? "" : shapeBlocksEditorHtml(S.sectionDraft || d)) + (S.ui.shpOpen ? shapePickerHtml() : "");
 
   return `
   <div class="card card-lg">
@@ -11126,6 +11142,26 @@ function nextplanSectionHtml(d) {
 }
 
 /* ---- الشواهد والمرفقات ---- */
+const EVD_IMG_UPLOAD = true; // موقع الشيت يُغلقها عند البناء (حدّ حجم الخلية)
+const EVD_IMG_MAX = 8;
+function evdResizeImage(file, maxSide, quality) {
+  return new Promise((res, rej) => {
+    const fr = new FileReader();
+    fr.onerror = () => rej(new Error("تعذّرت قراءة الصورة"));
+    fr.onload = () => {
+      const img = new Image();
+      img.onerror = () => rej(new Error("الملف ليس صورة صالحة"));
+      img.onload = () => {
+        const k = Math.min(1, maxSide / Math.max(img.width, img.height));
+        const c = document.createElement("canvas"); c.width = Math.max(1, Math.round(img.width * k)); c.height = Math.max(1, Math.round(img.height * k));
+        const g = c.getContext("2d"); g.fillStyle = "#fff"; g.fillRect(0, 0, c.width, c.height); g.drawImage(img, 0, 0, c.width, c.height);
+        res(c.toDataURL("image/jpeg", quality));
+      };
+      img.src = String(fr.result);
+    };
+    fr.readAsDataURL(file);
+  });
+}
 function evidenceSectionHtml(d) {
   const items = d.evidenceItems || [];
   const rows = items.map((item, i) => `
@@ -11135,6 +11171,7 @@ function evidenceSectionHtml(d) {
       <div class="subhead">بيانات الشاهد</div>
       ${fieldWrap("اسم الشاهد", true, inp("evidenceItems", item.id, "name", item.name, "اسم الشاهد"))}
       ${fieldWrap("القسم المرتبط به", sel("evidenceItems", item.id, "relatedDepartment", item.relatedDepartment, S.departments.filter((x) => x.status === "active").map((x) => x.name), "اختاري القسم (اختياري)"))}
+      ${EVD_IMG_UPLOAD ? fieldWrap("صورة الشاهد (من الجهاز)", `<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">${item.imageData ? `<img src="${esc(item.imageData)}" alt="" style="width:92px;height:68px;object-fit:cover;border-radius:10px;border:1px solid ${BORDER};" /><button type="button" class="pill-btn pill-ghost" data-action="evd-img-clear" data-id="${esc(item.id)}">حذف الصورة</button>` : ""}<input type="file" accept="image/*" data-evd-img="${esc(item.id)}" style="font-size:12px;max-width:100%;" /></div><div class="hint" style="margin-top:4px;">تُصغَّر الصورة تلقائيًا وتُحفظ مع التقرير وتظهر في العرض والـPDF.</div>`) : ""}
       ${fieldWrap("رابط الملف", inp("evidenceItems", item.id, "fileLink", item.fileLink, "رابط الملف بالمستودع"))}
       ${fieldWrap("وصف مختصر", txt("evidenceItems", item.id, "description", item.description))}
       ${fieldWrap("درجة السرية", true, radio("evidenceItems", item.id, "confidentiality", item.confidentiality, CONFIDENTIALITY_LEVELS))}
@@ -11316,6 +11353,7 @@ function rptAnalysisHtml(sid, items, fields) {
 }
 /* معرض الشواهد: صور مصغّرة للشواهد من النوع صورة/روابط درايف، وبطاقة بديلة لغيرها */
 function rptEvidenceThumbUrl(it) {
+  if (it && it.imageData) return it.imageData;
   const l = String((it && it.fileLink) || "").trim();
   if (!/^https?:\/\//i.test(l)) return "";
   if (/\.(png|jpe?g|gif|webp|svg)(\?|#|$)/i.test(l)) return l;
@@ -11324,24 +11362,25 @@ function rptEvidenceThumbUrl(it) {
   return "";
 }
 function rptEvidenceGalleryHtml(items) {
-  items = (items || []).filter((it) => it && (it.name || it.fileLink || it.evidenceType));
+  items = (items || []).filter((it) => it && (it.name || it.fileLink || it.evidenceType || it.imageData));
   if (!items.length) return emptyHint("لا توجد شواهد مُدخلة بعد.");
   let imgs = 0, files = 0, links = 0;
-  const tiles = items.map((it, i) => {
+  const tiles = [];
+  items.forEach((it) => {
     const th = rptEvidenceThumbUrl(it);
-    const isImg = it.evidenceType === "صورة" || !!th;
-    if (isImg) imgs++; else if (/^https?:/i.test(it.fileLink || "")) links++; else files++;
+    const isLink = /^https?:/i.test(it.fileLink || "");
+    if (th || it.evidenceType === "صورة") imgs++; else if (isLink) links++; else files++;
+    if (!th) return;
     const cap = esc(it.name || it.evidenceType || "شاهد");
-    const g = ["linear-gradient(135deg,#e9a86a,#f3c58b)", "linear-gradient(135deg,#d99aab,#efc3cf)", "linear-gradient(135deg,#a8324f,#d98ba0)"][i % 3];
-    const inner = th
-      ? `<img src="${esc(th)}" alt="${cap}" loading="lazy" referrerpolicy="no-referrer" style="width:100%;height:100%;object-fit:cover;display:block;" onerror="this.style.display='none'">`
-      : `<span style="font-size:10px;font-weight:800;color:#fff;padding:6px;text-align:center;line-height:1.5;">${esc(it.evidenceType || "ملف")}</span>`;
-    return `<div class="rpt-ev-tile" style="background:${g};">${inner}<div class="rpt-ev-cap">${cap}</div></div>`;
+    tiles.push(`<div class="rpt-ev-tile"><img src="${esc(th)}" alt="${cap}" loading="lazy" referrerpolicy="no-referrer" onerror="this.style.display='none'"><div class="rpt-ev-cap">${cap}</div></div>`);
+  });
+  const rows = items.map((it) => {
+    const isLink = /^https?:/i.test(it.fileLink || "");
+    return `<div class="rpt-ev-row"><span class="rpt-ev-type">${esc(it.evidenceType || "ملف")}</span><div class="rpt-ev-main"><b>${esc(it.name || "—")}</b>${it.description ? `<span>${esc(it.description)}</span>` : ""}</div>${isLink ? `<a class="rpt-ev-open" href="${esc(it.fileLink)}" target="_blank" rel="noopener noreferrer">فتح الملف ↗</a>` : ""}${it.confidentiality && it.confidentiality !== "عام" ? `<span class="rpt-ev-conf">${esc(it.confidentiality)}</span>` : ""}</div>`;
   }).join("");
-  const chip = (n, t) => n ? `<span class="rpt-ev-chip">${n} ${t}</span>` : "";
-  return `<div class="rpt-ev-grid">${tiles}</div><div class="rpt-ev-chips">${chip(imgs, "صور")}${chip(files, "ملفات")}${chip(links, "روابط")}</div>`;
+  const chip = (n, one, many) => n ? `<span class="rpt-ev-chip">${n === 1 ? one : arabicDigits(n) + " " + many}</span>` : "";
+  return `${tiles.length ? `<div class="rpt-ev-grid">${tiles.join("")}</div>` : ""}<div class="rpt-ev-chips">${chip(imgs, "صورة واحدة", "صور")}${chip(files, "ملف واحد", "ملفات")}${chip(links, "رابط واحد", "روابط")}</div><div class="rpt-ev-list">${rows}</div>`;
 }
-
 function rptSchemaItemsHtml(sid, items, emptyText) {
   items = (items || []).filter(rptHasValue);
   if (!items.length) return emptyHint(emptyText || "لم يُدخل محتوى بعد.");
@@ -11372,6 +11411,72 @@ function rptSectionColumns(sid, s, captured) {
   }
   return ((captured || {})[sid] || []).map((h) => ({ label: h, def: true, on: !((s.hiddenCols[sid] || []).includes(h)) }));
 }
+/* =============================== مكتبة الأشكال والرسوم =============================== */
+const shpLines = (v) => String(v || "").split("\n").map((x) => x.trim()).filter(Boolean);
+const shpPairs = (v) => shpLines(v).map((l) => l.split("|").map((p) => p.trim()));
+const shpE = (v) => esc(String(v == null ? "" : v));
+const shpNum = (v) => { const n = parseFloat(String(v).replace(/[٠-٩]/g, (d) => "٠١٢٣٤٥٦٧٨٩".indexOf(d)).replace("%", "")); return isFinite(n) ? Math.max(0, Math.min(100, n)) : 0; };
+const SHP_CATS = [["text", "نصوص"], ["stats", "أرقام وإحصاءات"], ["list", "قوائم"], ["time", "خطوط زمنية"], ["flow", "مخططات انسيابية"], ["table", "جداول"]];
+const SHP_F = { // حقول مشتركة
+  t: (k, label, ph) => ({ k, label, type: "t", ph }), a: (k, label, ph) => ({ k, label, type: "a", ph }),
+};
+const SHP_TABLE = (cols) => ({ cat: "table", fields: [SHP_F.t("title", "عنوان الجدول"), SHP_F.t("head", "رؤوس الأعمدة (افصلي بـ |)", Array.from({ length: cols }, (_, i) => "عمود " + (i + 1)).join(" | ")), SHP_F.a("rows", "الصفوف (سطر لكل صف، افصلي الخلايا بـ |)")],
+  sample: { title: "جدول", head: Array.from({ length: cols }, (_, i) => "عمود " + (i + 1)).join("|"), rows: Array.from({ length: 3 }, (_, r) => Array.from({ length: cols }, (_, i) => "قيمة " + (r + 1) + "-" + (i + 1)).join("|")).join("\n") },
+  render: (x) => { const h = shpPairs(x.head)[0] || []; return `${x.title ? `<div class="shp-ttl">${shpE(x.title)}</div>` : ""}<table class="shp-tbl"><thead><tr>${h.map((c) => `<th>${shpE(c)}</th>`).join("")}</tr></thead><tbody>${shpPairs(x.rows).map((r) => `<tr>${h.map((_, i) => `<td>${shpE(r[i] || "")}</td>`).join("")}</tr>`).join("")}</tbody></table>`; } });
+const SHP_FLOW = (n) => ({ cat: "flow", fields: [SHP_F.t("title", "عنوان المخطط"), SHP_F.a("steps", "الخطوات (سطر لكل خطوة)")],
+  sample: { title: "مسار العمل", steps: Array.from({ length: n }, (_, i) => "الخطوة " + (i + 1)).join("\n") },
+  render: (x) => `${x.title ? `<div class="shp-ttl">${shpE(x.title)}</div>` : ""}<div class="shp-flow">${shpLines(x.steps).map((s, i, a) => `<div class="shp-step"><b>${i + 1}</b><span>${shpE(s)}</span></div>${i < a.length - 1 ? `<div class="shp-arr">◂</div>` : ""}`).join("")}</div>` });
+const SHAPES_LIB = {
+  "quote": { cat: "text", name: "اقتباس", fields: [SHP_F.a("text", "النص"), SHP_F.t("by", "القائل")], sample: { text: "الجودة ليست عملًا نؤديه مرة، بل عادة نعيشها.", by: "اسم القائل" }, render: (x) => `<div class="shp-quote"><div class="q">“</div><div class="qt">${shpE(x.text)}</div>${x.by ? `<div class="by">— ${shpE(x.by)}</div>` : ""}</div>` },
+  "story": { cat: "text", name: "قصة نجاح", fields: [SHP_F.t("title", "العنوان"), SHP_F.a("text", "القصة")], sample: { title: "قصة نجاح", text: "بدأنا بتحدٍّ واضح، وبالتعاون بين الفريق حققنا نتيجة تستحق الذكر." }, render: (x) => `<div class="shp-story"><div class="shp-ttl">★ ${shpE(x.title)}</div><div>${shpE(x.text).replace(/\n/g, "<br>")}</div></div>` },
+  "callout": { cat: "text", name: "ملاحظة بارزة", fields: [SHP_F.t("title", "العنوان"), SHP_F.a("text", "النص")], sample: { title: "تنبيه", text: "نص الملاحظة المهمة يظهر هنا بشكل بارز." }, render: (x) => `<div class="shp-callout"><b>${shpE(x.title)}</b><div>${shpE(x.text).replace(/\n/g, "<br>")}</div></div>` },
+  "letterhead": { cat: "text", name: "ترويسة", fields: [SHP_F.t("title", "العنوان"), SHP_F.t("sub", "العنوان الفرعي")], sample: { title: "تقرير الأداء", sub: "الفترة الحالية" }, render: (x) => `<div class="shp-head"><div>${shpE(x.title)}</div><small>${shpE(x.sub)}</small></div>` },
+  "footer": { cat: "text", name: "تذييل", fields: [SHP_F.t("text", "نص التذييل")], sample: { text: "إدارة التعليم النسائي — جمعية فرقان" }, render: (x) => `<div class="shp-foot">${shpE(x.text)}</div>` },
+  "num1": { cat: "stats", name: "رقم بارز", fields: [SHP_F.t("value", "الرقم"), SHP_F.t("label", "الوصف")], sample: { value: "٨٥٪", label: "نسبة الإنجاز" }, render: (x) => `<div class="shp-num1"><b>${shpE(x.value)}</b><span>${shpE(x.label)}</span></div>` },
+  "num3": { cat: "stats", name: "٣ أرقام", fields: [SHP_F.a("items", "سطر لكل رقم: القيمة|الوصف")], sample: { items: "١٢٠|مستفيدة\n٤٥|نشاط\n٩٢٪|رضا" }, render: (x) => `<div class="shp-nums c3">${shpPairs(x.items).slice(0, 3).map((p) => `<div><b>${shpE(p[0])}</b><span>${shpE(p[1])}</span></div>`).join("")}</div>` },
+  "num4": { cat: "stats", name: "٤ أرقام", fields: [SHP_F.a("items", "سطر لكل رقم: القيمة|الوصف")], sample: { items: "١٢٠|مستفيدة\n٤٥|نشاط\n٩٢٪|رضا\n٣|مبادرات" }, render: (x) => `<div class="shp-nums c4">${shpPairs(x.items).slice(0, 4).map((p) => `<div><b>${shpE(p[0])}</b><span>${shpE(p[1])}</span></div>`).join("")}</div>` },
+  "donut": { cat: "stats", name: "نسبة دائرية", fields: [SHP_F.t("pct", "النسبة (٠-١٠٠)"), SHP_F.t("label", "الوصف")], sample: { pct: "72", label: "نسبة التحقق" }, render: (x) => { const p = shpNum(x.pct), c = 2 * Math.PI * 40; return `<div class="shp-donut"><svg width="110" height="110" viewBox="0 0 100 100"><circle cx="50" cy="50" r="40" fill="none" stroke="#efe5e3" stroke-width="12"/><circle cx="50" cy="50" r="40" fill="none" stroke="var(--rpt-burgundy)" stroke-width="12" stroke-dasharray="${(c * p / 100).toFixed(1)} ${c.toFixed(1)}" transform="rotate(-90 50 50)" stroke-linecap="round"/><text x="50" y="56" text-anchor="middle" font-size="20" font-weight="800" fill="var(--rpt-ink)">${Math.round(p)}%</text></svg><span>${shpE(x.label)}</span></div>`; } },
+  "bars": { cat: "stats", name: "أشرطة نسب", fields: [SHP_F.a("items", "سطر لكل شريط: العنوان|النسبة")], sample: { items: "الاختبارات|90\nالجودة|75\nالتدريب|60" }, render: (x) => `<div class="shp-bars">${shpPairs(x.items).map((p) => `<div><div class="r"><span>${shpE(p[0])}</span><b>${Math.round(shpNum(p[1]))}%</b></div><div class="t"><i style="width:${shpNum(p[1])}%"></i></div></div>`).join("")}</div>` },
+  "ba": { cat: "stats", name: "قبل وبعد", fields: [SHP_F.a("items", "سطر لكل بند: البند|قبل|بعد")], sample: { items: "زمن الإنجاز|٥ أيام|٢ يوم\nنسبة الخطأ|١٠٪|٣٪" }, render: (x) => `<table class="shp-tbl"><thead><tr><th>البند</th><th>قبل</th><th>بعد</th></tr></thead><tbody>${shpPairs(x.items).map((p) => `<tr><td>${shpE(p[0])}</td><td>${shpE(p[1])}</td><td><b style="color:#1f8a52">${shpE(p[2])}</b></td></tr>`).join("")}</tbody></table>` },
+  "bul": { cat: "list", name: "قائمة نقاط", fields: [SHP_F.t("title", "العنوان"), SHP_F.a("items", "سطر لكل نقطة")], sample: { title: "أبرز النقاط", items: "النقطة الأولى\nالنقطة الثانية\nالنقطة الثالثة" }, render: (x) => `${x.title ? `<div class="shp-ttl">${shpE(x.title)}</div>` : ""}<ul class="shp-ul">${shpLines(x.items).map((s) => `<li>${shpE(s)}</li>`).join("")}</ul>` },
+  "num": { cat: "list", name: "قائمة مرقمة", fields: [SHP_F.t("title", "العنوان"), SHP_F.a("items", "سطر لكل بند")], sample: { title: "الخطوات", items: "التخطيط\nالتنفيذ\nالمتابعة" }, render: (x) => `${x.title ? `<div class="shp-ttl">${shpE(x.title)}</div>` : ""}<div class="shp-ol">${shpLines(x.items).map((s, i) => `<div><b>${i + 1}</b><span>${shpE(s)}</span></div>`).join("")}</div>` },
+  "check": { cat: "list", name: "قائمة تحقق", fields: [SHP_F.a("items", "سطر لكل بند (ابدئي بـ + للمنجز و - لغير المنجز)")], sample: { items: "+ تم إعداد الخطة\n+ تم التنفيذ\n- بانتظار الاعتماد" }, render: (x) => `<div class="shp-chk">${shpLines(x.items).map((s) => { const ok = !s.startsWith("-"); return `<div class="${ok ? "ok" : "no"}"><b>${ok ? "✓" : "○"}</b><span>${shpE(s.replace(/^[+-]\s*/, ""))}</span></div>`; }).join("")}</div>` },
+  "two": { cat: "list", name: "عمودان (مزايا/تحديات)", fields: [SHP_F.t("t1", "عنوان العمود ١"), SHP_F.a("l1", "بنود العمود ١"), SHP_F.t("t2", "عنوان العمود ٢"), SHP_F.a("l2", "بنود العمود ٢")], sample: { t1: "نقاط القوة", l1: "تعاون الفريق\nوضوح الأهداف", t2: "التحديات", l2: "ضيق الوقت\nقلة الموارد" }, render: (x) => `<div class="shp-two"><div><div class="shp-ttl">${shpE(x.t1)}</div><ul class="shp-ul">${shpLines(x.l1).map((s) => `<li>${shpE(s)}</li>`).join("")}</ul></div><div><div class="shp-ttl">${shpE(x.t2)}</div><ul class="shp-ul">${shpLines(x.l2).map((s) => `<li>${shpE(s)}</li>`).join("")}</ul></div></div>` },
+  "tl": { cat: "time", name: "خط زمني أفقي", fields: [SHP_F.a("items", "سطر لكل محطة: التاريخ|العنوان")], sample: { items: "محرم|بداية الخطة\nصفر|التنفيذ\nربيع|المراجعة\nجمادى|الاعتماد" }, render: (x) => `<div class="shp-tl">${shpPairs(x.items).map((p) => `<div><i></i><b>${shpE(p[0])}</b><span>${shpE(p[1])}</span></div>`).join("")}</div>` },
+  "tlv": { cat: "time", name: "خط زمني رأسي", fields: [SHP_F.a("items", "سطر لكل حدث: التاريخ|الوصف")], sample: { items: "١ محرم|انطلاق المشروع\n١٥ صفر|إنجاز المرحلة الأولى\n١ ربيع|التسليم" }, render: (x) => `<div class="shp-tlv">${shpPairs(x.items).map((p) => `<div><i></i><div><b>${shpE(p[0])}</b><span>${shpE(p[1])}</span></div></div>`).join("")}</div>` },
+  "f1": { ...SHP_FLOW(3), name: "انسيابي ف١ (٣ خطوات)" }, "f2": { ...SHP_FLOW(4), name: "انسيابي ف٢ (٤ خطوات)" },
+  "f3": { cat: "flow", name: "انسيابي ف٣ (دورة)", fields: [SHP_F.t("title", "العنوان"), SHP_F.a("steps", "٤ خطوات (سطر لكل خطوة)")], sample: { title: "دورة التحسين", steps: "خطط\nنفّذ\nافحص\nحسّن" }, render: (x) => `${x.title ? `<div class="shp-ttl">${shpE(x.title)}</div>` : ""}<div class="shp-cyc">${shpLines(x.steps).slice(0, 4).map((s, i) => `<div class="c${i}"><b>${i + 1}</b>${shpE(s)}</div>`).join("")}<em>↻</em></div>` },
+  "f4": { cat: "flow", name: "انسيابي ف٤ (قرار)", fields: [SHP_F.t("q", "السؤال/الشرط"), SHP_F.t("yes", "إذا نعم"), SHP_F.t("no", "إذا لا")], sample: { q: "هل اكتمل التقرير؟", yes: "اعتماد", no: "إعادة للمراجعة" }, render: (x) => `<div class="shp-dec"><div class="q">${shpE(x.q)}</div><div class="br"><div class="y"><small>نعم</small>${shpE(x.yes)}</div><div class="n"><small>لا</small>${shpE(x.no)}</div></div></div>` },
+  "t2": { ...SHP_TABLE(2), name: "جدول عمودان" }, "t3": { ...SHP_TABLE(3), name: "جدول ٣ أعمدة" }, "t4": { ...SHP_TABLE(4), name: "جدول ٤ أعمدة" },
+};
+function shapeRender(shapeId, data) { const s = SHAPES_LIB[shapeId]; if (!s) return ""; try { return `<div class="shp">${s.render(data || {})}</div>`; } catch (e) { return ""; } }
+function rptShapeBlocksHtml(blocks) { return (blocks || []).map((b) => shapeRender(b.shapeId, b)).join(""); }
+function renderShapesLibraryPage() {
+  const cat = S.ui.shpCat || "";
+  const tabs = [["", "الكل"], ...SHP_CATS].map(([id, n]) => `<button type="button" class="flt-chip${cat === id ? " on" : ""}" data-action="shp-cat" data-cat="${id}">${n}</button>`).join("");
+  const list = Object.entries(SHAPES_LIB).filter(([, s]) => !cat || s.cat === cat);
+  return `<div class="page-wrap"><div class="page-inner">
+    ${topBarHtml({ title: "مكتبة الأشكال والرسوم", subtitle: `${Object.keys(SHAPES_LIB).length} شكلًا — للاستعراض. لإضافة شكل لتقرير: افتحي أي قسم ← «اختيار من المكتبة».`, right: "" })}
+    <div style="display:flex;gap:6px;flex-wrap:wrap;margin:6px 0 14px;">${tabs}</div>
+    <div class="shp-grid">${list.map(([id, s]) => `<div class="shp-card" style="cursor:default;"><div class="shp-prev rpt-v5">${shapeRender(id, s.sample)}</div><div class="shp-nm">${esc(s.name)}</div></div>`).join("")}</div>
+  </div></div>`;
+}
+function shapePickerHtml(target) {
+  const cat = S.ui.shpCat || "";
+  const list = Object.entries(SHAPES_LIB).filter(([, s]) => !cat || s.cat === cat);
+  const tabs = [["", "الكل"], ...SHP_CATS].map(([id, n]) => `<button type="button" class="flt-chip${cat === id ? " on" : ""}" data-action="shp-cat" data-cat="${id}">${n}</button>`).join("");
+  return `<div class="no-print" data-action="shp-close" style="position:fixed;inset:0;background:rgba(40,20,30,.45);z-index:9000;display:flex;align-items:flex-end;justify-content:center;"><div data-stop="1" style="background:#faf6f6;width:min(760px,100%);max-height:88vh;overflow:auto;border-radius:22px 22px 0 0;padding:16px 16px 24px;">
+    <div style="font-size:16px;font-weight:800;margin-bottom:8px;">مكتبة الأشكال والرسوم</div><div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px;">${tabs}</div>
+    <div class="shp-grid">${list.map(([id, s]) => `<button type="button" class="shp-card" data-action="shp-add" data-shape="${id}"><div class="shp-prev rpt-v5">${shapeRender(id, s.sample)}</div><div class="shp-nm">${esc(s.name)}</div></button>`).join("")}</div>
+    <div style="margin-top:12px;">${pillBtn("إغلاق", { variant: "ghost", action: "shp-close" })}</div></div></div>`;
+}
+function shapeBlocksEditorHtml(d) {
+  const rows = (d.shapeBlocks || []).map((b) => { const s = SHAPES_LIB[b.shapeId]; if (!s) return ""; return `<div class="repeat-item"><div class="repeat-item-head"><span class="repeat-item-title">${esc(s.name)}</span>${removeBtn("shapeBlocks", b.id)}</div>
+    ${s.fields.map((f) => fieldWrap(f.label, false, f.type === "a" ? txt("shapeBlocks", b.id, f.k, b[f.k], f.ph || "", 70) : inp("shapeBlocks", b.id, f.k, b[f.k], f.ph || ""))).join("")}
+    <div class="shp-live rpt-v5">${shapeRender(b.shapeId, b)}</div></div>`; }).join("");
+  return `<div class="subhead" style="margin-top:14px;">الأشكال والرسوم</div>${rows}<div style="margin-top:8px;">${pillBtn("اختيار من المكتبة", { variant: "ghost", action: "shp-open" })}</div>`;
+}
+
 function sectionBodyOnly(section, saved, report) {
   const d = (saved && saved.data) || {};
   let body = "";
@@ -11536,6 +11641,7 @@ function sectionBodyOnly(section, saved, report) {
     body = textBlock("المحتوى", d.content) || emptyHint("لم يُدخل محتوى بعد.");
   }
   if (d.notes) body += textBlock("ملاحظات", d.notes);
+  if (d.shapeBlocks && d.shapeBlocks.length) body += rptShapeBlocksHtml(d.shapeBlocks);
   return body;
 }
 function comparisonJudgmentMeta(judgment) {
@@ -11627,6 +11733,96 @@ function reportChapterHtml(iconFn, title, sectionIds, report, extraTop) {
       <div class="rpt-chapter-body">${extraTop || ""}${parts}</div>
     </section>`;
 }
+/* ===== فصول مجمّعة في العرض الكامل: القوة والتحديات والفرص / أدوات القياس والتحليل / المبادرات والأثر ===== */
+const RPT_GROUPS = [
+  { key: "g-swot", group: "swot", title: "القوة والتحديات والفرص", icon: "check", sub: "ما تميّز به الأداء وما واجه العمل وما يمكن تطويره", members: ["strengths", "challenges", "improvement"] },
+  { key: "g-measure", group: "measure", title: "أدوات القياس وتحليل النتائج", icon: "gauge", sub: "الأدوات المستخدمة وقراءة النتائج مقارنة بالفصل السابق", members: ["tools", "analysis"] },
+  { key: "g-impact", group: "impact", title: "المبادرات والأثر", icon: "sparkles", sub: "مبادرات وممارسات نوعية والأثر المتحقق", members: ["initiatives", "impact"] },
+];
+function rptGroupChapters(chapters, report) {
+  const out = [];
+  const done = {};
+  chapters.forEach((c) => {
+    if (c.special || !c.sections || c.sections.length !== 1) { out.push(c); return; }
+    const g = RPT_GROUPS.find((x) => x.members.includes(c.sections[0]));
+    if (!g) { out.push(c); return; }
+    const present = chapters.filter((x) => x.sections && x.sections.length === 1 && g.members.includes(x.sections[0]));
+    if (present.length < 2) { out.push(c); return; }
+    if (done[g.key]) return;
+    done[g.key] = 1;
+    out.push({ key: g.key, group: g.group, title: g.title, icon: g.icon, sub: g.sub, sections: present.map((x) => x.sections[0]) });
+  });
+  return out;
+}
+function rptGData(report, sid) { return (report && report.sections && report.sections[sid] && report.sections[sid].data) || {}; }
+function rptGCard(title, iconHtml, count, inner, cls) {
+  return `<div class="rpt-gcard${cls ? " " + cls : ""}"><div class="rpt-gcard-h"><span class="ic">${iconHtml}</span><b>${esc(title)}</b>${count != null ? `<span class="cnt">${arabicDigits(count)}</span>` : ""}</div>${inner}</div>`;
+}
+function rptGList(rows, nameKey, subKeys) {
+  const li = rows.filter((r) => r && (r[nameKey] || subKeys.some((k) => r[k]))).map((r) => `<li><b>${esc(r[nameKey] || "—")}</b>${subKeys.map((k) => r[k]).filter(Boolean).slice(0, 2).map((v) => `<span>${esc(schemaFieldText(v))}</span>`).join("")}</li>`).join("");
+  return li ? `<ul class="rpt-glist">${li}</ul>` : `<div class="hint">لا توجد بيانات.</div>`;
+}
+function rptJudgeBadge(j) {
+  const t = String(j || "").trim();
+  if (!t) return "—";
+  if (/تحسن|ارتفع|زياد|أفضل|إيجاب/.test(t)) return `<span class="rpt-judge up">▲ ${esc(t)}</span>`;
+  if (/تراجع|انخفض|نقص|أقل|سلب/.test(t)) return `<span class="rpt-judge down">▼ ${esc(t)}</span>`;
+  return `<span class="rpt-judge">● ${esc(t)}</span>`;
+}
+function rptGroupChapterHtml(c, iconFn, title, report, extraTop) {
+  const has = (sid) => c.sections.includes(sid);
+  let inner = "";
+  if (c.group === "swot") {
+    const st = (rptGData(report, "strengths").strengths || []).filter(rptHasValue);
+    const ch = (rptGData(report, "challenges").challenges || []).filter(rptHasValue);
+    const op = (rptGData(report, "improvement").opportunities || []).filter(rptHasValue);
+    const cols = [];
+    if (has("strengths")) cols.push(rptGCard("نقاط القوة", iconCheckCircle(15, "var(--rpt-burgundy)"), st.length, rptGList(st, "name", ["area", "impact"]), "good"));
+    if (has("challenges")) cols.push(rptGCard("الصعوبات والتحديات", iconBell(15, "var(--rpt-burgundy)"), ch.length, rptGList(ch, "name", ["area", "severity"]), "bad"));
+    if (has("improvement")) cols.push(rptGCard("فرص التحسين", iconPencil(15, "var(--rpt-burgundy)"), op.length, rptGList(op, "name", ["field", "desiredStatus"]), "opp"));
+    inner = `<div class="rpt-ggrid c${cols.length}">${cols.join("")}</div>`;
+    const parts = [["نقاط القوة", st.length, "#6b2337"], ["الصعوبات", ch.length, "#c26b85"], ["فرص التحسين", op.length, "#d8b48a"]].filter((x) => x[1] > 0);
+    const tot = parts.reduce((a, x) => a + x[1], 0);
+    if (parts.length > 1 && tot) {
+      inner += rptGCard("توازن الصورة العامة", iconLayers(15, "var(--rpt-burgundy)"), null,
+        `<div class="rpt-gbar">${parts.map((x) => `<i style="width:${(x[1] * 100 / tot).toFixed(1)}%;background:${x[2]}"></i>`).join("")}</div>
+         <div class="rpt-glegend">${parts.map((x) => `<span><em style="background:${x[2]}"></em>${esc(x[0])} <b>${arabicDigits(x[1])}</b> (${arabicDigits(Math.round(x[1] * 100 / tot))}٪)</span>`).join("")}</div>`, "wide");
+    }
+  } else if (c.group === "measure") {
+    const tl = (rptGData(report, "tools").tools || []).filter(rptHasValue);
+    const an = rptGData(report, "analysis");
+    const cmp = (an.comparisons || []).filter(rptHasValue);
+    if (has("tools")) {
+      const rows = tl.map((t) => `<li><b>${esc(t.name || "—")}</b>${t.toolType ? `<span>${esc(t.toolType)}</span>` : ""}${t.respondentsCount ? `<span>الاستجابات: ${esc(t.respondentsCount)}${t.sampleSize ? " من " + esc(t.sampleSize) : ""}</span>` : ""}${t.resultQuality ? `<span>${esc(t.resultQuality)}</span>` : ""}</li>`).join("");
+      inner += rptGCard("أدوات القياس", iconLayers(15, "var(--rpt-burgundy)"), tl.length, rows ? `<ul class="rpt-glist">${rows}</ul>` : `<div class="hint">لا توجد أدوات.</div>`, "wide");
+    }
+    if (has("analysis")) {
+      if (cmp.length) {
+        inner += rptGCard("مقارنة بالفصل السابق", iconPencil(15, "var(--rpt-burgundy)"), null,
+          `<table class="rpt-gtable"><thead><tr><th>موضوع المقارنة</th><th>النتيجة</th><th>الحكم</th><th>السبب</th></tr></thead><tbody>${cmp.map((r) => `<tr><td>${esc(r.topic || "—")}</td><td>${esc(r.resultValue || "—")}</td><td>${rptJudgeBadge(r.judgment)}</td><td>${esc(r.changeReason || "—")}</td></tr>`).join("")}</tbody></table>`, "wide");
+      }
+      const txt = textBlock("أبرز نتيجة إيجابية", an.positiveResult) + textBlock("تفسيرها", an.positiveInterpretation) + textBlock("أبرز نتيجة تحتاج تحسين", an.improvementResult) + textBlock("الإجراء المقترح", an.improvementAction) + textBlock("الخلاصة التحليلية", an.summary);
+      if (txt) inner += rptGCard("تحليل النتائج", iconCheckCircle(15, "var(--rpt-burgundy)"), null, txt, "wide");
+    }
+  } else if (c.group === "impact") {
+    const ini = (rptGData(report, "initiatives").initiatives || []).filter(rptHasValue);
+    const imp = (rptGData(report, "impact").impactStories || []).filter(rptHasValue);
+    const cols = [];
+    if (has("initiatives")) cols.push(rptGCard("المبادرات والممارسات النوعية", iconSparkles(15, "var(--rpt-burgundy)"), ini.length, rptGList(ini, "name", ["stage", "preliminaryResults"]), "good"));
+    if (has("impact")) cols.push(rptGCard("الأثر وقصص النجاح", iconCheckCircle(15, "var(--rpt-burgundy)"), imp.length, rptGList(imp, "title", ["change", "beneficiariesCount"]), "opp"));
+    inner = `<div class="rpt-ggrid c${cols.length}">${cols.join("")}</div>`;
+  }
+  return `
+    <section class="rpt-chapter rpt-gchapter prs-avoid-break">
+      <div class="rpt-chapter-head">
+        <div class="rpt-chapter-icon">${iconFn(16, "#fff")}</div>
+        <h2 class="rpt-chapter-title">${esc(title)}</h2>
+      </div>
+      ${c.sub ? `<div class="rpt-chapter-sub">${esc(c.sub)}</div>` : ""}
+      <div class="rpt-chapter-body">${extraTop || ""}${inner}</div>
+    </section>`;
+}
+
 function arabicDigits(n) {
   const map = ["٠", "١", "٢", "٣", "٤", "٥", "٦", "٧", "٨", "٩"];
   return String(n).split("").map((d) => map[+d] ?? d).join("");
@@ -11695,12 +11891,13 @@ function fullReportOrPreviewBody(unit, report, afterPage, opts) {
   const dept = S.departments.find((x) => x.id === unit.departmentId);
   const chapters = rptOrdered(unitChapterDefs(opts.capture ? null : report, unit.id), s).filter((c) => review || (!s.hidden[c.key] && !rptLevelHides(s, c.key) &&
     (s.showEmpty || opts.capture || c.special || c.sections.some((sid) => sectionHasData(report, sid)))));
+  const grouped = opts.capture ? chapters : rptGroupChapters(chapters, report);
   return rptWithCtx({ ...rptChartCtx(s), hiddenCols: review ? null : rptHiddenColsForViewer(s), colsShow: s.colsShow, capture: opts.capture || null, unitId: unit.id }, () => {
     // «ملخص التقرير» بصفحة مستقلة، ثم الأقسام (عدد محدد بكل صفحة، 0 = متتابعة)، و«الإغلاق والاعتماد» مع آخر صفحة
     const per = Number(s.perPage) || 0;
     const pages = [];
     let inPage = 0;
-    chapters.forEach((c) => {
+    grouped.forEach((c) => {
       const title = rptChapterTitle(c, s);
       const newPage = !pages.length || c.special === "summary" || (pages[pages.length - 1].summary) || (per && inPage >= per && c.special !== "approval");
       if (newPage) { pages.push({ html: "", ids: [], summary: c.special === "summary" }); inPage = 0; }
@@ -11708,6 +11905,7 @@ function fullReportOrPreviewBody(unit, report, afterPage, opts) {
       const extra = rptCustomChartsFor(s, c.key, [{ unit, report }], false); // رسوم مضافة لهذا الفصل
       if (c.special === "summary") pg.html += reportSummaryHtml(report, title) + extra;
       else if (c.special === "approval") pg.html += reportApprovalHtml(report, title, s.approvalBoxes, extra);
+      else if (c.group) { pg.html += rptGroupChapterHtml(c, rptIcon(c.icon), title, report, extra); pg.ids.push(...c.sections); inPage++; }
       else { pg.html += reportChapterHtml(rptIcon(c.icon), title, c.sections, report, extra); pg.ids.push(...c.sections); inPage++; }
     });
     const hasCover = !!s.showCover;
@@ -11870,6 +12068,14 @@ function loadHtml2Pdf() {
     document.head.appendChild(sc);
   });
 }
+const HTML2CANVAS_URL = "https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js";
+function loadHtml2Canvas() {
+  if (window.html2canvas) return Promise.resolve(true);
+  return new Promise((res) => {
+    const sc = document.createElement("script"); sc.src = HTML2CANVAS_URL; sc.onload = () => res(!!window.html2canvas); sc.onerror = () => res(false);
+    document.head.appendChild(sc);
+  });
+}
 function reportFileBase(unit, report) {
   const clean = (x) => String(x || "").replace(/[\\/:*?"<>|]+/g, " ").replace(/\s+/g, " ").trim();
   const yr = (report.shared && report.shared.hijriYear) || (report.sections && report.sections.basic && report.sections.basic.hijriYear) || "";
@@ -11879,10 +12085,13 @@ function reportFileBase(unit, report) {
 async function reportPdfBlob(unit, report) {
   await loadHtml2Pdf();
   const host = document.createElement("div");
-  host.style.cssText = "position:fixed;left:-10000px;top:0;width:794px;background:#fff;direction:rtl;";
+  host.style.cssText = "width:794px;background:#fff;direction:rtl;";
+  const outer = document.createElement("div");
+  outer.style.cssText = "position:fixed;left:-10000px;top:0;width:794px;";
+  outer.appendChild(host);
   host.className = "rpt-pdf";
   host.innerHTML = rptWrap(rptUnitSettings(unit), fullReportOrPreviewBody(unit, report, null));
-  document.body.appendChild(host);
+  document.body.appendChild(outer);
   try { linkifyReportView(); } catch (e) { /* تجاهل */ }
   try {
     try { if (document.fonts && document.fonts.ready) await document.fonts.ready; } catch (e) { /* تجاهل */ }
@@ -11898,18 +12107,25 @@ async function reportPdfBlob(unit, report) {
         jsPDF: { unit: "mm", format: "a4", orientation: "portrait" }, pagebreak: { mode: ["css", "legacy"], before: ".a4-page + .a4-page" },
       }).outputPdf("blob");
     }
+    // الصفحة وحدها تُنسخ مع غلافها (rpt-v5 واتجاه RTL) — نسخ الصفحة وحدها يضيّع التنسيق ويقصّ المحتوى
+    pages.forEach((pg) => { pg.style.margin = "0"; pg.style.boxShadow = "none"; });
+    const h2c = await loadHtml2Canvas(); // يُرسم العنصر الأصلي مباشرة (نسخ html2pdf للعنصر يقصّ الصفحة على الآيباد)
     for (let i = 0; i < pages.length; i++) {
-      const canvas = await window.html2pdf().from(pages[i]).set({
-        html2canvas: { scale: 2, useCORS: true, backgroundColor: "#ffffff", windowWidth: 794 },
-      }).toCanvas().get("canvas");
+      let canvas;
+      if (h2c) canvas = await window.html2canvas(pages[i], { scale: 2, useCORS: true, backgroundColor: "#ffffff", windowWidth: 794 });
+      else {
+        pages.forEach((pg, j) => { pg.style.display = j === i ? "" : "none"; });
+        canvas = await window.html2pdf().from(host).set({ html2canvas: { scale: 2, useCORS: true, backgroundColor: "#ffffff", windowWidth: 794 } }).toCanvas().get("canvas");
+      }
       if (i > 0) pdf.addPage();
-      pdf.addImage(canvas.toDataURL("image/jpeg", 0.92), "JPEG", 0, 0, 210, 297);
+      const hMm = Math.min(297, 210 * canvas.height / canvas.width);
+      pdf.addImage(canvas.toDataURL("image/jpeg", 0.92), "JPEG", 0, 0, 210, hMm);
       canvas.width = canvas.height = 0;
       await new Promise((r) => setTimeout(r, 30));
     }
     const blob = pdf.output("blob");
     return blob;
-  } finally { host.remove(); }
+  } finally { outer.remove(); }
 }
 function blobToBase64(blob) {
   return new Promise((res, rej) => { const fr = new FileReader(); fr.onload = () => res(String(fr.result).split(",")[1] || ""); fr.onerror = () => rej(new Error("تعذّر قراءة الملف")); fr.readAsDataURL(blob); });
@@ -12112,7 +12328,7 @@ function attachFormListeners() {
     }
     if (el.id === "archive-search") {
       const q = el.value.trim().toLowerCase();
-      document.querySelectorAll("#archive-grid > [data-search]").forEach((card) => { card.style.display = !q || (card.dataset.search || "").includes(q) ? "" : "none"; });
+      document.querySelectorAll("#archive-grid tr[data-search]").forEach((card) => { card.style.display = !q || (card.dataset.search || "").includes(q) ? "" : "none"; });
       return;
     }
     if (el.id === "unit-reports-search") {
@@ -12251,6 +12467,13 @@ function attachFormListeners() {
 
   appEl.addEventListener("change", (e) => {
     const el = e.target;
+    if (el.dataset && el.dataset.evdImg) {
+      const f = el.files && el.files[0]; if (!f) return;
+      const list = getItemList("evidenceItems"); const item = findById(list, el.dataset.evdImg); if (!item) return;
+      if (!item.imageData && list.filter((x) => x.imageData).length >= EVD_IMG_MAX) { alert("الحد الأقصى " + EVD_IMG_MAX + " صور في التقرير. احذفي صورة قبل إضافة غيرها."); el.value = ""; return; }
+      evdResizeImage(f, 800, 0.72).then((url) => { item.imageData = url; autoSaveSchedule(); render(); }).catch((err) => alert((err && err.message) || "تعذّر تحميل الصورة"));
+      return;
+    }
     if (["site-platform-name", "site-banner-title", "site-banner-sub", "site-banner-eyebrow", "site-sidebar-tagline"].includes(el.id)) {
       S.siteSettings = S.siteSettings || dataStore.getSiteSettings();
       dataStore.saveSiteSettings(S.siteSettings); S.ui.siteSettingsSaved = true; try { applySiteColors(S.siteSettings); } catch (e2) { /* تجاهل */ }
@@ -13404,6 +13627,31 @@ function attachClickListener() {
         render();
         break;
       }
+      case "arc-dl": {
+        const unit = (S.units || []).find((u) => u.id === ds.unitId), report = ((S.reports || {})[ds.unitId] || []).find((r) => r.id === ds.reportId);
+        if (!unit || !report || (S.ui.arcBusy || {})[ds.reportId]) break;
+        S.ui.arcBusy = { ...(S.ui.arcBusy || {}), [ds.reportId]: "dl" }; render();
+        reportPdfBlob(unit, report).then((b) => downloadBlob(b, reportFileBase(unit, report) + ".pdf")).catch((e) => alert("تعذّر إنشاء PDF: " + ((e && e.message) || e)))
+          .finally(() => { const m = { ...(S.ui.arcBusy || {}) }; delete m[ds.reportId]; S.ui.arcBusy = m; render(); });
+        break;
+      }
+      case "arc-up": {
+        if ((S.ui.arcBusy || {})[ds.reportId]) break;
+        const a = archiveCfg(themeOf(S.siteSettings || {}));
+        if (!a.drive) { alert("فعّلي Drive من «إعدادات الموقع ← الأرشفة وDrive»."); break; }
+        S.ui.arcBusy = { ...(S.ui.arcBusy || {}), [ds.reportId]: "drive" }; render();
+        archiveRun(ds.unitId, ds.reportId, ["drive"]).finally(() => { const m = { ...(S.ui.arcBusy || {}) }; delete m[ds.reportId]; S.ui.arcBusy = m; render(); });
+        break;
+      }
+      case "arc-wa": {
+        const unit = (S.units || []).find((u) => u.id === ds.unitId), report = ((S.reports || {})[ds.unitId] || []).find((r) => r.id === ds.reportId);
+        if (!unit || !report) break;
+        const url = report.archive && report.archive.drive && report.archive.drive.ok && report.archive.drive.url;
+        if (!url) { alert("ارفعي التقرير إلى Drive أولًا (زر «رفع إلى Drive») ثم أرسليه بالواتساب."); break; }
+        const txt = `${unit.name} — ${report.label || "تقرير"}\n${url}`;
+        window.open("https://wa.me/?text=" + encodeURIComponent(txt), "_blank");
+        break;
+      }
       case "office-archive-nav": {
         S.ui.officeArchiveYear = ds.year || null;
         S.ui.officeArchivePeriod = ds.period || null;
@@ -13925,6 +14173,10 @@ function handleReportEditorAction(action, ds) {
     }
 
     /* ---- repeatable items ---- */
+    case "evd-img-clear": {
+      const it = findById(getItemList("evidenceItems"), ds.id); if (it) { it.imageData = ""; autoSaveSchedule(); render(); }
+      break;
+    }
     case "add-item": {
       const factory = EMPTY_ITEM_FACTORY[ds.arr];
       if (factory) {
@@ -13968,6 +14220,15 @@ function handleReportEditorAction(action, ds) {
       const bad = pv.rows.filter((r) => r.errs.length).map((r) => r.line);
       S.ui.bulk = bad.length ? { arr: ds.arr, text: bad.join("\n"), preview: null } : null;
       render(); return true;
+    }
+    case "shp-open": S.ui.shpOpen = true; render(); return true;
+    case "shp-close": S.ui.shpOpen = false; render(); return true;
+    case "shp-cat": S.ui.shpCat = ds.cat || ""; render(); return true;
+    case "shp-add": {
+      const sh = SHAPES_LIB[ds.shape]; if (!sh) return true;
+      const list = getItemList("shapeBlocks");
+      list.push({ id: uid("shp"), shapeId: ds.shape, ...JSON.parse(JSON.stringify(sh.sample)) });
+      S.ui.shpOpen = false; autoSaveSchedule(); render(); return true;
     }
     case "remove-item": {
       const list = S.sectionDraft[ds.arr];
