@@ -10255,6 +10255,7 @@ function phaseSidebarHtml(report) {
       ${isDone ? iconCheckCircle(13, isActive ? "#fff" : GREEN) : iconDocument(13, isActive ? "#fff" : SUBTLE)}
       <span class="dot" style="background:${isActive ? "#fff" : meta.color}"></span>
       <span class="sec-label" style="flex:1;font-size:12px;font-weight:${isActive ? 700 : 500};color:${isActive ? "#fff" : INK};text-align:right;">${i + 1}. ${esc(section.label)}</span>
+      ${status !== "not_started" ? `<span class="sec-st" style="font-size:9.5px;font-weight:800;border-radius:8px;padding:1px 7px;background:${isActive ? "rgba(255,255,255,.25)" : meta.bg};color:${isActive ? "#fff" : meta.color};">${meta.label}</span>` : ""}
       ${REVIEW_NOTE_STATUSES.includes(report.status) && report.sections && report.sections[section.id] && report.sections[section.id].reviewNote ? `<span style="font-size:9.5px;font-weight:800;background:${DANGER_BG};color:${DANGER};border-radius:999px;padding:1px 7px;">ملاحظة</span>` : ""}
     </button>`;
   }).join("");
@@ -10262,7 +10263,7 @@ function phaseSidebarHtml(report) {
   return `
     <div class="phase-sidebar ${collapsed ? "collapsed" : ""} ${S.mobilePhaseOpen ? "mobile-open" : ""}">
       <div style="display:flex;align-items:center;justify-content:${collapsed ? "center" : "space-between"};margin-bottom:18px;padding-bottom:14px;border-bottom:1px solid ${BORDER};">
-        ${!collapsed ? `<span style="font-size:11.5px;font-weight:800;color:${INK}">أقسام التقرير</span>` : ""}
+        ${!collapsed ? (() => { const pg = computeProgress(report, S.currentUnitId); return `<div style="flex:1;margin-inline-end:8px"><div style="display:flex;justify-content:space-between;font-size:11.5px;font-weight:800;color:${INK};margin-bottom:5px"><span>أقسام التقرير</span><span style="color:${ROSE}">${pg.percent}٪</span></div><div style="height:6px;border-radius:3px;background:${GRAY_BG};overflow:hidden"><div style="height:100%;width:${pg.percent}%;background:${GREEN}"></div></div><div style="font-size:10.5px;color:${SUBTLE};margin-top:4px">${pg.completed} مكتمل · ${pg.drafted} ناقص · ${pg.total - pg.completed - pg.drafted} لم يبدأ</div></div>`; })() : ""}
         <button class="icon-btn" style="border:1px solid ${BORDER}" data-action="toggle-phase-collapse">${collapsed ? iconChevronRight(13) : iconChevronLeft(13)}</button>
       </div>
       <div style="display:flex;flex-direction:column;gap:${collapsed ? 8 : 2}px;">${rows}</div>
@@ -10425,6 +10426,7 @@ function renderUnitReport() {
                pillBtn("عرض كامل", { variant: "ghost", icon: iconLayers(15, INK), action: "nav-to", data: { view: "full-report" } }) +
                (RPT_SHOW_PRINT_PREVIEW ? pillBtn("معاينة الطباعة", { variant: "ghost", icon: iconPrinter(15, INK), action: "nav-to", data: { view: "report-preview" } }) : "") +
                `<button class="mobile-menu-toggle no-print" data-action="open-mobile-phase-sidebar" title="مراحل التقرير" style="display:none">${iconLayers(17, INK)}</button>` })}
+      ${(() => { const ix = secList.findIndex((x) => x.id === S.activeSectionId); const cur = secList[ix]; if (!cur) return ""; const st = statusMeta(sectionStatus(entry, cur.id)); return `<button type="button" class="sec-chip no-print" data-action="open-mobile-phase-sidebar"><span class="sc-n">${ix + 1} / ${secList.length}</span><span class="sc-t">${esc(cur.label)}</span><span class="sc-s" style="background:${st.bg};color:${st.color}">${st.label}</span><span class="sc-p">${progress.percent}٪</span></button><div class="sec-bar no-print"><div style="width:${progress.percent}%"></div></div>`; })()}
       ${mainContent}
     </div>
     ${S.mobilePhaseOpen ? `<div class="mobile-backdrop" data-action="close-mobile-phase-sidebar"></div>` : ""}
@@ -11312,6 +11314,34 @@ function rptAnalysisHtml(sid, items, fields) {
   }).join("");
   return cards ? `<div class="rpt-an-grid">${cards}</div>` : "";
 }
+/* معرض الشواهد: صور مصغّرة للشواهد من النوع صورة/روابط درايف، وبطاقة بديلة لغيرها */
+function rptEvidenceThumbUrl(it) {
+  const l = String((it && it.fileLink) || "").trim();
+  if (!/^https?:\/\//i.test(l)) return "";
+  if (/\.(png|jpe?g|gif|webp|svg)(\?|#|$)/i.test(l)) return l;
+  const m = l.match(/drive\.google\.com\/(?:file\/d\/|open\?id=|uc\?(?:export=\w+&)?id=|thumbnail\?id=)([\w-]+)/i);
+  if (m && (it.evidenceType === "صورة" || /thumbnail/.test(l))) return "https://drive.google.com/thumbnail?id=" + m[1] + "&sz=w600";
+  return "";
+}
+function rptEvidenceGalleryHtml(items) {
+  items = (items || []).filter((it) => it && (it.name || it.fileLink || it.evidenceType));
+  if (!items.length) return emptyHint("لا توجد شواهد مُدخلة بعد.");
+  let imgs = 0, files = 0, links = 0;
+  const tiles = items.map((it, i) => {
+    const th = rptEvidenceThumbUrl(it);
+    const isImg = it.evidenceType === "صورة" || !!th;
+    if (isImg) imgs++; else if (/^https?:/i.test(it.fileLink || "")) links++; else files++;
+    const cap = esc(it.name || it.evidenceType || "شاهد");
+    const g = ["linear-gradient(135deg,#e9a86a,#f3c58b)", "linear-gradient(135deg,#d99aab,#efc3cf)", "linear-gradient(135deg,#a8324f,#d98ba0)"][i % 3];
+    const inner = th
+      ? `<img src="${esc(th)}" alt="${cap}" loading="lazy" referrerpolicy="no-referrer" style="width:100%;height:100%;object-fit:cover;display:block;" onerror="this.style.display='none'">`
+      : `<span style="font-size:10px;font-weight:800;color:#fff;padding:6px;text-align:center;line-height:1.5;">${esc(it.evidenceType || "ملف")}</span>`;
+    return `<div class="rpt-ev-tile" style="background:${g};">${inner}<div class="rpt-ev-cap">${cap}</div></div>`;
+  }).join("");
+  const chip = (n, t) => n ? `<span class="rpt-ev-chip">${n} ${t}</span>` : "";
+  return `<div class="rpt-ev-grid">${tiles}</div><div class="rpt-ev-chips">${chip(imgs, "صور")}${chip(files, "ملفات")}${chip(links, "روابط")}</div>`;
+}
+
 function rptSchemaItemsHtml(sid, items, emptyText) {
   items = (items || []).filter(rptHasValue);
   if (!items.length) return emptyHint(emptyText || "لم يُدخل محتوى بعد.");
@@ -11481,7 +11511,7 @@ function sectionBodyOnly(section, saved, report) {
     } else { body = emptyHint("لم تُضف أعمال رئيسة بعد."); }
 
   } else if (section.id === "evidence") {
-    body = rptSchemaItemsHtml("evidence", d.evidenceItems, "لا توجد شواهد مُدخلة بعد.");
+    body = rptEvidenceGalleryHtml(d.evidenceItems);
 
   } else if (section.id === "review") {
     const checklist = d.checklist || {};
@@ -11551,9 +11581,9 @@ function reportSummaryHtml(report, title) {
     { label: "يحتاج تدخلاً", value: statusCounts.needsAction, color: RPT_SHADES[2] },
     { label: "متعثر", value: statusCounts.struggling, color: RPT_SHADES[3] },
     { label: "بلا بيانات", value: statusCounts.noData, color: RPT_SHADES[4] },
-  ], { size: 120, wrapDonut: "" }) : emptyHint("لا توجد مؤشرات بعد.");
+  ], { size: 150, wrapDonut: "" }) : emptyHint("لا توجد مؤشرات بعد.");
 
-  const goalPie = goalsFlat.length ? rptChart("u-goalLevels", GOAL_LEVELS.map((lvl, i) => ({ label: lvl, value: goalLevelCounts[lvl] || 0, color: RPT_SHADES[i % RPT_SHADES.length] })), { size: 120, wrapDonut: "" }) : emptyHint("لا توجد أهداف بعد.");
+  const goalPie = goalsFlat.length ? rptChart("u-goalLevels", GOAL_LEVELS.map((lvl, i) => ({ label: lvl, value: goalLevelCounts[lvl] || 0, color: RPT_SHADES[i % RPT_SHADES.length] })), { size: 150, wrapDonut: "" }) : emptyHint("لا توجد أهداف بعد.");
 
   return `
     <div class="rpt-chapter-head">
@@ -11857,11 +11887,27 @@ async function reportPdfBlob(unit, report) {
   try {
     try { if (document.fonts && document.fonts.ready) await document.fonts.ready; } catch (e) { /* تجاهل */ }
     await new Promise((r) => setTimeout(r, 400));
-    const blob = await window.html2pdf().from(host).set({
-      margin: 0, filename: reportFileBase(unit, report) + ".pdf", image: { type: "jpeg", quality: 0.98 },
-      html2canvas: { scale: 2, useCORS: true, backgroundColor: "#ffffff", windowWidth: 794 },
-      jsPDF: { unit: "mm", format: "a4", orientation: "portrait" }, pagebreak: { mode: ["css", "legacy"], before: ".a4-page + .a4-page" },
-    }).outputPdf("blob");
+    // كل صفحة A4 تُصوَّر وحدها: iOS يعطي صفحة بيضاء إذا كبر القماش (canvas) عن حدّه (~16 مليون بكسل)
+    const pages = Array.from(host.querySelectorAll(".a4-page"));
+    let pdf = null;
+    try { pdf = await window.html2pdf().set({ jsPDF: { unit: "mm", format: "a4", orientation: "portrait" } }).from(document.createElement("div")).toPdf().get("pdf"); } catch (e) { pdf = null; }
+    if (!pages.length || !pdf) {
+      return await window.html2pdf().from(host).set({
+        margin: 0, filename: reportFileBase(unit, report) + ".pdf", image: { type: "jpeg", quality: 0.95 },
+        html2canvas: { scale: 1.5, useCORS: true, backgroundColor: "#ffffff", windowWidth: 794 },
+        jsPDF: { unit: "mm", format: "a4", orientation: "portrait" }, pagebreak: { mode: ["css", "legacy"], before: ".a4-page + .a4-page" },
+      }).outputPdf("blob");
+    }
+    for (let i = 0; i < pages.length; i++) {
+      const canvas = await window.html2pdf().from(pages[i]).set({
+        html2canvas: { scale: 2, useCORS: true, backgroundColor: "#ffffff", windowWidth: 794 },
+      }).toCanvas().get("canvas");
+      if (i > 0) pdf.addPage();
+      pdf.addImage(canvas.toDataURL("image/jpeg", 0.92), "JPEG", 0, 0, 210, 297);
+      canvas.width = canvas.height = 0;
+      await new Promise((r) => setTimeout(r, 30));
+    }
+    const blob = pdf.output("blob");
     return blob;
   } finally { host.remove(); }
 }

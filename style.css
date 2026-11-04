@@ -596,7 +596,8 @@ table.prs-table td { padding: 8px 10px; border-top: 1px solid var(--border); }
 .rpt-v5 .rpt-chapter-icon { width: 44px; height: 44px; border-radius: 13px; background: linear-gradient(145deg, var(--rpt-burgundy-dark), var(--rpt-burgundy)); box-shadow: 0 6px 14px rgba(107,35,55,.22); }
 .rpt-v5 .rpt-chapter-icon svg { width: 22px; height: 22px; }
 .rpt-v5 .rpt-chapter-title { font-size: 26px; line-height: 1.3; }
-.rpt-v5 .rpt-chapter-head::after { counter-increment: chap; content: counter(chap, arabic-indic); margin-inline-start: auto; width: 38px; height: 38px; border-radius: 50%; background: var(--rpt-burgundy); color: #fff; font-weight: 800; font-size: 15px; display: flex; align-items: center; justify-content: center; flex: none; }
+/* الدائرة المرقّمة أُزيلت بطلب */
+.rpt-v5 .rpt-chapter-head::after { content: none; display: none; }
 .rpt-v5 .rpt-chapter { margin-bottom: 22px; }
 .rpt-v5 .rpt-subheading { border-bottom: 0; font-size: 14px; margin: 18px 0 10px; }
 .rpt-v5 .stat-card, .rpt-v5 .rpt-chapter-body .card { border-radius: 20px; border: 0; background: #fff; box-shadow: 0 2px 4px rgba(107,35,55,.04), 0 10px 26px rgba(107,35,55,.07); }
@@ -704,3 +705,34 @@ table.prs-table td { padding: 8px 10px; border-top: 1px solid var(--border); }
 @media print { .lk-btn { display: none !important; } .lk-qr { display: inline-flex !important; } }
 .rpt-pdf .lk-btn { display: none !important; }
 .rpt-pdf .lk-qr { display: inline-flex !important; }
+
+/* شريط القسم الحالي على الجوال/الآيباد العمودي */
+.sec-chip, .sec-bar { display: none; }
+@media (max-width: 860px) {
+  .sec-chip { display: flex; align-items: center; gap: 8px; width: 100%; border: 1px solid var(--border); background: #fff; border-radius: 12px; padding: 10px 12px; font-family: inherit; cursor: pointer; margin: 0 0 6px; text-align: right; }
+  .sec-chip .sc-n { direction: ltr; unicode-bidi: isolate; font-size: 11px; font-weight: 800; color: #fff; background: var(--rose, #8a3350); border-radius: 8px; padding: 2px 8px; }
+  .sec-chip .sc-t { flex: 1; font-size: 13px; font-weight: 800; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .sec-chip .sc-s { font-size: 10.5px; font-weight: 800; border-radius: 8px; padding: 2px 8px; }
+  .sec-chip .sc-p { font-size: 12px; font-weight: 800; color: var(--rose, #8a3350); }
+  .sec-bar { display: block; height: 5px; border-radius: 3px; background: #efe7e9; overflow: hidden; margin-bottom: 10px; }
+  .sec-bar div { height: 100%; background: #2e9e5b; }
+}
+@media print { .sec-chip, .sec-bar { display: none !important; } }
+
+/* توزيع أفضل داخل الصفحة: بطاقات متساوية الارتفاع وشبكات تملأ العرض */
+.rpt-v5 .rpt-chapter > div[style*="grid-template-columns"], .rpt-v5 .rpt-chapter-body > div[style*="grid-template-columns"] { align-items: stretch; gap: 16px !important; }
+.rpt-v5 .rpt-chapter > div[style*="grid-template-columns"] > div, .rpt-v5 .rpt-chapter-body > div[style*="grid-template-columns"] > div { background: #fff; border-radius: 20px; box-shadow: 0 2px 4px rgba(107,35,55,.04), 0 10px 26px rgba(107,35,55,.07); padding: 16px 18px; display: flex; flex-direction: column; justify-content: center; box-sizing: border-box; }
+.rpt-v5 .rpt-chapter > div[style*="grid-template-columns"] .rpt-subheading { margin: 0 0 10px !important; }
+.rpt-v5 .rpt-chapter-sub { padding-right: 0; }
+.rpt-v5 .rpt-chapter-body table.prs-table { width: 100%; }
+.rpt-v5 .stat-grid { gap: 12px; }
+.rpt-v5 .a4-page .stat-grid { grid-template-columns: repeat(4, 1fr); }
+@media (max-width: 560px) { .rpt-v5 .a4-page .stat-grid { grid-template-columns: repeat(2, 1fr); } }
+
+.rpt-ev-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}
+.rpt-ev-tile{position:relative;aspect-ratio:4/3;border-radius:10px;overflow:hidden;display:flex;align-items:center;justify-content:center}
+.rpt-ev-tile img{position:absolute;inset:0}
+.rpt-ev-cap{position:absolute;inset-inline:0;bottom:0;background:rgba(0,0,0,.45);color:#fff;font-size:9px;padding:2px 6px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.rpt-ev-chips{display:flex;gap:6px;justify-content:flex-start;margin-top:8px}
+.rpt-ev-chip{font-size:10px;font-weight:700;background:#f6e9ec;color:#8a2a45;border-radius:99px;padding:2px 9px}
+@media print{.rpt-ev-tile{-webkit-print-color-adjust:exact;print-color-adjust:exact}}
