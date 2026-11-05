@@ -3379,14 +3379,16 @@ function dashFieldBlockHtml(kind, sid, units) {
   let cfg = DASH_SEC_VIEW[sid];
   if (!cfg) { const ts = sc.fields.filter((f) => f.type === "text" || f.type === "textarea"), ss = sc.fields.filter((f) => ["select", "radio", "expandableSelect"].includes(f.type)); cfg = { title: (ts[0] || {}).id, meta: [], badges: ss.slice(0, 2).map((f) => f.id), dist: ss.slice(0, 2).map((f) => f.id), stats: [{ k: "count", l: esc(sc.itemLabel || "إدخال") }] }; }
   const tile = (n, l) => `<div style="flex:1;min-width:110px;background:#faf5f3;border-radius:14px;padding:10px 12px;"><div style="font-size:22px;font-weight:800;color:${ROSE};line-height:1.2;">${n}</div><div style="font-size:11.5px;color:${SUBTLE};margin-top:2px;">${l}</div></div>`;
-  const tiles = cfg.stats.map((s) => {
+  // دمج المكرر: الحقل اللي يُعرض كتوزيع بنسب لا يتكرر كبطاقة رقم، وما يظهر مع كل بند (meta) لا يتكرر كتوزيع
+  const distIds = (cfg.dist || []).filter((id) => !(cfg.meta || []).includes(id));
+  const tiles = cfg.stats.filter((s) => !(s.k === "is" && distIds.includes(s.f))).map((s) => {
     if (s.k === "count") return tile(fmtNum(rows.length), s.l);
     if (s.k === "is") { const n = rows.filter((x) => s.v.test(txt(x, s.f))).length; return tile(fmtNum(n), s.l); }
     if (s.k === "sum" || s.k === "avg") { const ns = rows.map((x) => num(x[s.f])).filter((n) => n != null); if (!ns.length) return ""; const sm = ns.reduce((a, b) => a + b, 0); return tile(s.k === "sum" ? fmtNum(Math.round(sm * 100) / 100) : fmtNum(Math.round((sm / ns.length) * 10) / 10) + (s.pct ? "٪" : ""), s.l); }
     if (s.k === "rate") { const a = rows.reduce((t, x) => t + (num(x[s.f]) || 0), 0), b = rows.reduce((t, x) => t + (num(x[s.of]) || 0), 0); return b ? tile(fmtNum(Math.round((a / b) * 100)) + "٪", s.l) : ""; }
     return "";
   }).join("");
-  const distH = (cfg.dist || []).map((id) => {
+  const distH = distIds.map((id) => {
     const f = fld(id); if (!f) return "";
     const cnt = {}; let tot = 0;
     rows.forEach((x) => { const v = x[id]; (Array.isArray(v) ? v : [v]).forEach((y) => { const k = schemaFieldText(y).trim(); if (k) { cnt[k] = (cnt[k] || 0) + 1; tot++; } }); });
@@ -3394,13 +3396,13 @@ function dashFieldBlockHtml(kind, sid, units) {
     const colOf = (k, i) => { const m = DASH_SEV_COL.find(([re]) => re.test(k)); return (id === "severity" || id === "priority" || id === "executionStatus") && m ? m[1] : DASH_PAL[i % DASH_PAL.length]; };
     return `<div style="margin-top:12px;"><div style="font-size:12px;font-weight:800;margin-bottom:6px;">${esc(f.label)}</div>
       <div style="display:flex;height:12px;border-radius:8px;overflow:hidden;background:${GRAY_BG};">${ent.map(([k, n], i) => `<i title="${esc(k)}" style="display:block;width:${(n / tot) * 100}%;background:${colOf(k, i)};"></i>`).join("")}</div>
-      <div style="display:flex;flex-wrap:wrap;gap:4px 14px;margin-top:6px;font-size:11.5px;">${ent.map(([k, n], i) => `<span style="display:inline-flex;align-items:center;gap:5px;"><i style="width:9px;height:9px;border-radius:50%;background:${colOf(k, i)};display:inline-block;"></i>${esc(k.length > 28 ? k.slice(0, 28) + "…" : k)} <b>${fmtNum(Math.round((n / tot) * 100))}٪</b></span>`).join("")}</div></div>`;
+      <div style="display:flex;flex-wrap:wrap;gap:4px 14px;margin-top:6px;font-size:11.5px;">${ent.map(([k, n], i) => `<span style="display:inline-flex;align-items:center;gap:5px;"><i style="width:9px;height:9px;border-radius:50%;background:${colOf(k, i)};display:inline-block;"></i>${esc(k.length > 28 ? k.slice(0, 28) + "…" : k)} <b>${fmtNum(n)} · ${fmtNum(Math.round((n / tot) * 100))}٪</b></span>`).join("")}</div></div>`;
   }).join("");
   const badge = (id, v) => { const m = DASH_SEV_COL.find(([re]) => re.test(v)); const c = (id === "severity" || id === "priority" || id === "executionStatus") && m ? m[1] : ROSE; return `<span style="font-size:10.5px;font-weight:700;color:${c};background:${c}1a;border-radius:999px;padding:2px 9px;white-space:nowrap;">${esc(v.length > 24 ? v.slice(0, 24) + "…" : v)}</span>`; };
   const items = rows.filter((x) => txt(x, cfg.title)).slice(0, 6);
   const listH = items.length ? `<div style="margin-top:14px;border-top:1px solid ${BORDER};">${items.map((x) => {
     const meta = [unitOf.get(x), ...(cfg.meta || []).map((id) => txt(x, id)).filter(Boolean)].filter(Boolean).map((m) => m.length > 60 ? m.slice(0, 60) + "…" : m).join(" · ");
-    const bs = (cfg.badges || []).map((id) => { const v = txt(x, id); return v ? badge(id, v) : ""; }).join("");
+    const bs = (cfg.badges || []).map((id) => { const v = txt(x, id); if (!v) return ""; if (rows.length > 1 && rows.every((r) => txt(r, id) === v)) return ""; return badge(id, v); }).join("");
     const t = txt(x, cfg.title);
     const key = kind + "|" + sid + "|" + rows.indexOf(x); DASH_ITEMS[key] = { sid, item: x, unit: unitOf.get(x) || "" };
     return `<div data-action="dash-item" data-key="${esc(key)}" style="cursor:pointer;display:flex;align-items:flex-start;justify-content:space-between;gap:10px;padding:9px 0;border-bottom:1px solid ${BORDER};"><div style="min-width:0;"><div style="font-size:13px;font-weight:700;line-height:1.6;">${esc(t.length > 110 ? t.slice(0, 110) + "…" : t)}</div><div style="font-size:11.5px;color:${SUBTLE};">${esc(meta)}</div></div><div style="display:flex;gap:4px;flex-wrap:wrap;justify-content:flex-end;flex:none;max-width:45%;">${bs}</div></div>`;
@@ -12060,8 +12062,146 @@ Object.assign(SHAPES_LIB, {
   "countdown": { cat: "time", name: "المتبقي من المدة", fields: [SHP_F.t("a", "المنقضي"), SHP_F.t("b", "الإجمالي"), SHP_F.t("u", "الوحدة")], sample: { a: "6", b: "10", u: "أسابيع" }, render: (x) => { const a = shpN(x.a) || 0, b = Math.max(1, shpN(x.b) || 1); return `<div class="shp-bars"><div><div class="r"><span>مضى ${shpE(x.a)} من ${shpE(x.b)} ${shpE(x.u)}</span><b>${Math.round(Math.min(100, (a / b) * 100))}%</b></div><div class="t"><i style="width:${Math.min(100, (a / b) * 100)}%"></i></div></div></div>`; } },
   "chev": { cat: "flow", name: "أسهم متتابعة", fields: [SHP_F.a("steps", "الخطوات (سطر لكل خطوة)")], sample: { steps: "تخطيط\nتنفيذ\nمتابعة\nتقييم" }, render: (x) => `<div style="display:flex">${shpLines(x.steps).map((s, i) => `<div style="flex:1;background:var(--rpt-burgundy);opacity:${1 - i * 0.14};color:#fff;text-align:center;padding:9px 6px;clip-path:polygon(0 0,88% 0,100% 50%,88% 100%,0 100%,12% 50%);margin-right:-8px;font-size:11.5px">${shpE(s)}</div>`).join("")}</div>` },
 });
-function shapeRender(shapeId, data) { const s = SHAPES_LIB[shapeId]; if (!s) return ""; try { return `<div class="shp">${s.render(data || {})}</div>`; } catch (e) { return ""; } }
-function rptShapeBlocksHtml(blocks) { return (blocks || []).map((b) => shapeRender(b.shapeId, b)).join(""); }
+/* ===== أشكال حيّة «إحصائيات ورسوم»: ترسم نفسها من بيانات التقرير (وحدات العدّ + الفترات السابقة) بدون تعبئة ===== */
+const ST_COL = ["#6b2337", "#b98a58", "#a38d6a", "#c4566a", "#7d8fa8"];
+const ST_NEED = { data: "يحتاج برامج لها وحدات عدّ ومنجز (في «الأعمال والبرامج»).", prev: "يحتاج تقريرًا سابقًا لنفس الوحدة للمقارنة.", target: "يحتاج «العدد المستهدف» في وحدة العدّ." };
+function stProgsOf(rep) { const d = rep && rep.sections && rep.sections.programs && rep.sections.programs.data; return ((d && d.programs) || []).filter((p) => p && (p.name || p.workType)); }
+function stAgg(progs) {
+  const types = {}, units = {}, tg = {};
+  progs.forEach((p) => {
+    const t = p.workType || p.name || "غير محدد"; const T = types[t] || (types[t] = { name: t, programs: 0, vals: {} }); T.programs++;
+    programCounts(p).forEach((c) => { const u = c.unit || "مستفيدة"; if (c.done != null) { T.vals[u] = (T.vals[u] || 0) + c.done; units[u] = (units[u] || 0) + c.done; } if (c.target != null) tg[u] = (tg[u] || 0) + c.target; });
+  });
+  return { types: Object.values(types), units, tg };
+}
+function stDemo() {
+  const T = [["الجوامع", 14, 16, 291], ["الشراكات", 6, 7, 90], ["المعالي", 1, 1, 7]];
+  return { demo: true, cols: ["مقر", "معلمة", "مستفيدة"], primary: "مستفيدة", hasPrev: true,
+    types: T.map((t, i) => ({ name: t[0], programs: t[2], vals: { "مقر": t[1], "معلمة": t[2], "مستفيدة": t[3] }, color: ST_COL[i] })),
+    periods: [{ label: "أول ١٤٤٦", by: { "الجوامع": 294, "الشراكات": 180, "المعالي": 28 } }, { label: "ثاني ١٤٤٦", by: { "الجوامع": 381, "الشراكات": 204, "المعالي": 31 } }, { label: "ثالث ١٤٤٦", by: { "الجوامع": 233, "الشراكات": 219, "المعالي": 21 } }, { label: "الحالية", by: { "الجوامع": 291, "الشراكات": 90, "المعالي": 7 } }],
+    target: { done: 39, goal: 45, unit: "مركز" }, rings: [["مقر", 39, 45], ["معلمة", 22, 22], ["مستفيدة", 388, 540]] };
+}
+function stData(ctx) {
+  if (ctx && ctx.demo) return stDemo();
+  const rep = ctx && ctx.report; if (!rep) return null;
+  const a = stAgg(stProgsOf(rep)); if (!a.types.length) return null;
+  const cols = Object.entries(a.units).sort((x, y) => y[1] - x[1]).slice(0, 3).map((x) => x[0]);
+  const primary = cols.find((c) => /مستفيد|طالب/.test(c)) || cols[0] || null;
+  const val = (t) => (primary ? (t.vals[primary] || 0) : t.programs);
+  let per = [];
+  try {
+    const uid = ctx.unitId || reportUnitIdOf(rep);
+    ensureUnitReportsLoaded(uid).filter((r) => r.id !== rep.id && reportHasContent(r)).forEach((r) => {
+      const pa = stAgg(stProgsOf(r)); if (!pa.types.length) return; const by = {}; pa.types.forEach((t) => { by[t.name] = primary ? (t.vals[primary] || 0) : t.programs; });
+      const ti = reportTermInfo(r); per.push({ label: ti.label, ord: ti.ord, by });
+    });
+  } catch (e) { per = []; }
+  per.sort((x, y) => x.ord - y.ord); per = per.slice(-3);
+  const cur = { label: "الحالية", by: {} }; a.types.forEach((t) => { cur.by[t.name] = val(t); }); per.push(cur);
+  const tu = Object.keys(a.tg).find((u) => a.units[u] != null);
+  return { cols, primary, hasPrev: per.length > 1, periods: per, types: a.types.map((t, i) => ({ ...t, color: ST_COL[i % ST_COL.length] })),
+    target: tu ? { done: a.units[tu] || 0, goal: a.tg[tu], unit: tu } : null,
+    rings: Object.keys(a.tg).filter((u) => a.units[u] != null).slice(0, 3).map((u) => [u, a.units[u], a.tg[u]]) };
+}
+function stWrap(x, ctx, need, fn) {
+  const d = stData(ctx);
+  const miss = !d ? "data" : (need === "prev" && !d.hasPrev) ? "prev" : (need === "target" && !(d.target && d.target.goal)) ? "target" : "";
+  if (miss) return ctx && ctx.editor ? `<div class="shp-need">${esc(ST_NEED[miss])}</div>` : "";
+  return `${x.title ? `<div class="shp-ttl">${shpE(x.title)}</div>` : ""}<div class="st">${fn(d)}</div>`;
+}
+const stT = (d) => d.types.reduce((s, t) => s + (d.primary ? (t.vals[d.primary] || 0) : t.programs), 0);
+const stV = (d, t) => (d.primary ? (t.vals[d.primary] || 0) : t.programs);
+const stPrev = (d) => d.periods[d.periods.length - 2];
+const stChg = (a, b) => (b ? Math.round(((a - b) / b) * 100) : null);
+const stChip = (c) => c == null ? "" : `<span class="st-chg ${c >= 0 ? "up" : "dn"}">${c >= 0 ? "▲" : "▼"} ${fmtNum(Math.abs(c))}٪</span>`;
+function stTableH(d) {
+  const cols = ["البرامج", ...d.cols], g = `grid-template-columns:1.5fr repeat(${cols.length},1fr)`;
+  const row = (t) => `<div class="st-r" style="${g}"><span class="n" style="background:${t.color}">${esc(t.name)}</span><span>${fmtNum(t.programs)}</span>${d.cols.map((c) => `<span${c === d.primary ? ' class="v"' : ""}>${fmtNum(t.vals[c] || 0)}</span>`).join("")}</div>`;
+  const tot = d.cols.map((c) => d.types.reduce((s, t) => s + (t.vals[c] || 0), 0));
+  return `<div class="st-h" style="${g}"><span>النوع</span>${cols.map((c) => `<span>${esc(c)}</span>`).join("")}</div>${d.types.map(row).join("")}<div class="st-r st-tot" style="${g}"><span>الإجمالي</span><span>${fmtNum(d.types.reduce((s, t) => s + t.programs, 0))}</span>${tot.map((v) => `<span>${fmtNum(v)}</span>`).join("")}</div>`;
+}
+function stDumbH(d) {
+  const p = stPrev(d), cur = d.periods[d.periods.length - 1], mx = Math.max(1, ...d.types.map((t) => Math.max(cur.by[t.name] || 0, p.by[t.name] || 0)));
+  return d.types.map((t) => { const a = (cur.by[t.name] || 0) / mx * 92, b = (p.by[t.name] || 0) / mx * 92, lo = Math.min(a, b), hi = Math.max(a, b);
+    return `<div class="st-db"><span class="nm">${esc(t.name)}</span><div class="tr"><i class="ln"></i><i class="sp" style="right:${lo + 3}%;width:${hi - lo}%"></i><i class="dt" style="right:calc(${b + 3}% - 8px);background:#d9c7a8"></i><i class="dt" style="right:calc(${a + 3}% - 8px);background:${t.color}"></i></div><b>${fmtNum(cur.by[t.name] || 0)}</b>${stChip(stChg(cur.by[t.name] || 0, p.by[t.name] || 0))}</div>`; }).join("") + `<div class="st-lg"><span><i style="background:#6b2337"></i>${esc(cur.label)}</span><span><i style="background:#d9c7a8"></i>${esc(p.label)}</span></div>`;
+}
+function stAxes(d, W, H, mx, step, pad) {
+  let s = ""; for (let i = 0; i <= 3; i++) { const y = pad.t + (H - pad.t - pad.b) * i / 3; s += `<line x1="${pad.l}" x2="${W - pad.r}" y1="${y}" y2="${y}" stroke="#f1e8da"/><text x="${W - 2}" y="${y + 3}" text-anchor="end" font-size="9" fill="#898781">${fmtNum(Math.round(mx * (1 - i / 3)))}</text>`; }
+  return s;
+}
+function stLineH(d, area) {
+  const W = 320, H = 170, pad = { l: 8, r: 30, t: 16, b: 26 }, P = d.periods, n = P.length;
+  const X = (i) => W - pad.r - 14 - (n - 1 - i) * ((W - pad.l - pad.r - 28) / Math.max(1, n - 1)) * -1 - ((W - pad.l - pad.r - 28)) + 0;
+  const xs = (i) => pad.l + 14 + (n - 1 - i) * ((W - pad.l - pad.r - 28) / Math.max(1, n - 1));
+  const series = area ? [{ name: "الإجمالي", color: "#6b2337", v: P.map((p) => Object.values(p.by).reduce((a, b) => a + b, 0)) }] : d.types.map((t) => ({ name: t.name, color: t.color, v: P.map((p) => p.by[t.name] || 0) }));
+  const mx = Math.max(1, ...series.flatMap((s) => s.v)) * 1.12, y = (v) => pad.t + (H - pad.t - pad.b) * (1 - v / mx);
+  let g = stAxes(d, W, H, mx, 0, pad);
+  series.forEach((s) => {
+    const pts = s.v.map((v, i) => [xs(i), y(v)]); const path = pts.map((p, i) => (i ? "L" : "M") + p[0].toFixed(1) + " " + p[1].toFixed(1)).join(" ");
+    if (area) g += `<path d="${path} L${pts[n - 1][0]} ${H - pad.b} L${pts[0][0]} ${H - pad.b} Z" fill="rgba(107,35,55,0.10)"/>`;
+    g += `<path d="${path}" fill="none" stroke="${s.color}" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>`;
+    const best = s.v.indexOf(Math.max(...s.v)), worst = s.v.indexOf(Math.min(...s.v));
+    pts.forEach((p, i) => { const mk = area && n > 2 && (i === best || i === worst); g += `<circle cx="${p[0]}" cy="${p[1]}" r="${mk ? 6.5 : 4}" fill="${mk ? (i === best ? "#3b6d11" : "#c4566a") : s.color}" stroke="#FFFDF9" stroke-width="2"/>`; if (area || series.length < 3) g += `<text x="${p[0]}" y="${p[1] - 9}" text-anchor="middle" font-size="9.5" font-weight="500" fill="#4d1827">${fmtNum(s.v[i])}</text>`; });
+  });
+  P.forEach((p, i) => { g += `<text x="${xs(i)}" y="${H - 8}" text-anchor="middle" font-size="9.5" fill="#6f6a63">${esc(p.label)}</text>`; });
+  const lg = area ? "" : `<div class="st-lg">${d.types.map((t) => `<span><i style="background:${t.color};border-radius:2px;height:3px;width:14px"></i>${esc(t.name)}</span>`).join("")}</div>`;
+  return `<svg viewBox="0 0 ${W} ${H}" width="100%" role="img" aria-label="خط اتجاه">${g}</svg>${lg}`;
+}
+function stColsH(d, stacked) {
+  const W = 320, H = 170, pad = { l: 8, r: 30, t: 16, b: 26 }, P = d.periods, n = P.length, gw = (W - pad.l - pad.r) / n;
+  const tot = (p) => d.types.reduce((s, t) => s + (p.by[t.name] || 0), 0);
+  const mx = Math.max(1, ...P.map((p) => stacked ? tot(p) : Math.max(...d.types.map((t) => p.by[t.name] || 0)))) * 1.12, y = (v) => pad.t + (H - pad.t - pad.b) * (1 - v / mx);
+  let g = stAxes(d, W, H, mx, 0, pad);
+  P.forEach((p, i) => {
+    const cx = W - pad.r - gw * (n - 1 - i) - gw / 2 - gw * 0 ; const x0 = pad.l + gw * (n - 1 - i);
+    if (stacked) { let acc = 0; const bw = Math.min(30, gw * 0.55); d.types.forEach((t) => { const v = p.by[t.name] || 0; g += `<rect x="${x0 + gw / 2 - bw / 2}" y="${y(acc + v)}" width="${bw}" height="${Math.max(0, y(acc) - y(acc + v) - 1)}" fill="${t.color}"/>`; acc += v; }); g += `<text x="${x0 + gw / 2}" y="${y(acc) - 4}" text-anchor="middle" font-size="9.5" font-weight="500" fill="#4d1827">${fmtNum(acc)}</text>`; }
+    else { const k = d.types.length, bw = Math.min(16, (gw * 0.8) / k); d.types.forEach((t, j) => { const v = p.by[t.name] || 0, bx = x0 + gw / 2 - (k * bw) / 2 + j * bw; g += `<rect x="${bx + 1}" y="${y(v)}" width="${bw - 2}" height="${H - pad.b - y(v)}" rx="3" fill="${t.color}"/>`; if (k < 4) g += `<text x="${bx + bw / 2}" y="${y(v) - 3}" text-anchor="middle" font-size="8.5" fill="#4d1827">${fmtNum(v)}</text>`; }); }
+    g += `<text x="${x0 + gw / 2}" y="${H - 8}" text-anchor="middle" font-size="9.5" fill="#6f6a63">${esc(p.label)}</text>`;
+  });
+  return `<svg viewBox="0 0 ${W} ${H}" width="100%" role="img" aria-label="أعمدة مقارنة">${g}</svg><div class="st-lg">${d.types.map((t) => `<span><i style="background:${t.color}"></i>${esc(t.name)}</span>`).join("")}</div>`;
+}
+function stDonutH(d) {
+  const tot = stT(d) || 1, C = 2 * Math.PI * 40; let off = 0;
+  const arcs = d.types.map((t) => { const f = stV(d, t) / tot, s = `<circle cx="50" cy="50" r="40" fill="none" stroke="${t.color}" stroke-width="16" stroke-dasharray="${(f * C).toFixed(2)} ${C.toFixed(2)}" stroke-dashoffset="${(-off * C).toFixed(2)}" transform="rotate(-90 50 50)"/>`; off += f; return s; }).join("");
+  return `<div class="st-don"><svg viewBox="0 0 100 100" width="130"><circle cx="50" cy="50" r="40" fill="none" stroke="#f1e8da" stroke-width="16"/>${arcs}<text x="50" y="54" text-anchor="middle" font-size="15" font-weight="500" fill="#6b2337">${fmtNum(stT(d))}</text><text x="50" y="65" text-anchor="middle" font-size="6" fill="#6f6a63">${esc(d.primary || "برنامج")}</text></svg><div class="lg2">${d.types.map((t) => `<div><i style="background:${t.color}"></i><span>${esc(t.name)}</span><b>${fmtNum(Math.round(stV(d, t) / tot * 100))}٪</b></div>`).join("")}</div></div>`;
+}
+function stBar100H(d) {
+  const tot = stT(d) || 1;
+  return `<div class="st-b100">${d.types.map((t) => { const p = stV(d, t) / tot * 100; return p < 0.5 ? "" : `<div style="flex:${p};background:${t.color}">${p >= 8 ? fmtNum(Math.round(p)) + "٪" : ""}</div>`; }).join("")}</div><div class="st-lg">${d.types.map((t) => `<span><i style="background:${t.color}"></i>${esc(t.name)} ${fmtNum(stV(d, t))}</span>`).join("")}</div>`;
+}
+function stIconsH(d) {
+  const tot = stT(d), per = Math.max(1, Math.ceil(tot / 40)), ic = (c) => `<svg width="20" height="28" viewBox="0 0 22 30"><circle cx="11" cy="7" r="5" fill="${c}"/><path d="M2 28v-6a9 9 0 0 1 18 0v6z" fill="${c}"/></svg>`;
+  return `<div class="st-ic">${d.types.map((t) => Array.from({ length: Math.max(stV(d, t) > 0 ? 1 : 0, Math.round(stV(d, t) / per)) }, () => ic(t.color)).join("")).join("")}</div><div class="st-lg"><span>كل أيقونة = ${fmtNum(per)} ${esc(d.primary || "")}</span>${d.types.map((t) => `<span><i style="background:${t.color}"></i>${esc(t.name)} ${fmtNum(stV(d, t))}</span>`).join("")}</div>`;
+}
+function stGaugeH(d) {
+  const g = d.target, pc = Math.max(0, Math.min(1, g.done / g.goal)), a = Math.PI * (1 - pc), ex = 150 + 120 * Math.cos(a), ey = 140 - 120 * Math.sin(a);
+  return `<svg viewBox="0 0 300 165" width="100%" role="img" aria-label="مؤشر إنجاز"><path d="M30 140 A120 120 0 0 1 270 140" fill="none" stroke="#f1e8da" stroke-width="22" stroke-linecap="round"/>${pc > 0 ? `<path d="M30 140 A120 120 0 0 1 ${ex.toFixed(1)} ${ey.toFixed(1)}" fill="none" stroke="${pc >= 0.85 ? "#3b6d11" : pc >= 0.7 ? "#c9a24a" : "#6b2337"}" stroke-width="22" stroke-linecap="round"/>` : ""}<text x="150" y="122" text-anchor="middle" font-size="34" font-weight="500" fill="#6b2337">${fmtNum(Math.round(pc * 100))}٪</text><text x="150" y="147" text-anchor="middle" font-size="12" fill="#6f6a63">${fmtNum(g.done)} من ${fmtNum(g.goal)} ${esc(g.unit)}</text></svg>`;
+}
+function stRingsH(d) {
+  return `<div class="st-rings">${d.rings.map(([u, a, b]) => { const pc = Math.max(0, Math.min(1, a / b)), C = 2 * Math.PI * 34; return `<div><svg viewBox="0 0 84 84" width="84"><circle cx="42" cy="42" r="34" fill="none" stroke="#f1e8da" stroke-width="9"/><circle cx="42" cy="42" r="34" fill="none" stroke="${pc >= 0.85 ? "#3b6d11" : pc >= 0.7 ? "#c9a24a" : "#6b2337"}" stroke-width="9" stroke-linecap="round" stroke-dasharray="${(pc * C).toFixed(1)} ${C.toFixed(1)}" transform="rotate(-90 42 42)"/><text x="42" y="47" text-anchor="middle" font-size="15" font-weight="500" fill="#6b2337">${fmtNum(Math.round(pc * 100))}٪</text></svg><div>${esc(u)}</div><small>${fmtNum(a)} من ${fmtNum(b)}</small></div>`; }).join("")}</div>`;
+}
+function stHeatH(d) {
+  const P = d.periods.slice().reverse(), mx = Math.max(1, ...d.periods.flatMap((p) => Object.values(p.by))), g = `grid-template-columns:1.4fr repeat(${P.length},1fr)`;
+  return `<div class="st-heat" style="${g}"><span></span>${P.map((p) => `<span class="hd">${esc(p.label)}</span>`).join("")}${d.types.map((t) => `<span class="nm">${esc(t.name)}</span>` + P.map((p) => { const v = p.by[t.name] || 0, a = 0.12 + 0.88 * (v / mx); return `<span style="background:rgba(107,35,55,${a.toFixed(2)});color:${a > 0.5 ? "#fff" : "#4d1827"}">${fmtNum(v)}</span>`; }).join("")).join("")}</div>`;
+}
+const stShape = (name, need, fn, extra) => ({ cat: "live", live: true, name, fields: [SHP_F.t("title", "عنوان (اختياري)")], sample: { title: "" }, render: (x, ctx) => stWrap(x, ctx || { demo: true }, need, fn), ...(extra || {}) });
+Object.assign(SHAPES_LIB, {
+  "st_table": stShape("جدول الإحصائيات", "", stTableH),
+  "st_dumb": stShape("نقاط مرتبة: الحالية مقابل السابقة", "prev", stDumbH),
+  "st_line": stShape("خط لكل نوع", "prev", (d) => stLineH(d, false)),
+  "st_area": stShape("خط الإجمالي مع الأفضل والأضعف", "prev", (d) => stLineH(d, true)),
+  "st_cols": stShape("أعمدة متجاورة", "prev", (d) => stColsH(d, false)),
+  "st_stack": stShape("أعمدة متراكبة", "prev", (d) => stColsH(d, true)),
+  "st_donut": stShape("دونات التوزيع", "", stDonutH),
+  "st_b100": stShape("شريط نسب متراكب", "", stBar100H),
+  "st_icons": stShape("أيقونات أشخاص", "", stIconsH),
+  "st_gauge": stShape("مؤشر نصف دائري (الإنجاز)", "target", stGaugeH),
+  "st_rings": stShape("حلقات الإنجاز", "target", stRingsH),
+  "st_heat": stShape("خريطة حرارية", "prev", stHeatH),
+});
+SHP_CATS.unshift(["live", "إحصائيات ورسوم"]);
+function shapeRender(shapeId, data, ctx) { const s = SHAPES_LIB[shapeId]; if (!s) return ""; try { const h = s.render(data || {}, ctx); return h ? `<div class="shp">${h}</div>` : ""; } catch (e) { return ""; } }
+function rptShapeBlocksHtml(blocks, report) { const ctx = { report, unitId: report ? reportUnitIdOf(report) : "" }; return (blocks || []).map((b) => shapeRender(b.shapeId, b, ctx)).join(""); }
 function shapeDefaultsPanelHtml() {
   const secs = SECTIONS;
   const cur = ((S.siteSettings || {}).theme || {}).shapeDefaults || {};
@@ -12077,16 +12217,16 @@ function renderShapesLibraryPage() {
     ${topBarHtml({ title: "مكتبة الأشكال والرسوم", subtitle: `${Object.keys(SHAPES_LIB).length} شكلًا — للاستعراض. لإضافة شكل لتقرير: افتحي أي قسم ← «اختيار من المكتبة».`, right: "" })}
     <div style="display:flex;gap:6px;flex-wrap:wrap;margin:6px 0 14px;">${tabs}</div>
     ${S.isAdmin ? shapeDefaultsPanelHtml() : ""}
-    <div class="shp-grid">${list.map(([id, s]) => `<div class="shp-card" style="cursor:default;"><div class="shp-prev rpt-v5">${shapeRender(id, s.sample)}</div><div class="shp-nm">${esc(s.name)}</div></div>`).join("")}</div>
+    <div class="shp-grid">${list.map(([id, s]) => `<div class="shp-card" style="cursor:default;"><div class="shp-prev rpt-v5">${shapeRender(id, s.sample, { demo: true })}</div><div class="shp-nm">${esc(s.name)}</div></div>`).join("")}</div>
   </div></div>`;
 }
 function shapePickerHtml(target) {
-  const cat = S.ui.shpCat || "";
+  const cat = S.ui.shpCat == null ? "live" : S.ui.shpCat;
   const list = Object.entries(SHAPES_LIB).filter(([, s]) => !cat || s.cat === cat);
   const tabs = [["", "الكل"], ...SHP_CATS].map(([id, n]) => `<button type="button" class="flt-chip${cat === id ? " on" : ""}" data-action="shp-cat" data-cat="${id}">${n}</button>`).join("");
   return `<div class="no-print" data-action="shp-close" style="position:fixed;inset:0;background:rgba(40,20,30,.45);z-index:9000;display:flex;align-items:flex-end;justify-content:center;"><div data-stop="1" style="background:#faf6f6;width:min(760px,100%);max-height:88vh;overflow:auto;border-radius:22px 22px 0 0;padding:16px 16px 24px;">
     <div style="font-size:16px;font-weight:800;margin-bottom:8px;">مكتبة الأشكال والرسوم</div><div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px;">${tabs}</div>
-    <div class="shp-grid">${list.map(([id, s]) => `<button type="button" class="shp-card" data-action="shp-add" data-shape="${id}"><div class="shp-prev rpt-v5">${shapeRender(id, s.sample)}</div><div class="shp-nm">${esc(s.name)}</div></button>`).join("")}</div>
+    <div class="shp-grid">${list.map(([id, s]) => `<button type="button" class="shp-card" data-action="shp-add" data-shape="${id}"><div class="shp-prev rpt-v5">${shapeRender(id, s.sample, { demo: true })}</div><div class="shp-nm">${esc(s.name)}</div></button>`).join("")}</div>
     <div style="margin-top:12px;">${pillBtn("إغلاق", { variant: "ghost", action: "shp-close" })}</div></div></div>`;
 }
 function shapeDefaultFor(sectionId) { const m = ((S.siteSettings || {}).theme || {}).shapeDefaults || {}; const id = m[sectionId]; return id && SHAPES_LIB[id] ? id : ""; }
@@ -12098,7 +12238,7 @@ function shapeBlocksEditorHtml(d, sectionId) {
 function shapeBlocksEditorInner(d) {
   const rows = (d.shapeBlocks || []).map((b) => { const s = SHAPES_LIB[b.shapeId]; if (!s) return ""; return `<div class="repeat-item"><div class="repeat-item-head"><span class="repeat-item-title">${esc(s.name)}</span>${removeBtn("shapeBlocks", b.id)}</div>
     ${s.fields.map((f) => fieldWrap(f.label, false, f.type === "i" ? `<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;"><input type="file" accept="image/*" data-shp-img="${esc(b.id)}" data-shp-key="${esc(f.k)}" />${b[f.k] ? `<img src="${esc(b[f.k])}" style="height:44px;border-radius:6px;" alt="" /><button type="button" class="pill-btn pill-ghost" data-action="shp-img-clear" data-id="${esc(b.id)}" data-key="${esc(f.k)}">حذف الصورة</button>` : ""}</div>` : f.type === "a" ? txt("shapeBlocks", b.id, f.k, b[f.k], f.ph || "", 70) : inp("shapeBlocks", b.id, f.k, b[f.k], f.ph || ""))).join("")}
-    <div class="shp-live rpt-v5">${shapeRender(b.shapeId, b)}</div></div>`; }).join("");
+    <div class="shp-live rpt-v5">${shapeRender(b.shapeId, b, { editor: true, report: getCurrentReportEntry(), unitId: S.currentUnitId })}</div></div>`; }).join("");
   return `<div class="subhead" style="margin-top:14px;">الأشكال والرسوم</div>${rows}<div style="margin-top:8px;">${pillBtn("اختيار من المكتبة", { variant: "ghost", action: "shp-open" })}</div>`;
 }
 
@@ -12118,6 +12258,11 @@ function rptMeasureToolHtml(t) {
     if (o) h += `<div class="sv-auto-txt">${svAnalysisTextBlocks(o, textBlock)}${textBlock("الخلاصة", o.summary)}</div>`;
   }
   return h;
+}
+function rptStatsPageHtml(report) {
+  const ctx = { report, unitId: reportUnitIdOf(report) };
+  const h = ["st_table", "st_dumb", "st_line"].map((id) => shapeRender(id, {}, ctx)).join("");
+  return h ? `<div class="rpt-stats"><h3>الإحصائيات</h3>${h}</div>` : "";
 }
 function rptMeasureHtml(report) {
   const sec = report.sections || {};
@@ -12332,8 +12477,8 @@ function sectionBodyOnly(section, saved, report) {
     body = textBlock("المحتوى", d.content) || emptyHint("لم يُدخل محتوى بعد.");
   }
   if (d.notes) body += textBlock("ملاحظات", d.notes);
-  if (section.id === "programs" && report) body += (svMergeOn() ? rptMeasureHtml(report) : rptProgramCardsHtml(report));
-  if (d.shapeBlocks && d.shapeBlocks.length) body += rptShapeBlocksHtml(d.shapeBlocks);
+  if (section.id === "programs" && report) body += (svMergeOn() ? rptStatsPageHtml(report) + rptMeasureHtml(report) : rptProgramCardsHtml(report));
+  if (d.shapeBlocks && d.shapeBlocks.length) body += rptShapeBlocksHtml(d.shapeBlocks, report);
   return body;
 }
 function comparisonJudgmentMeta(judgment) {
