@@ -238,7 +238,7 @@ textarea.input { resize: vertical; line-height: 1.6; }
 table.prs-table { width: 100%; border-collapse: collapse; font-size: 12px; }
 table.prs-table th { text-align: right; padding: 9px 10px; font-weight: 800; }
 table.prs-table td { padding: 8px 10px; border-top: 1px solid var(--border); }
-.table-wrap { border: 1px solid var(--border); border-radius: 12px; overflow: hidden; }
+.table-wrap { border: 1px solid var(--border); border-radius: 12px; overflow-x: auto; overflow-y: hidden; }
 
 .badge { display: inline-flex; align-items: center; font-size: 10.5px; font-weight: 700; padding: 4px 10px; border-radius: 999px; }
 .row-flex { display: flex; gap: 10px; }
@@ -822,3 +822,4 @@ table.prs-table td { padding: 8px 10px; border-top: 1px solid var(--border); }
 .rpt-pc-h{display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-bottom:6px}.rpt-pc-h b{color:var(--rpt-burgundy);font-size:13px;flex:1 0 100%}.rpt-pc-h span{background:#faf3f1;border-radius:99px;padding:2px 9px;font-size:10.5px}
 .rpt-pc-s{font-size:10.5px;color:#8a7d7a;font-weight:800;margin:6px 0 2px}.rpt-pc-row{display:flex;justify-content:space-between;gap:8px;font-size:11.5px;padding:3px 0;border-top:1px dashed #eadfdb}
 .rpt-pc-gen{border:1.5px dashed #c9a24a;background:#fffdf7;margin-top:12px}.rpt-subheading{font-weight:800;color:var(--rpt-burgundy);margin:6px 0}.sv-auto-txt{margin-top:4px}
+.table-wrap table,.table-wrap .prs-table{width:100%}.table-wrap th,.table-wrap td{white-space:normal;word-break:break-word;overflow-wrap:anywhere}

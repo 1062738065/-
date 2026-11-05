@@ -617,6 +617,10 @@ function renderSchemaFieldsHtml(fields, arrKey, itemId, item, d, subArrKey, subI
     const f = fields[i];
     const subhead = f.subheadBefore ? `<div class="subhead">${esc(f.subheadBefore)}</div>` : "";
     const next = fields[i + 1];
+    if (arrKey === "programs" && !subArrKey && (f.id === "countUnit" || f.id === "achievedCount")) {
+      if (f.id === "countUnit") html += subhead + pcCountBlockHtml(item, d);
+      i += 1; continue;
+    }
     if (f.rowGroup && next && next.rowGroup === f.rowGroup) {
       html += subhead + `<div class="row-flex">${renderSchemaFieldHtml(f, arrKey, itemId, item[f.id], f.customKey ? d[f.customKey] : undefined, item, subArrKey, subItemId)}${renderSchemaFieldHtml(next, arrKey, itemId, item[next.id], next.customKey ? d[next.customKey] : undefined, item, subArrKey, subItemId)}</div>`;
       i += 2;
@@ -8111,6 +8115,26 @@ function collectProgramsForUnits(units, yearFilter) {
   });
   return [...map.values()];
 }
+/* وحدات العدّ المتعددة: p.counts = [{id, unit, done, target}] — وتبقى الحقول القديمة countUnit/achievedCount تُقرأ إن لم توجد */
+function programCounts(p) {
+  const c = Array.isArray(p.counts) ? p.counts.filter((x) => x && String(x.unit || "").trim()) : [];
+  if (c.length) return c.map((x) => ({ unit: String(x.unit).trim(), done: numOrNull(x.done), target: numOrNull(x.target) }));
+  const cu = String(p.countUnit || "").trim(), a = numOrNull(p.achievedCount);
+  if (cu) return [{ unit: cu, done: a, target: numOrNull(p.targetCount) }];
+  if (a != null) return [{ unit: "", done: a, target: numOrNull(p.targetCount) }];
+  const b = numOrNull(p.actualBeneficiaries);
+  return [{ unit: "مستفيدة", done: b, target: numOrNull(p.targetCount) }];
+}
+function pcCountBlockHtml(item, d) {
+  const custom = (d && d.customCountUnits) || [];
+  const all = [...new Set([...COUNT_UNITS_BASE, ...custom, ...(item.counts || []).map((x) => x.unit)])];
+  const cur = item.counts || [];
+  const chips = all.map((u) => { const on = cur.some((x) => x.unit === u); return `<button type="button" class="radio-pill ${on ? "active" : ""}" data-action="pc-toggle" data-id="${esc(item.id)}" data-unit="${esc(u)}">${esc(u)}</button>`; }).join("");
+  const rows = cur.map((x) => `<div class="og-block" style="padding:10px 12px;"><div style="font-weight:800;font-size:12.5px;margin-bottom:8px;">${esc(x.unit)}</div><div class="row-flex">${fieldWrap("العدد المستهدف", inpSub("programs", item.id, "counts", x.id, "target", x.target, "0", "number"))}${fieldWrap("العدد المنجز فعليًا", inpSub("programs", item.id, "counts", x.id, "done", x.done, "0", "number"))}</div></div>`).join("");
+  return `<div class="field"><label class="field-label">وحدات العدّ (اختاري واحدة أو أكثر)</label><div class="radio-group">${chips}</div>
+    <div style="display:flex;gap:6px;margin-top:8px;flex-wrap:wrap;"><input class="input" id="pc-new-${esc(item.id)}" style="flex:1;min-width:160px;" placeholder="وحدة أخرى، مثال: مدرسة" /><button type="button" class="pill-btn pill-ghost" data-action="pc-add-custom" data-id="${esc(item.id)}">＋ إضافة</button></div>
+    <div class="hint">لكل وحدة عدّ اكتبي عددها المنجز، وتظهر الإحصائية في لوحة المعلومات.</div></div>${rows}`;
+}
 function programAchievedValue(p) {
   const a = numOrNull(p.achievedCount);
   return a != null ? a : numOrNull(p.actualBeneficiaries);
@@ -8123,13 +8147,15 @@ function programCountUnit(p) {
 function achievementStats(progs) {
   const groups = {};
   progs.forEach(({ p }) => {
-    const wt = p.workType || "غير محدد", cu = programCountUnit(p);
-    const key = wt + "|" + cu;
-    const g = groups[key] || (groups[key] = { workType: wt, countUnit: cu, works: 0, target: 0, achieved: 0, hasTarget: false, hasAchieved: false, completed: 0 });
-    g.works++;
-    const t = numOrNull(p.targetCount); if (t != null) { g.target += t; g.hasTarget = true; }
-    const a = programAchievedValue(p); if (a != null) { g.achieved += a; g.hasAchieved = true; }
-    if (p.executionStatus === "مكتمل") g.completed++;
+    const wt = p.workType || "غير محدد";
+    programCounts(p).forEach((c) => {
+      const cu = c.unit, key = wt + "|" + cu;
+      const g = groups[key] || (groups[key] = { workType: wt, countUnit: cu, works: 0, target: 0, achieved: 0, hasTarget: false, hasAchieved: false, completed: 0 });
+      g.works++;
+      if (c.target != null) { g.target += c.target; g.hasTarget = true; }
+      if (c.done != null) { g.achieved += c.done; g.hasAchieved = true; }
+      if (p.executionStatus === "مكتمل") g.completed++;
+    });
   });
   return Object.values(groups).sort((a, b) => b.works - a.works || b.achieved - a.achieved);
 }
@@ -11691,7 +11717,7 @@ function reviewSectionHtml(d, report) {
 
 /* =============================== Empty-item factories ========================= */
 const EMPTY_ITEM_FACTORY = {
-  programs: () => ({ id: uid("prog"), workType: "", name: "", goal: "", targetGroup: "", targetCount: "", actualBeneficiaries: "", countUnit: "", achievedCount: "", startDate: "", endDate: "", location: "", deliveryMode: "", executingEntity: "", participatingEntities: "", responsiblePerson: "", executionStatus: "", completionPercent: "", attendeesCount: "", attendanceRate: "", continuationRate: "", approvedCost: "", actualCost: "", highlightResult: "" }),
+  programs: () => ({ id: uid("prog"), workType: "", name: "", goal: "", targetGroup: "", targetCount: "", actualBeneficiaries: "", countUnit: "", achievedCount: "", counts: [], startDate: "", endDate: "", location: "", deliveryMode: "", executingEntity: "", participatingEntities: "", responsiblePerson: "", executionStatus: "", completionPercent: "", attendeesCount: "", attendanceRate: "", continuationRate: "", approvedCost: "", actualCost: "", highlightResult: "" }),
   tools: () => ({ id: uid("tool"), toolType: "", name: "", purpose: "", relatedProgram: "", targetGroup: "", populationSize: "", sampleSize: "", respondentsCount: "", applicationDate: "", toolLink: "", resultsLink: "", resultQuality: "" }),
   comparisons: () => ({ id: uid("cmp"), topic: "", resultValue: "", judgment: "", changeReason: "" }),
   challenges: () => ({ id: uid("chl"), name: "", area: "", severity: "", scope: "", description: "", rootCause: "", performanceImpact: "", startedWhen: "", recurred: "", actionTaken: "", actionResult: "", stillOngoing: "", supportNeeded: "", proposedHandler: "", resolutionTime: "" }),
@@ -11800,6 +11826,9 @@ function rptVisibleFields(sid) {
 }
 function rptFieldCellHtml(sid, f, it) {
   let v = it[f.id];
+  if (sid === "programs" && f.id === "achievedCount" && Array.isArray(it.counts) && it.counts.some((x) => x && x.unit)) {
+    return esc(it.counts.filter((x) => x && x.unit).map((x) => `${x.done !== "" && x.done != null ? x.done : "—"} ${x.unit}`).join("، "));
+  }
   if (f.type === "computed" && f.id === "responseRate") { const r = computeResponseRate(it.sampleSize, it.respondentsCount); return r != null ? r + "٪" : "—"; }
   const t = schemaFieldText(v);
   if (!t) return "—";
@@ -14843,6 +14872,17 @@ function handleReportEditorAction(action, ds) {
         setTimeout(() => { S.sectionSaveStatus = ""; if (S.activeSectionId) render(); }, 1500);
       } else render();
       return true;
+    }
+    case "pc-toggle": case "pc-add-custom": {
+      const it = findById(getItemList("programs"), ds.id); if (!it) return true;
+      it.counts = Array.isArray(it.counts) ? it.counts : [];
+      let unit = ds.unit;
+      if (action === "pc-add-custom") { const el = document.getElementById("pc-new-" + ds.id); unit = String((el && el.value) || "").trim(); if (!unit) return true; if (S.sectionDraft) { const cu = S.sectionDraft.customCountUnits || []; if (!cu.includes(unit) && !COUNT_UNITS_BASE.includes(unit)) S.sectionDraft.customCountUnits = [...cu, unit]; } }
+      const at = it.counts.findIndex((x) => x.unit === unit);
+      if (at >= 0 && action === "pc-toggle") it.counts.splice(at, 1);
+      else if (at < 0) it.counts.push({ id: uid("pc"), unit, target: "", done: "" });
+      if (typeof autoSaveSchedule === "function") autoSaveSchedule();
+      render(); return true;
     }
     case "sv-tab": {
       clearTimeout(__autoSaveTimer); __autoSaveTimer = null;
