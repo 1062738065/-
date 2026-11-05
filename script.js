@@ -526,7 +526,7 @@ const SECTION_FIELD_SCHEMAS = {
 // دالة حساب مكتوبة له)، لكنه يبقى يشتغل عاديًا للحقول المعرّفة بالكود مسبقًا.
 const SCHEMA_COMPUTED_FIELDS = {
   responseRate: (item) => {
-    const rate = computeResponseRate(item.sampleSize, item.respondentsCount);
+    const rate = svResponseRate(item);
     return rate != null ? `${rate}٪` : "تُحسب تلقائيًا بعد إدخال حجم العينة وعدد المستجيبات";
   },
 };
@@ -648,7 +648,7 @@ function renderSchemaRepeaterHtml(schema, d) {
     const isOpen = items.length === 1 || item.id === expandedId;
     const head = `<div class="repeat-item-head" style="cursor:pointer;" data-action="toggle-repeat-item" data-arr="${esc(schema.arrayKey)}" data-id="${esc(item.id)}"><span class="repeat-item-title">${esc(schema.itemLabel)} ${i + 1}${isOpen ? "" : ` — ${esc(item[schema.fields.find((f) => f.id)?.id] || "")}`}</span>${removeBtn(schema.arrayKey, item.id)}</div>`;
     if (!isOpen) return `<div class="repeat-item">${head}</div>`;
-    return `<div class="repeat-item">${head}${renderSchemaFieldsHtml(schema.fields, schema.arrayKey, item.id, item, d)}</div>`;
+    return `<div class="repeat-item">${head}${renderSchemaFieldsHtml(schema.fields, schema.arrayKey, item.id, item, d)}${schema.arrayKey === "tools" ? svToolBlockHtml(item) : ""}</div>`;
   }).join("");
   // hint اختياري أعلى القسم (نفس أسلوب التنبيهات المكتوبة يدويًا بأقسام مثل "الشواهد"
   // و"خطة الفترة القادمة")، وحد أقصى/أدنى اختياري لعدد العناصر (maxItems/minItems).
@@ -6367,7 +6367,7 @@ function rptWithCtx(ctx, fn) { const prev = RPT_CTX; RPT_CTX = ctx; try { return
 function rptChartCtx(s) {
   // s.chartType/chartColors/chartSize = إعدادات عامة قديمة (قبل إعداد كل رسم) — تبقى قيمة افتراضية لما لم يُضبط
   return { charts: s.charts || {}, legacy: { type: s.chartType === "hide" ? "hide" : "auto", colors: s.chartColors === "main" ? "main" : "status", size: s.chartSize || "md" }, main: s.mainColor,
-    numCenter: !!s.numCenter, customCharts: s.customCharts || [] };
+    numCenter: !!s.numCenter, customCharts: s.customCharts || [], sv: { style: s.svStyle, type: s.svType, x: s.svx } };
 }
 function rptChartCfg(id) {
   const ctx = RPT_CTX || {};
@@ -6920,7 +6920,7 @@ function rmPanelHtml(st) {
     const chartsAll = chartsHtml + (customHtml ? `<div class="rm-label" style="margin-top:6px;">رسوم مضافة</div>${customHtml}` : "") +
       (secs.length ? `<button type="button" class="rm-new" style="width:100%;" data-action="rm-cc-add">${iconPlus(14, ROSE)} رسم جديد (من حقل في أي قسم)</button>` : "") +
       `<div class="rm-hint">حقل اختيارات (مثل الحالة) = رسم توزيع. حقل رقم (مثل العدد) = رسم أرقام${isUnit ? " لكل عنصر" : " مجموعة لكل وحدة"}.</div>`;
-    return `<div class="rm-label">الرسوم البيانية — لكل رسم إعداده</div><div class="rm-hint">تظهر لكل رسم الأنواع المناسبة لبياناته فقط (التوزيع: دائري/أعمدة، والأرقام والنسب: أعمدة/خطي).</div>${chartsAll}` +
+    return svSettingsHtml(d) + `<div class="rm-label">الرسوم البيانية — لكل رسم إعداده</div><div class="rm-hint">تظهر لكل رسم الأنواع المناسبة لبياناته فقط (التوزيع: دائري/أعمدة، والأرقام والنسب: أعمدة/خطي).</div>${chartsAll}` +
       `<div class="rm-sep"></div>` +
       rmFieldHtml("محاذاة رأس الجدول", rmPills("thAlign", d.thAlign, [["right", "يمين"], ["center", "وسط"], ["left", "يسار"]])) +
       rmFieldHtml("محاذاة الكلام داخل الجدول", rmPills("tdAlign", d.tdAlign, [["right", "يمين"], ["center", "وسط"], ["left", "يسار"]])) +
@@ -7012,6 +7012,7 @@ function handleReportsManageAction(action, ds) {
     case "rm-set": rmSetField(ds.key, ds.value); break;
     case "rm-preset": { const pr = RPT_PRESETS[Number(ds.p)]; if (pr) { rmSetField("mainColor", pr.main); rmSetField("chapterBg", pr.chapterBg); rmSetField("thBg", pr.thBg); rmSetField("thColor", pr.main); } break; }
     case "rm-toggle": d[ds.key] = !d[ds.key]; break;
+    case "rm-svx": { const cur = { ...((d.svx && typeof d.svx === "object") ? d.svx : SV_EXTRAS_DEFAULT) }; cur[ds.id] = !cur[ds.id]; d.svx = cur; break; }
     case "rm-colv": { const lv = ds.lvl, lc = { ...(d.levelCols || {}) }; const bySec = { ...(lc[lv] || {}) }; const cur = new Set(bySec[ds.sec] || []); if (cur.has(ds.col)) cur.delete(ds.col); else cur.add(ds.col); bySec[ds.sec] = [...cur]; lc[lv] = bySec; d.levelCols = lc; break; }
     case "rm-lvl": { const lv = ds.lvl, cur = new Set((d.levelHidden || {})[lv] || []); if (cur.has(ds.key)) cur.delete(ds.key); else cur.add(ds.key); d.levelHidden = { ...(d.levelHidden || {}), [lv]: [...cur] }; break; }
     case "rm-excl": { const ex = { units: [...((d.excl || {}).units || [])], depts: [...((d.excl || {}).depts || [])] }; const l = ex[ds.kind]; const k = l.indexOf(ds.id); if (k >= 0) l.splice(k, 1); else l.push(ds.id); d.excl = ex; break; }
@@ -10924,12 +10925,465 @@ function programsSectionHtml(d) {
   return `${rows}${pillBtn("إضافة برنامج أو عمل", { variant: "ghost", icon: iconPlus(15, ROSE), action: "add-item", data: { arr: "programs" } })}<div style="margin-top:18px;">${notesFieldHtml(d)}</div>`;
 }
 
+/* =============================== تحليل الاستبانة (لصق الجدول أو رابط Google) ===== */
+const SV_LIKERT_RAW = [
+  ["موافق بشدة", 5], ["اوافق بشدة", 5], ["موافق تماما", 5], ["ممتاز", 5], ["راضي جدا", 5], ["دائما", 5], ["عالي جدا", 5],
+  ["موافق", 4], ["اوافق", 4], ["جيد جدا", 4], ["راضي", 4], ["غالبا", 4], ["عالي", 4],
+  ["محايد", 3], ["الى حد ما", 3], ["جيد", 3], ["متوسط", 3], ["احيانا", 3],
+  ["غير موافق", 2], ["لا اوافق", 2], ["مقبول", 2], ["غير راضي", 2], ["نادرا", 2], ["منخفض", 2],
+  ["غير موافق بشدة", 1], ["لا اوافق بشدة", 1], ["ضعيف", 1], ["ضعيف جدا", 1], ["غير راضي جدا", 1], ["ابدا", 1], ["منخفض جدا", 1],
+];
+function svNorm(s) {
+  return String(s == null ? "" : s).replace(/[ً-ٟـ]/g, "").replace(/[أإآ]/g, "ا").replace(/ة/g, "ه").replace(/ى/g, "ي").replace(/راضية/g, "راضي").replace(/\s+/g, " ").trim().toLowerCase();
+}
+const SV_LIKERT = (() => { const m = {}; SV_LIKERT_RAW.forEach(([k, v]) => { m[svNorm(k)] = v; }); return m; })();
+function svLatin(s) {
+  return String(s == null ? "" : s).replace(/[٠-٩]/g, (d) => "٠١٢٣٤٥٦٧٨٩".indexOf(d)).replace(/[۰-۹]/g, (d) => "۰۱۲۳۴۵۶۷۸۹".indexOf(d)).replace(/٫/g, ".").replace(/٬/g, "");
+}
+function svNum(v) { const s = svLatin(v).trim(); if (!/^-?\d+(\.\d+)?$/.test(s)) return NaN; return parseFloat(s); }
+function svParseTable(text) {
+  const src = String(text || "").replace(/\r\n?/g, "\n").replace(/^﻿/, "");
+  if (!src.trim()) return [];
+  const first = src.split("\n")[0];
+  const delim = first.includes("\t") ? "\t" : (first.split(";").length > first.split(",").length ? ";" : ",");
+  const rows = []; let row = [], cur = "", q = false;
+  for (let i = 0; i < src.length; i++) {
+    const c = src[i];
+    if (q) { if (c === '"') { if (src[i + 1] === '"') { cur += '"'; i++; } else q = false; } else cur += c; }
+    else if (c === '"' && cur === "") q = true;
+    else if (c === delim) { row.push(cur); cur = ""; }
+    else if (c === "\n") { row.push(cur); rows.push(row); row = []; cur = ""; }
+    else cur += c;
+  }
+  row.push(cur); rows.push(row);
+  return rows.filter((r) => r.some((x) => String(x).trim() !== ""));
+}
+function svParseDate(v) {
+  const s = svLatin(v); let m;
+  if ((m = /(\d{4})[\/\-.](\d{1,2})[\/\-.](\d{1,2})/.exec(s))) return `${m[1]}-${String(m[2]).padStart(2, "0")}-${String(m[3]).padStart(2, "0")}`;
+  if ((m = /(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{4})/.exec(s))) {
+    let a = +m[1], b = +m[2]; const y = m[3];
+    let d = a, mo = b; if (a <= 12 && b > 12) { mo = a; d = b; }
+    return `${y}-${String(mo).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
+  }
+  return "";
+}
+function svAnalyze(rows) {
+  if (!rows || rows.length < 2) return null;
+  const head = rows[0].map((h) => String(h || "").trim());
+  const data = rows.slice(1).filter((r) => r.some((x) => String(x).trim() !== ""));
+  const n = data.length; if (!n) return null;
+  let tsCol = head.findIndex((h) => /timestamp|الطابع الزمني|الطابع|تاريخ التعبئه|تاريخ التعبئة/i.test(h));
+  if (tsCol < 0) { for (let j = 0; j < head.length; j++) { const ok = data.filter((r) => svParseDate(r[j])).length; if (ok >= n * 0.8 && /\d{1,2}:\d{2}/.test(String(data[0][j] || ""))) { tsCol = j; break; } } }
+  const dates = tsCol >= 0 ? data.map((r) => svParseDate(r[tsCol])).filter(Boolean).sort() : [];
+  const dayMap = {}; dates.forEach((d) => { dayMap[d] = (dayMap[d] || 0) + 1; });
+  const qs = []; let adminCol = -1;
+  head.forEach((h, j) => {
+    if (j === tsCol || !h) return;
+    const vals = data.map((r) => String(r[j] == null ? "" : r[j]).trim()).filter((x) => x !== "");
+    if (!vals.length) return;
+    const nums = vals.map(svNum);
+    const numOk = nums.filter((x) => !isNaN(x));
+    const lik = vals.map((v) => SV_LIKERT[svNorm(v)]);
+    const likOk = lik.filter((x) => x != null);
+    if (numOk.length >= vals.length * 0.8 && Math.max(...numOk) <= 10 && Math.min(...numOk) >= 0 && new Set(numOk).size <= 11) {
+      const mx = Math.max(...numOk) <= 5 ? 5 : 10;
+      const dist = Array(mx).fill(0); numOk.forEach((x) => { const k = Math.min(mx, Math.max(1, Math.round(x))); dist[k - 1]++; });
+      qs.push({ i: j, t: h, k: "s", max: mx, avg: numOk.reduce((a, b) => a + b, 0) / numOk.length, dist, n: numOk.length });
+    } else if (likOk.length >= vals.length * 0.8) {
+      const dist = Array(5).fill(0); likOk.forEach((x) => { dist[x - 1]++; });
+      qs.push({ i: j, t: h, k: "s", max: 5, avg: likOk.reduce((a, b) => a + b, 0) / likOk.length, dist, n: likOk.length });
+    } else {
+      const cnt = {}; vals.forEach((v) => { cnt[v] = (cnt[v] || 0) + 1; });
+      const keys = Object.keys(cnt); const avgLen = vals.reduce((a, v) => a + v.length, 0) / vals.length;
+      if (keys.length <= 8 && avgLen <= 25 && vals.length >= 3) {
+        const ch = keys.map((l) => ({ l, n: cnt[l], p: (cnt[l] / vals.length) * 100 })).sort((a, b) => b.n - a.n);
+        qs.push({ i: j, t: h, k: "c", ch, n: vals.length });
+        if (/ادار|الاداره|إدار|القسم|الوحده|الوحدة|المكتب|المركز/.test(svNorm(h)) && adminCol < 0 && keys.length >= 2) adminCol = j;
+      } else {
+        const notes = []; const seen = new Set();
+        vals.forEach((v) => { const k = svNorm(v); if (v.length >= 6 && !seen.has(k)) { seen.add(k); notes.push(v.length > 180 ? v.slice(0, 180) + "…" : v); } });
+        qs.push({ i: j, t: h, k: "t", notes: notes.slice(0, 6), n: vals.length });
+      }
+    }
+  });
+  const sq = qs.filter((q) => q.k === "s");
+  let admins = [];
+  if (adminCol >= 0 && sq.length) {
+    const names = [...new Set(data.map((r) => String(r[adminCol] || "").trim()).filter(Boolean))];
+    admins = names.map((nm) => {
+      const rs = data.filter((r) => String(r[adminCol] || "").trim() === nm);
+      const qa = sq.map((q) => { const v = rs.map((r) => svNum(r[q.i])).filter((x) => !isNaN(x)); return v.length ? (v.reduce((a, b) => a + b, 0) / v.length / q.max) * 100 : null; });
+      const ok = qa.filter((x) => x != null);
+      return { name: nm, n: rs.length, pct: ok.length ? ok.reduce((a, b) => a + b, 0) / ok.length : 0, qa };
+    }).filter((a) => a.n > 0).sort((a, b) => b.pct - a.pct);
+    if (admins.length < 2) admins = [];
+  }
+  const daily = Object.keys(dayMap).sort().slice(-14).map((d) => ({ d, n: dayMap[d] }));
+  return { v: 1, n, from: dates[0] || "", to: dates[dates.length - 1] || "", qs, admins, adminQ: adminCol >= 0 ? head[adminCol] : "", daily, at: Date.now() };
+}
+function svScaleQs(a) { return ((a && a.qs) || []).filter((q) => q.k === "s"); }
+function svQPct(q) { return (q.avg / q.max) * 100; }
+function svMainPct(a, src) {
+  if (!a) return null;
+  const sq = svScaleQs(a);
+  src = src || "all";
+  if (src.startsWith("q:")) { const q = (a.qs || []).find((x) => String(x.i) === src.slice(2)); if (q && q.k === "s") return svQPct(q); }
+  if (src.startsWith("y:")) { const [, qi, label] = /^y:(\d+):(.*)$/.exec(src) || []; const q = (a.qs || []).find((x) => String(x.i) === qi); const c = q && (q.ch || []).find((x) => x.l === label); if (c) return c.p; }
+  if (!sq.length) return null;
+  return sq.reduce((s, q) => s + svQPct(q), 0) / sq.length;
+}
+function svMainOptions(a) {
+  const o = [["all", "متوسط كل الأسئلة"]];
+  svScaleQs(a).forEach((q) => o.push(["q:" + q.i, "متوسط سؤال: " + q.t]));
+  ((a && a.qs) || []).filter((q) => q.k === "c").forEach((q) => q.ch.slice(0, 4).forEach((c) => o.push(["y:" + q.i + ":" + c.l, "نسبة «" + c.l + "» في: " + q.t])));
+  return o;
+}
+function svQuality(n, pop) {
+  const p = Number(pop);
+  if (p > 0) { const r = (n / p) * 100; return r >= 50 ? TOOL_RESULT_QUALITY[0] : r >= 25 ? TOOL_RESULT_QUALITY[1] : TOOL_RESULT_QUALITY[2]; }
+  return n >= 30 ? TOOL_RESULT_QUALITY[0] : n >= 10 ? TOOL_RESULT_QUALITY[1] : TOOL_RESULT_QUALITY[2];
+}
+function svD(x) { return String(x || "").replace(/-/g, "/").replace(/\d/g, (c) => "٠١٢٣٤٥٦٧٨٩"[c]); }
+function svAr(x, d) { const v = Number(x); if (!isFinite(v)) return ""; return v.toLocaleString("ar-SA", { maximumFractionDigits: d == null ? 0 : d, useGrouping: false }); }
+function svApplyToTool(t, a) {
+  t.analysis = a;
+  t.respondentsCount = String(a.n);
+  t.sampleSize = String(a.n);
+  if (a.from) t.applicationDate = a.from;
+  t.resultQuality = svQuality(a.n, t.populationSize);
+  t.autoFields = { sampleSize: 1, respondentsCount: 1, applicationDate: !!a.from, resultQuality: 1 };
+  if (!t.mainSource) t.mainSource = "all";
+}
+// نصوص التحليل التلقائي (تعبّي القسم ٦)
+function svTexts(t) {
+  const a = t && t.analysis; if (!a) return null;
+  const sq = svScaleQs(a).slice().sort((x, y) => svQPct(y) - svQPct(x));
+  const main = svMainPct(a, t.mainSource);
+  const o = { main };
+  const overall = sq.length ? sq.reduce((s, q) => s + q.avg, 0) / sq.length : null;
+  const tool = t.name || "الأداة";
+  if (sq.length) {
+    const best = sq[0], worst = sq[sq.length - 1];
+    o.positiveResult = `أعلى المحاور رضا: «${best.t}» بمتوسط ${svAr(best.avg, 1)} من ${svAr(best.max)}`;
+    o.positiveEvidence = `متوسط ${svAr(best.avg, 1)} من ${svAr(best.max)} من ${svAr(best.n)} مستجيبة (${tool})`;
+    o.positiveInterpretation = sq.length > 1 ? `أعلى محاور الأداة${overall != null ? `، ويتفوق على المتوسط العام (${svAr(overall, 1)})` : ""}.` : "";
+    if (sq.length > 1) {
+      const gapPct = svQPct(best) - svQPct(worst);
+      o.improvementResult = `أقل المحاور: «${worst.t}» بمتوسط ${svAr(worst.avg, 1)} من ${svAr(worst.max)}`;
+      o.improvementGapSize = worst.max === best.max ? `${svAr(best.avg - worst.avg, 1)} درجة عن أعلى محور` : `${svAr(gapPct)}٪ عن أعلى محور`;
+      const wa = a.admins && a.admins.length ? a.admins[a.admins.length - 1] : null;
+      o.improvementWeaknessLocation = wa ? `${wa.name} (${svAr(wa.pct)}٪)` : `سؤال «${worst.t}»`;
+      const tn = (a.qs.find((q) => q.k === "t") || {}).notes || [];
+      o.improvementCauses = tn.length ? `من ملاحظات المستجيبات: «${tn[0]}»` : "";
+      o.improvementAction = `رفع مستوى «${worst.t}»${wa ? ` ومتابعة ${wa.name}` : ""}.`;
+    }
+  }
+  const qual = t.resultQuality || svQuality(a.n, t.populationSize);
+  const pop = Number(t.populationSize);
+  const dr = a.from ? (a.to && a.to !== a.from ? ` في الفترة من ${svD(a.from)} إلى ${svD(a.to)}` : ` بتاريخ ${svD(a.from)}`) : "";
+  let sm = `بلغت النتيجة الرئيسية ${main != null ? svAr(main) + "٪" : "—"}${overall != null ? ` بمتوسط ${svAr(overall, 1)} من ${svAr(sq[0].max)}` : ""}، وشاركت ${svAr(a.n)} مستفيدة${pop > 0 ? ` من ${svAr(pop)}` : ""}${dr}.`;
+  if (sq.length > 1) sm += ` أعلى المحاور «${sq[0].t}» وأقلها «${sq[sq.length - 1].t}».`;
+  sm += ` جودة النتائج: ${qual}.`;
+  o.summary = sm.length > 500 ? sm.slice(0, 497) + "…" : sm;
+  return o;
+}
+// مقارنة بتحليل فترة سابقة: تعيد عناصر comparisons
+function svCompare(cur, prev) {
+  const out = [];
+  const pm = {}; svScaleQs(prev).forEach((q) => { pm[svNorm(q.t)] = q; });
+  svScaleQs(cur).forEach((q) => {
+    const p = pm[svNorm(q.t)]; if (!p) return;
+    const d = q.avg - p.avg * (q.max / p.max);
+    const dp = (d / q.max) * 100;
+    const judgment = Math.abs(dp) < 2 ? "ثابت" : dp > 0 ? "تحسن" : "تراجع";
+    const fmt = (x) => svAr(x, 1);
+    const val = Math.abs(dp) < 2 ? `بقيت ${fmt(q.avg)}` : `${dp > 0 ? "ارتفعت" : "انخفضت"} من ${fmt(p.avg * (q.max / p.max))} إلى ${fmt(q.avg)}`;
+    out.push({ topic: q.t, resultValue: val, judgment, prevAvg: p.avg * (q.max / p.max), curAvg: q.avg, max: q.max });
+  });
+  return out;
+}
+
+/* =============================== رسوم تحليل الاستبانة في التقرير + واجهتها ======== */
+const SV_PAL = {
+  brand: { m: "#7A1F3D", m2: "#B3667F", soft: "#EFE6E9", warn: "#C9A24D", ink: "#2C2C2A", tint: "#F8F1F3", name: "هوية الجمعية" },
+  calm: { m: "#444441", m2: "#888780", soft: "#E8E6DF", warn: "#B4B2A9", ink: "#2C2C2A", tint: "#F1EFE8", name: "رسمي هادئ" },
+  fun: { m: "#1D9E75", m2: "#85CFB6", soft: "#E3F4EF", warn: "#EF9F27", ink: "#2C2C2A", tint: "#E3F4EF", name: "ملوّن مرح" },
+};
+const SV_TYPES = [["hbar", "أشرطة أفقية"], ["vbar", "أعمدة رأسية"], ["rings", "دوائر صغيرة"], ["radar", "رادار"], ["table", "جدول فقط"]];
+const SV_EXTRAS = [["gauge", "مقياس نصف دائري للرضا العام"], ["heat", "خريطة حرارية للإدارات"], ["stack", "شريط توزيع الإجابات"], ["ba", "قبل وبعد"], ["waffle", "مربعات النسبة"], ["div", "شريط الآراء المركزي"], ["daily", "المستجيبات يوميًا"], ["rank", "ترتيب الإدارات"], ["dot", "نقاط الإدارات مع المتوسط"], ["donut", "دونات التوزيع"]];
+const SV_EXTRAS_DEFAULT = { gauge: true, stack: true, rank: true };
+function svCfg() {
+  const c = (RPT_CTX && RPT_CTX.sv) || {};
+  const x = c.x && typeof c.x === "object" ? c.x : SV_EXTRAS_DEFAULT;
+  return { style: SV_PAL[c.style] ? c.style : "brand", type: SV_TYPES.some((t) => t[0] === c.type) ? c.type : "hbar", x };
+}
+function svLevels(a) {
+  const tot = [0, 0, 0, 0, 0];
+  svScaleQs(a).forEach((q) => { q.dist.forEach((c, i) => { const lv = q.max === 5 ? i : Math.min(4, Math.floor(i / 2)); tot[lv] += c; }); });
+  const s = tot.reduce((x, y) => x + y, 0) || 1;
+  return tot.map((c) => (c / s) * 100).reverse();
+}
+const SV_LV_NAMES = ["موافق بشدة", "موافق", "محايد", "غير موافق", "غير موافق بشدة"];
+function svLvCols(P) { return [P.m, P.m2, P.soft, P.warn, "#9A9A96"]; }
+function svWeakest(sq) { if (sq.length < 2) return -1; let k = 0; sq.forEach((q, i) => { if (svQPct(q) < svQPct(sq[k])) k = i; }); return k; }
+function svBarRow(label, pct, valTxt, color, P) {
+  return `<div style="display:grid;grid-template-columns:minmax(70px,28%) 1fr 34px;gap:6px;align-items:center;font-size:11.5px;margin-bottom:5px;"><span>${esc(label)}</span><div style="background:${P.soft};height:9px;border-radius:5px;"><div style="width:${Math.max(2, Math.min(100, pct)).toFixed(0)}%;height:9px;border-radius:5px;background:${color};"></div></div><span style="text-align:left;">${valTxt}</span></div>`;
+}
+function svChartAxes(a, cfg, P) {
+  const sq = svScaleQs(a); if (!sq.length) return "";
+  const wk = svWeakest(sq);
+  const col = (i) => (i === wk ? P.warn : P.m);
+  if (cfg.type === "table") {
+    return `<table class="rpt-tbl" style="width:100%;font-size:12px;"><thead><tr><th>المحور</th><th>المتوسط</th><th>النسبة</th></tr></thead><tbody>${sq.map((q) => `<tr><td>${esc(q.t)}</td><td>${svAr(q.avg, 1)} من ${svAr(q.max)}</td><td>${svAr(svQPct(q))}٪</td></tr>`).join("")}</tbody></table>`;
+  }
+  if (cfg.type === "vbar") {
+    return `<div style="display:flex;align-items:flex-end;justify-content:space-around;gap:6px;height:130px;border-bottom:1px solid ${P.soft};">${sq.slice(0, 8).map((q, i) => `<div style="flex:1;min-width:0;text-align:center;"><div style="font-size:11px;font-weight:700;">${svAr(q.avg, 1)}</div><div style="height:${Math.max(6, svQPct(q) * 0.95).toFixed(0)}px;background:${col(i)};border-radius:6px 6px 0 0;"></div></div>`).join("")}</div>
+      <div style="display:flex;justify-content:space-around;gap:6px;font-size:10px;margin-top:4px;">${sq.slice(0, 8).map((q) => `<span style="flex:1;min-width:0;text-align:center;overflow:hidden;">${esc(q.t.length > 18 ? q.t.slice(0, 17) + "…" : q.t)}</span>`).join("")}</div>`;
+  }
+  if (cfg.type === "rings") {
+    return `<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(78px,1fr));gap:8px;text-align:center;">${sq.slice(0, 8).map((q, i) => { const L = 2 * Math.PI * 20; return `<div><svg viewBox="0 0 50 50" width="62" height="62"><circle cx="25" cy="25" r="20" fill="none" stroke="${P.soft}" stroke-width="6"/><circle cx="25" cy="25" r="20" fill="none" stroke="${col(i)}" stroke-width="6" stroke-linecap="round" stroke-dasharray="${(L * svQPct(q) / 100).toFixed(1)} ${L.toFixed(1)}" transform="rotate(-90 25 25)"/><text x="25" y="28.5" text-anchor="middle" font-size="10" font-weight="700" fill="${P.ink}">${svAr(svQPct(q))}٪</text></svg><div style="font-size:10px;">${esc(q.t.length > 22 ? q.t.slice(0, 21) + "…" : q.t)}</div></div>`; }).join("")}</div>`;
+  }
+  if (cfg.type === "radar" && sq.length >= 3 && sq.length <= 8) {
+    const N = sq.length, cx = 110, cy = 96, R = 58;
+    const pt = (i, r) => { const ang = -Math.PI / 2 + (i * 2 * Math.PI) / N; return [cx + r * Math.cos(ang), cy + r * Math.sin(ang)]; };
+    const ring = (f) => sq.map((_, i) => pt(i, R * f).map((v) => v.toFixed(1)).join(",")).join(" ");
+    const poly = sq.map((q, i) => pt(i, (R * svQPct(q)) / 100).map((v) => v.toFixed(1)).join(",")).join(" ");
+    const labs = sq.map((q, i) => { const [x, y] = pt(i, R + 14); const anc = x < cx - 8 ? "end" : x > cx + 8 ? "start" : "middle"; return `<text x="${x.toFixed(1)}" y="${(y + 3).toFixed(1)}" text-anchor="${anc}" font-size="8.5" fill="${P.ink}">${esc(q.t.length > 14 ? q.t.slice(0, 13) + "…" : q.t)} ${svAr(q.avg, 1)}</text>`; }).join("");
+    return `<svg viewBox="0 0 220 192" width="100%" style="max-width:340px;display:block;margin:0 auto;"><polygon points="${ring(1)}" fill="none" stroke="${P.soft}"/><polygon points="${ring(0.5)}" fill="none" stroke="${P.soft}"/>${sq.map((_, i) => `<line x1="${cx}" y1="${cy}" x2="${pt(i, R)[0].toFixed(1)}" y2="${pt(i, R)[1].toFixed(1)}" stroke="${P.soft}"/>`).join("")}<polygon points="${poly}" fill="${P.m}" fill-opacity=".2" stroke="${P.m}" stroke-width="2"/>${labs}</svg>`;
+  }
+  return sq.map((q, i) => svBarRow(q.t, svQPct(q), svAr(q.avg, 1), col(i), P)).join("");
+}
+function svGauge(main, P) {
+  if (main == null) return "";
+  const L = Math.PI * 40;
+  return `<svg viewBox="0 0 110 70" width="130" height="82" style="flex:none;direction:rtl;"><path d="M15 62 A40 40 0 0 1 95 62" fill="none" stroke="${P.soft}" stroke-width="11" stroke-linecap="round"/><path d="M15 62 A40 40 0 0 1 95 62" fill="none" stroke="${P.m}" stroke-width="11" stroke-linecap="round" stroke-dasharray="${(L * Math.max(0, Math.min(100, main)) / 100).toFixed(1)} ${(L + 2).toFixed(1)}"/><text x="55" y="57" text-anchor="middle" font-size="18" font-weight="700" fill="${P.ink}">${svAr(main)}٪</text></svg>`;
+}
+function svStack(a, P) {
+  const lv = svLevels(a), cols = svLvCols(P);
+  return `<div style="font-size:11.5px;font-weight:700;margin:8px 0 4px;">توزيع الإجابات</div><div style="display:flex;height:20px;border-radius:6px;overflow:hidden;">${lv.map((p, i) => (p > 0.5 ? `<div style="width:${p.toFixed(1)}%;background:${cols[i]};color:${i === 2 ? P.ink : "#fff"};font-size:10px;text-align:center;line-height:20px;">${p >= 7 ? svAr(p) + "٪" : ""}</div>` : "")).join("")}</div>
+    <div style="display:flex;flex-wrap:wrap;gap:4px 10px;font-size:10px;margin-top:4px;">${lv.map((p, i) => `<span><i style="display:inline-block;width:8px;height:8px;border-radius:2px;background:${cols[i]};margin-left:4px;"></i>${SV_LV_NAMES[i]}</span>`).join("")}</div>`;
+}
+function svDonut(a, P) {
+  const lv = svLevels(a), cols = svLvCols(P), r = 28, C = 2 * Math.PI * r; let off = 0;
+  const segs = lv.map((p, i) => { const len = (C * p) / 100; const s = `<circle cx="40" cy="40" r="${r}" fill="none" stroke="${cols[i]}" stroke-width="13" stroke-dasharray="${len.toFixed(1)} ${C.toFixed(1)}" stroke-dashoffset="${(-off).toFixed(1)}" transform="rotate(-90 40 40)"/>`; off += len; return s; }).join("");
+  return `<div style="display:flex;gap:12px;align-items:center;margin-top:8px;"><svg viewBox="0 0 80 80" width="92" height="92" style="flex:none;">${segs}</svg><div style="font-size:11px;line-height:1.9;">${lv.map((p, i) => `<div><i style="display:inline-block;width:9px;height:9px;border-radius:50%;background:${cols[i]};margin-left:5px;"></i>${SV_LV_NAMES[i]} ${svAr(p)}٪</div>`).join("")}</div></div>`;
+}
+function svHeat(a, P) {
+  const sq = svScaleQs(a); if (!a.admins || a.admins.length < 2 || !sq.length) return "";
+  return `<div style="font-size:11.5px;font-weight:700;margin:10px 0 4px;">الإدارات × المحاور</div><div style="overflow-x:auto;"><table style="width:100%;border-collapse:separate;border-spacing:3px;font-size:11px;text-align:center;"><tr><td></td>${sq.slice(0, 6).map((q) => `<td style="color:#6b6a64;">${esc(q.t.length > 12 ? q.t.slice(0, 11) + "…" : q.t)}</td>`).join("")}</tr>${a.admins.map((ad) => `<tr><td style="text-align:right;">${esc(ad.name)}</td>${sq.slice(0, 6).map((q, i) => { const v = ad.qa[i]; if (v == null) return "<td>—</td>"; const al = Math.max(0.15, Math.min(1, (v - 40) / 60)); return `<td style="background:${P.m};background:color-mix(in srgb, ${P.m} ${(al * 100).toFixed(0)}%, white);color:${al > 0.55 ? "#fff" : P.ink};border-radius:5px;padding:5px 0;">${svAr(v)}٪</td>`; }).join("")}</tr>`).join("")}</table></div>`;
+}
+function svWaffle(main, P) {
+  if (main == null) return "";
+  const on = Math.round(main); let h = "";
+  for (let i = 0; i < 100; i++) h += `<i style="display:block;width:8px;height:8px;border-radius:2px;background:${i < on ? P.m : P.soft};"></i>`;
+  return `<div style="display:flex;gap:12px;align-items:center;margin-top:8px;"><div style="display:grid;grid-template-columns:repeat(10,8px);gap:2px;direction:ltr;flex:none;">${h}</div><div><div style="font-size:24px;font-weight:700;color:${P.m};line-height:1;">${svAr(main)}٪</div><div style="font-size:10.5px;color:#6b6a64;">كل مربع = ١٪</div></div></div>`;
+}
+function svDiv(a, P) {
+  const sq = svScaleQs(a); if (!sq.length) return "";
+  const rows = sq.slice(0, 8).map((q) => {
+    const tot = q.dist.reduce((x, y) => x + y, 0) || 1; const cut = q.max === 5 ? 2 : 4;
+    const neg = q.dist.slice(0, cut).reduce((x, y) => x + y, 0) / tot * 100;
+    const pos = q.dist.slice(q.max === 5 ? 3 : 7).reduce((x, y) => x + y, 0) / tot * 100;
+    return `<div style="display:grid;grid-template-columns:minmax(60px,26%) 1fr;gap:6px;align-items:center;font-size:11px;margin-bottom:4px;"><span>${esc(q.t)}</span><div style="display:grid;grid-template-columns:1fr 1fr;direction:ltr;height:12px;"><div style="display:flex;justify-content:flex-end;"><div style="width:${neg.toFixed(0)}%;background:${P.warn};"></div></div><div><div style="width:${pos.toFixed(0)}%;background:${P.m};"></div></div></div></div>`;
+  }).join("");
+  return `<div style="font-size:11.5px;font-weight:700;margin:10px 0 4px;">الآراء: غير راضية ← راضية</div>${rows}`;
+}
+function svDaily(a, P) {
+  if (!a.daily || a.daily.length < 2) return "";
+  const mx = Math.max(...a.daily.map((d) => d.n));
+  return `<div style="font-size:11.5px;font-weight:700;margin:10px 0 4px;">المستجيبات يوميًا</div><div style="display:flex;align-items:flex-end;gap:4px;height:58px;direction:ltr;">${a.daily.map((d) => `<div title="${esc(d.d)}: ${d.n}" style="flex:1;height:${Math.max(6, (d.n / mx) * 100).toFixed(0)}%;background:${d.n === mx ? P.m : P.m2};border-radius:3px;"></div>`).join("")}</div><div style="font-size:10px;color:#6b6a64;margin-top:2px;">${svAr(a.daily.length)} أيام · أعلى يوم ${svAr(mx)} مستجيبة</div>`;
+}
+function svRank(a, P) {
+  if (!a.admins || a.admins.length < 2) return "";
+  return `<div style="font-size:11.5px;font-weight:700;margin:10px 0 4px;">ترتيب الإدارات</div>${a.admins.map((ad, i) => `<div style="display:flex;align-items:center;gap:8px;font-size:12px;padding:4px 0;border-top:1px solid ${P.soft};"><span style="width:20px;height:20px;border-radius:50%;background:${i === a.admins.length - 1 ? P.warn : P.m};color:#fff;font-size:11px;text-align:center;line-height:20px;">${svAr(i + 1)}</span><span style="flex:1;">${esc(ad.name)}</span><span style="font-size:10.5px;color:#6b6a64;">${svAr(ad.n)} مستجيبة</span><b>${svAr(ad.pct)}٪</b></div>`).join("")}`;
+}
+function svDot(a, P) {
+  if (!a.admins || a.admins.length < 2) return "";
+  const avg = a.admins.reduce((s, x) => s + x.pct, 0) / a.admins.length;
+  const mn = Math.max(0, Math.min(...a.admins.map((x) => x.pct)) - 10), W = 240, X = (v) => 60 + ((v - mn) / (100 - mn || 1)) * (W - 70);
+  const rows = a.admins.map((ad, i) => `<text x="56" y="${20 + i * 22}" text-anchor="end" font-size="9.5" fill="${P.ink}">${esc(ad.name.length > 12 ? ad.name.slice(0, 11) + "…" : ad.name)}</text><line x1="60" x2="${X(ad.pct).toFixed(1)}" y1="${17 + i * 22}" y2="${17 + i * 22}" stroke="${P.soft}" stroke-width="2.5"/><circle cx="${X(ad.pct).toFixed(1)}" cy="${17 + i * 22}" r="5" fill="${ad.pct < avg ? P.warn : P.m}"/><text x="${(X(ad.pct) + 9).toFixed(1)}" y="${20 + i * 22}" font-size="9" fill="${P.ink}">${svAr(ad.pct)}٪</text>`).join("");
+  const H = 12 + a.admins.length * 22;
+  return `<div style="font-size:11.5px;font-weight:700;margin:10px 0 4px;">نقاط الإدارات (الخط الذهبي = المتوسط)</div><svg viewBox="0 0 ${W + 20} ${H + 6}" width="100%" style="max-width:380px;direction:ltr;"><line x1="${X(avg).toFixed(1)}" x2="${X(avg).toFixed(1)}" y1="4" y2="${H}" stroke="${P.warn}" stroke-dasharray="3 2"/>${rows}</svg>`;
+}
+function svBA(t, P) {
+  if (!t.prevAnalysis || !t.analysis) return "";
+  const rows = svCompare(t.analysis, t.prevAnalysis); if (!rows.length) return "";
+  return `<div style="font-size:11.5px;font-weight:700;margin:10px 0 4px;">قبل وبعد</div>${rows.map((r) => `<div style="font-size:11px;margin-bottom:6px;"><div>${esc(r.topic)}</div><div style="display:flex;gap:4px;align-items:center;"><div style="flex:1;background:${P.soft};height:7px;border-radius:4px;"><div style="width:${((r.prevAvg / r.max) * 100).toFixed(0)}%;height:7px;border-radius:4px;background:${P.m2};"></div></div><span style="width:28px;">${svAr(r.prevAvg, 1)}</span></div><div style="display:flex;gap:4px;align-items:center;"><div style="flex:1;background:${P.soft};height:7px;border-radius:4px;"><div style="width:${((r.curAvg / r.max) * 100).toFixed(0)}%;height:7px;border-radius:4px;background:${P.m};"></div></div><span style="width:28px;">${svAr(r.curAvg, 1)}</span></div></div>`).join("")}<div style="font-size:10px;color:#6b6a64;">الأفتح = الفترة السابقة · الأغمق = الحالية</div>`;
+}
+function svReportHtml(t) {
+  const a = t && t.analysis; if (!a) return "";
+  const cfg = svCfg(), P = SV_PAL[cfg.style], x = cfg.x;
+  const main = svMainPct(a, t.mainSource);
+  const pop = Number(t.populationSize);
+  const chip = (txt) => `<span style="background:${P.tint};color:${P.ink};padding:3px 9px;border-radius:6px;font-size:11px;">${txt}</span>`;
+  const dr = a.from ? (a.to && a.to !== a.from ? `${svD(a.from)} ← ${svD(a.to)}` : svD(a.from)) : "";
+  let h = `<div class="sv-rep" style="border:1px solid ${P.soft};border-radius:10px;padding:12px;margin:10px 0;break-inside:avoid;">
+    <div style="font-weight:800;color:${P.m};margin-bottom:6px;">تحليل: ${esc(t.name || "الأداة")}</div>
+    <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px;">${pop > 0 ? chip("المجتمع " + svAr(pop)) : ""}${chip("العينة " + svAr(a.n))}${dr ? chip(esc(dr)) : ""}${t.resultQuality ? chip(esc(t.resultQuality)) : ""}</div>
+    <div style="display:flex;gap:12px;align-items:center;">${x.gauge ? svGauge(main, P) : (main != null ? `<div style="font-size:26px;font-weight:800;color:${P.m};">${svAr(main)}٪</div>` : "")}<div style="flex:1;min-width:0;">${svChartAxes(a, cfg, P)}</div></div>`;
+  if (x.stack) h += svStack(a, P);
+  if (x.donut) h += svDonut(a, P);
+  if (x.waffle) h += svWaffle(main, P);
+  if (x.div) h += svDiv(a, P);
+  if (x.heat) h += svHeat(a, P);
+  if (x.rank) h += svRank(a, P);
+  if (x.dot) h += svDot(a, P);
+  if (x.daily) h += svDaily(a, P);
+  if (x.ba) h += svBA(t, P);
+  const notes = ((a.qs || []).find((q) => q.k === "t") || {}).notes || [];
+  if (notes.length) h += `<div style="font-size:11.5px;font-weight:700;margin:10px 0 3px;">من ملاحظات المستجيبات</div><div style="font-size:11.5px;line-height:1.9;">${notes.slice(0, 3).map((n) => "«" + esc(n) + "»").join(" · ")}</div>`;
+  return h + "</div>";
+}
+function svSettingsHtml(d) {
+  const x = d.svx && typeof d.svx === "object" ? d.svx : SV_EXTRAS_DEFAULT;
+  return rmFieldHtml("رسوم تحليل الاستبانة: الطابع", rmPills("svStyle", d.svStyle || "brand", Object.keys(SV_PAL).map((k) => [k, SV_PAL[k].name]))) +
+    rmFieldHtml("نوع رسم المحاور", rmPills("svType", d.svType || "hbar", SV_TYPES)) +
+    rmFieldHtml("رسوم إضافية", `<div class="rm-pills">${SV_EXTRAS.map(([k, l]) => `<button type="button" class="rm-pill${x[k] ? " on" : ""}" data-action="rm-svx" data-id="${k}" aria-pressed="${!!x[k]}">${x[k] ? "✓ " : ""}${esc(l)}</button>`).join("")}</div>`, "تظهر تحت رسم المحاور لكل أداة قياس محلَّلة. الخريطة والترتيب والنقاط تحتاج سؤال «الإدارة» في الاستبانة، وقبل وبعد تحتاج مقارنة بفترة سابقة.") +
+    `<div class="rm-sep"></div>`;
+}
+
+/* ---- واجهة أداة القياس: رابط/لصق + قراءة وتحليل ---- */
+function svResponseRate(t) {
+  const pop = Number(t.populationSize), r = Number(t.respondentsCount);
+  if (t.analysis && pop > 0 && r >= 0) return Math.min(100, Math.round((r / pop) * 100));
+  return computeResponseRate(t.sampleSize, t.respondentsCount);
+}
+function svMsg(id) { return (S.ui.svMsg && S.ui.svMsg[id]) || null; }
+function svSetMsg(id, text, kind) { S.ui.svMsg = S.ui.svMsg || {}; S.ui.svMsg[id] = text ? { text, kind: kind || "info" } : null; }
+function svToolBlockHtml(t) {
+  const a = t.analysis, busy = S.ui.svBusy && S.ui.svBusy[t.id], m = svMsg(t.id);
+  const paste = (S.ui.svPaste && S.ui.svPaste[t.id]) || "";
+  const msgHtml = m ? `<div class="hint" style="margin-top:8px;color:${m.kind === "err" ? DANGER : m.kind === "ok" ? GREEN : SUBTLE};font-weight:700;">${esc(m.text)}</div>` : "";
+  let res = "";
+  if (a) {
+    const opts = svMainOptions(a);
+    const main = svMainPct(a, t.mainSource);
+    res = `<div style="margin-top:12px;padding:12px;border-radius:12px;background:${GRAY_BG};">
+      <div style="font-size:12.5px;font-weight:800;margin-bottom:6px;">نتيجة التحليل <span class="hint" style="font-weight:600;">— تلقائي، وتقدرين تعدّلين الحقول أعلاه</span></div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;font-size:12px;margin-bottom:8px;"><span class="pill-soft" style="padding:4px 10px;border-radius:999px;">${svAr(a.n)} مستجيبة</span>${a.from ? `<span class="pill-soft" style="padding:4px 10px;border-radius:999px;">${svD(a.from)}${a.to && a.to !== a.from ? " ← " + svD(a.to) : ""}</span>` : ""}<span class="pill-soft" style="padding:4px 10px;border-radius:999px;">${svScaleQs(a).length} أسئلة قياس</span>${main != null ? `<span class="pill-soft" style="padding:4px 10px;border-radius:999px;">النسبة الرئيسية ${svAr(main)}٪</span>` : ""}${a.admins && a.admins.length ? `<span class="pill-soft" style="padding:4px 10px;border-radius:999px;">${svAr(a.admins.length)} إدارات</span>` : ""}</div>
+      <div class="field"><label class="field-label">النسبة الرئيسية للأداة</label><select class="input" data-sv-main="${esc(t.id)}">${opts.map(([v, l]) => `<option value="${esc(v)}" ${(t.mainSource || "all") === v ? "selected" : ""}>${esc(l)}</option>`).join("")}</select></div>
+      <button type="button" class="pill-btn pill-ghost" data-action="sv-clear" data-id="${esc(t.id)}" style="margin-top:6px;">مسح التحليل</button>
+    </div>`;
+  }
+  return `<div class="subhead">تحليل الاستبانة تلقائيًا</div>
+    <div class="hint" style="margin-bottom:8px;">الطريقة ١: ضعي رابط جدول إجابات Google في «رابط نتائجها» ثم اضغطي «قراءة وتحليل». الطريقة ٢: انسخي الجدول والصقيه هنا.</div>
+    <button type="button" class="pill-btn pill-primary" data-action="sv-read-link" data-id="${esc(t.id)}" ${busy ? "disabled" : ""}>${busy === "link" ? "جارٍ القراءة…" : "قراءة وتحليل من الرابط"}</button>
+    <div class="field" style="margin-top:10px;"><label class="field-label">أو الصقي الجدول هنا</label><textarea class="input" rows="4" dir="auto" data-sv-paste="${esc(t.id)}" placeholder="انسخي كل الجدول من Google Sheets (مع صف العناوين) والصقيه هنا">${esc(paste)}</textarea></div>
+    <button type="button" class="pill-btn pill-ghost" data-action="sv-read-paste" data-id="${esc(t.id)}" ${busy ? "disabled" : ""}>${busy === "paste" ? "جارٍ التحليل…" : "تحليل الجدول الملصق"}</button>
+    ${msgHtml}${res}`;
+}
+function svFindTool(id) { return getItemList("tools").find((x) => x.id === id); }
+async function svReadSheetUrl(url) {
+  const a = archiveCfg(themeOf(S.siteSettings || {}));
+  if (!a.scriptUrl || !/^https:\/\//.test(a.scriptUrl)) throw new Error("رابط سكربت Drive غير مضبوط في «إعدادات الموقع ← الأرشفة وDrive». أو الصقي الجدول مباشرة.");
+  const out = await archivePost(a, { action: "readSheet", url });
+  if (!out.rows || !out.rows.length) throw new Error("ما وصلت بيانات من الجدول");
+  return out.rows;
+}
+async function svRunRead(id, mode) {
+  const t = svFindTool(id); if (!t) return;
+  S.ui.svBusy = S.ui.svBusy || {}; S.ui.svBusy[id] = mode; svSetMsg(id, ""); render();
+  try {
+    let rows;
+    if (mode === "link") {
+      const url = String(t.resultsLink || "").trim();
+      if (!/^https:\/\/docs\.google\.com\/spreadsheets\//.test(url)) throw new Error("ضعي رابط جدول Google في «رابط نتائجها» أولًا");
+      rows = await svReadSheetUrl(url);
+    } else {
+      rows = svParseTable((S.ui.svPaste || {})[id] || "");
+      if (!rows.length) throw new Error("الصقي الجدول أولًا");
+    }
+    const an = svAnalyze(rows);
+    if (!an) throw new Error("ما قدرت أقرأ إجابات من الجدول. تأكدي أن الصف الأول عناوين الأسئلة");
+    const cur = svFindTool(id); if (!cur) return;
+    svApplyToTool(cur, an);
+    svSetMsg(id, `تمت قراءة ${an.n} إجابة وتعبئة العينة والتاريخ والجودة.`, "ok");
+    autoSaveSchedule();
+  } catch (e) { svSetMsg(id, (e && e.message) || String(e), "err"); }
+  S.ui.svBusy[id] = null; render();
+}
+function svAction(action, ds) {
+  if (action === "sv-read-link") { svRunRead(ds.id, "link"); return true; }
+  if (action === "sv-read-paste") { svRunRead(ds.id, "paste"); return true; }
+  if (action === "sv-clear") { const t = svFindTool(ds.id); if (t) { t.analysis = null; t.autoFields = null; t.prevAnalysis = null; svSetMsg(ds.id, ""); autoSaveSchedule(); } render(); return true; }
+  if (action === "sv-fill") { svFillSection(); return true; }
+  return false;
+}
+/* ---- القسم ٦: تعبئة التحليل من الأداة + المقارنة ---- */
+function svReportTools() {
+  const rep = getCurrentReportEntry();
+  const d = (rep && rep.sections && rep.sections.tools && rep.sections.tools.data) || {};
+  return (d.tools || []).filter((t) => t.analysis);
+}
+function svPrevReports() {
+  const list = (S.reports && S.reports[S.currentUnitId]) || [];
+  return list.filter((r) => r.id !== S.currentReportId && ((r.sections && r.sections.tools && r.sections.tools.data && r.sections.tools.data.tools) || []).some((t) => t.analysis));
+}
+function svFillBlockHtml(d) {
+  const tools = svReportTools();
+  if (!tools.length) return `<div class="hint" style="background:${GRAY_BG};border-radius:10px;padding:9px 12px;margin-bottom:14px;">لتعبئة هذا القسم تلقائيًا: حلّلي استبانة من قسم «أدوات القياس» (رابط أو لصق) ثم ارجعي هنا.</div>`;
+  const prev = svPrevReports();
+  const toolId = S.ui.svFillTool && tools.some((t) => t.id === S.ui.svFillTool) ? S.ui.svFillTool : tools[0].id;
+  const prevId = S.ui.svPrevRep || "";
+  const m = S.ui.svFillMsg;
+  return `<div style="padding:12px;border-radius:12px;background:${GRAY_BG};margin-bottom:16px;">
+    <div style="font-size:13px;font-weight:800;margin-bottom:6px;">تعبئة التحليل من الأداة</div>
+    ${tools.length > 1 ? `<div class="field"><label class="field-label">الأداة</label><select class="input" data-sv-filltool="1">${tools.map((t) => `<option value="${esc(t.id)}" ${t.id === toolId ? "selected" : ""}>${esc(t.name || "أداة")}</option>`).join("")}</select></div>` : ""}
+    <div class="field"><label class="field-label">الفترة السابقة للمقارنة (اختياري)</label><select class="input" data-sv-prev="1"><option value="">بدون مقارنة</option>${prev.map((r) => `<option value="${esc(r.id)}" ${r.id === prevId ? "selected" : ""}>${esc(r.label || "تقرير")}</option>`).join("")}</select></div>
+    <button type="button" class="pill-btn pill-primary" data-action="sv-fill">تعبئة التحليل من الأداة</button>
+    <div class="hint" style="margin-top:6px;">يعبّي الحقول الفارغة فقط (أو اللي عُبّيت تلقائيًا قبل). «الأثر» و«سبب التغير» تكتبينهم أنتِ.</div>
+    ${m ? `<div class="hint" style="margin-top:6px;font-weight:700;color:${m.kind === "err" ? DANGER : GREEN};">${esc(m.text)}</div>` : ""}
+  </div>`;
+}
+function svFillSection() {
+  const tools = svReportTools();
+  const t = tools.find((x) => x.id === S.ui.svFillTool) || tools[0];
+  if (!t) { S.ui.svFillMsg = { text: "ما فيه أداة محلَّلة", kind: "err" }; render(); return; }
+  const o = svTexts(t); if (!o) return;
+  const d = S.sectionDraft; d.__auto = d.__auto || {};
+  const put = (k, v) => { if (v == null || v === "") return; if (!d[k] || d.__auto[k]) { d[k] = v; d.__auto[k] = 1; } };
+  ["positiveResult", "positiveEvidence", "positiveInterpretation", "improvementResult", "improvementGapSize", "improvementWeaknessLocation", "improvementCauses", "improvementAction", "summary"].forEach((k) => put(k, o[k]));
+  let note = "تمت تعبئة الحقول.";
+  const prevId = S.ui.svPrevRep;
+  if (prevId) {
+    const pr = svPrevReports().find((r) => r.id === prevId);
+    const pt = pr && pr.sections.tools.data.tools.filter((x) => x.analysis);
+    const pa = pt && (pt.find((x) => svNorm(x.name) === svNorm(t.name)) || pt[0]);
+    if (pa) {
+      const cmp = svCompare(t.analysis, pa.analysis);
+      if (cmp.length) {
+        const list = getItemList("comparisons");
+        const keep = list.filter((c) => !c.__auto);
+        cmp.forEach((c) => keep.push({ id: uid("cmp"), topic: c.topic, resultValue: c.resultValue, judgment: c.judgment, changeReason: "", __auto: 1 }));
+        d.comparisons = keep;
+        const live = svFindToolInReport(t.id); if (live) live.prevAnalysis = pa.analysis;
+        note += ` وأُضيفت ${cmp.length} مقارنات.`;
+      } else note += " ما وُجدت أسئلة مطابقة للمقارنة.";
+    }
+  }
+  S.ui.svFillMsg = { text: note, kind: "ok" };
+  autoSaveSchedule(); render();
+}
+// نحفظ التحليل السابق على الأداة داخل التقرير المحفوظ (لرسم قبل وبعد)
+function svFindToolInReport(toolId) {
+  const rep = getCurrentReportEntry();
+  const list = rep && rep.sections && rep.sections.tools && rep.sections.tools.data && rep.sections.tools.data.tools;
+  const t = list && list.find((x) => x.id === toolId);
+  if (t && S.currentUnitId) { try { setTimeout(() => saveReportEntry(S.currentUnitId, rep), 0); } catch (e) {} }
+  return t;
+}
+
+function svAnalysisTextBlocks(an, tb) {
+  return tb("أبرز نتيجة إيجابية", an.positiveResult) + tb("الرقم أو الدليل", an.positiveEvidence) + tb("تفسيرها", an.positiveInterpretation) + tb("أثرها", an.positiveImpact) +
+    tb("أبرز نتيجة تحتاج تحسين", an.improvementResult) + tb("حجم الفجوة", an.improvementGapSize) + tb("أين ظهر القصور", an.improvementWeaknessLocation) + tb("الأسباب المحتملة", an.improvementCauses) + tb("الإجراء المقترح", an.improvementAction);
+}
 /* ---- أدوات القياس ---- */
 function toolsSectionHtml(d) {
   const tools = d.tools || [];
   const customToolTypes = d.customToolTypes || [];
   const rows = tools.map((t, i) => {
-    const responseRate = computeResponseRate(t.sampleSize, t.respondentsCount);
+    const responseRate = svResponseRate(t);
     return `<div class="repeat-item">
       <div class="repeat-item-head"><span class="repeat-item-title">أداة القياس ${i + 1}</span>${removeBtn("tools", t.id)}</div>
       ${fieldWrap("نوع الأداة", true, expandableSelectHtml("toolType", t.toolType, MEASUREMENT_TOOL_TYPES, customToolTypes, "اختاري نوع الأداة", "أخرى", "tools", t.id))}
@@ -10947,6 +11401,7 @@ function toolsSectionHtml(d) {
       ${fieldWrap("تاريخ التطبيق", inp("tools", t.id, "applicationDate", t.applicationDate, "", "date"))}
       ${fieldWrap("رابط نسخة الأداة", inp("tools", t.id, "toolLink", t.toolLink, "https://..."))}
       ${fieldWrap("رابط نتائجها", inp("tools", t.id, "resultsLink", t.resultsLink, "https://..."))}
+      ${svToolBlockHtml(t)}
       <div class="subhead">جودة نتائج الأداة</div>
       ${fieldWrap("جودة نتائج الأداة", radio("tools", t.id, "resultQuality", t.resultQuality, TOOL_RESULT_QUALITY))}
     </div>`;
@@ -10970,6 +11425,7 @@ function analysisSectionHtml(d) {
     return `<div class="repeat-item">${head}${renderSchemaFieldsHtml(comparisonsSchema.fields, "comparisons", c.id, c, d)}</div>`;
   }).join("");
   return `
+    ${svFillBlockHtml(d)}
     <div class="hint" style="background:${GRAY_BG};border-radius:10px;padding:9px 12px;margin-bottom:18px;">يظهر هذا القسم بعد إدخال المؤشرات وأدوات القياس.</div>
     <div class="subhead" style="color:${GREEN}">أبرز نتيجة إيجابية</div>
     ${fieldWrap("ما النتيجة؟", inp(null, null, "positiveResult", d.positiveResult))}
@@ -11493,6 +11949,64 @@ Object.assign(SHAPES_LIB, {
   "storyimg": { cat: "photo", name: "قصة نجاح بصورة", fields: [SHP_F.i("img", "الصورة"), SHP_F.t("title", "العنوان"), SHP_F.a("text", "القصة")], sample: { title: "قصة نجاح", text: "بدأنا بتحدٍّ واضح وحققنا نتيجة تستحق الذكر." }, render: (x) => `<div class="shp-story shp-it"><div class="p">${shpImg(x.img)}</div><div><div class="shp-ttl">★ ${shpE(x.title)}</div><div style="line-height:1.8">${shpE(x.text).replace(/\n/g, "<br>")}</div></div></div>` },
   "profile": { cat: "photo", name: "بطاقة شخص", fields: [SHP_F.i("img", "الصورة"), SHP_F.t("name", "الاسم"), SHP_F.t("role", "الدور")], sample: { name: "الاسم", role: "المسمى" }, render: (x) => `<div class="shp-prof"><div class="a">${shpImg(x.img)}</div><b>${shpE(x.name)}</b><span>${shpE(x.role)}</span></div>` },
 });
+const SHP_TTL = (x) => (x.title ? `<div class="shp-ttl">${shpE(x.title)}</div>` : "");
+const SHP_CALL = (id, name, c, bg, bd, ico) => ({ cat: "text", name, fields: [SHP_F.t("title", "العنوان"), SHP_F.a("text", "النص")], sample: { title: name, text: "نص الملاحظة يظهر هنا." }, render: (x) => `<div class="shp-callout" style="background:${bg};border-color:${bd}"><b style="color:${c}">${ico} ${shpE(x.title)}</b><div>${shpE(x.text).replace(/\n/g, "<br>")}</div></div>` });
+Object.assign(SHAPES_LIB, {
+  "cal-ok": SHP_CALL("ok", "ملاحظة نجاح", "#1f8a52", "#e8f6ee", "#bfe3cc", "✓"),
+  "cal-warn": SHP_CALL("w", "ملاحظة تنبيه", "#a87b00", "#fff6dc", "#f0dca0", "⚠"),
+  "cal-bad": SHP_CALL("b", "ملاحظة خطر", "#c0392b", "#fdecec", "#f2c3c0", "✕"),
+  "cal-info": SHP_CALL("i", "ملاحظة معلومة", "#2563eb", "#eaf1ff", "#c6d7fb", "ℹ"),
+  "quote2": { cat: "text", name: "اقتباس مركزي كبير", fields: [SHP_F.a("text", "النص"), SHP_F.t("by", "القائل")], sample: { text: "التميز عادة وليس حدثًا.", by: "اسم القائل" }, render: (x) => `<div style="text-align:center;padding:14px"><div style="font-size:34px;color:var(--rpt-burgundy);line-height:.7">“</div><div style="font-size:16px;font-weight:700;line-height:1.8">${shpE(x.text)}</div><div style="color:#8a7d7a;margin-top:6px">${shpE(x.by)}</div></div>` },
+  "keymsg": { cat: "text", name: "رسالة رئيسية", fields: [SHP_F.t("label", "التسمية"), SHP_F.a("text", "الرسالة")], sample: { label: "الرسالة الرئيسية", text: "خلاصة الفترة في جملة واحدة واضحة." }, render: (x) => `<div style="background:var(--rpt-burgundy);color:#fff;border-radius:12px;padding:12px 16px"><small style="opacity:.8">${shpE(x.label)}</small><div style="font-size:14px;font-weight:700;line-height:1.8">${shpE(x.text)}</div></div>` },
+  "head2": { cat: "text", name: "ترويسة خفيفة", fields: [SHP_F.t("title", "العنوان"), SHP_F.t("sub", "العنوان الفرعي")], sample: { title: "عنوان الفصل", sub: "وصف مختصر" }, render: (x) => `<div style="border-bottom:2px solid var(--rpt-burgundy);padding-bottom:6px"><div style="font-size:17px;font-weight:800;color:var(--rpt-burgundy)">${shpE(x.title)}</div><small style="color:#8a7d7a">${shpE(x.sub)}</small></div>` },
+  "foot2": { cat: "text", name: "تذييل بثلاثة أعمدة", fields: [SHP_F.t("a", "يمين"), SHP_F.t("b", "الوسط"), SHP_F.t("c", "يسار")], sample: { a: "وحدة التطوع", b: "جمعية فرقان", c: "١٤٤٨ هـ" }, render: (x) => `<div style="display:flex;justify-content:space-between;border-top:1px solid #eadfdb;padding-top:6px;color:#8a7d7a;font-size:10.5px"><span>${shpE(x.a)}</span><span>${shpE(x.b)}</span><span>${shpE(x.c)}</span></div>` },
+  "stat-bar1": { cat: "stats", name: "شريط تقدم واحد", fields: [SHP_F.t("label", "العنوان"), SHP_F.t("pct", "النسبة")], sample: { label: "نسبة إنجاز الخطة", pct: "78" }, render: (x) => `<div class="shp-bars"><div><div class="r"><span>${shpE(x.label)}</span><b>${Math.round(shpNum(x.pct))}%</b></div><div class="t" style="height:14px"><i style="width:${shpNum(x.pct)}%"></i></div></div></div>` },
+  "num2": { cat: "stats", name: "رقمان", fields: [SHP_F.a("items", "سطر لكل رقم: القيمة|الوصف")], sample: { items: "٨٥٪|نسبة الإنجاز\n١٢٠|مستفيدة" }, render: (x) => `<div class="shp-nums" style="grid-template-columns:1fr 1fr">${shpPairs(x.items).slice(0, 2).map((p) => `<div><b>${shpE(p[0])}</b><span>${shpE(p[1])}</span></div>`).join("")}</div>` },
+  "num5": { cat: "stats", name: "٥ أرقام", fields: [SHP_F.a("items", "سطر لكل رقم: القيمة|الوصف")], sample: { items: "١٢٠|مستفيدة\n٤٥|نشاط\n٩٢٪|رضا\n٣|مبادرات\n٧|شراكات" }, render: (x) => `<div class="shp-nums" style="grid-template-columns:repeat(5,1fr)">${shpPairs(x.items).slice(0, 5).map((p) => `<div><b style="font-size:17px">${shpE(p[0])}</b><span>${shpE(p[1])}</span></div>`).join("")}</div>` },
+  "donut2": { cat: "stats", name: "دائرتان", fields: [SHP_F.t("p1", "نسبة ١"), SHP_F.t("l1", "وصف ١"), SHP_F.t("p2", "نسبة ٢"), SHP_F.t("l2", "وصف ٢")], sample: { p1: "72", l1: "الحضور", p2: "88", l2: "الرضا" }, render: (x) => `<div style="display:flex;gap:18px;justify-content:center">${[["p1", "l1"], ["p2", "l2"]].map(([p, l]) => shapeRender("donut", { pct: x[p], label: x[l] })).join("")}</div>` },
+  "stack": { cat: "stats", name: "شريط توزيع مجزّأ", fields: [SHP_F.a("items", "سطر لكل جزء: العنوان|القيمة")], sample: { items: "متحقق|6\nقريب|3\nمتعثر|1" }, render: (x) => { const r = shpPairs(x.items), t = r.reduce((s, p) => s + (shpN(p[1]) || 0), 0) || 1, cols = ["var(--rpt-burgundy)", "#c98ba0", "#e0c9a0", "#b7b2ad", "#8a7d7a"]; return `<div style="display:flex;height:16px;border-radius:8px;overflow:hidden;margin-bottom:6px">${r.map((p, i) => `<div style="width:${((shpN(p[1]) || 0) / t) * 100}%;background:${cols[i % 5]}"></div>`).join("")}</div><div style="display:flex;gap:12px;flex-wrap:wrap;font-size:10.5px">${r.map((p, i) => `<span><i style="display:inline-block;width:9px;height:9px;border-radius:50%;background:${cols[i % 5]};margin-left:4px"></i>${shpE(p[0])} ${shpE(p[1])}</span>`).join("")}</div>`; } },
+  "pie": { cat: "stats", name: "دائرة أجزاء", fields: [SHP_F.a("items", "سطر لكل جزء: العنوان|القيمة")], sample: { items: "الاختبارات|40\nالجودة|30\nالتدريب|20\nأخرى|10" }, render: (x) => { const r = shpPairs(x.items), t = r.reduce((s, p) => s + (shpN(p[1]) || 0), 0) || 1, cols = ["#6b2337", "#a8506b", "#d8a0b3", "#e8d3a8", "#b7b2ad"]; let a = 0; const seg = r.map((p, i) => { const f = (shpN(p[1]) || 0) / t, c = 2 * Math.PI * 38; const el = `<circle cx="50" cy="50" r="38" fill="none" stroke="${cols[i % 5]}" stroke-width="22" stroke-dasharray="${(c * f).toFixed(1)} ${c.toFixed(1)}" stroke-dashoffset="${(-c * a).toFixed(1)}" transform="rotate(-90 50 50)"/>`; a += f; return el; }).join(""); return `<div style="display:flex;gap:16px;align-items:center;justify-content:center"><svg width="120" height="120" viewBox="0 0 100 100">${seg}</svg><div style="font-size:11px;line-height:2">${r.map((p, i) => `<div><i style="display:inline-block;width:9px;height:9px;border-radius:50%;background:${cols[i % 5]};margin-left:5px"></i>${shpE(p[0])} — ${shpE(p[1])}</div>`).join("")}</div></div>`; } },
+  "hbars": { cat: "stats", name: "أشرطة أفقية بقيم", fields: [SHP_F.a("items", "سطر لكل شريط: العنوان|القيمة")], sample: { items: "محرم|40\nصفر|65\nربيع|90" }, render: (x) => { const r = shpPairs(x.items), mx = Math.max(1, ...r.map((p) => shpN(p[1]) || 0)); return `<div class="shp-bars">${r.map((p) => `<div><div class="r"><span>${shpE(p[0])}</span><b>${shpE(p[1])}</b></div><div class="t"><i style="width:${((shpN(p[1]) || 0) / mx) * 100}%"></i></div></div>`).join("")}</div>`; } },
+  "line": { cat: "stats", name: "خط اتجاه", fields: [SHP_F.a("items", "سطر لكل نقطة: العنوان|القيمة")], sample: { items: "ش١|20\nش٢|45\nش٣|40\nش٤|70\nش٥|85" }, render: (x) => { const r = shpPairs(x.items), mx = Math.max(1, ...r.map((p) => shpN(p[1]) || 0)), W = 300, H = 90, n = Math.max(1, r.length - 1); const pts = r.map((p, i) => [W - (i / n) * (W - 20) - 10, H - 10 - ((shpN(p[1]) || 0) / mx) * (H - 24)]); return `<svg viewBox="0 0 ${W} ${H + 16}" width="100%"><polyline fill="none" stroke="var(--rpt-burgundy)" stroke-width="2.5" points="${pts.map((q) => q.join(",")).join(" ")}"/>${pts.map((q, i) => `<circle cx="${q[0]}" cy="${q[1]}" r="3.5" fill="var(--rpt-burgundy)"/><text x="${q[0]}" y="${H + 12}" text-anchor="middle" font-size="9" fill="#8a7d7a">${shpE(r[i][0])}</text>`).join("")}</svg>`; } },
+  "stars": { cat: "stats", name: "تقييم بالنجوم", fields: [SHP_F.t("label", "العنوان"), SHP_F.t("n", "التقييم من ٥")], sample: { label: "رضا المستفيدات", n: "4" }, render: (x) => { const n = Math.round(Math.min(5, shpN(x.n) || 0)); return `<div style="text-align:center"><div style="font-size:22px;color:#c9a24a;letter-spacing:3px">${"★".repeat(n)}<span style="color:#e6dcc8">${"★".repeat(5 - n)}</span></div><small style="color:#8a7d7a">${shpE(x.label)}</small></div>`; } },
+  "traffic": { cat: "stats", name: "إشارة مرورية", fields: [SHP_F.t("label", "العنوان"), SHP_F.t("st", "الحالة (أخضر/أصفر/أحمر)")], sample: { label: "حالة المشروع", st: "أخضر" }, render: (x) => { const s = /حمر/.test(x.st) ? 2 : /صفر/.test(x.st) ? 1 : 0; const c = ["#1f8a52", "#e0a93b", "#c0392b"]; return `<div style="display:flex;align-items:center;gap:10px;justify-content:center">${c.map((k, i) => `<i style="width:22px;height:22px;border-radius:50%;background:${i === s ? k : "#ece4e2"}"></i>`).join("")}<b>${shpE(x.label)}</b></div>`; } },
+  "grid4": { cat: "list", name: "٤ بطاقات", fields: [SHP_F.a("items", "سطر لكل بطاقة: العنوان|الوصف")], sample: { items: "الجودة|رفع الأداء\nالسرعة|تقليل الزمن\nالتعاون|عمل الفريق\nالابتكار|حلول جديدة" }, render: (x) => `<div class="shp-nums c3" style="grid-template-columns:1fr 1fr">${shpPairs(x.items).slice(0, 4).map((p) => `<div style="text-align:right"><b style="font-size:13px">${shpE(p[0])}</b><span style="font-size:11px">${shpE(p[1])}</span></div>`).join("")}</div>` },
+  "cards2": { cat: "list", name: "بطاقتان", fields: [SHP_F.a("items", "سطر لكل بطاقة: العنوان|الوصف")], sample: { items: "الهدف|وصف الهدف\nالنتيجة|وصف النتيجة" }, render: (x) => `<div class="shp-two">${shpPairs(x.items).slice(0, 2).map((p) => `<div><div class="shp-ttl">${shpE(p[0])}</div>${shpE(p[1])}</div>`).join("")}</div>` },
+  "defs": { cat: "list", name: "قائمة تعريفات", fields: [SHP_F.a("items", "سطر لكل بند: المصطلح|التعريف")], sample: { items: "المؤشر|مقياس رقمي للأداء\nالمستهدف|القيمة المطلوبة" }, render: (x) => `<div>${shpPairs(x.items).map((p) => `<div style="display:flex;gap:10px;padding:6px 0;border-bottom:0.5px solid #eadfdb"><b style="min-width:90px;color:var(--rpt-burgundy)">${shpE(p[0])}</b><span>${shpE(p[1])}</span></div>`).join("")}</div>` },
+  "proscons": { cat: "list", name: "إيجابيات وسلبيات", fields: [SHP_F.a("p", "الإيجابيات"), SHP_F.a("c", "السلبيات")], sample: { p: "سرعة الإنجاز\nوضوح المسار", c: "حاجة لتدريب" }, render: (x) => `<div class="shp-two"><div style="background:#e8f6ee"><div class="shp-ttl" style="color:#1f8a52">＋ إيجابيات</div><ul class="shp-ul">${shpLines(x.p).map((l) => `<li>${shpE(l)}</li>`).join("")}</ul></div><div style="background:#fdecec"><div class="shp-ttl" style="color:#c0392b">－ سلبيات</div><ul class="shp-ul">${shpLines(x.c).map((l) => `<li>${shpE(l)}</li>`).join("")}</ul></div></div>` },
+  "qa": { cat: "list", name: "سؤال وجواب", fields: [SHP_F.a("items", "سطر لكل بند: السؤال|الجواب")], sample: { items: "ما الإنجاز الأبرز؟|رفع نسبة الرضا\nما التحدي؟|ضيق الوقت" }, render: (x) => `<div>${shpPairs(x.items).map((p) => `<div style="margin-bottom:8px"><b style="color:var(--rpt-burgundy)">س: ${shpE(p[0])}</b><div style="padding-right:14px">ج: ${shpE(p[1])}</div></div>`).join("")}</div>` },
+  "check2": { cat: "list", name: "قائمة تحقق بعمودين", fields: [SHP_F.a("items", "سطر لكل بند (+ منجز، - غير منجز)")], sample: { items: "+ الخطة\n+ التنفيذ\n- التقييم\n- الاعتماد" }, render: (x) => `<div class="shp-chk" style="columns:2">${shpLines(x.items).map((s) => { const ok = !s.startsWith("-"); return `<div class="${ok ? "ok" : "no"}"><b>${ok ? "✓" : "○"}</b><span>${shpE(s.replace(/^[+-]\s*/, ""))}</span></div>`; }).join("")}</div>` },
+  "numcards": { cat: "list", name: "بطاقات مرقمة", fields: [SHP_F.a("items", "سطر لكل بطاقة: العنوان|الوصف")], sample: { items: "التحليل|دراسة الواقع\nالتخطيط|بناء الخطة\nالتنفيذ|تطبيق الخطة" }, render: (x) => `<div class="shp-nums c3" style="text-align:right">${shpPairs(x.items).slice(0, 3).map((p, i) => `<div style="text-align:right"><b style="width:22px;height:22px;border-radius:50%;background:var(--rpt-burgundy);color:#fff;font-size:11px;display:flex;align-items:center;justify-content:center">${i + 1}</b><b style="font-size:12.5px;margin-top:5px">${shpE(p[0])}</b><span style="font-size:10.5px">${shpE(p[1])}</span></div>`).join("")}</div>` },
+  "tl-alt": { cat: "time", name: "خط زمني متبادل", fields: [SHP_F.a("items", "سطر لكل حدث: التاريخ|الوصف")], sample: { items: "محرم|البداية\nصفر|التنفيذ\nربيع|المراجعة\nجمادى|الختام" }, render: (x) => `<div style="position:relative;padding:4px 0">${shpPairs(x.items).map((p, i) => `<div style="display:flex;${i % 2 ? "justify-content:flex-start" : "justify-content:flex-end"};margin-bottom:8px"><div style="width:47%;background:#faf3f1;border-radius:10px;padding:6px 10px"><b style="color:var(--rpt-burgundy)">${shpE(p[0])}</b><div style="font-size:10.5px">${shpE(p[1])}</div></div></div>`).join("")}</div>` },
+  "miles": { cat: "time", name: "محطات بأرقام", fields: [SHP_F.a("items", "سطر لكل محطة: التاريخ|العنوان")], sample: { items: "١ محرم|إطلاق\n١٥ صفر|منتصف المدة\n٣٠ ربيع|التسليم" }, render: (x) => `<div class="shp-flow" style="justify-content:space-between">${shpPairs(x.items).map((p, i, a) => `<div style="text-align:center;flex:1"><div style="width:30px;height:30px;border-radius:50%;background:var(--rpt-burgundy);color:#fff;margin:0 auto 4px;display:flex;align-items:center;justify-content:center;font-weight:700">${i + 1}</div><b style="font-size:11px">${shpE(p[1])}</b><div style="font-size:10px;color:#8a7d7a">${shpE(p[0])}</div></div>`).join("")}</div>` },
+  "gantt": { cat: "time", name: "جدول زمني (جانت)", fields: [SHP_F.a("items", "سطر لكل مهمة: المهمة|من (١-١٢)|إلى (١-١٢)")], sample: { items: "التخطيط|1|3\nالتنفيذ|3|9\nالتقييم|9|12" }, render: (x) => `<div>${shpPairs(x.items).map((p) => { const a = Math.max(1, Math.min(12, shpN(p[1]) || 1)), b = Math.max(a, Math.min(12, shpN(p[2]) || a)); return `<div style="display:flex;align-items:center;gap:8px;margin-bottom:5px"><span style="width:70px;font-size:10.5px">${shpE(p[0])}</span><div style="flex:1;height:12px;background:#f1e8e6;border-radius:6px;position:relative"><i style="position:absolute;top:0;bottom:0;right:${((a - 1) / 12) * 100}%;width:${((b - a + 1) / 12) * 100}%;background:var(--rpt-burgundy);border-radius:6px"></i></div></div>`; }).join("")}</div>` },
+  "weeks": { cat: "time", name: "أسابيع الفترة", fields: [SHP_F.a("items", "سطر لكل أسبوع: العنوان|الوصف")], sample: { items: "الأسبوع ١|التهيئة\nالأسبوع ٢|التنفيذ\nالأسبوع ٣|المتابعة\nالأسبوع ٤|التقييم" }, render: (x) => `<div class="shp-nums c4" style="grid-template-columns:repeat(4,1fr)">${shpPairs(x.items).slice(0, 4).map((p) => `<div><b style="font-size:12px">${shpE(p[0])}</b><span>${shpE(p[1])}</span></div>`).join("")}</div>` },
+  "road": { cat: "time", name: "خارطة طريق", fields: [SHP_F.a("items", "سطر لكل مرحلة: المرحلة|الوصف")], sample: { items: "المرحلة ١|التأسيس\nالمرحلة ٢|التوسع\nالمرحلة ٣|الاستدامة" }, render: (x) => `<div class="shp-flow">${shpPairs(x.items).map((p, i, a) => `<div class="shp-step" style="flex-direction:column;align-items:flex-start;flex:1"><b style="background:none;color:var(--rpt-burgundy);width:auto;height:auto">${shpE(p[0])}</b><span>${shpE(p[1])}</span></div>${i < a.length - 1 ? `<div class="shp-arr">◂</div>` : ""}`).join("")}</div>` },
+  "fv": { cat: "flow", name: "انسيابي رأسي", fields: [SHP_F.t("title", "العنوان"), SHP_F.a("steps", "الخطوات (سطر لكل خطوة)")], sample: { title: "المسار", steps: "استلام الطلب\nالمراجعة\nالاعتماد" }, render: (x) => `${SHP_TTL(x)}<div style="display:flex;flex-direction:column;align-items:center;gap:2px">${shpLines(x.steps).map((s, i, a) => `<div class="shp-step" style="min-width:55%;justify-content:center">${shpE(s)}</div>${i < a.length - 1 ? `<div style="color:var(--rpt-burgundy)">▾</div>` : ""}`).join("")}</div>` },
+  "lanes": { cat: "flow", name: "مسارات (سباحة)", fields: [SHP_F.t("l1", "المسار ١"), SHP_F.a("s1", "خطوات المسار ١"), SHP_F.t("l2", "المسار ٢"), SHP_F.a("s2", "خطوات المسار ٢")], sample: { l1: "الوحدة", s1: "إعداد\nإرسال", l2: "المكتب", s2: "مراجعة\nاعتماد" }, render: (x) => `${[["l1", "s1"], ["l2", "s2"]].map(([l, s]) => `<div style="display:flex;border:0.5px solid #eadfdb;border-radius:10px;margin-bottom:6px;overflow:hidden"><div style="background:var(--rpt-burgundy);color:#fff;width:64px;display:flex;align-items:center;justify-content:center;font-size:11px;padding:4px">${shpE(x[l])}</div><div class="shp-flow" style="padding:8px">${shpLines(x[s]).map((t, i, a) => `<div class="shp-step">${shpE(t)}</div>${i < a.length - 1 ? `<div class="shp-arr">◂</div>` : ""}`).join("")}</div></div>`).join("")}` },
+  "funnel": { cat: "flow", name: "قمع", fields: [SHP_F.a("items", "سطر لكل مرحلة: العنوان|العدد")], sample: { items: "المسجلات|200\nالحاضرات|150\nالمكملات|120" }, render: (x) => { const r = shpPairs(x.items); return `<div style="display:flex;flex-direction:column;align-items:center;gap:3px">${r.map((p, i) => `<div style="width:${100 - i * (60 / Math.max(1, r.length))}%;background:var(--rpt-burgundy);opacity:${1 - i * 0.18};color:#fff;text-align:center;padding:6px;border-radius:6px;font-size:11.5px">${shpE(p[0])} — <b>${shpE(p[1])}</b></div>`).join("")}</div>`; } },
+  "pyramid": { cat: "flow", name: "هرم", fields: [SHP_F.a("items", "من القمة للقاعدة (سطر لكل مستوى)")], sample: { items: "الرؤية\nالأهداف\nالبرامج\nالأنشطة" }, render: (x) => { const r = shpLines(x.items); return `<div style="display:flex;flex-direction:column;align-items:center;gap:3px">${r.map((t, i) => `<div style="width:${28 + (i / Math.max(1, r.length - 1)) * 70}%;background:var(--rpt-burgundy);opacity:${0.55 + (i / Math.max(1, r.length)) * 0.45};color:#fff;text-align:center;padding:6px;border-radius:6px;font-size:11.5px">${shpE(t)}</div>`).join("")}</div>`; } },
+  "org": { cat: "flow", name: "هيكل تنظيمي", fields: [SHP_F.t("top", "الأعلى"), SHP_F.a("mid", "المستوى الثاني (سطر لكل جهة)")], sample: { top: "مديرة الإدارة", mid: "وحدة الاختبارات\nوحدة الجودة\nوحدة التطوع" }, render: (x) => `<div style="text-align:center"><div class="shp-step" style="display:inline-flex;background:var(--rpt-burgundy);color:#fff">${shpE(x.top)}</div><div style="width:2px;height:12px;background:#ecd9d4;margin:0 auto"></div><div style="display:flex;gap:8px;justify-content:center;border-top:2px solid #ecd9d4;padding-top:10px">${shpLines(x.mid).map((m) => `<div class="shp-step">${shpE(m)}</div>`).join("")}</div></div>` },
+  "cyc6": { cat: "flow", name: "دورة ٦ مراحل", fields: [SHP_F.a("steps", "٦ مراحل (سطر لكل مرحلة)")], sample: { steps: "التحليل\nالتخطيط\nالتنفيذ\nالمتابعة\nالتقييم\nالتحسين" }, render: (x) => `<div class="shp-nums c3" style="grid-template-columns:repeat(3,1fr)">${shpLines(x.steps).slice(0, 6).map((s, i) => `<div><b style="font-size:13px">${i + 1}</b><span style="font-size:11px">${shpE(s)}</span></div>`).join("")}</div><div style="text-align:center;color:var(--rpt-burgundy);font-size:18px;margin-top:4px">↻</div>` },
+  "fsplit": { cat: "flow", name: "تفرّع نعم/لا مع نتيجتين", fields: [SHP_F.t("q", "السؤال"), SHP_F.t("yes", "نعم ←"), SHP_F.t("no", "لا ←")], sample: { q: "هل الشواهد مكتملة؟", yes: "إرسال للمراجعة", no: "استكمال الشواهد" }, render: (x) => shapeRender("f4", x) },
+  "t-zebra": { ...SHP_TABLE(3), name: "جدول مخطط بالتناوب" },
+  "t-matrix": { cat: "table", name: "مصفوفة مقارنة ✓/✗", fields: [SHP_F.t("head", "الأعمدة (افصلي بـ |)", "البند | أ | ب"), SHP_F.a("rows", "سطر لكل بند: البند|+|-  (+ نعم، - لا)")], sample: { head: "البند|الخيار أ|الخيار ب", rows: "السرعة|+|-\nالتكلفة|-|+\nالجودة|+|+" }, render: (x) => { const h = shpPairs(x.head)[0] || []; return `<table class="shp-tbl"><thead><tr>${h.map((c) => `<th>${shpE(c)}</th>`).join("")}</tr></thead><tbody>${shpPairs(x.rows).map((r) => `<tr>${h.map((_, i) => i === 0 ? `<td>${shpE(r[0])}</td>` : `<td style="text-align:center;font-weight:800;color:${/^\+/.test(r[i] || "") ? "#1f8a52" : "#c0392b"}">${/^\+/.test(r[i] || "") ? "✓" : "✕"}</td>`).join("")}</tr>`).join("")}</tbody></table>`; } },
+  "t-total": { cat: "table", name: "جدول بإجمالي", fields: [SHP_F.a("rows", "سطر لكل بند: البند|القيمة")], sample: { rows: "الاختبارات|40\nالتدريب|25\nالجودة|15" }, render: (x) => { const r = shpPairs(x.rows), t = r.reduce((s, p) => s + (shpN(p[1]) || 0), 0); return `<table class="shp-tbl"><thead><tr><th>البند</th><th>القيمة</th></tr></thead><tbody>${r.map((p) => `<tr><td>${shpE(p[0])}</td><td>${shpE(p[1])}</td></tr>`).join("")}<tr style="background:#faf3f1"><td><b>الإجمالي</b></td><td><b>${t}</b></td></tr></tbody></table>`; } },
+  "t-sched": { cat: "table", name: "جدول أسبوعي", fields: [SHP_F.a("rows", "سطر لكل يوم: اليوم|النشاط|الوقت")], sample: { rows: "الأحد|لقاء الفريق|٩ ص\nالثلاثاء|ورشة تدريب|١٠ ص\nالخميس|مراجعة|١١ ص" }, render: (x) => `<table class="shp-tbl"><thead><tr><th>اليوم</th><th>النشاط</th><th>الوقت</th></tr></thead><tbody>${shpPairs(x.rows).map((r) => `<tr><td><b>${shpE(r[0])}</b></td><td>${shpE(r[1])}</td><td>${shpE(r[2])}</td></tr>`).join("")}</tbody></table>` },
+  "t-kv": { cat: "table", name: "جدول بيانات (بند وقيمة)", fields: [SHP_F.t("title", "العنوان"), SHP_F.a("rows", "سطر لكل بند: البند|القيمة")], sample: { title: "بيانات المشروع", rows: "الاسم|ملتقى المتطوعات\nالمدة|٣ أشهر\nالميزانية|١٠٠٠٠" }, render: (x) => `${SHP_TTL(x)}<table class="shp-tbl"><tbody>${shpPairs(x.rows).map((r) => `<tr><td style="width:35%;background:#faf3f1;font-weight:700">${shpE(r[0])}</td><td>${shpE(r[1])}</td></tr>`).join("")}</tbody></table>` },
+  "ba-img": { cat: "photo", name: "صورتا قبل وبعد", fields: [SHP_F.i("i1", "قبل"), SHP_F.i("i2", "بعد"), SHP_F.t("cap", "تعليق")], sample: { cap: "قبل وبعد" }, render: (x) => `<div class="shp-gal c2"><div style="position:relative">${shpImg(x.i1)}<b style="position:absolute;top:6px;right:6px;background:#fff;border-radius:6px;padding:1px 8px;font-size:10px">قبل</b></div><div style="position:relative">${shpImg(x.i2)}<b style="position:absolute;top:6px;right:6px;background:#fff;border-radius:6px;padding:1px 8px;font-size:10px">بعد</b></div></div>${x.cap ? `<div class="shp-cap">${shpE(x.cap)}</div>` : ""}` },
+  "gal4": { cat: "photo", name: "معرض ٤ صور", fields: [SHP_F.i("i1", "١"), SHP_F.i("i2", "٢"), SHP_F.i("i3", "٣"), SHP_F.i("i4", "٤"), SHP_F.t("cap", "تعليق")], sample: { cap: "لقطات من الفعالية" }, render: (x) => `<div class="shp-gal c2">${["i1", "i2", "i3", "i4"].map((k) => `<div>${shpImg(x[k])}</div>`).join("")}</div>${x.cap ? `<div class="shp-cap">${shpE(x.cap)}</div>` : ""}` },
+  "imgcap-side": { cat: "photo", name: "صورة بجانب قائمة", fields: [SHP_F.i("img", "الصورة"), SHP_F.t("title", "العنوان"), SHP_F.a("items", "نقاط (سطر لكل نقطة)")], sample: { title: "أبرز ما تحقق", items: "نقطة أولى\nنقطة ثانية" }, render: (x) => `<div class="shp-it"><div class="p">${shpImg(x.img)}</div><div><div class="shp-ttl">${shpE(x.title)}</div><ul class="shp-ul">${shpLines(x.items).map((l) => `<li>${shpE(l)}</li>`).join("")}</ul></div></div>` },
+  "logos": { cat: "photo", name: "شعارات الشركاء", fields: [SHP_F.i("i1", "شعار ١"), SHP_F.i("i2", "شعار ٢"), SHP_F.i("i3", "شعار ٣"), SHP_F.t("cap", "العنوان")], sample: { cap: "شركاء النجاح" }, render: (x) => `${x.cap ? `<div class="shp-ttl" style="text-align:center">${shpE(x.cap)}</div>` : ""}<div class="shp-gal" style="grid-template-columns:repeat(3,1fr)">${["i1", "i2", "i3"].map((k) => `<div style="aspect-ratio:3/2;background:#fff;border:0.5px solid #eadfdb;display:flex;align-items:center;justify-content:center">${x[k] ? `<img src="${esc(x[k])}" style="max-width:90%;max-height:90%" alt=""/>` : `<span style="color:#b89a94;font-size:11px">شعار</span>`}</div>`).join("")}</div>` },
+});
+Object.assign(SHAPES_LIB, {
+  "bul2": { cat: "list", name: "نقاط بعمودين", fields: [SHP_F.a("items", "سطر لكل نقطة")], sample: { items: "نقطة ١\nنقطة ٢\nنقطة ٣\nنقطة ٤" }, render: (x) => `<ul class="shp-ul" style="columns:2">${shpLines(x.items).map((l) => `<li>${shpE(l)}</li>`).join("")}</ul>` },
+  "sticky": { cat: "text", name: "ورقة ملاحظة", fields: [SHP_F.a("text", "النص")], sample: { text: "تذكير: تسليم التقرير قبل نهاية الأسبوع." }, render: (x) => `<div style="background:#fff7c9;border:1px solid #efe08a;border-radius:4px;padding:12px 14px;line-height:1.8;transform:rotate(-.6deg)">${shpE(x.text).replace(/\n/g, "<br>")}</div>` },
+  "datebadge": { cat: "text", name: "شارة تاريخ وعنوان", fields: [SHP_F.t("d", "التاريخ"), SHP_F.t("t", "العنوان"), SHP_F.t("s", "الوصف")], sample: { d: "١٥ صفر", t: "ملتقى المتطوعات", s: "بمشاركة ٢٥ متطوعة" }, render: (x) => `<div style="display:flex;gap:12px;align-items:center"><div style="background:var(--rpt-burgundy);color:#fff;border-radius:12px;padding:10px 14px;font-weight:800;text-align:center">${shpE(x.d)}</div><div><b>${shpE(x.t)}</b><div style="color:#8a7d7a;font-size:11px">${shpE(x.s)}</div></div></div>` },
+  "kpi2": { cat: "stats", name: "مؤشران بسهمين", fields: [SHP_F.a("items", "سطر لكل مؤشر: العنوان|القيمة|التغير")], sample: { items: "الحضور|٩٢٪|+٥٪\nالتسرب|٣٪|-٢٪" }, render: (x) => `<div class="shp-two">${shpPairs(x.items).slice(0, 2).map((p) => { const up = !/^[-−]/.test(p[2] || ""); return `<div><small style="color:#8a7d7a">${shpE(p[0])}</small><div style="font-size:22px;font-weight:800;color:var(--rpt-burgundy)">${shpE(p[1])}</div><b style="color:${up ? "#1f8a52" : "#c0392b"}">${up ? "▲" : "▼"} ${shpE(p[2])}</b></div>`; }).join("")}</div>` },
+  "countdown": { cat: "time", name: "المتبقي من المدة", fields: [SHP_F.t("a", "المنقضي"), SHP_F.t("b", "الإجمالي"), SHP_F.t("u", "الوحدة")], sample: { a: "6", b: "10", u: "أسابيع" }, render: (x) => { const a = shpN(x.a) || 0, b = Math.max(1, shpN(x.b) || 1); return `<div class="shp-bars"><div><div class="r"><span>مضى ${shpE(x.a)} من ${shpE(x.b)} ${shpE(x.u)}</span><b>${Math.round(Math.min(100, (a / b) * 100))}%</b></div><div class="t"><i style="width:${Math.min(100, (a / b) * 100)}%"></i></div></div></div>`; } },
+  "chev": { cat: "flow", name: "أسهم متتابعة", fields: [SHP_F.a("steps", "الخطوات (سطر لكل خطوة)")], sample: { steps: "تخطيط\nتنفيذ\nمتابعة\nتقييم" }, render: (x) => `<div style="display:flex">${shpLines(x.steps).map((s, i) => `<div style="flex:1;background:var(--rpt-burgundy);opacity:${1 - i * 0.14};color:#fff;text-align:center;padding:9px 6px;clip-path:polygon(0 0,88% 0,100% 50%,88% 100%,0 100%,12% 50%);margin-right:-8px;font-size:11.5px">${shpE(s)}</div>`).join("")}</div>` },
+});
 function shapeRender(shapeId, data) { const s = SHAPES_LIB[shapeId]; if (!s) return ""; try { return `<div class="shp">${s.render(data || {})}</div>`; } catch (e) { return ""; } }
 function rptShapeBlocksHtml(blocks) { return (blocks || []).map((b) => shapeRender(b.shapeId, b)).join(""); }
 function shapeDefaultsPanelHtml() {
@@ -11549,7 +12063,7 @@ function rptProgramCardsHtml(report) {
     const pi = inds.filter((r) => String(r.relatedProgram).trim() === nm), pt = tools.filter((t) => String(t.relatedProgram).trim() === nm);
     if (!pi.length && !pt.length) return "";
     const indHtml = pi.map((r) => { const st = computeIndicatorStatus(resolveIndicatorRow(r, findIndicatorDef(r.name))); const pc = dashIndPct(r); return `<div class="rpt-pc-row"><span>${esc(r.name)}</span><b style="color:${st.color}">${pc == null ? esc(st.label) : pc + "٪ — " + esc(st.label)}</b></div>`; }).join("");
-    const toolHtml = pt.map((t) => { const rr = computeResponseRate(t.sampleSize, t.respondentsCount); return `<div class="rpt-pc-row"><span>${esc(t.name || t.toolType || "أداة")}</span><b>${rr != null && rr !== "" ? "استجابة " + esc(String(rr)) + (String(rr).includes("%") ? "" : "٪") : esc(t.resultQuality || "")}</b></div>`; }).join("");
+    const toolHtml = pt.map((t) => { const rr = svResponseRate(t); return `<div class="rpt-pc-row"><span>${esc(t.name || t.toolType || "أداة")}</span><b>${rr != null && rr !== "" ? "استجابة " + esc(String(rr)) + (String(rr).includes("%") ? "" : "٪") : esc(t.resultQuality || "")}</b></div>`; }).join("");
     return `<div class="rpt-pc"><div class="rpt-pc-h"><b>${esc(nm)}</b>${p.executionStatus ? `<span>${esc(p.executionStatus)}</span>` : ""}${p.actualBeneficiaries ? `<span>${esc(p.actualBeneficiaries)} مستفيدة</span>` : ""}</div>
       ${indHtml ? `<div class="rpt-pc-s">المؤشرات</div>${indHtml}` : ""}${toolHtml ? `<div class="rpt-pc-s">أدوات القياس</div>${toolHtml}` : ""}</div>`;
   }).join("");
@@ -11616,11 +12130,10 @@ function sectionBodyOnly(section, saved, report) {
     } else { body = emptyHint("لا توجد أعمال مُدخلة."); }
 
   } else if (section.id === "tools") {
-    body = rptSchemaItemsHtml("tools", d.tools, "لا توجد أدوات مُدخلة.");
+    body = rptSchemaItemsHtml("tools", d.tools, "لا توجد أدوات مُدخلة.") + (d.tools || []).filter((t) => t && t.analysis).map(svReportHtml).join("");
 
   } else if (section.id === "analysis") {
-    body = textBlock("أبرز نتيجة إيجابية", d.positiveResult) + textBlock("تفسيرها", d.positiveInterpretation) +
-      textBlock("أبرز نتيجة تحتاج تحسين", d.improvementResult) + textBlock("الإجراء المقترح", d.improvementAction);
+    body = svAnalysisTextBlocks(d, textBlock);
     if ((d.comparisons || []).filter(rptHasValue).length) body += rptSchemaItemsHtml("analysis", d.comparisons);
     body += textBlock("الخلاصة التحليلية", d.summary);
 
@@ -11883,13 +12396,14 @@ function rptGroupChapterHtml(c, iconFn, title, report, extraTop) {
     if (has("tools")) {
       const rows = tl.map((t) => `<li><b>${esc(t.name || "—")}</b>${t.toolType ? `<span>${esc(t.toolType)}</span>` : ""}${t.respondentsCount ? `<span>الاستجابات: ${esc(t.respondentsCount)}${t.sampleSize ? " من " + esc(t.sampleSize) : ""}</span>` : ""}${t.resultQuality ? `<span>${esc(t.resultQuality)}</span>` : ""}</li>`).join("");
       inner += rptGCard("أدوات القياس", iconLayers(15, "var(--rpt-burgundy)"), tl.length, rows ? `<ul class="rpt-glist">${rows}</ul>` : `<div class="hint">لا توجد أدوات.</div>`, "wide");
+      inner += tl.filter((t) => t.analysis).map(svReportHtml).join("");
     }
     if (has("analysis")) {
       if (cmp.length) {
         inner += rptGCard("مقارنة بالفصل السابق", iconPencil(15, "var(--rpt-burgundy)"), null,
           `<table class="rpt-gtable"><thead><tr><th>موضوع المقارنة</th><th>النتيجة</th><th>الحكم</th><th>السبب</th></tr></thead><tbody>${cmp.map((r) => `<tr><td>${esc(r.topic || "—")}</td><td>${esc(r.resultValue || "—")}</td><td>${rptJudgeBadge(r.judgment)}</td><td>${esc(r.changeReason || "—")}</td></tr>`).join("")}</tbody></table>`, "wide");
       }
-      const txt = textBlock("أبرز نتيجة إيجابية", an.positiveResult) + textBlock("تفسيرها", an.positiveInterpretation) + textBlock("أبرز نتيجة تحتاج تحسين", an.improvementResult) + textBlock("الإجراء المقترح", an.improvementAction) + textBlock("الخلاصة التحليلية", an.summary);
+      const txt = svAnalysisTextBlocks(an, textBlock) + textBlock("الخلاصة التحليلية", an.summary);
       if (txt) inner += rptGCard("تحليل النتائج", iconCheckCircle(15, "var(--rpt-burgundy)"), null, txt, "wide");
     }
   } else if (c.group === "impact") {
@@ -12349,6 +12863,7 @@ function liveUpdateComputed(el) {
 function attachFormListeners() {
   appEl.addEventListener("input", (e) => {
     const el = e.target;
+    if (el.dataset && el.dataset.svPaste) { S.ui.svPaste = S.ui.svPaste || {}; S.ui.svPaste[el.dataset.svPaste] = el.value; return; }
     if (el.id === "ops-recent-q") {
       S.ui.opsRecentQ = el.value; const pos = el.selectionStart; render();
       const n = document.getElementById("ops-recent-q"); if (n) { n.focus(); try { n.setSelectionRange(pos, pos); } catch (_) {} }
@@ -12559,6 +13074,9 @@ function attachFormListeners() {
 
   appEl.addEventListener("change", (e) => {
     const el = e.target;
+    if (el.dataset && el.dataset.svMain) { const t = svFindTool(el.dataset.svMain); if (t) { t.mainSource = el.value; autoSaveSchedule(); render(); } return; }
+    if (el.dataset && el.dataset.svFilltool) { S.ui.svFillTool = el.value; render(); return; }
+    if (el.dataset && el.dataset.svPrev) { S.ui.svPrevRep = el.value; render(); return; }
     if (el.dataset && el.dataset.shpDef) {
       const sid = el.dataset.shpDef, v = el.value;
       saveSiteTheme((th) => { const m = { ...((th || {}).shapeDefaults || {}) }; if (v) m[sid] = v; else delete m[sid]; return { shapeDefaults: m }; });
@@ -14328,6 +14846,7 @@ function handleReportEditorAction(action, ds) {
     case "shp-open": S.ui.shpOpen = true; render(); return true;
     case "shp-close": S.ui.shpOpen = false; render(); return true;
     case "shp-cat": S.ui.shpCat = ds.cat || ""; render(); return true;
+    case "sv-read-link": case "sv-read-paste": case "sv-clear": case "sv-fill": return svAction(action, ds);
     case "shp-add": {
       const sh = SHAPES_LIB[ds.shape]; if (!sh) return true;
       const list = getItemList("shapeBlocks");
