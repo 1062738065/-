@@ -648,7 +648,7 @@ function renderSchemaRepeaterHtml(schema, d) {
     const isOpen = items.length === 1 || item.id === expandedId;
     const head = `<div class="repeat-item-head" style="cursor:pointer;" data-action="toggle-repeat-item" data-arr="${esc(schema.arrayKey)}" data-id="${esc(item.id)}"><span class="repeat-item-title">${esc(schema.itemLabel)} ${i + 1}${isOpen ? "" : ` — ${esc(item[schema.fields.find((f) => f.id)?.id] || "")}`}</span>${removeBtn(schema.arrayKey, item.id)}</div>`;
     if (!isOpen) return `<div class="repeat-item">${head}</div>`;
-    return `<div class="repeat-item">${head}${renderSchemaFieldsHtml(schema.fields, schema.arrayKey, item.id, item, d)}${schema.arrayKey === "tools" ? svToolBlockHtml(item) : ""}</div>`;
+    return `<div class="repeat-item">${head}${renderSchemaFieldsHtml(schema.fields, schema.arrayKey, item.id, item, d)}${schema.arrayKey === "tools" ? svToolBlockHtml(item) : ""}${schema.arrayKey === "evidenceItems" ? svEvdProgramHtml(item) : ""}</div>`;
   }).join("");
   // hint اختياري أعلى القسم (نفس أسلوب التنبيهات المكتوبة يدويًا بأقسام مثل "الشواهد"
   // و"خطة الفترة القادمة")، وحد أقصى/أدنى اختياري لعدد العناصر (maxItems/minItems).
@@ -1850,12 +1850,36 @@ function reportUnitIdOf(report) {
   return Object.keys(S.reports || {}).find((uid) => (S.reports[uid] || []).some((r) => r.id === report.id)) || null;
 }
 function unitSectionsOff(unitId, periodType) { return (((entityPrefs("unit:" + unitId).sectionsOff) || {})[periodType]) || []; }
-function reportSections(report, unitId) {
+function reportSectionsRaw(report, unitId) {
   const u = unitId || reportUnitIdOf(report), pt = reportPeriodType(report);
   const off = u && pt ? unitSectionsOff(u, pt) : [];
   return off.length ? SECTIONS.filter((sc) => SECTIONS_ALWAYS.includes(sc.id) || !off.includes(sc.id)) : SECTIONS;
 }
-function activeReportSections() { return reportSections(getReportEntry(S.currentUnitId, S.currentReportId), S.currentUnitId); }
+/* دمج «أدوات القياس» و«تحليل النتائج» و«الشواهد» داخل «الأعمال والبرامج والقياس»: 12 قسمًا بدل 15 */
+const SV_MERGED_IDS = ["tools", "analysis", "evidence"];
+const SV_MERGED_LABEL = "الأعمال والبرامج والقياس";
+const SV_TAB_LABELS = { programs: "الأعمال والبرامج", tools: "أدوات القياس", analysis: "تحليل النتائج", evidence: "الشواهد والمرفقات" };
+function svMergeOn() { try { const th = themeOf(S.siteSettings || {}); return !(th && th.mergeMeasure === false); } catch (e) { return true; } }
+function svRelabel(sc) { return sc.id === "programs" ? { ...sc, label: SV_MERGED_LABEL } : sc; }
+function reportSections(report, unitId) {
+  const raw = reportSectionsRaw(report, unitId);
+  if (!svMergeOn()) return raw;
+  return raw.filter((sc) => !SV_MERGED_IDS.includes(sc.id)).map(svRelabel);
+}
+// قائمة التنقل (السابق/التالي): الأقسام المدمجة تأتي بعد «الأعمال والبرامج» مباشرة
+function reportSectionsNav(report, unitId) {
+  const raw = reportSectionsRaw(report, unitId);
+  if (!svMergeOn()) return raw;
+  const out = [];
+  raw.forEach((sc) => {
+    if (SV_MERGED_IDS.includes(sc.id)) return;
+    out.push(svRelabel(sc));
+    if (sc.id === "programs") SV_MERGED_IDS.forEach((id) => { const m = raw.find((x) => x.id === id); if (m) out.push(m); });
+  });
+  return out;
+}
+function svInMeasureGroup(sid) { return svMergeOn() && (sid === "programs" || SV_MERGED_IDS.includes(sid)); }
+function activeReportSections() { return reportSectionsNav(getReportEntry(S.currentUnitId, S.currentReportId), S.currentUnitId); }
 function computeProgress(report, unitId) {
   const list = reportSections(report, unitId);
   const total = list.length;
@@ -10273,7 +10297,7 @@ function phaseSidebarHtml(report) {
   const rows = reportSections(report, S.currentUnitId).map((section, i) => {
     const status = sectionStatus(report, section.id);
     const meta = statusMeta(status);
-    const isActive = S.activeSectionId === section.id;
+    const isActive = S.activeSectionId === section.id || (section.id === "programs" && svInMeasureGroup(S.activeSectionId));
     const isDone = status === "completed";
     if (collapsed) {
       return `<button class="phase-row-btn" style="width:40px;height:40px;border-radius:11px;background:${isActive ? ROSE : isDone ? GREEN_BG : "#fff"};justify-content:center;margin:0 auto;" data-action="select-section" data-section="${section.id}" title="${esc(section.label)}">${isDone && !isActive ? iconCheck(15, GREEN) : iconDocument(15, isActive ? "#fff" : SUBTLE)}</button>`;
@@ -10432,7 +10456,7 @@ function renderUnitReport() {
   if (!entry) return `<div class="page-wrap">تعذر إيجاد هذا التقرير — ارجعي إلى "تقاريري" واختاري تقريرًا.</div>`;
   const progress = computeProgress(entry, unit.id);
   const meta = reportStatusMeta(entry.status);
-  const secList = reportSections(entry, unit.id);
+  const secList = reportSectionsNav(entry, unit.id);
 
   // No more phase-overview landing screen: entering a report always opens a
   // section directly — default to the first one if none is active yet.
@@ -10541,10 +10565,17 @@ function persistSection(sectionId, data, status) {
   saveReportEntry(unitId, updatedEntry);
 }
 
+function svMeasureTabsHtml(report, unitId) {
+  if (!svInMeasureGroup(S.activeSectionId)) return "";
+  const ids = reportSectionsNav(report, unitId).map((x) => x.id).filter((id) => svInMeasureGroup(id));
+  return `<div class="no-print" style="display:flex;gap:6px;flex-wrap:wrap;margin:0 0 16px;">${ids.map((id) => `<button type="button" class="pill-btn ${id === S.activeSectionId ? "pill-primary" : "pill-ghost"}" data-action="sv-tab" data-section="${id}" style="padding:7px 14px;">${esc(SV_TAB_LABELS[id] || id)}</button>`).join("")}</div>`;
+}
 function sectionEditorHtml(unit, report) {
   const secList = reportSections(report, unit.id);
-  const sectionIndex = secList.findIndex((s) => s.id === S.activeSectionId);
-  const section = secList[sectionIndex];
+  const navList = reportSectionsNav(report, unit.id);
+  const navIndex = navList.findIndex((s) => s.id === S.activeSectionId);
+  const section = navList[navIndex];
+  const sectionIndex = Math.max(0, secList.findIndex((s) => s.id === (svInMeasureGroup(S.activeSectionId) ? "programs" : S.activeSectionId)));
   const color = PALETTE[sectionIndex % PALETTE.length];
   const d = S.sectionDraft || {};
   const shared = report.shared || {};
@@ -10578,13 +10609,14 @@ function sectionEditorHtml(unit, report) {
     ${(() => { const rn = report.sections && report.sections[section.id] && report.sections[section.id].reviewNote; return rn && REVIEW_NOTE_STATUSES.includes(report.status) ? `<div class="hint bad" style="margin-bottom:14px;text-align:right;line-height:1.9;"><strong>ملاحظة على هذا القسم${rn.by ? " من " + esc(rn.by) : ""}:</strong> ${esc(rn.text)}</div>` : ""; })()}
     ${S.ui.imp && S.ui.imp.open ? importModalHtml(unit, report) : ""}
     ${sharedBar}
+    ${svMeasureTabsHtml(report, unit.id)}
     ${fieldsHtml}
     ${S.sectionSaveError ? `<div class="error-box" style="margin-top:16px;">${esc(S.sectionSaveError)}</div>` : ""}
     ${S.ui.showApSendPicker ? apSendPickerHtml(unit, report) : ""}
     <div class="section-editor-nav">
-      ${pillBtn("السابق", { variant: "ghost", action: "section-prev", disabled: sectionIndex <= 0 })}
+      ${pillBtn("السابق", { variant: "ghost", action: "section-prev", disabled: navIndex <= 0 })}
       <div style="flex:1;"></div>
-      ${sectionIndex >= secList.length - 1
+      ${navIndex >= navList.length - 1
         ? (report.status === "draft" || report.status === "returned" || report.status === "needs_completion"
             ? (matchApprovalPath(unit, report)
                 ? pillBtn("إرسال للمراجعة", { icon: iconCheckCircle(15, "#fff"), action: "ap-send" })
@@ -11637,6 +11669,7 @@ function evidenceSectionHtml(d) {
       ${fieldWrap("نوع الشاهد", true, sel("evidenceItems", item.id, "evidenceType", item.evidenceType, EVIDENCE_TYPES_LIST, "اختاري نوع الشاهد"))}
       <div class="subhead">بيانات الشاهد</div>
       ${fieldWrap("اسم الشاهد", true, inp("evidenceItems", item.id, "name", item.name, "اسم الشاهد"))}
+      ${svEvdProgramHtml(item)}
       ${fieldWrap("القسم المرتبط به", sel("evidenceItems", item.id, "relatedDepartment", item.relatedDepartment, S.departments.filter((x) => x.status === "active").map((x) => x.name), "اختاري القسم (اختياري)"))}
       ${EVD_IMG_UPLOAD ? fieldWrap("صورة الشاهد (من الجهاز)", `<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">${item.imageData ? `<img src="${esc(item.imageData)}" alt="" style="width:92px;height:68px;object-fit:cover;border-radius:10px;border:1px solid ${BORDER};" /><button type="button" class="pill-btn pill-ghost" data-action="evd-img-clear" data-id="${esc(item.id)}">حذف الصورة</button>` : ""}<input type="file" accept="image/*" data-evd-img="${esc(item.id)}" style="font-size:12px;max-width:100%;" /></div><div class="hint" style="margin-top:4px;">تُصغَّر الصورة تلقائيًا وتُحفظ مع التقرير وتظهر في العرض والـPDF.</div>`) : ""}
       ${fieldWrap("رابط الملف", inp("evidenceItems", item.id, "fileLink", item.fileLink, "رابط الملف بالمستودع"))}
@@ -11679,7 +11712,7 @@ const EMPTY_ITEM_FACTORY = {
   impactStories: () => ({ id: uid("imp2"), impactType: "", title: "", beforeSituation: "", intervention: "", change: "", evidence: "", beneficiariesCount: "", impactDuration: "", ongoing: "", testimonial: "", evidenceLink: "", publicConsent: "" }),
   recommendations: () => ({ id: uid("rec"), source: "", level: "", text: "", evidenceBasis: "", expectedResult: "", priority: "", responsibleParty: "", supportingParties: "", proposedDuration: "", expectedCost: "", indicator: "" }),
   mainTasks: () => ({ id: uid("task"), name: "", goal: "", responsiblePerson: "", expectedDate: "" }),
-  evidenceItems: () => ({ id: uid("evd"), evidenceType: "", name: "", relatedDepartment: "", fileLink: "", description: "", confidentiality: "" }),
+  evidenceItems: () => ({ id: uid("evd"), evidenceType: "", name: "", relatedProgram: "", relatedDepartment: "", fileLink: "", description: "", confidentiality: "" }),
 };
 
 // Maps a field (scoped by its repeatable array, or "top" for top-level fields)
@@ -12054,6 +12087,53 @@ function rptProgramNames(report) {
   const list = ((S.sectionDraft && S.activeSectionId === "programs" && S.sectionDraft.programs) || (r && r.sections && r.sections.programs && r.sections.programs.data && r.sections.programs.data.programs) || []);
   return [...new Set(list.map((p) => (p.name || "").trim()).filter(Boolean))];
 }
+
+/* ---- فصل «الأعمال والبرامج والقياس» في التقرير: لكل برنامج أدواته وتحليله وشواهده + صندوق عام ---- */
+function rptMeasureToolHtml(t) {
+  const rr = svResponseRate(t);
+  let h = `<div class="rpt-pc-row"><span>${esc(t.name || t.toolType || "أداة")}</span><b>${rr != null && rr !== "" ? "استجابة " + esc(String(rr)) + "٪" : esc(t.resultQuality || "")}</b></div>`;
+  if (t.analysis) {
+    h += svReportHtml(t);
+    const o = svTexts(t);
+    if (o) h += `<div class="sv-auto-txt">${svAnalysisTextBlocks(o, textBlock)}${textBlock("الخلاصة", o.summary)}</div>`;
+  }
+  return h;
+}
+function rptMeasureHtml(report) {
+  const sec = report.sections || {};
+  const g = (id) => (sec[id] && sec[id].data) || {};
+  const progs = (g("programs").programs || []).filter((p) => (p.name || "").trim());
+  const names = progs.map((p) => p.name.trim());
+  const inds = (g("kpi").indicators || []).filter((r) => r.name && r.relatedProgram);
+  const tools = (g("tools").tools || []).filter((t) => t && (t.name || t.toolType || t.analysis));
+  const evs = (g("evidence").evidenceItems || []).filter((it) => it && (it.name || it.fileLink || it.imageData));
+  const an = g("analysis");
+  const isLinked = (x) => names.includes(String(x.relatedProgram || "").trim());
+  const cards = progs.map((p) => {
+    const nm = p.name.trim();
+    const pi = inds.filter((r) => String(r.relatedProgram).trim() === nm);
+    const pt = tools.filter((t) => String(t.relatedProgram || "").trim() === nm);
+    const pe = evs.filter((it) => String(it.relatedProgram || "").trim() === nm);
+    if (!pi.length && !pt.length && !pe.length) return "";
+    const indHtml = pi.map((r) => { const st = computeIndicatorStatus(resolveIndicatorRow(r, findIndicatorDef(r.name))); const pc = dashIndPct(r); return `<div class="rpt-pc-row"><span>${esc(r.name)}</span><b style="color:${st.color}">${pc == null ? esc(st.label) : pc + "٪ — " + esc(st.label)}</b></div>`; }).join("");
+    return `<div class="rpt-pc"><div class="rpt-pc-h"><b>${esc(nm)}</b>${p.executionStatus ? `<span>${esc(p.executionStatus)}</span>` : ""}${p.actualBeneficiaries ? `<span>${esc(p.actualBeneficiaries)} مستفيدة</span>` : ""}</div>
+      ${indHtml ? `<div class="rpt-pc-s">المؤشرات</div>${indHtml}` : ""}${pt.length ? `<div class="rpt-pc-s">أدوات القياس وتحليل النتائج</div>${pt.map(rptMeasureToolHtml).join("")}` : ""}${pe.length ? `<div class="rpt-pc-s">الشواهد والمرفقات</div>${rptEvidenceGalleryHtml(pe)}` : ""}</div>`;
+  }).join("");
+  const gt = tools.filter((t) => !isLinked(t)), ge = evs.filter((it) => !isLinked(it));
+  const cmp = (an.comparisons || []).filter(rptHasValue);
+  const anTxt = svAnalysisTextBlocks(an, textBlock) + (an.summary ? textBlock("الخلاصة التحليلية", an.summary) : "");
+  const hasGen = gt.length || ge.length || cmp.length || (anTxt && String(anTxt).replace(/<[^>]*>/g, "").trim());
+  const gen = hasGen ? `<div class="rpt-pc rpt-pc-gen"><div class="rpt-pc-h"><b>قياس وتحليل وشواهد عامة</b></div>
+    ${gt.length ? `<div class="rpt-pc-s">أدوات القياس</div>${gt.map(rptMeasureToolHtml).join("")}` : ""}
+    ${(anTxt && String(anTxt).replace(/<[^>]*>/g, "").trim()) ? `<div class="rpt-pc-s">تحليل النتائج</div>${anTxt}` : ""}
+    ${cmp.length ? `<div class="rpt-pc-s">المقارنة بالفترة السابقة</div>${rptSchemaItemsHtml("analysis", cmp)}` : ""}
+    ${ge.length ? `<div class="rpt-pc-s">الشواهد والمرفقات</div>${rptEvidenceGalleryHtml(ge)}` : ""}</div>` : "";
+  return (cards ? `<div class="rpt-subheading">القياس والتحليل والشواهد لكل برنامج</div><div class="rpt-pcs">${cards}</div>` : "") + gen;
+}
+function svEvdProgramHtml(item) {
+  const names = rptProgramNames();
+  return fieldWrap("البرنامج المرتبط (اختياري)", names.length ? sel("evidenceItems", item.id, "relatedProgram", item.relatedProgram, [...new Set([...names, ...(item.relatedProgram ? [item.relatedProgram] : [])])], "بدون ربط (عام)") : `<div class="hint">أضيفي برامج في «الأعمال والبرامج» لربط الشاهد ببرنامج.</div>`);
+}
 function rptProgramCardsHtml(report) {
   const progs = (report.sections?.programs?.data?.programs || []).filter((p) => (p.name || "").trim());
   const inds = (report.sections?.kpi?.data?.indicators || []).filter((r) => r.name && r.relatedProgram);
@@ -12232,7 +12312,7 @@ function sectionBodyOnly(section, saved, report) {
     body = textBlock("المحتوى", d.content) || emptyHint("لم يُدخل محتوى بعد.");
   }
   if (d.notes) body += textBlock("ملاحظات", d.notes);
-  if (section.id === "programs" && report) body += rptProgramCardsHtml(report);
+  if (section.id === "programs" && report) body += (svMergeOn() ? rptMeasureHtml(report) : rptProgramCardsHtml(report));
   if (d.shapeBlocks && d.shapeBlocks.length) body += rptShapeBlocksHtml(d.shapeBlocks);
   return body;
 }
@@ -12534,6 +12614,7 @@ function rptHasValue(v) {
   return false;
 }
 function sectionHasData(report, sid) {
+  if (sid === "programs" && svMergeOn() && report && report.sections && SV_MERGED_IDS.some((m) => report.sections[m] && rptHasValue(report.sections[m].data))) return true;
   const d = report && report.sections && report.sections[sid] && report.sections[sid].data;
   if (!d) return false;
   if (sid === "kpi") return (d.indicators || []).some((r) => r && r.name && rptHasValue(r.actual)) || rptHasValue(d.notes);
@@ -14777,6 +14858,11 @@ function handleReportEditorAction(action, ds) {
         setTimeout(() => { S.sectionSaveStatus = ""; if (S.activeSectionId) render(); }, 1500);
       } else render();
       return true;
+    }
+    case "sv-tab": {
+      clearTimeout(__autoSaveTimer); __autoSaveTimer = null;
+      if (!trySaveSectionWithStatus(S.sectionCompleted ? "completed" : "draft")) { render(); return true; }
+      openSection(ds.section); return true;
     }
     case "section-prev": {
       clearTimeout(__autoSaveTimer); __autoSaveTimer = null;

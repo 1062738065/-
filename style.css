@@ -821,3 +821,4 @@ table.prs-table td { padding: 8px 10px; border-top: 1px solid var(--border); }
 .rpt-pcs{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:10px}.rpt-pc{background:#fff;border:1px solid #eadfdb;border-radius:12px;padding:10px 12px;break-inside:avoid}
 .rpt-pc-h{display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-bottom:6px}.rpt-pc-h b{color:var(--rpt-burgundy);font-size:13px;flex:1 0 100%}.rpt-pc-h span{background:#faf3f1;border-radius:99px;padding:2px 9px;font-size:10.5px}
 .rpt-pc-s{font-size:10.5px;color:#8a7d7a;font-weight:800;margin:6px 0 2px}.rpt-pc-row{display:flex;justify-content:space-between;gap:8px;font-size:11.5px;padding:3px 0;border-top:1px dashed #eadfdb}
+.rpt-pc-gen{border:1.5px dashed #c9a24a;background:#fffdf7;margin-top:12px}.rpt-subheading{font-weight:800;color:var(--rpt-burgundy);margin:6px 0}.sv-auto-txt{margin-top:4px}
