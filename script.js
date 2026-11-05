@@ -3251,7 +3251,6 @@ const DASH_STD_BLOCKS = [
   { key: "exHeat", label: "خريطة الأداء (المؤشرات)" },
   { key: "exHeatGoal", label: "خريطة تحقق الأهداف" },
   { key: "exCompare", label: "مقارنة الوحدات (مؤشرات وأهداف)" },
-  { key: "exStrategic", label: "أهداف الخطة الاستراتيجية" },
   { key: "exStacks", label: "حالات المؤشرات" },
   { key: "exBenef", label: "المستفيدون حسب نوع العمل" },
   { key: "exChal", label: "الصعوبات القائمة" },
@@ -3285,7 +3284,6 @@ const DASH_EX_BLOCKS = [
   { key: "exHeatGoal", label: "خريطة تحقق الأهداف" },
   { key: "exCompare", label: "مقارنة المكاتب/الأقسام/الوحدات" },
   { key: "trend", label: "رسم تطور التحقق فترة بعد فترة" },
-  { key: "exStrategic", label: "أهداف الخطة الاستراتيجية" },
   { key: "exStacks", label: "حالات المؤشرات لكل مكتب/قسم" },
   { key: "exBenef", label: "المستفيدون حسب نوع العمل" },
   { key: "exChal", label: "الصعوبات القائمة حسب المستوى" },
@@ -3596,8 +3594,8 @@ function dashGoalMatrixHtml(kind, series) {
   series.cols.forEach((c, ci) => series.units.forEach((u) => {
     const r = (series.byUnit[u.id] || {})[c.key]; if (!r) return;
     dashOpGoals(r).forEach((g) => {
-      const k = g.name + "|" + g.strategicGoal;
-      const row = rows[k] || (rows[k] = { name: g.name, parent: g.strategicGoal, cells: series.cols.map(() => []) });
+      const k = g.name;
+      const row = rows[k] || (rows[k] = { name: g.name, cells: series.cols.map(() => []) });
       row.cells[ci].push(numOrNull(g.percentage));
     });
   }));
@@ -3605,9 +3603,9 @@ function dashGoalMatrixHtml(kind, series) {
   if (!list.length) return dashCard("الأهداف التشغيلية عبر الفترات", "", emptyHint("لا توجد أهداف مُدخلة في التقارير المختارة."));
   const body = list.map((row) => {
     const pcts = row.cells.map((c) => dashAvg(c));
-    return `<tr><td style="font-weight:700">${esc(row.name)}</td><td style="color:${SUBTLE}">${esc(row.parent || "—")}</td>${pcts.map((p) => `<td style="text-align:center">${dashPctCell(p)}</td>`).join("")}<td style="text-align:center">${dashTrend(pcts)}</td></tr>`;
+    return `<tr><td style="font-weight:700">${esc(row.name)}</td>${pcts.map((p) => `<td style="text-align:center">${dashPctCell(p)}</td>`).join("")}<td style="text-align:center">${dashTrend(pcts)}</td></tr>`;
   }).join("");
-  return dashCard("الأهداف التشغيلية عبر الفترات", "", `<div class="table-wrap" style="overflow-x:auto;"><table class="prs-table" style="min-width:640px;"><thead><tr style="background:${GREEN_BG}"><th style="color:${ROSE}">الهدف التشغيلي</th><th style="color:${ROSE}">الهدف الاستراتيجي</th>${series.cols.map((c) => `<th style="text-align:center;color:${ROSE};white-space:nowrap">${esc(c.label)}</th>`).join("")}<th style="text-align:center;color:${ROSE}">الاتجاه</th></tr></thead><tbody>${body}</tbody></table></div>`);
+  return dashCard("الأهداف التشغيلية عبر الفترات", "", `<div class="table-wrap" style="overflow-x:auto;"><table class="prs-table" style="min-width:640px;"><thead><tr style="background:${GREEN_BG}"><th style="color:${ROSE}">الهدف التشغيلي</th>${series.cols.map((c) => `<th style="text-align:center;color:${ROSE};white-space:nowrap">${esc(c.label)}</th>`).join("")}<th style="text-align:center;color:${ROSE}">الاتجاه</th></tr></thead><tbody>${body}</tbody></table></div>`);
 }
 
 /* ---- الرسمان الدائريان: كل التقارير المختارة أو آخر فترة ---- */
@@ -3774,16 +3772,8 @@ function exBlocksInner(kind, units, extra) {
       return `<div style="display:flex;align-items:center;gap:10px;padding:5px 0;">${nameEl}<div style="flex:1;display:flex;flex-direction:column;gap:4px;">${bar(c.ind, ROSE)}${bar(c.goal, "#D9A066")}</div></div>`;
     }).join(""));
   html += dashB(kind, "exCompare", cmp) + (extra ? "" : dashB(kind, "trend", dashTrendHtml(kind, series, "التطور فترة بعد فترة — " + (sc.cur ? sc.cur.name : "الجمعية"))));
-  // أهداف الخطة الاستراتيجية + حالات المؤشرات
+  // حالات المؤشرات
   const latestReports = dashReports(series, true);
-  let strat = "";
-  if (!dashHidden(kind, "exStrategic")) { html += "\u0001exStrategic\u0002";
-    const m = {};
-    latestReports.forEach(({ report }) => dashOpGoals(report).forEach((g) => { const k = g.strategicGoal || "بدون هدف استراتيجي"; (m[k] = m[k] || []).push(numOrNull(g.percentage)); }));
-    const list = Object.entries(m).map(([k, v]) => [k, dashAvg(v)]).sort((a, b) => (b[1] || 0) - (a[1] || 0));
-    strat = dashCard("أهداف الخطة الاستراتيجية", "متوسط تحقق الأهداف التشغيلية التابعة لكل هدف", list.length ? list.map(([k, p]) => `<div style="padding:6px 0;"><div style="display:flex;justify-content:space-between;font-size:12.5px;margin-bottom:4px;"><span style="font-weight:700">${esc(k)}</span>${dashPctCell(p)}</div><div style="height:12px;background:${GRAY_BG};border-radius:6px;"><div style="height:12px;border-radius:6px;width:${Math.min(100, p || 0)}%;background:${pctColor(p)}"></div></div></div>`).join("") : emptyHint("لا توجد أهداف مُدخلة."));
-    html += "\u0003";
-  }
   let stacks = "";
   if (!dashHidden(kind, "exStacks")) { html += "\u0001exStacks\u0002";
     const cols = [["achieved", "متحقق", GREEN], ["close", "قريب", GOLD], ["needsAction", "يحتاج تدخلًا", "#c9863a"], ["struggling", "متعثر", DANGER]];
@@ -3796,7 +3786,7 @@ function exBlocksInner(kind, units, extra) {
     stacks = dashCard("حالات المؤشرات لكل " + childLabel[1], "", `<div style="display:flex;gap:10px;font-size:11.5px;flex-wrap:wrap;margin-bottom:8px;">${cols.map(([, l, c]) => `<span style="display:flex;align-items:center;gap:5px;"><span style="width:12px;height:12px;border-radius:3px;background:${c}"></span>${l}</span>`).join("")}</div>${rows}`);
     html += "\u0003";
   }
-  html += dashB(kind, "exStrategic", strat) + dashB(kind, "exStacks", stacks);
+  html += dashB(kind, "exStacks", stacks);
   // المستفيدون / التحديات / رفع التقارير
   let benH = "", chH = "", subH = "";
   if (!dashHidden(kind, "exBenef")) { html += "\u0001exBenef\u0002";
@@ -6642,7 +6632,7 @@ function rptFakeUnitReportBase() {
     id: "preview", label: "التقرير الدوري للأداء — نموذج", status: "completed", createdAt: Date.now(), shared: {},
     sections: {
       basic: st({ mainEntity: "إدارة التعليم النسائي", entityName: "وحدة نموذجية", periodType: "ربع سنوي", startDate: "١٤٤٨/٠١/٠١", endDate: "١٤٤٨/٠٣/٣٠", hijriYear: "1448", preparerName: "اسم المعدّة", preparerTitle: "إدارية", managerName: "اسم الرئيسة" }),
-      goals: st({ goals: [{ strategicGoal: "هدف استراتيجي نموذجي", operationalGoals: [{ id: "g1", name: "هدف تشغيلي أول", level: GOAL_LEVELS[0], percentage: 100 }, { id: "g2", name: "هدف تشغيلي ثانٍ", level: GOAL_LEVELS[2], percentage: 60 }] }] }),
+      goals: st({ goals: [{ operationalGoals: [{ id: "g1", name: "هدف تشغيلي أول", level: GOAL_LEVELS[0], percentage: 100 }, { id: "g2", name: "هدف تشغيلي ثانٍ", level: GOAL_LEVELS[2], percentage: 60 }] }] }),
       kpi: st({ indicators: inds }),
       programs: st({ programs: [{ id: "p1", name: "عمل نموذجي أول", workType: "زيارة إشرافية", targetGroup: "المراكز", targetCount: "45", actualBeneficiaries: "120", achievedCount: 39, countUnit: "مركز", executionStatus: "مكتمل", highlightResult: "نتيجة نموذجية بارزة" }, { id: "p2", name: "عمل نموذجي ثانٍ", workType: "برنامج", targetGroup: "المعلمات", targetCount: "30", actualBeneficiaries: "28", executionStatus: "قيد التنفيذ" }] }),
       tools: st({ tools: [{ name: "استبانة رضا", toolType: "استبانة", sampleSize: "100", respondentsCount: "80", resultQuality: "عالية" }] }),
@@ -7970,7 +7960,7 @@ function yearlyComparisonData(units) {
   const years = lastThreeHijriYears();
   const byYear = latestReportsPerUnitByYear(units, years);
   const indMap = {}; // name -> { def, years: { y: { actuals: [], ratios: [] } } }
-  const goalMap = {}; // strategic goal -> { y: [pct] }
+  const goalMap = {}; // operational goal -> { y: [pct] }
   const summary = {}; // y -> { indRatios: [], goalPcts: [], reports: n }
   years.forEach((y) => {
     summary[y] = { indRatios: [], goalPcts: [], reports: byYear[y].length };
@@ -7993,10 +7983,10 @@ function yearlyComparisonData(units) {
         if (st.ratio != null && isFinite(st.ratio)) { ye.ratios.push(st.ratio); summary[y].indRatios.push(Math.min(1, Math.max(0, st.ratio))); }
       });
       (report.sections?.goals?.data?.goals || []).forEach((g) => {
-        const sg = (g.strategicGoal || "").trim() || "بدون هدف استراتيجي";
         (g.operationalGoals || []).forEach((og) => {
           const pct = numOrNull(og.percentage);
           if (pct == null) return;
+          const sg = String(og.name || "").trim(); if (!sg) return;
           const gm = goalMap[sg] || (goalMap[sg] = {});
           (gm[y] || (gm[y] = [])).push(pct);
           summary[y].goalPcts.push(pct);
@@ -8086,7 +8076,7 @@ function yearCompareCardHtml(units) {
   const goalTable = data.goals.length ? `
     <div class="subhead">الأهداف — متوسط نسبة التحقق</div>
     <div class="table-wrap" style="overflow-x:auto;"><table class="prs-table" style="min-width:480px;"><thead>
-      <tr style="background:${GREEN_BG}"><th style="color:${ROSE}">الهدف الاستراتيجي</th>${yearHead(1)}<th style="text-align:center;color:${ROSE}">الاتجاه</th></tr>
+      <tr style="background:${GREEN_BG}"><th style="color:${ROSE}">الهدف التشغيلي</th>${yearHead(1)}<th style="text-align:center;color:${ROSE}">الاتجاه</th></tr>
     </thead><tbody>${data.goals.map((g) => {
       const [p, c] = lastTwoWithData(g.cells);
       return `<tr><td style="font-weight:700">${esc(g.name)}</td>${g.cells.map((v) => `<td style="text-align:center;font-weight:800;color:${v == null ? SUBTLE : pctColor(v)};border-right:1px solid ${BORDER};">${v == null ? "—" : v + "٪"}</td>`).join("")}<td style="text-align:center">${trendHtml(p, c)}</td></tr>`;
@@ -8283,7 +8273,7 @@ function yearCompareReportChapterBody(units) {
     ["عدد الوحدات المُبلِّغة", ...data.summary.map((s) => s.reports)],
   ]);
   const indTable = data.indicators.length ? reportTable(["المؤشر", ...yl.map((y) => `${y} (مستهدف / متحقق)`)], data.indicators.map((ind) => [esc(ind.name), ...ind.cells.map((c) => (c ? `${fmtNum(c.target)} / ${fmtNum(c.actual)}${c.pct == null ? "" : ` <b>(${c.pct}٪)</b>`}` : "—"))])) : "";
-  const goalTable = data.goals.length ? reportTable(["الهدف الاستراتيجي", ...yl], data.goals.map((g) => [esc(g.name), ...g.cells.map((v) => (v == null ? "—" : v + "٪"))])) : "";
+  const goalTable = data.goals.length ? reportTable(["الهدف التشغيلي", ...yl], data.goals.map((g) => [esc(g.name), ...g.cells.map((v) => (v == null ? "—" : v + "٪"))])) : "";
   return sumTable + indTable + goalTable;
 }
 
@@ -10147,9 +10137,7 @@ function bkSchema(arr) {
     { id: "correctiveAction", type: "text", label: "الإجراء التصحيحي" },
     { id: "responsiblePerson", type: "text", label: "المسؤولة" }] };
   if (arr === "goals") {
-    const st = (S.goalsDefinitions.strategic && S.goalsDefinitions.strategic.length ? S.goalsDefinitions.strategic.map((g) => g.name) : STRATEGIC_GOALS_FALLBACK);
     return { arrayKey: "goals", itemLabel: "الهدف", fields: [
-      { id: "strategicGoal", type: "select", label: "الهدف الاستراتيجي", required: true, options: st },
       { id: "operationalGoals", type: "multi", label: "الأهداف التشغيلية (افصلي بينها بـ «؛»)", required: true }] };
   }
   return Object.values(SECTION_FIELD_SCHEMAS).find((x) => x.arrayKey === arr) || null;
@@ -10166,7 +10154,7 @@ function bkParse(arr, text) {
     fields.forEach((f, i) => {
       const raw = parts[i] || ""; if (!raw) { if (f.required) errs.push(`«${f.label}» ناقص`); return; }
       if (f.type === "multi") {
-        const allowed = (S.goalsDefinitions.operational && S.goalsDefinitions.operational.length ? operationalGoalsFor(item.strategicGoal) : OPERATIONAL_GOALS_FALLBACK);
+        const allowed = (S.goalsDefinitions.operational && S.goalsDefinitions.operational.length ? operationalGoalsFor() : OPERATIONAL_GOALS_FALLBACK);
         const names = raw.split(/[؛;]/).map((x) => x.trim()).filter(Boolean);
         const bad = names.filter((n) => !allowed.includes(n));
         if (bad.length) errs.push(`هدف تشغيلي غير موجود في القائمة: «${bad.join("، ")}»`);
@@ -10568,7 +10556,14 @@ function persistSection(sectionId, data, status) {
 function svMeasureTabsHtml(report, unitId) {
   if (!svInMeasureGroup(S.activeSectionId)) return "";
   const ids = reportSectionsNav(report, unitId).map((x) => x.id).filter((id) => svInMeasureGroup(id));
-  return `<div class="no-print" style="display:flex;gap:6px;flex-wrap:wrap;margin:0 0 16px;">${ids.map((id) => `<button type="button" class="pill-btn ${id === S.activeSectionId ? "pill-primary" : "pill-ghost"}" data-action="sv-tab" data-section="${id}" style="padding:7px 14px;">${esc(SV_TAB_LABELS[id] || id)}</button>`).join("")}</div>`;
+  const cur = ids.indexOf(S.activeSectionId);
+  const stepHtml = ids.map((id, k) => {
+    const done = report && report.sections && report.sections[id] && report.sections[id].status === "completed";
+    const on = id === S.activeSectionId;
+    const circle = `<span style="width:26px;height:26px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;font-size:12px;font-weight:800;flex-shrink:0;background:${on ? ROSE : done ? GREEN : "#efe6e6"};color:${on || done ? "#fff" : "#8b7e82"};">${done && !on ? "✓" : k + 1}</span>`;
+    return `<button type="button" data-action="sv-tab" data-section="${id}" style="display:flex;align-items:center;gap:8px;background:${on ? "#fbefef" : "transparent"};border:none;border-radius:999px;padding:5px 12px 5px 14px;cursor:pointer;font-family:inherit;font-size:12.5px;font-weight:${on ? 800 : 600};color:${on ? ROSE : "#6b5f62"};white-space:nowrap;">${circle}${esc(SV_TAB_LABELS[id] || id)}</button>${k < ids.length - 1 ? `<span style="flex:0 0 18px;height:2px;background:${k < cur ? GREEN : "#e6dcdc"};"></span>` : ""}`;
+  }).join("");
+  return `<div class="no-print" style="display:flex;align-items:center;gap:4px;overflow-x:auto;margin:0 0 16px;padding:6px 2px;">${stepHtml}</div>`;
 }
 function sectionEditorHtml(unit, report) {
   const secList = reportSections(report, unit.id);
@@ -10848,7 +10843,6 @@ function goalOverallAchieved(g) {
 }
 function goalsSectionHtml(d) {
   const goals = d.goals || [];
-  const strategicOptions = (S.goalsDefinitions.strategic && S.goalsDefinitions.strategic.length ? S.goalsDefinitions.strategic.map((g) => g.name) : STRATEGIC_GOALS_FALLBACK);
   const operationalAll = (S.goalsDefinitions.operational && S.goalsDefinitions.operational.length ? null : OPERATIONAL_GOALS_FALLBACK);
   // نفس أسلوب الطيّ التلقائي المستخدم بالأقسام الأخرى (البرامج والتوصيات...):
   // بعد إضافة هدف جديد تنطوي الأهداف السابقة تلقائيًا وتبيّن عنوانها فقط، وتقدرين
@@ -10863,7 +10857,7 @@ function goalsSectionHtml(d) {
     const isOpen = goals.length === 1 || g.id === expandedId;
     const achieved = goalOverallAchieved(g);
     const achievedBadge = achieved ? `<span style="display:inline-flex;align-items:center;gap:4px;background:${GREEN_BG};color:${GREEN};border-radius:999px;padding:3px 10px;font-size:11px;font-weight:800;margin-inline-start:8px;">✅ منجز</span>` : "";
-    const head = `<div class="repeat-item-head" style="cursor:pointer;" data-action="toggle-repeat-item" data-arr="goals" data-id="${esc(g.id)}"><span class="repeat-item-title">الهدف ${i + 1}${isOpen ? "" : ` — ${esc(g.strategicGoal || "")}`}</span>${achievedBadge}${removeBtn("goals", g.id)}</div>`;
+    const head = `<div class="repeat-item-head" style="cursor:pointer;" data-action="toggle-repeat-item" data-arr="goals" data-id="${esc(g.id)}"><span class="repeat-item-title">الهدف ${i + 1}${isOpen ? "" : ` — ${esc((g.operationalGoals || []).map((x) => x.name).join("، "))}`}</span>${achievedBadge}${removeBtn("goals", g.id)}</div>`;
     if (!isOpen) return `<div class="repeat-item">${head}</div>`;
     const ogHtml = (g.operationalGoals || []).map((og) => `
       <div class="og-block">
@@ -10876,8 +10870,7 @@ function goalsSectionHtml(d) {
       </div>`).join("");
     return `<div class="repeat-item">
       ${head}
-      ${fieldWrap("الهدف المرتبط بالخطة الاستراتيجية", true, sel("goals", g.id, "strategicGoal", g.strategicGoal, strategicOptions, "اختاري الهدف الاستراتيجي") + goalAddInlineHtml(g.id, "strategic"))}
-      ${fieldWrap("الهدف التشغيلي للوحدة", true, multiSelectDropdownHtml(`goal-og-${g.id}`, operationalAll || operationalGoalsFor(g.strategicGoal), (g.operationalGoals || []).map((og) => og.name), "اختاري هدفًا أو أكثر") + goalAddInlineHtml(g.id, "operational"))}
+      ${fieldWrap("الهدف التشغيلي للوحدة", true, multiSelectDropdownHtml(`goal-og-${g.id}`, operationalAll || operationalGoalsFor(), (g.operationalGoals || []).map((og) => og.name), "اختاري هدفًا أو أكثر") + goalAddInlineHtml(g.id, "operational"))}
       ${ogHtml}
     </div>`;
   }).join("");
@@ -10891,10 +10884,8 @@ function goalsSectionHtml(d) {
 // الأهداف التشغيلية التابعة للهدف الاستراتيجي المختار (+ غير المربوطة بأي هدف).
 // قبل اختيار الهدف الاستراتيجي تظهر كلها.
 function strategicGoalIdByName(name) { const g = (S.goalsDefinitions.strategic || []).find((x) => x.name === name); return g ? g.id : ""; }
-function operationalGoalsFor(strategicName) {
-  const sid = strategicGoalIdByName(strategicName);
-  const valid = new Set((S.goalsDefinitions.strategic || []).map((x) => x.id));
-  return (S.goalsDefinitions.operational || []).filter((o) => (!sid || !o.parentId || !valid.has(o.parentId) || o.parentId === sid) && scopeAllows("og", o.id, S.currentUnitId)).map((o) => o.name);
+function operationalGoalsFor() {
+  return (S.goalsDefinitions.operational || []).filter((o) => scopeAllows("og", o.id, S.currentUnitId)).map((o) => o.name);
 }
 // «＋ هدف غير موجود في القائمة»: يضيف الهدف للقائمة العامة (إدارة الأهداف) ويختاره مباشرة.
 // مديرة النظام تقدر توقفه من «إدارة الأهداف والمستهدفات».
@@ -11708,7 +11699,7 @@ const EMPTY_ITEM_FACTORY = {
   initiatives: () => ({ id: uid("init"), entryType: "", name: "", problem: "", ideaSummary: "", targetGroup: "", stage: "", beneficiariesCount: "", preliminaryResults: "", measuredImpact: "", cost: "", sustainability: "", scalability: "", needs: "", fileLink: "" }),
   strengths: () => ({ id: uid("str"), name: "", area: "", description: "", evidence: "", impact: "", continuity: "", maintainHow: "", transferable: "" }),
   indicators: () => ({ id: uid("kpi"), name: "", actual: "", deviationReason: "", causeType: "", correctiveAction: "", responsiblePerson: "", closureDate: "", requiredSupport: "" }),
-  goals: () => ({ id: uid("goal"), strategicGoal: "", operationalGoals: [] }),
+  goals: () => ({ id: uid("goal"), operationalGoals: [] }),
   impactStories: () => ({ id: uid("imp2"), impactType: "", title: "", beforeSituation: "", intervention: "", change: "", evidence: "", beneficiariesCount: "", impactDuration: "", ongoing: "", testimonial: "", evidenceLink: "", publicConsent: "" }),
   recommendations: () => ({ id: uid("rec"), source: "", level: "", text: "", evidenceBasis: "", expectedResult: "", priority: "", responsibleParty: "", supportingParties: "", proposedDuration: "", expectedCost: "", indicator: "" }),
   mainTasks: () => ({ id: uid("task"), name: "", goal: "", responsiblePerson: "", expectedDate: "" }),
@@ -12188,13 +12179,13 @@ function sectionBodyOnly(section, saved, report) {
 
   } else if (section.id === "goals") {
     const flat = [];
-    (d.goals || []).forEach((g) => (g.operationalGoals || []).forEach((og) => flat.push({ ...og, strategicGoal: g.strategicGoal })));
+    (d.goals || []).forEach((g) => (g.operationalGoals || []).forEach((og) => flat.push({ ...og })));
     if (!flat.length) { body = emptyHint("لا توجد أهداف مُدخلة."); }
     else {
-      body = reportTable(["الهدف الاستراتيجي", "الهدف التشغيلي", "المستوى", "النسبة"], flat.map((og) => {
+      body = reportTable(["الهدف التشغيلي", "المستوى", "النسبة"], flat.map((og) => {
         const gm = goalLevelMeta(og.level);
         const bar = og.percentage !== "" ? `<div style="display:flex;align-items:center;gap:6px;"><div style="width:70px;">${progressBarHtml(og.percentage || 0, gm.color)}</div><b style="color:${gm.color}">${og.percentage}٪</b></div>` : "—";
-        return [esc(og.strategicGoal), esc(og.name), og.level ? badgeHtml(og.level, gm.color, gm.bg) : "—", bar];
+        return [esc(og.name), og.level ? badgeHtml(og.level, gm.color, gm.bg) : "—", bar];
       }));
     }
 
@@ -13280,11 +13271,6 @@ function attachFormListeners() {
         const item = findById(list, el.dataset.id);
         const sub = item && findById(item[el.dataset.subarr] || [], el.dataset.subid);
         if (sub) sub.percentage = GOAL_LEVEL_PERCENTAGE[el.value] ?? "";
-      }
-      if (el.dataset.field === "strategicGoal" && el.dataset.arr === "goals" && (S.goalsDefinitions.operational || []).length) {
-        const item = findById(getItemList("goals"), el.dataset.id);
-        const allowed = operationalGoalsFor(el.value);
-        if (item) item.operationalGoals = (item.operationalGoals || []).filter((og) => allowed.includes(og.name));
       }
       if (el.dataset.field === "evidenceType" && el.dataset.subarr === "operationalGoals") {
         const list = getItemList(el.dataset.arr);
@@ -14592,8 +14578,7 @@ function attachClickListener() {
         if (!goalAddFromReportOn()) break;
         const kind = ds.kind === "strategic" ? "strategic" : "operational", gid = ds.gid;
         const goalItem = findById(getItemList("goals"), gid);
-        const parentName = kind === "operational" ? ((goalItem && goalItem.strategicGoal) || "") : "";
-        if (kind === "operational" && !parentName) { S.ui.goalAddErr = "اختاري الهدف الاستراتيجي أولًا، عشان يرتبط الهدف التشغيلي به"; render(); break; }
+        const parentName = "";
         // نجيب آخر قائمة من القاعدة قبل الإضافة عشان ما نرجّع تعديلات مديرة النظام
         refreshGoalsDefinitionsFromDb().catch(() => {}).then(() => {
           const list = S.goalsDefinitions[kind] || [];
