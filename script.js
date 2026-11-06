@@ -3500,6 +3500,14 @@ function statsCardHtml(c, entries) {
   } else body = `<div style="display:grid;gap:10px;">${secs.map((sid, n) => dashCCBlock(lab(sid), items.filter((i) => i.sid === sid), cols[n % 4])).join("")}</div>`;
   return `<div class="prs-avoid-break" style="margin:0 0 14px;"><div class="rpt-subheading" style="margin-top:0;">${esc(c.title || sub)}${c.cmp ? ' <span style="font-size:11px;color:#c9a24a;font-weight:700;">· مقارنة</span>' : ""}</div>${body}</div>`;
 }
+/* قسم + حقوله في مكان واحد: كل قسم قابل للفتح وتحته حقوله، واختيار حقل يختار قسمه تلقائيًا */
+function ccUnifiedHtml(c, secs, chip, secAttr, fldAttr, cls) {
+  return `<div class="${cls}" style="margin-bottom:6px;">اختاري القسم كاملًا، أو افتحيه وحدّدي الحقول التي تظهر معلوماتها فقط</div><div style="display:grid;gap:6px;margin-bottom:8px;">${secs.map((x) => {
+    const selOn = (c.secs || []).includes(x.id), fl = (rptVisibleFields(x.id) || []).filter((f) => f && f.id), on = selOn ? ccOnly(c.flds, x.id) : [];
+    const stat = !selOn ? "" : on.length ? `${on.length} حقل` : "كل الحقول";
+    return `<details${selOn ? " open" : ""} style="border:1px solid ${BORDER};border-radius:12px;background:${selOn ? "#faf2f4" : "#fff"};padding:6px 10px;"><summary style="cursor:pointer;font-weight:800;font-size:12.5px;display:flex;justify-content:space-between;gap:8px;"><span>${selOn ? "✓ " : ""}${esc(x.label)}</span><span style="font-weight:600;color:#8a7c80;font-size:11px;">${stat}</span></summary><div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:8px;">${chip(selOn && !on.length, secAttr(x.id), "كل الحقول")}${fl.length > 1 ? fl.map((f) => chip(on.includes(f.id), fldAttr(x.id, f.id), f.label || f.id)).join("") : ""}</div></details>`;
+  }).join("")}</div>`;
+}
 function statsPageBodyHtml(s, entries) {
   if (!s || !s.statsOn || !Array.isArray(s.statsCards) || !s.statsCards.length) return "";
   let last = null;
@@ -3523,8 +3531,7 @@ function statsEditorHtml(d) {
     ${d.statsOn ? `<div style="margin-top:10px;">${rmFieldHtml("عنوان الصفحة", rmText("statsTitle", d.statsTitle, "الإحصائيات"))}</div>
     ${cards.map((c) => `<div style="border:1px solid ${BORDER};border-radius:12px;padding:10px 12px;margin-top:10px;background:#faf6f6;">
       <div style="display:flex;gap:8px;align-items:center;margin-bottom:8px;"><input class="input" data-rm="st|${esc(c.id)}|title" value="${esc(c.title || "")}" placeholder="عنوان البطاقة" style="flex:1;" /><input class="input" data-rm="st|${esc(c.id)}|group" value="${esc(c.group || "")}" placeholder="مجموعة (اختياري)" style="width:130px;" />${pillBtn("حذف", { variant: "ghost", action: "st-del", data: { id: c.id } })}</div>
-      <div class="rm-hint" style="margin-bottom:4px;">الأقسام</div><div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px;">${secs.map((x) => chip((c.secs || []).includes(x.id), `data-action="st-sec" data-id="${esc(c.id)}" data-sec="${esc(x.id)}"`, x.label)).join("")}</div>
-      ${(c.secs || []).map((sid) => { const fl = (rptVisibleFields(sid) || []).filter((f) => f && f.id); if (fl.length < 2) return ""; const on = ccOnly(c.flds, sid); return `<div class="rm-hint" style="margin-bottom:4px;">حقول «${esc(((SECTIONS || []).find((x) => x.id === sid) || {}).label || sid)}» (لا شيء محدد = كل الحقول)</div><div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px;">${fl.map((f) => chip(on.includes(f.id), `data-action="st-fld" data-id="${esc(c.id)}" data-fld="${esc(sid + "." + f.id)}"`, f.label || f.id)).join("")}</div>`; }).join("")}
+      ${ccUnifiedHtml(c, secs, chip, (sid) => `data-action="st-sec" data-id="${esc(c.id)}" data-sec="${esc(sid)}"`, (sid, fid) => `data-action="st-fld" data-id="${esc(c.id)}" data-fld="${esc(sid + "." + fid)}"`, "rm-hint")}
       <div style="margin-bottom:8px;">${chip(!!c.cmp, `data-action="st-cmp" data-id="${esc(c.id)}"`, "هذه مقارنة بين الوحدات")}</div>
       <div class="rm-hint" style="margin-bottom:4px;">طريقة العرض</div><div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px;">${views.map(([v, l]) => chip((c.view || "seq") === v, `data-action="st-view" data-id="${esc(c.id)}" data-view="${v}"`, l)).join("")}</div>
       ${c.view === "shape" ? dashCCCandidatesHtml("st", c, "st-apply") + `<select class="input" data-rm="st|${esc(c.id)}|shape"><option value="">أو اختاري من القائمة</option>${shapes.map(([id, v]) => `<option value="${esc(id)}" ${c.shape === id ? "selected" : ""}>${esc(v.name)}</option>`).join("")}</select>${shpSelPreview(c, (() => { try { return dashCCItems((S.units || []).filter((u) => u.status === "active"), (c.secs || []).filter(Boolean), c.flds); } catch (e) { return []; } })())}` : ""}
@@ -3628,8 +3635,7 @@ function dashCCEditorHtml(kid) {
     <div class="hint" style="margin-bottom:10px;">اختاري قسمًا أو أكثر وطريقة العرض، وتظهر بطاقة واحدة في اللوحة ببيانات هذه الأقسام. البيانات تبقى في أقسامها، والدمج في العرض فقط.</div>
     ${cards.map((c) => `<div style="border:1px solid ${BORDER};border-radius:12px;padding:10px 12px;margin-bottom:10px;background:#faf6f6;">
       <div style="display:flex;gap:8px;align-items:center;margin-bottom:8px;"><input class="input" data-cc-kind="${esc(kid)}" data-cc-id="${esc(c.id)}" data-cc-f="title" value="${esc(c.title || "")}" placeholder="عنوان البطاقة" style="flex:1;" />${pillBtn("حذف", { variant: "ghost", action: "cc-del", data: { kind: kid, id: c.id } })}</div>
-      <div class="hint" style="margin-bottom:4px;">الأقسام</div><div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px;">${secs.map((x) => chip((c.secs || []).includes(x.id), `data-action="cc-sec" data-kind="${esc(kid)}" data-id="${esc(c.id)}" data-sec="${esc(x.id)}"`, x.label)).join("")}</div>
-      ${(c.secs || []).map((sid) => { const fl = (rptVisibleFields(sid) || []).filter((f) => f && f.id); if (fl.length < 2) return ""; const on = ccOnly(c.flds, sid); return `<div class="hint" style="margin-bottom:4px;">حقول «${esc(((SECTIONS || []).find((x) => x.id === sid) || {}).label || sid)}» (لا شيء محدد = كل الحقول)</div><div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px;">${fl.map((f) => chip(on.includes(f.id), `data-action="cc-fld" data-kind="${esc(kid)}" data-id="${esc(c.id)}" data-fld="${esc(sid + "." + f.id)}"`, f.label || f.id)).join("")}</div>`; }).join("")}
+      ${ccUnifiedHtml(c, secs, chip, (sid) => `data-action="cc-sec" data-kind="${esc(kid)}" data-id="${esc(c.id)}" data-sec="${esc(sid)}"`, (sid, fid) => `data-action="cc-fld" data-kind="${esc(kid)}" data-id="${esc(c.id)}" data-fld="${esc(sid + "." + fid)}"`, "hint")}
       <div style="margin-bottom:8px;">${chip(!!c.cmp, `data-action="cc-cmp" data-kind="${esc(kid)}" data-id="${esc(c.id)}"`, "هذه مقارنة بين الوحدات")}</div>
       ${dashCCCandidatesHtml(kid, c)}
       <div class="hint" style="margin-bottom:4px;">طريقة العرض</div><div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px;">${views.map(([v, l]) => chip((c.view || "seq") === v, `data-action="cc-view" data-kind="${esc(kid)}" data-id="${esc(c.id)}" data-view="${v}"`, l)).join("")}</div>
@@ -3705,7 +3711,7 @@ function vwPickerHtml(cur, act, attrs, secs, ctxId) {
     if (/^shape:/.test(pend)) { const pid = pend.slice(6); const r0 = rows.find((x) => x.id === pid); let h = ""; if (items.length) { try { h = shapeRender(pid, { auto: true }, { sectionId: secs[0], items, label: "", dash: true }); } catch (e) { h = ""; } } big = h ? `<div class="rpt-v5" style="pointer-events:none;background:#fff;border:1px solid ${BORDER};border-radius:12px;padding:10px;margin:8px 0;">${h}</div>` : `<div class="hint" style="margin:8px 0;">${items.length ? "هذا الشكل لا يناسب هذه البيانات" : "لا توجد بيانات لمعاينته"}، وسيُعبَّأ تلقائيًا إن وُجدت بيانات مناسبة.</div>`; }
     pendHtml = `<div style="border:2px solid ${ROSE};border-radius:14px;background:#fff;padding:12px;margin-bottom:10px;"><div style="font-weight:800;font-size:13px;">معاينة قبل الحفظ: ${esc(vwLabel(pend))}</div>${big}<div style="display:flex;gap:8px;flex-wrap:wrap;"><button type="button" class="pill-btn" data-action="${act}" ${attrs} data-val="${esc(pend)}">تأكيد الحفظ</button><button type="button" class="pill-btn pill-ghost" data-action="vw-pend-cancel">إلغاء</button></div></div>`;
   }
-  return `<div style="padding:10px 14px;background:#faf6f6;border-top:1px solid ${BORDER};">${pendHtml}<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px;">${b("", "جدول (كما هو)")}${b("chart", "رسم + زر الجدول")}${b("both", "رسم وجدول")}</div><div class="hint" style="margin-bottom:4px;">أو اختاري شكلًا من المكتبة (الاسم تحت كل معاينة). ${note}</div><div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px;">${cats.map(([cid, cn]) => `<button type="button" class="flt-chip${cat === cid ? " on" : ""}" data-action="vw-cat" data-cat="${esc(cid)}">${esc(cn)}</button>`).join("")}</div><div class="shp-grid">${cards}</div></div>`;
+  return `<div style="padding:10px 14px;background:#faf6f6;border-top:1px solid ${BORDER};">${pendHtml}<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px;">${b("shape:auto", "✨ تلقائي (الأنسب)")}${b("", "جدول (كما هو)")}${b("chart", "رسم + زر الجدول")}${b("both", "رسم وجدول")}</div><div class="hint" style="margin-bottom:4px;">أو اختاري شكلًا من المكتبة (الاسم تحت كل معاينة). ${note}</div><div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px;">${cats.map(([cid, cn]) => `<button type="button" class="flt-chip${cat === cid ? " on" : ""}" data-action="vw-cat" data-cat="${esc(cid)}">${esc(cn)}</button>`).join("")}</div><div class="shp-grid">${cards}</div></div>`;
 }
 function tvShapeItems(tb) {
   const rows = [...tb.querySelectorAll("tbody tr")]; const out = [];
@@ -6403,7 +6409,7 @@ function dashSettingsCardHtml() {
       <div style="font-size:13px;font-weight:800;margin-bottom:6px;">معاينة مباشرة للوحة</div>
       <div class="hint" style="margin-bottom:10px;">اختاري الجهة لترين اللوحة كما تظهر لها (ببيانات التقارير الحالية)، ثم اضغطي ✓/✗ فوق وستتغير المعاينة فورًا.</div>
       <select class="input" id="dash-prev-kind" style="max-width:300px;margin-bottom:12px;"><option value="">بدون معاينة</option>${DASH_KINDS.map((k) => `<option value="${esc(k.id)}" ${S.ui.dashPrevKind === k.id ? "selected" : ""}>${esc(k.label)}</option>`).join("")}</select>
-      ${S.ui.dashPrevKind ? `<div class="dash-dock-body" style="border:2px dashed ${BORDER};border-radius:18px;padding:6px;background:#faf6f6;pointer-events:none;overflow:auto;">${dashPreviewHtml(S.ui.dashPrevKind)}</div>` : ""}
+      ${S.ui.dashPrevKind ? `<div class="dash-dock-body" style="border:2px dashed ${BORDER};border-radius:18px;padding:6px;background:#faf6f6;overflow:auto;-webkit-overflow-scrolling:touch;overscroll-behavior:contain;touch-action:pan-y;"><div style="pointer-events:none;">${dashPreviewHtml(S.ui.dashPrevKind)}</div></div>` : ""}
     </div>
     ${dashOrderCardHtml()}
   </div>`;
@@ -6900,15 +6906,17 @@ function aggReportDocHtml(s, data) {
     const chapters = rptOrdered(aggChapterDefs(s), s).filter((c) => !s.hidden[c.key] && !rptLevelHides(s, c.key) && (s.showEmpty || (c.custom ? aggCustomChapterRows(c.custom, data).length : aggChapterHasData(c.key, data))));
     const pages = [];
     const per = Number(s.perPage) || 0;
+    let closingPage = -1;
     chapters.forEach((c, i) => {
       if (!pages.length || (per && i % per === 0)) pages.push("");
+      if (c.key === "closing") closingPage = pages.length - 1;
       RPT_CTX.section = c.key;
       const extra = rptCustomChartsFor(s, c.key, data.flat || [], true);
       pages[pages.length - 1] += tvApply(execChapterHtml(i + 1, rptIcon(c.icon), rptChapterTitle(c, s), extra + (c.custom ? aggCustomChapterBody(c.custom, data) : aggChapterBody(c.key, data, s))), "fr:" + c.key, (s.tv || {})[c.key]);
       RPT_CTX.section = null;
     });
     const stBody = statsPageBodyHtml(s, data.flat || []);
-    if (stBody) pages.push(execChapterHtml("", rptIcon(""), s.statsTitle || "الإحصائيات", stBody));
+    if (stBody) { const stH = execChapterHtml("", rptIcon(""), s.statsTitle || "الإحصائيات", stBody); if (closingPage >= 0) pages.splice(closingPage, 0, stH); else pages.push(stH); } // قبل صفحة الاعتماد
     const hasCover = !!s.showCover;
     const total = pages.length + (hasCover ? 1 : 0);
     const cover = hasCover ? rptUnifiedCoverHtml(s, {
@@ -7374,8 +7382,8 @@ function handleReportsManageAction(action, ds) {
     case "rm-excl": { const ex = { units: [...((d.excl || {}).units || [])], depts: [...((d.excl || {}).depts || [])] }; const l = ex[ds.kind]; const k = l.indexOf(ds.id); if (k >= 0) l.splice(k, 1); else l.push(ds.id); d.excl = ex; break; }
     case "st-add": d.statsCards = [...(d.statsCards || []), { id: uid("st"), title: "", group: "", secs: [], view: "seq", shape: "" }]; break;
     case "st-del": d.statsCards = (d.statsCards || []).filter((x) => x.id !== ds.id); break;
-    case "st-sec": d.statsCards = (d.statsCards || []).map((x) => { if (x.id !== ds.id) return x; const l = [...(x.secs || [])]; const i = l.indexOf(ds.sec); if (i === -1) l.push(ds.sec); else l.splice(i, 1); return { ...x, secs: l }; }); break;
-    case "st-fld": d.statsCards = (d.statsCards || []).map((x) => { if (x.id !== ds.id) return x; const l = [...(x.flds || [])]; const i = l.indexOf(ds.fld); if (i === -1) l.push(ds.fld); else l.splice(i, 1); return { ...x, flds: l }; }); break;
+    case "st-sec": d.statsCards = (d.statsCards || []).map((x) => { if (x.id !== ds.id) return x; const l = [...(x.secs || [])]; const i = l.indexOf(ds.sec); let fl = [...(x.flds || [])]; const has = fl.some((f) => String(f).startsWith(ds.sec + ".")); if (i === -1) l.push(ds.sec); else if (has) fl = fl.filter((f) => !String(f).startsWith(ds.sec + ".")); else { l.splice(i, 1); } return { ...x, secs: l, flds: fl }; }); break;
+    case "st-fld": d.statsCards = (d.statsCards || []).map((x) => { if (x.id !== ds.id) return x; const l = [...(x.flds || [])]; const i = l.indexOf(ds.fld); if (i === -1) l.push(ds.fld); else l.splice(i, 1); const sc = String(ds.fld).split(".")[0], sl = [...(x.secs || [])]; if (i === -1 && !sl.includes(sc)) sl.push(sc); return { ...x, flds: l, secs: sl }; }); break;
     case "st-cmp": d.statsCards = (d.statsCards || []).map((x) => (x.id === ds.id ? { ...x, cmp: !x.cmp } : x)); break;
     case "rm-dock": st.dock = !(st.dock == null ? window.innerWidth >= 900 : st.dock); break;
     case "rm-pick": st.pick = st.pick === ds.key ? null : ds.key; break;
@@ -12932,7 +12940,23 @@ function shapeAutoData(shapeId, ctx) {
   });
   return out;
 }
+/* اختيار الشكل الأنسب تلقائيًا من شكل البيانات */
+function shpBestId(ctx) {
+  let its = [];
+  try { its = ctx && ctx.items ? ctx.items : (ctx && ctx.sectionId ? shpSecItems(ctx.sectionId, ctx.data).items : []); } catch (e) { its = []; }
+  const nums = its.filter((i) => i.num != null), withT = nums.filter((i) => i.target != null && shpN(i.target) > 0);
+  const pcs = nums.filter((i) => /نسبة|٪|%|percent|rate/.test(String(i.numLabel || "")));
+  if (withT.length) return "m20";
+  if (pcs.length === 1 && nums.length === 1) return "m1";
+  if (nums.length >= 2 && nums.some((i) => i.date)) return "m7";
+  if (nums.length >= 2) return "m22";
+  if (nums.length === 1) return "m19";
+  if (its.some((i) => i.date)) return "m23";
+  return "mf2";
+}
+SHAPES_LIB.auto = { cat: "_auto", live: true, name: "✨ تلقائي — الأنسب للبيانات", fields: [], sample: {}, render: () => "" };
 function shapeRender(shapeId, data, ctx) {
+  if (shapeId === "auto") shapeId = shpBestId(ctx);
   const s = SHAPES_LIB[shapeId]; if (!s) return "";
   try {
     if (data && data.auto && ctx && ctx.sectionId && !s.live) {
@@ -13493,12 +13517,12 @@ function fullReportOrPreviewBody(unit, report, afterPage, opts) {
         const mb = mergeBasic ? sectionBodyOnly({ id: "basic", label: "البيانات الأساسية" }, report.sections && report.sections.basic, report) : "";
         pg.html += reportSummaryHtml(report, title, mb) + extra; if (mb) pg.ids.push("basic");
       }
-      else if (c.special === "approval") pg.html += reportApprovalHtml(report, title, s.approvalBoxes, extra);
+      else if (c.special === "approval") { pg.html += reportApprovalHtml(report, title, s.approvalBoxes, extra); pg.appr = true; }
       else if (c.group) { pg.html += tvApply(rptGroupChapterHtml(c, rptIcon(c.icon), title, report, extra), "ur:" + c.key, (s.tv || {})[c.key]); pg.ids.push(...c.sections); inPage++; }
       else { pg.html += tvApply(reportChapterHtml(rptIcon(c.icon), title, c.sections, report, extra), "ur:" + c.key, (s.tv || {})[c.key]); pg.ids.push(...c.sections); inPage++; }
     });
     const stBody = opts.capture ? "" : statsPageBodyHtml(s, [{ unit, report }]);
-    if (stBody) pages.push({ html: execChapterHtml("", rptIcon(""), s.statsTitle || "الإحصائيات", stBody), ids: [], summary: false });
+    if (stBody) { const stPg = { html: execChapterHtml("", rptIcon(""), s.statsTitle || "الإحصائيات", stBody), ids: [], summary: false }; const ai = pages.findIndex((p) => p.appr); if (ai >= 0) pages.splice(ai, 0, stPg); else pages.push(stPg); } // الإحصائيات قبل صفحة الاعتماد
     const hasCover = !!s.showCover;
     const total = pages.length + (hasCover ? 1 : 0);
     return (hasCover ? reportCoverPageHtml(unit, report, dept, s, total) : "") +
@@ -14454,8 +14478,8 @@ function attachClickListener() {
       case "vw-set": { if (!S.isAdmin) break; const cfg = JSON.parse(JSON.stringify(dashConfig())); cfg[ds.kind] = cfg[ds.kind] || {}; cfg[ds.kind].view = cfg[ds.kind].view || {}; if (ds.val) cfg[ds.kind].view[ds.key] = ds.val; else delete cfg[ds.kind].view[ds.key]; S.ui.vwPend = null; S.dashboardConfig = cfg; dataStore.saveDashboardConfig(cfg); render(); break; }
       case "cc-add": { dashCCSave(ds.kind, (c) => c.cards.push({ id: uid("cc"), title: "", secs: [], view: "seq", shape: "" })); render(); break; }
       case "cc-del": { dashCCSave(ds.kind, (c) => { c.cards = c.cards.filter((x) => x.id !== ds.id); }); render(); break; }
-      case "cc-sec": { dashCCSave(ds.kind, (c) => { const k = c.cards.find((x) => x.id === ds.id); if (!k) return; k.secs = k.secs || []; const i = k.secs.indexOf(ds.sec); if (i === -1) k.secs.push(ds.sec); else k.secs.splice(i, 1); }); render(); break; }
-      case "cc-fld": { dashCCSave(ds.kind, (c) => { const k = c.cards.find((x) => x.id === ds.id); if (!k) return; k.flds = k.flds || []; const i = k.flds.indexOf(ds.fld); if (i === -1) k.flds.push(ds.fld); else k.flds.splice(i, 1); }); render(); break; }
+      case "cc-sec": { dashCCSave(ds.kind, (c) => { const k = c.cards.find((x) => x.id === ds.id); if (!k) return; k.secs = k.secs || []; k.flds = k.flds || []; const i = k.secs.indexOf(ds.sec); const has = k.flds.some((f) => String(f).startsWith(ds.sec + ".")); if (i === -1) k.secs.push(ds.sec); else if (has) k.flds = k.flds.filter((f) => !String(f).startsWith(ds.sec + ".")); else k.secs.splice(i, 1); }); render(); break; }
+      case "cc-fld": { dashCCSave(ds.kind, (c) => { const k = c.cards.find((x) => x.id === ds.id); if (!k) return; k.flds = k.flds || []; const i = k.flds.indexOf(ds.fld); if (i === -1) k.flds.push(ds.fld); else k.flds.splice(i, 1); const sc = String(ds.fld).split(".")[0]; k.secs = k.secs || []; if (i === -1 && !k.secs.includes(sc)) k.secs.push(sc); }); render(); break; }
       case "cc-cmp": { dashCCSave(ds.kind, (c) => { const k = c.cards.find((x) => x.id === ds.id); if (k) k.cmp = !k.cmp; }); render(); break; }
       case "cc-view": { dashCCSave(ds.kind, (c) => { const k = c.cards.find((x) => x.id === ds.id); if (k) k.view = ds.view; }); render(); break; }
       case "cc-apply": { dashCCSave(ds.kind, (c) => { const k = c.cards.find((x) => x.id === ds.id); if (k) { k.view = "shape"; k.shape = ds.shape; } }); render(); break; }

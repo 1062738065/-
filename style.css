@@ -1007,3 +1007,6 @@ table.prs-table th, table.prs-table td, .shp-tbl th, .shp-tbl td, .table-wrap ta
   .dash-dock { position: fixed; top: 8px; bottom: 8px; left: 8px; width: 38vw; z-index: 60; margin: 0; padding: 10px; background: #fffdf9; border: 1px solid #e7dccb; border-radius: 16px; box-shadow: 0 6px 24px rgba(43,29,33,.18); overflow: hidden; display: flex; flex-direction: column; }
   .dash-dock .dash-dock-body { flex: 1; min-height: 0; overflow: auto !important; }
 }
+
+.dash-dock .dash-dock-body { max-height: 70vh; }
+@media (min-width: 900px) { .dash-dock .dash-dock-body { max-height: none; } }
