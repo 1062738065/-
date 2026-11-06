@@ -999,3 +999,11 @@ table.prs-table th, table.prs-table td, .shp-tbl th, .shp-tbl td, .table-wrap ta
   .rm-layout.rm-has-dock > .rm-panel { flex: 1 1 100%; min-width: 0; }
   .rm-dock-sp { display: none; }
 }
+
+/* معاينة لوحة المعلومات: مثبتة يسار الشاشة أثناء التعديل */
+.dash-dock { border-top: 1px solid #e7dccb; margin-top: 18px; padding-top: 16px; }
+@media (min-width: 900px) {
+  .dash-dockwrap { padding-left: calc(40vw + 16px) !important; }
+  .dash-dock { position: fixed; top: 8px; bottom: 8px; left: 8px; width: 38vw; z-index: 60; margin: 0; padding: 10px; background: #fffdf9; border: 1px solid #e7dccb; border-radius: 16px; box-shadow: 0 6px 24px rgba(43,29,33,.18); overflow: hidden; display: flex; flex-direction: column; }
+  .dash-dock .dash-dock-body { flex: 1; min-height: 0; overflow: auto !important; }
+}
