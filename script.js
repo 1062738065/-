@@ -664,7 +664,8 @@ function renderSchemaRepeaterHtml(schema, d) {
   const belowMin = schema.minItems != null && items.length > 0 && items.length < schema.minItems;
   const minWarningHtml = belowMin ? `<div class="hint bad">أضيفي ${schema.minItems - items.length} ${schema.itemLabelPlural || schema.itemLabel} إضافية على الأقل لاستيفاء الحد الأدنى (${schema.minItems}).</div>` : "";
   const addBtn = pillBtn(addLabel, { variant: "ghost", icon: iconPlus(15, ROSE), action: "add-item", data: { arr: schema.arrayKey }, disabled: atMax });
-  if (schema.arrayKey === "programs") return `${hintHtml}<div style="margin-bottom:14px;">${addBtn}</div>${rows}${minWarningHtml}<div style="margin-top:18px;">${notesFieldHtml(d)}</div>`;
+  if (schema.arrayKey === "programs") return `${hintHtml}<div style="margin-bottom:14px;">${addBtn}${pillBtn("استيراد من جدول", { variant: "ghost", action: "xl-open" })}</div>${xlPanelHtml()}${rows}${minWarningHtml}<div style="margin-top:18px;">${notesFieldHtml(d)}</div>`;
+  return `${hintHtml}<div style="margin-bottom:14px;">${addBtn}</div>${rows}${minWarningHtml}<div style="margin-top:18px;">${notesFieldHtml(d)}</div>`;
   return `${hintHtml}${rows}${addBtn}${minWarningHtml}<div style="margin-top:18px;">${notesFieldHtml(d)}</div>`;
 }
 
@@ -10638,6 +10639,82 @@ function pfBannerHtml() {
   const sub = on === "tools" ? "القياس" : on === "analysis" ? "التحليل" : "الشواهد";
   return `<div class="no-print pf-banner"><div><small>العمل / البرنامج</small><b>${esc(nm)}</b><span> — ${sub}</span></div><button type="button" class="pill-btn pill-ghost" data-action="pf-all">عرض العام</button></div>`;
 }
+/* ===== استيراد الأعمال من رابط Google Sheet أو ملف (Excel/CSV) أو لصق: يكتشف الأعمدة ويُنشئ الأعمال ووحدات عدّها ===== */
+const IMP_FIELDS = [["type", "نوع العمل / البرنامج", /نوع|برنامج|عمل|فئة|مسار/], ["venue", "المقر / المركز", /مقر|مركز|موقع|جامع|مدرسة|جهة/], ["count", "عدد المستفيدات", /عدد|مستفيد|طالب|حضور/], ["teacher", "المعلمة / المنفّذة", /معلم|منفذ|مشرف|مدرب/]];
+function impState() { return S.ui.xl || (S.ui.xl = { open: false, rows: null, map: {}, msg: "", ok: false, busy: false, link: "", paste: "" }); }
+function impAutoMap(rows) {
+  const head = (rows[0] || []).map((x) => String(x || "").trim()), map = {}, used = new Set();
+  IMP_FIELDS.forEach(([k, , rx]) => { const i = head.findIndex((h, ix) => !used.has(ix) && rx.test(h)); if (i >= 0) { map[k] = i; used.add(i); } });
+  return map;
+}
+function impSetRows(rows, msg) { const st = impState(); st.rows = rows; st.map = impAutoMap(rows); st.msg = msg || ""; st.ok = true; st.busy = false; render(); }
+function impFail(e) { const st = impState(); st.msg = (e && e.message) || String(e); st.ok = false; st.busy = false; render(); }
+function impGroups(st) {
+  const rows = (st.rows || []).slice(1), m = st.map, g = {};
+  const cell = (r, k) => (m[k] == null ? "" : String(r[m[k]] == null ? "" : r[m[k]]).trim());
+  rows.forEach((r) => {
+    const t = cell(r, "type") || "غير محدد"; const x = g[t] || (g[t] = { type: t, rows: 0, venues: new Set(), teachers: new Set(), people: 0 });
+    x.rows++; const v = cell(r, "venue"), te = cell(r, "teacher"); if (v) x.venues.add(v); if (te) x.teachers.add(te);
+    const n = parseFloat(svLatin(cell(r, "count")).replace(/[^\d.]/g, "")); if (!isNaN(n)) x.people += n;
+  });
+  return Object.values(g);
+}
+function xlPanelHtml() {
+  const st = impState(); if (!st.open) return "";
+  const rows = st.rows, head = rows ? (rows[0] || []).map((h, i) => String(h || "").trim() || "عمود " + (i + 1)) : [];
+  const src = `<div class="imp-box"><div class="field"><label class="field-label">رابط جدول Google Sheets</label><div style="display:flex;gap:6px;"><input class="input" dir="ltr" id="xl-link" style="flex:1;min-width:0;" placeholder="https://docs.google.com/spreadsheets/..." value="${esc(st.link)}" /><button type="button" class="pill-btn pill-primary" data-action="xl-link" ${st.busy ? "disabled" : ""}>${st.busy ? "جارٍ القراءة…" : "قراءة"}</button></div></div>
+    <div class="field"><label class="field-label">أو ملف Excel / CSV</label><input type="file" id="imp-file" accept=".xlsx,.xls,.csv,.tsv,.txt" class="input" /></div>
+    <div class="field"><label class="field-label">أو الصقي الجدول</label><textarea class="input" rows="3" dir="auto" id="xl-paste" placeholder="انسخي الجدول مع صف العناوين">${esc(st.paste)}</textarea><button type="button" class="pill-btn pill-ghost" style="margin-top:6px;" data-action="xl-paste">قراءة الملصق</button></div></div>`;
+  const msg = st.msg ? `<div class="hint" style="color:${st.ok ? "#3b6d11" : "#a32d2d"};margin:8px 0;">${esc(st.msg)}</div>` : "";
+  let body = "";
+  if (rows && rows.length > 1) {
+    const maps = IMP_FIELDS.map(([k, l]) => `<div class="field" style="margin:0;"><label class="field-label">${l}</label><select class="input" data-imp-map="${k}"><option value="">— بدون —</option>${head.map((h, i) => `<option value="${i}" ${st.map[k] === i ? "selected" : ""}>${esc(h)}</option>`).join("")}</select></div>`).join("");
+    const gs = impGroups(st), mx = Math.max(1, ...gs.map((x) => x.people || x.rows));
+    const tbl = `<div class="pc-table"><div class="imp-r pc-head"><div>النوع</div><div>حلقة</div><div>مركز</div><div>معلمة</div><div>مستفيدة</div></div>${gs.map((x) => `<div class="imp-r"><div class="pc-u">${esc(x.type)}</div><div>${fmtNum(x.rows)}</div><div>${fmtNum(x.venues.size)}</div><div>${fmtNum(x.teachers.size)}</div><div><b>${fmtNum(x.people)}</b></div></div>`).join("")}</div>`;
+    const bars = gs.map((x, i) => `<div class="imp-bar"><span>${esc(x.type)}</span><i style="width:${Math.round(((x.people || x.rows) / mx) * 100)}%;background:${ST_COL[i % ST_COL.length]}"></i><b>${fmtNum(x.people || x.rows)}</b></div>`).join("");
+    body = `<div class="ach-l" style="margin-top:12px;">الأعمدة (عدّليها إن كان الاكتشاف غير صحيح)</div><div class="imp-maps">${maps}</div>${tbl}<div style="margin:8px 0;">${bars}</div><button type="button" class="next-btn" data-action="xl-apply">إنشاء ${fmtNum(gs.length)} عمل وبرنامج</button>`;
+  }
+  return `<div class="card imp-panel no-print" style="margin-bottom:14px;"><div style="display:flex;justify-content:space-between;align-items:center;"><b style="color:#6b2337;">استيراد الأعمال من جدول</b><button type="button" class="pill-btn pill-ghost" data-action="xl-close">إغلاق</button></div>${src}${msg}${body}</div>`;
+}
+async function impLoadXlsx() {
+  if (window.XLSX) return window.XLSX;
+  await new Promise((ok, no) => { const sc = document.createElement("script"); sc.src = "https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"; sc.onload = ok; sc.onerror = () => no(new Error("تعذّر تحميل قارئ Excel. احفظي الملف CSV أو الصقي الجدول.")); document.head.appendChild(sc); });
+  return window.XLSX;
+}
+async function impReadFile(file) {
+  const st = impState(); st.busy = true; st.msg = ""; render();
+  try {
+    let rows;
+    if (/\.(xlsx|xls)$/i.test(file.name)) { const X = await impLoadXlsx(); const wb = X.read(await file.arrayBuffer(), { type: "array" }); rows = X.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { header: 1, defval: "", raw: false }); rows = rows.filter((r) => r.some((x) => String(x).trim() !== "")); }
+    else rows = svParseTable(await file.text());
+    if (!rows || rows.length < 2) throw new Error("الملف فارغ أو بدون صف عناوين.");
+    impSetRows(rows, `تمت قراءة ${rows.length - 1} صفًا.`);
+  } catch (e) { impFail(e); }
+}
+function impAction(action, ds) {
+  const st = impState();
+  if (action === "xl-open") { st.open = true; render(); return true; }
+  if (action === "xl-close") { st.open = false; render(); return true; }
+  if (action === "xl-link") {
+    const el = document.getElementById("xl-link"); st.link = el ? el.value.trim() : st.link;
+    if (!/^https:\/\/docs\.google\.com\/spreadsheets\//.test(st.link)) { impFail(new Error("ضعي رابط جدول Google صحيح.")); return true; }
+    st.busy = true; st.msg = ""; render();
+    svReadSheetUrl(st.link).then((rows) => impSetRows(rows, `تمت قراءة ${rows.length - 1} صفًا.`)).catch(impFail); return true;
+  }
+  if (action === "xl-paste") { const el = document.getElementById("xl-paste"); st.paste = el ? el.value : ""; const rows = svParseTable(st.paste); if (rows.length < 2) { impFail(new Error("الصقي الجدول مع صف العناوين.")); return true; } impSetRows(rows, `تمت قراءة ${rows.length - 1} صفًا.`); return true; }
+  if (action === "xl-apply") {
+    const gs = impGroups(st), list = getItemList("programs"), mk = EMPTY_ITEM_FACTORY.programs;
+    gs.forEach((x) => {
+      const it = mk(); it.name = x.type; if (WORK_TYPES_BASE.includes(x.type)) it.workType = x.type;
+      const cs = []; const add = (unit, done) => { if (done > 0) cs.push({ id: uid("pc"), unit, target: "", done }); };
+      add("حلقة", x.rows); add("مركز", x.venues.size); add("معلمة", x.teachers.size); add("مستفيدة", x.people);
+      it.counts = cs; if (x.people) it.actualBeneficiaries = x.people; list.push(it);
+    });
+    st.open = false; st.rows = null; st.msg = ""; S.ui.expandedRepeatItem = S.ui.expandedRepeatItem || {}; S.ui.expandedRepeatItem.programs = null;
+    autoSaveSchedule(); render(); window.scrollTo(0, 0); return true;
+  }
+  return false;
+}
 function svMeasureTabsHtml(report, unitId) {
   if (!svInMeasureGroup(S.activeSectionId)) return "";
   const ids = reportSectionsNav(report, unitId).map((x) => x.id).filter((id) => svInMeasureGroup(id));
@@ -10682,7 +10759,7 @@ function sectionEditorHtml(unit, report) {
         <div class="prs-title" style="font-size:17px;font-weight:800;">${esc(section.label)}</div>
       </div>
       ${(section.id !== "basic" && section.id !== "review" && /ربع|سنوي|نصف|فصلي/.test(reportPeriodType(report) || "")) ? `<button data-action="imp-open" style="display:flex;align-items:center;gap:6px;background:#fff;border:1px solid ${BORDER};border-radius:999px;padding:6px 12px;font-size:12px;font-weight:700;color:${ROSE};cursor:pointer;margin-inline-end:8px;">${iconDownload(14, ROSE)} استيراد من تقارير سابقة</button>` : ""}
-      ${actionAllowed("toggle-section-completed") && autoSectionComplete(section.id, S.sectionDraft) === null ? `<button data-action="toggle-section-completed" style="display:flex;align-items:center;gap:6px;background:${S.sectionCompleted ? GREEN_BG : "#fff"};border:1px solid ${S.sectionCompleted ? GREEN : BORDER};border-radius:999px;padding:6px 12px;cursor:pointer;font-size:11.5px;font-weight:700;color:${S.sectionCompleted ? GREEN : SUBTLE}">
+      ${actionAllowed("toggle-section-completed") && autoSectionComplete(section.id, S.sectionDraft) === null && section.id === "basic" ? `<button data-action="toggle-section-completed" style="display:flex;align-items:center;gap:6px;background:${S.sectionCompleted ? GREEN_BG : "#fff"};border:1px solid ${S.sectionCompleted ? GREEN : BORDER};border-radius:999px;padding:6px 12px;cursor:pointer;font-size:11.5px;font-weight:700;color:${S.sectionCompleted ? GREEN : SUBTLE}">
         ${S.sectionCompleted ? iconCheckCircle(14, GREEN) : iconCircle(14, SUBTLE)} ${S.sectionCompleted ? "مكتمل" : "تحديد كمكتمل"}
       </button>` : ""}
     </div>
@@ -10961,8 +11038,8 @@ function goalsSectionHtml(d) {
   }).join("");
 
   return `
+    <div style="margin-bottom:14px;">${pillBtn("إضافة هدف", { variant: "ghost", icon: iconPlus(15, ROSE), action: "add-goal" })}</div>
     ${goalsHtml}
-    ${pillBtn("إضافة هدف", { variant: "ghost", icon: iconPlus(15, ROSE), action: "add-goal" })}
     ${notesFieldHtml(d)}`;
 }
 
@@ -13377,6 +13454,8 @@ function attachFormListeners() {
 
   appEl.addEventListener("change", (e) => {
     const el = e.target;
+    if (el.id === "imp-file" && el.files && el.files[0]) { impReadFile(el.files[0]); return; }
+    if (el.dataset && el.dataset.impMap) { const st = impState(); st.map[el.dataset.impMap] = el.value === "" ? undefined : +el.value; render(); return; }
     if (el.dataset && el.dataset.svMain) { const t = svFindTool(el.dataset.svMain); if (t) { t.mainSource = el.value; autoSaveSchedule(); render(); } return; }
     if (el.dataset && el.dataset.svFilltool) { S.ui.svFillTool = el.value; render(); return; }
     if (el.dataset && el.dataset.svPrev) { S.ui.svPrevRep = el.value; render(); return; }
@@ -15075,6 +15154,7 @@ function handleReportEditorAction(action, ds) {
       } else render();
       return true;
     }
+    case "xl-open": case "xl-close": case "xl-link": case "xl-paste": case "xl-apply": return impAction(action, ds);
     case "ach-set": { const c = achCfg(); S.ui.achCfg = { d: c.d, s: c.s, by: c.by }; S.ui.achCfg[ds.k] = ds.v; try { localStorage.setItem(achKey(), JSON.stringify(S.ui.achCfg)); } catch (e) { /* بدون تخزين */ } saveEntityPrefs(achKey(), { ach: { ...S.ui.achCfg } }); render(); return true; }
     case "pc-menu": { S.ui.pcOpen = S.ui.pcOpen === ds.id ? null : ds.id; render(); return true; }
     case "pc-toggle": case "pc-add-custom": {
@@ -15289,6 +15369,7 @@ function trySaveSectionWithStatus(status) {
   S.sectionSaveError = "";
   const auto = autoSectionComplete(S.activeSectionId, S.sectionDraft);
   if (auto !== null) { status = auto ? "completed" : "draft"; S.sectionCompleted = auto; }
+  else if (S.activeSectionId !== "basic" && S.activeSectionId !== "review") { const has = rptHasValue(S.sectionDraft); status = has ? "completed" : "draft"; S.sectionCompleted = has; }
   persistSection(S.activeSectionId, S.sectionDraft, status);
   if (S.sectionSaveError) return false;
   return true;

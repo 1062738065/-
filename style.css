@@ -869,3 +869,6 @@ table.prs-table td { padding: 8px 10px; border-top: 1px solid var(--border); }
 .ach-chip{padding:6px 12px;font:inherit;font-size:12.5px;border:1px solid #e7dccb;border-radius:999px;background:#fff;cursor:pointer;color:#4d1827}
 .ach-chip.on{background:#6b2337;color:#fff;border-color:#6b2337}
 .ach-view{margin:6px 0 12px;padding:10px;border:1px solid #f1e8da;border-radius:12px;background:#FFFDF9}
+.imp-box{margin-top:10px}.imp-maps{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px}
+.imp-r{display:grid;grid-template-columns:1.4fr repeat(4,1fr);gap:6px;text-align:center;align-items:center;padding:8px 10px;border-bottom:1px solid #f1e8da;font-size:13px}
+.imp-bar{display:grid;grid-template-columns:90px 1fr 44px;gap:8px;align-items:center;font-size:12.5px;margin:6px 0}.imp-bar i{display:block;height:14px;border-radius:7px}
