@@ -8197,6 +8197,44 @@ function dashYearSelectHtml(units) {
   </select>`;
 }
 
+const ACH_DATA = ["المستفيدات", "البرامج", "المقرات", "المنفّذات"], ACH_SHAPES = ["جدول", "أعمدة", "دونات", "خط", "نقاط مرتبة"];
+const ACH_RX = { "المستفيدات": /مستفيد|طالب/, "المقرات": /مركز|مقر/, "المنفّذات": /معلم|منفذ|موظف/ };
+function achKey() { return "achCfg:" + (S.currentPersonId || S.currentUnitId || (S.isAdmin ? "admin" : "x")); }
+function achCfg() {
+  if (!S.ui.achCfg) { let c = (entityPrefs(achKey()) || {}).ach || null; if (!c) { try { c = JSON.parse(localStorage.getItem(achKey()) || "{}"); } catch (e) { c = {}; } } S.ui.achCfg = { ...c }; }
+  return { d: ACH_DATA.includes(S.ui.achCfg.d) ? S.ui.achCfg.d : "المستفيدات", s: ACH_SHAPES.includes(S.ui.achCfg.s) ? S.ui.achCfg.s : "جدول", by: S.ui.achCfg.by === "type" ? "type" : "unit" };
+}
+function achMetric(items, data) {
+  if (data === "البرامج") return items.length;
+  let sum = 0;
+  items.forEach(({ p }) => { const cs = programCounts(p).filter((c) => ACH_RX[data].test(c.unit) && c.done != null); if (cs.length) cs.forEach((c) => { sum += c.done; }); else if (data === "المستفيدات") sum += numOrNull(p.actualBeneficiaries) || 0; });
+  return sum;
+}
+function achData(units, year, cfg) {
+  const all = collectProgramsForUnits(units, null);
+  const years = [...new Set(all.map((x) => x.year).filter(Boolean))].sort((a, b) => a - b);
+  const cur = year || years[years.length - 1];
+  const yrs = years.filter((y) => y <= cur).slice(-4);
+  const multi = units.length > 1 && cfg.by === "unit";
+  const gOf = (x) => multi ? (x.unit.name || "وحدة") : (x.p.workType || "غير محدد");
+  const names = [...new Set(all.filter((x) => x.year === cur).map(gOf))];
+  const periods = yrs.map((y) => { const by = {}; names.forEach((n) => { by[n] = achMetric(all.filter((x) => x.year === y && gOf(x) === n), cfg.d); }); return { label: y === cur ? "الحالية" : hijriYearLabel(y), by }; });
+  const curBy = periods[periods.length - 1] ? periods[periods.length - 1].by : {};
+  return { primary: cfg.d, cols: [cfg.d], hasPrev: periods.length > 1, periods,
+    types: names.map((n, i) => ({ name: n, programs: all.filter((x) => x.year === cur && gOf(x) === n).length, vals: { [cfg.d]: curBy[n] || 0 }, color: ST_COL[i % ST_COL.length] })) };
+}
+function achSwitcherHtml(units, year) {
+  const cfg = achCfg(), d = achData(units, year, cfg);
+  const chip = (k, v, on) => `<button type="button" class="ach-chip${on ? " on" : ""}" data-action="ach-set" data-k="${k}" data-v="${esc(v)}">${esc(v)}</button>`;
+  const multi = units.length > 1;
+  let view = "";
+  if (cfg.s === "أعمدة") view = stColsH(d, false);
+  else if (cfg.s === "دونات") view = stDonutH(d);
+  else if (cfg.s === "خط") view = d.hasPrev ? stLineH(d, false) : `<div class="shp-need">${esc(ST_NEED.prev)}</div>`;
+  else if (cfg.s === "نقاط مرتبة") view = d.hasPrev ? stDumbH(d) : `<div class="shp-need">${esc(ST_NEED.prev)}</div>`;
+  if (cfg.s !== "جدول" && !d.types.length) view = "";
+  return `<div class="ach-sw no-print"><div class="ach-l">البيانات</div><div class="ach-row">${ACH_DATA.map((x) => chip("d", x, cfg.d === x)).join("")}</div>${multi ? `<div class="ach-l">التجميع</div><div class="ach-row">${chip("by", "حسب الوحدة", cfg.by === "unit").replace('data-v="حسب الوحدة"', 'data-v="unit"')}${chip("by", "حسب نوع العمل", cfg.by === "type").replace('data-v="حسب نوع العمل"', 'data-v="type"')}</div>` : ""}<div class="ach-l">الشكل</div><div class="ach-row">${ACH_SHAPES.map((x) => chip("s", x, cfg.s === x)).join("")}</div></div>${cfg.s === "جدول" ? "" : `<div class="st ach-view">${view || `<div class="shp-need">لا توجد بيانات لهذا الاختيار.</div>`}</div>`}`;
+}
 function achievementCardHtml(units) {
   const year = dashProgramsYear(units);
   const progs = collectProgramsForUnits(units, year);
@@ -8230,10 +8268,11 @@ function achievementCardHtml(units) {
       ${tile(fmtNum(beneficiaries), "إجمالي المستفيدات", "")}
       ${highlight.map((g) => tile(fmtNum(g.achieved) + " " + g.countUnit, g.workType, g.hasTarget ? `من ${fmtNum(g.target)} مستهدف` : "")).join("")}
     </div>
-    <div class="table-wrap" style="overflow-x:auto;"><table class="prs-table" style="min-width:600px;"><thead><tr style="background:${GRAY_BG}">
+    ${achSwitcherHtml(units, year)}
+    ${achCfg().s === "جدول" ? "" : `<div style="display:none">`}<div class="table-wrap" style="overflow-x:auto;"><table class="prs-table" style="min-width:600px;"><thead><tr style="background:${GRAY_BG}">
       <th>نوع العمل</th><th style="text-align:center">عدد الأعمال</th><th style="text-align:center">المكتمل</th><th style="text-align:center">وحدة العدّ</th><th style="text-align:center">المستهدف</th><th style="text-align:center">المنجز</th><th>نسبة الإنجاز</th>
     </tr></thead><tbody>${rows}</tbody></table></div>
-    <div class="hint">"المنجز" = حقل "العدد المنجز" في قسم الأعمال والبرامج (مثال: عدد المراكز التي تمت زيارتها)، وإن كان فارغًا يُحتسب "عدد المستفيدات الفعلي".</div>`}
+    <div class="hint">"المنجز" = حقل "العدد المنجز" في قسم الأعمال والبرامج (مثال: عدد المراكز التي تمت زيارتها)، وإن كان فارغًا يُحتسب "عدد المستفيدات الفعلي".</div>${achCfg().s === "جدول" ? "" : "</div>"}`}
   </div>`;
 }
 
@@ -15036,6 +15075,7 @@ function handleReportEditorAction(action, ds) {
       } else render();
       return true;
     }
+    case "ach-set": { const c = achCfg(); S.ui.achCfg = { d: c.d, s: c.s, by: c.by }; S.ui.achCfg[ds.k] = ds.v; try { localStorage.setItem(achKey(), JSON.stringify(S.ui.achCfg)); } catch (e) { /* بدون تخزين */ } saveEntityPrefs(achKey(), { ach: { ...S.ui.achCfg } }); render(); return true; }
     case "pc-menu": { S.ui.pcOpen = S.ui.pcOpen === ds.id ? null : ds.id; render(); return true; }
     case "pc-toggle": case "pc-add-custom": {
       const it = findById(getItemList("programs"), ds.id); if (!it) return true;

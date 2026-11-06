@@ -864,3 +864,8 @@ table.prs-table td { padding: 8px 10px; border-top: 1px solid var(--border); }
 .pc-row .input{width:100%;min-width:0;text-align:center}
 .pf-banner{display:flex;justify-content:space-between;align-items:center;gap:10px;background:#f7ecee;border:1px solid #e7c9d0;border-radius:14px;padding:10px 14px;margin-bottom:10px}
 .pf-banner small{display:block;color:#6f6a63;font-size:11px}.pf-banner b{color:#6b2337;font-size:14.5px}.pf-banner span{color:#6f6a63;font-size:13px}
+.ach-sw{margin:10px 0 12px}.ach-l{font-size:11.5px;color:#6f6a63;margin:8px 0 5px}
+.ach-row{display:flex;gap:6px;flex-wrap:wrap}
+.ach-chip{padding:6px 12px;font:inherit;font-size:12.5px;border:1px solid #e7dccb;border-radius:999px;background:#fff;cursor:pointer;color:#4d1827}
+.ach-chip.on{background:#6b2337;color:#fff;border-color:#6b2337}
+.ach-view{margin:6px 0 12px;padding:10px;border:1px solid #f1e8da;border-radius:12px;background:#FFFDF9}
