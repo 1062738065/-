@@ -3523,7 +3523,7 @@ function statsEditorHtml(d) {
   const cards = Array.isArray(d.statsCards) ? d.statsCards : [];
   const secs = (SECTIONS || []).filter((x) => x.id !== "review");
   const chip = (on, attrs, label) => `<button type="button" class="flt-chip${on ? " on" : ""}" ${attrs}>${esc(label)}</button>`;
-  const views = [["report", "حسب شكل القسم"], ["seq", "متتابعة"], ["two", "عمودان"], ["table", "جدول واحد"]];
+  const views = [["report", "حسب شكل القسم"], ["kpi", "أرقام كبيرة"], ["seq", "متتابعة"], ["two", "عمودان"], ["table", "جدول واحد"]];
   const shapes = Object.entries(SHAPES_LIB).filter(([, v]) => !v.live && v.cat !== "photo");
   return `<div style="margin-top:16px;border-top:1px solid ${BORDER};padding-top:14px;">
     <div class="rm-label">صفحة «الإحصائيات» الأخيرة</div>
@@ -3583,22 +3583,56 @@ function dashLinkCard(c) {
   if (!id) id = "auto";
   return { ...c, view: "shape", shape: id };
 }
+/* ترتيب تصاعدي/تنازلي لبنود البطاقة (يخص العرض فقط) */
+function ccSorted(items, id) {
+  const m = (S.ui.ccSort || {})[id]; if (!m) return items;
+  const num = items.filter((i) => i.num != null), rest = items.filter((i) => i.num == null);
+  if (num.length < 2) return items;
+  return num.slice().sort((a, b) => (m === "asc" ? a.num - b.num : b.num - a.num)).concat(rest);
+}
+function ccSortBar(id) {
+  const m = (S.ui.ccSort || {})[id] || "";
+  const b = (v, l) => `<button type="button" class="flt-chip${m === v ? " on" : ""}" data-action="cc-sort" data-id="${esc(id)}" data-v="${v}" style="min-height:30px;padding:2px 10px;font-size:11.5px;">${l}</button>`;
+  return `<span style="display:inline-flex;gap:4px;">${b("", "الأصل")}${b("desc", "▼ تنازلي")}${b("asc", "▲ تصاعدي")}</span>`;
+}
+function ccKpiHtml(items, secs) {
+  const cols = MG;
+  const num = items.filter((i) => i.num != null).slice(0, 8);
+  const tiles = num.length ? num.map((i) => ({ v: String(Math.round(i.num * 100) / 100), l: i.title, s: i.numLabel || "" })) : secs.map((sid) => ({ v: String(items.filter((i) => i.sid === sid).length), l: ((SECTIONS || []).find((x) => x.id === sid) || {}).label || sid, s: "بند" }));
+  return `<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:10px;">${tiles.map((t, k) => `<div style="background:${cols[k % 6]};color:${k % 6 === 2 || k % 6 === 3 || k % 6 === 5 ? "#4a2630" : "#fff"};border-radius:16px;padding:14px;text-align:center;"><b style="font-size:30px;display:block;line-height:1.1;">${esc(t.v)}</b><span style="font-size:12px;font-weight:700;">${esc(t.l)}</span>${t.s ? `<div style="font-size:10.5px;opacity:.85;">${esc(t.s)}</div>` : ""}</div>`).join("")}</div>`;
+}
+/* مقارنة الوحدات كرسم: قيمة كل وحدة لكل قسم (مجموع الأرقام إن وُجدت وإلا عدد البنود) */
+function cmpChartHtml(items, secs, id, title) {
+  const units = [...new Set(items.map((i) => i.unit))];
+  const lab = (sid) => ((SECTIONS || []).find((x) => x.id === sid) || {}).label || sid;
+  const cell = (u, sid) => { const l = items.filter((i) => i.unit === u && i.sid === sid), nums = l.filter((i) => i.num != null); return { n: l.length, sum: nums.length ? nums.reduce((a, b) => a + b.num, 0) : null }; };
+  const useSum = secs.every((sid) => units.some((u) => cell(u, sid).sum != null));
+  const val = (u, sid) => { const c = cell(u, sid); return Math.round((useSum && c.sum != null ? c.sum : c.n) * 100) / 100; };
+  let rows = units.map((u) => [u].concat(secs.map((sid) => val(u, sid))));
+  const m = (S.ui.ccSort || {})[id] || "desc"; rows.sort((a, b) => (m === "asc" ? a[1] - b[1] : b[1] - a[1]));
+  const sid = secs.length === 1 ? "m22" : secs.length === 2 ? "m5" : secs.length === 3 ? "m6" : "m17";
+  const text = rows.map((r) => r.join("|")).join("\n");
+  const legend = secs.length > 1 ? `<div style="display:flex;gap:10px;flex-wrap:wrap;justify-content:center;font-size:11px;margin-top:6px;">${secs.map((x, k) => `<span><i style="display:inline-block;width:9px;height:9px;border-radius:50%;background:${secs.length === 2 ? [MC[2], MC[0]][k] : secs.length === 3 ? MC[k] : MG[k % 6]};margin-left:4px;"></i>${esc(lab(x))}${secs.length > 3 ? " (العمود " + (k + 1) + ")" : ""}</span>`).join("")}</div>` : "";
+  let h = ""; try { h = shapeRender(sid, { title: "", items: text }, {}); } catch (e) { h = ""; }
+  return h ? `<div class="rpt-v5">${h}</div>${legend}<div class="hint" style="margin-top:6px;">مقارنة بين ${units.length} وحدة · ${useSum ? "مجموع الأرقام" : "عدد البنود"} لكل قسم</div>` : cmpHtml(items, secs);
+}
 function dashCCHtml(kind, units) {
   return dashCC(kind).map((c0) => {
     const c = dashLinkCard(c0);
     const secs = (c.secs || []).filter(Boolean);
     if (!secs.length) return "";
-    const items = dashCCItems(units, secs, c.flds);
+    const items = ccSorted(dashCCItems(units, secs, c.flds), c.id);
     const sub = secs.map((sid) => ((SECTIONS || []).find((x) => x.id === sid) || {}).label || sid).join(" + ");
     let body;
     if (!items.length) body = `<div class="hint">لا توجد بيانات في ${esc(sub)} للفترة المختارة.</div>`;
-    else if (c.cmp) body = cmpHtml(items, secs);
+    else if (c.cmp) { const tbl = S.ui.ccTbl && S.ui.ccTbl[c.id]; body = `<div style="display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap;margin-bottom:6px;" class="no-print">${!tbl && secs.length === 1 ? ccSortBar(c.id) : "<span></span>"}${pillBtn(tbl ? "عرض الرسم" : "عرض الجدول", { variant: "ghost", action: "cc-tbl", data: { id: c.id } })}</div>${tbl || c.view === "table" ? cmpHtml(items, secs) : cmpChartHtml(items, secs, c.id, c.title)}`; }
+    else if (c.view === "kpi") body = ccKpiHtml(items, secs);
     else if (c.view === "table") body = dashCCTable(items);
     else if (c.view === "two") body = `<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:10px;">${secs.map((sid, n) => dashCCBlock(((SECTIONS || []).find((x) => x.id === sid) || {}).label || sid, items.filter((i) => i.sid === sid), ["#a32d2d", "#3b6d11", "#6b2337", "#c9a24a"][n % 4])).join("")}</div>`;
     else if (c.view === "shape") {
       const tbl = S.ui.ccTbl && S.ui.ccTbl[c.id];
       const sh = SHAPES_LIB[c.shape] ? shapeRender(c.shape, { auto: true }, { sectionId: secs[0], items, label: c.title || sub, dash: true }) : "";
-      body = `<div style="display:flex;justify-content:flex-end;margin-bottom:6px;" class="no-print">${pillBtn(tbl ? "عرض الرسم" : "عرض الجدول", { variant: "ghost", action: "cc-tbl", data: { id: c.id } })}</div>${tbl ? dashCCTable(items) : (sh ? `<div class="rpt-v5">${sh}</div>` : `<div class="hint" style="margin-bottom:6px;">هذا الشكل لا يناسب بيانات هذا القسم، فعُرض الجدول بدله. جرّبي شكلًا آخر أو «✨ تلقائي».</div>` + dashCCTable(items))}`;
+      body = `<div style="display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap;margin-bottom:6px;" class="no-print">${items.filter((i) => i.num != null).length > 1 ? ccSortBar(c.id) : "<span></span>"}${pillBtn(tbl ? "عرض الرسم" : "عرض الجدول", { variant: "ghost", action: "cc-tbl", data: { id: c.id } })}</div>${tbl ? dashCCTable(items) : (sh ? `<div class="rpt-v5">${sh}</div>` : `<div class="hint" style="margin-bottom:6px;">هذا الشكل لا يناسب بيانات هذا القسم، فعُرض الجدول بدله. جرّبي شكلًا آخر أو «✨ تلقائي».</div>` + dashCCTable(items))}`;
     } else body = `<div style="display:grid;gap:10px;">${secs.map((sid, n) => dashCCBlock(((SECTIONS || []).find((x) => x.id === sid) || {}).label || sid, items.filter((i) => i.sid === sid), ["#a32d2d", "#3b6d11", "#6b2337", "#c9a24a"][n % 4])).join("")}</div>`;
     return dashB(kind, "cc_" + c.id, dashCard(c.title || sub, sub + (c.cmp ? " · مقارنة" : ""), body));
   }).join("");
@@ -3642,7 +3676,7 @@ function dashCCEditorHtml(kid) {
   const secs = (SECTIONS || []).filter((x) => x.id !== "review");
   const shapes = Object.entries(SHAPES_LIB).filter(([, v]) => !v.live && v.cat !== "photo");
   const chip = (on, attrs, label) => `<button type="button" class="flt-chip${on ? " on" : ""}" ${attrs}>${esc(label)}</button>`;
-  const views = [["report", "حسب شكل القسم"], ["seq", "متتابعة"], ["two", "عمودان"], ["table", "جدول واحد"]];
+  const views = [["report", "حسب شكل القسم"], ["kpi", "أرقام كبيرة"], ["seq", "متتابعة"], ["two", "عمودان"], ["table", "جدول واحد"]];
   return `<div style="border:1px solid ${BORDER};border-radius:14px;background:#fff;padding:12px 14px;margin-bottom:12px;">
     <div style="font-weight:800;color:${ROSE};font-size:14px;margin-bottom:4px;">بطاقات مخصصة — دمج أقسام وعرضها</div>
     <div class="hint" style="margin-bottom:10px;">اختاري قسمًا أو أكثر وطريقة العرض، وتظهر بطاقة واحدة في اللوحة ببيانات هذه الأقسام. البيانات تبقى في أقسامها، والدمج في العرض فقط.</div>
@@ -3739,9 +3773,42 @@ function vwPickerHtml(cur, act, attrs, secs, ctxId) {
   return `<div style="padding:10px 14px;background:#faf6f6;border-top:1px solid ${BORDER};">${pendHtml}<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px;">${b("shape:auto", "✨ تلقائي (الأنسب)")}${b("", "جدول (كما هو)")}${b("chart", "رسم + زر الجدول")}${b("both", "رسم وجدول")}</div><div class="hint" style="margin-bottom:4px;">أو اختاري شكلًا من المكتبة (الاسم تحت كل معاينة). ${note}</div><div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px;">${cats.map(([cid, cn]) => `<button type="button" class="flt-chip${cat === cid ? " on" : ""}" data-action="vw-cat" data-cat="${esc(cid)}">${esc(cn)}</button>`).join("")}</div><div class="shp-grid">${cards}</div></div>`;
 }
 function tvShapeItems(tb) {
+  const heads = [...tb.querySelectorAll("thead th")].map((x) => x.textContent.trim());
   const rows = [...tb.querySelectorAll("tbody tr")]; const out = [];
-  rows.forEach((tr) => { const c = [...tr.children].map((x) => x.textContent.trim()); if (!c.length || !c[0]) return; let num = null; for (let i = 1; i < c.length && num == null; i++) num = typeof tvNum === "function" ? tvNum(c[i]) : shpToNum(c[i]); out.push({ title: c[0], subs: c.slice(1).filter(Boolean).slice(0, 3), num, numLabel: "", date: "", long: "", done: false }); });
+  const ix = (re) => heads.findIndex((h, i) => i > 0 && re.test(h));
+  const iPct = ix(/نسبة|٪|%/), iAch = ix(/المتحقق|الفعلي|المنجز|التحقق|الحالي/), iTgt = ix(/المستهدف|الهدف|المخطط/);
+  rows.forEach((tr) => { const c = [...tr.children].map((x) => x.textContent.replace(/\s+/g, " ").trim()); if (!c.length || !c[0]) return;
+    const nv = (i) => (i >= 0 && i < c.length ? (typeof tvNum === "function" ? tvNum(c[i]) : shpToNum(c[i])) : null);
+    let num = null, numLabel = "", target = null, used = -1;
+    if (iTgt > 0) target = nv(iTgt);
+    if (iAch > 0 && nv(iAch) != null) { num = nv(iAch); numLabel = heads[iAch]; used = iAch; }
+    else if (iPct > 0 && nv(iPct) != null) { num = nv(iPct); numLabel = heads[iPct]; used = iPct; }
+    else { for (let i = 1; i < c.length && num == null; i++) { if (i === iTgt) continue; num = nv(i); if (num != null) { numLabel = heads[i] || ""; used = i; } } }
+    if (iTgt > 0 && num != null && iAch < 0 && iPct < 0) { /* عمود مستهدف فقط */ }
+    const subs = c.slice(1).map((v, k) => ({ v, k: k + 1 })).filter((o) => o.v && o.v !== "—" && o.k !== used && o.k !== iTgt).map((o) => o.v).slice(0, 3);
+    const it = { title: c[0], subs, num, numLabel, date: "", long: "", done: false };
+    if (target != null) it.target = target;
+    out.push(it); });
   return out;
+}
+/* صفحة «ملخص الرسوم»: تجمع رسم كل جدول رقمي في التقرير في شبكة واحدة (نفس شكل القسم إن وُجد وإلا تلقائي) */
+function chartsSummaryPages(pagesHtml, title) {
+  try {
+    const box = document.createElement("div"); box.innerHTML = pagesHtml;
+    const cards = [], seen = {};
+    box.querySelectorAll("table").forEach((tb) => {
+      if (tb.querySelector("table") || tb.closest(".rpt-v5")) return;
+      const items = tvShapeItems(tb); if (!items.length || !items.some((i) => i.num != null)) return;
+      let ttl = ""; try { let el = (tb.closest(".table-wrap") || tb); const w = tb.closest(".tv-wrap"); if (w) el = w; let q = el.previousElementSibling; while (q && !ttl) { if (/rpt-subheading|^H[1-6]$|rpt-ch-title/.test((q.className || "") + " " + q.tagName)) ttl = q.textContent.trim(); q = q.previousElementSibling; } if (!ttl) { const ch = el.closest(".rpt-chapter,.rpt-ch,section"); const h = ch && ch.querySelector("h1,h2,h3,.rpt-ch-title"); ttl = h ? h.textContent.trim() : ""; } } catch (e) {}
+      const key = ttl + "|" + items.map((i) => i.title).join(","); if (seen[key]) return; seen[key] = 1;
+      let sh = ""; const w = tb.closest(".tv-wrap"), ex = w && w.querySelector(".rpt-v5");
+      if (ex) sh = ex.innerHTML; else sh = shapeRender("auto", { auto: true }, { sectionId: "tbl", items, label: ttl, dash: true });
+      if (sh) cards.push(`<div class="chs-card"><div class="chs-t">${esc(ttl || "—")}</div><div class="rpt-v5">${sh}</div></div>`);
+    });
+    if (!cards.length) return [];
+    const out = []; for (let i = 0; i < cards.length; i += 6) out.push(execChapterHtml("", rptIcon(""), title + (cards.length > 6 ? " (" + (out.length + 1) + ")" : ""), `<div class="chs-grid">${cards.slice(i, i + 6).join("")}</div>`));
+    return out;
+  } catch (e) { return []; }
 }
 function tvApply(html, id, mode) {
   if (!mode || mode === "table" || !/<table/.test(html)) return html;
@@ -6943,6 +7010,7 @@ function aggReportDocHtml(s, data) {
     });
     const stBody = statsPageBodyHtml(s, data.flat || []);
     if (stBody) { const stH = execChapterHtml("", rptIcon(""), s.statsTitle || "الإحصائيات", stBody); if (closingPage >= 0) pages.splice(closingPage, 0, stH); else pages.push(stH); } // قبل صفحة الاعتماد
+    if (s.chartsPage !== false) { const cp = chartsSummaryPages(pages.join(""), s.chartsTitle || "ملخص الرسوم"); if (cp.length) { const ci = closingPage >= 0 ? pages.findIndex((x, k) => k > closingPage - 1 && /rpt-closing|اعتماد/.test("")) : -1; const at = closingPage >= 0 ? closingPage + (stBody ? 1 : 0) : pages.length; pages.splice(at, 0, ...cp); } }
     const hasCover = !!s.showCover;
     const total = pages.length + (hasCover ? 1 : 0);
     const cover = hasCover ? rptUnifiedCoverHtml(s, {
@@ -12801,7 +12869,8 @@ const mWedge = (cx, cy, r0, r1, a0, a1, c) => { const [x0, y0] = mPol(cx, cy, r1
 const mTitle = (x) => (x.title ? `<div class="shp-ttl">${shpE(x.title)}</div>` : "");
 const mPct = (x) => shpNum(x.pct);
 const mMax = (rows, k) => Math.max(1, ...rows.map((r) => mn(r[k || "a"])));
-const mCol = (i) => MC[i % 4];
+const MNEUTRAL = "#b3aaa3", MG = ["#9a3f4e", "#b5606c", "#cf8f96", "#e3bfa0", "#d9a04a", MNEUTRAL]; /* تدرّج: عنابي ← وردي ← بيج ← ذهبي ← رمادي محايد */
+const mCol = (i) => MG[i % 6];
 const mPctF = { pct: SHP_F.t("pct", "النسبة (٠-١٠٠)"), label: SHP_F.t("label", "الوصف") };
 const mShape = (cat, name, sample, render, extraFields) => ({ cat, name, fields: [SHP_F.t("title", "العنوان"), ...(extraFields || [SHP_F.a("items", "سطر لكل بند: العنوان|القيمة")])], sample: { title: "", ...sample }, render });
 const mPctShape = (name, render, cat) => ({ cat: cat || "stats", name, fields: [SHP_F.t("pct", "النسبة (٠-١٠٠)"), SHP_F.t("label", "الوصف")], sample: { pct: "72", label: "نسبة الإنجاز" }, render });
@@ -12813,7 +12882,7 @@ Object.assign(SHAPES_LIB, {
   "m2": mPctShape("٢ · عدّاد نصف دائري", (x) => { const p = mPct(x); return mSvg(170, 100, `${mArcStroke(85, 85, 62, 180, 360, MPALE, 14)}${p > 0 ? mArcStroke(85, 85, 62, 180, 180 + p * 1.8, MC[0], 14) : ""}${mT(85, 80, mf(p) + "٪", { s: 22, w: 800, c: MC[0] })}`, 190) + `<div class="shp-cap">${shpE(x.label)}</div>`; }),
   "m3": mShape("stats", "٣ · حلقات متداخلة", { items: MS_ITEMS }, (x) => { const r = mRows(x).slice(0, 4); return mTitle(x) + mSvg(160, 160, r.map((q, i) => { const rr = 70 - i * 16, p = Math.min(100, mn(q.a)); return `<circle cx="80" cy="80" r="${rr}" fill="none" stroke="${MPALE}" stroke-width="10"/>${mArcStroke(80, 80, rr, -90, -90 + Math.max(2, p * 3.59), mCol(i), 10)}`; }).join(""), 170) + `<div style="display:flex;gap:10px;flex-wrap:wrap;justify-content:center;font-size:11px">${r.map((q, i) => `<span><i style="display:inline-block;width:9px;height:9px;border-radius:50%;background:${mCol(i)};margin-left:4px"></i>${shpE(q.l)}</span>`).join("")}</div>`; }),
   "m4": mShape("stats", "٤ · دائري مقسم", { items: MS_ITEMS }, (x) => { const r = mRows(x).slice(0, 6), t = r.reduce((s, q) => s + mn(q.a), 0) || 1; let a = -90; return mTitle(x) + mSvg(150, 150, r.map((q, i) => { const d = (mn(q.a) / t) * 360, w = mWedge(75, 75, 0, 68, a, a + Math.max(0.5, d - 0.01), MC[i % 5]); a += d; return w; }).join("") + mCirc(75, 75, 30, "#fff") + mT(75, 82, mf(t), { s: 18, w: 800, c: MC[0] }), 170); }),
-  "m5": mShape("stats", "٥ · أعمدة مقارنة", { items: MS_2 }, (x) => { const r = mRows(x).slice(0, 6), mx = Math.max(1, ...r.flatMap((q) => [mn(q.a), mn(q.b)])), W = 300, H = 140, st = W / r.length; return mTitle(x) + mSvg(W, H + 22, r.map((q, i) => { const cx = W - (i + 0.5) * st, h1 = (mn(q.a) / mx) * H, h2 = (mn(q.b) / mx) * H; return mR(cx + 2, H - h1, st * 0.3, h1, MPALE.replace("f6e9e6", "ecd3d0"), 4) + mR(cx - st * 0.3 - 2, H - h2, st * 0.3, h2, MC[0], 4) + mT(cx, H + 15, q.l, { s: 10, w: 600 }); }).join(""), 380); }, [SHP_F.a("items", "سطر لكل بند: العنوان|الأولى|الثانية")]),
+  "m5": mShape("stats", "٥ · أعمدة مقارنة", { items: MS_2 }, (x) => { const r = mRows(x).slice(0, 6), mx = Math.max(1, ...r.flatMap((q) => [mn(q.a), mn(q.b)])), W = 300, H = 140, st = W / r.length; return mTitle(x) + mSvg(W, H + 22, r.map((q, i) => { const cx = W - (i + 0.5) * st, h1 = (mn(q.a) / mx) * H, h2 = (mn(q.b) / mx) * H; return mR(cx + 2, H - h1, st * 0.3, h1, MC[2], 4) + mR(cx - st * 0.3 - 2, H - h2, st * 0.3, h2, MC[0], 4) + mT(cx, H + 15, q.l, { s: 10, w: 600 }); }).join(""), 380); }, [SHP_F.a("items", "سطر لكل بند: العنوان|الأولى|الثانية")]),
   "m6": mShape("stats", "٦ · أعمدة مجمّعة", { items: MS_3 }, (x) => { const r = mRows(x).slice(0, 6), tot = r.map((q) => mn(q.a) + mn(q.b) + mn(q.c)), mx = Math.max(1, ...tot), W = 300, H = 140, st = W / r.length; return mTitle(x) + mSvg(W, H + 22, r.map((q, i) => { const cx = W - (i + 0.5) * st, bw = st * 0.5; let y = H; return [q.a, q.b, q.c].map((v, k) => { const h = (mn(v) / mx) * H; y -= h; return mR(cx - bw / 2, y, bw, h, MC[k], 3); }).join("") + mT(cx, H + 15, q.l, { s: 10, w: 600 }); }).join(""), 380); }, [SHP_F.a("items", "سطر لكل بند: العنوان|أ|ب|ج")]),
   "m7": mShape("stats", "٧ · خط زمني", { items: "محرم|20\nصفر|45\nربيع|35\nجمادى|70\nرجب|80" }, (x) => { const r = mRows(x).slice(0, 10), mx = mMax(r), W = 300, H = 110, st = r.length > 1 ? (W - 30) / (r.length - 1) : 0, pts = r.map((q, i) => [W - 15 - i * st, H - (mn(q.a) / mx) * (H - 14) - 4]); return mTitle(x) + mSvg(W, H + 24, `<line x1="10" y1="${H}" x2="${W - 10}" y2="${H}" stroke="#eadfdb"/><polyline points="${pts.map((p) => p.join(",")).join(" ")}" fill="none" stroke="${MC[0]}" stroke-width="2.5"/>${pts.map((p) => mCirc(p[0], p[1], 5, "#fff", `stroke="${MC[0]}" stroke-width="2.5"`)).join("")}${r.map((q, i) => mT(pts[i][0], H + 16, q.l, { s: 9, w: 600 })).join("")}`, 380); }),
   "m8": mShape("stats", "٨ · مساحة بيانية", { items: "محرم|20\nصفر|45\nربيع|35\nجمادى|70\nرجب|80" }, (x) => { const r = mRows(x).slice(0, 10), mx = mMax(r), W = 300, H = 110, st = r.length > 1 ? (W - 30) / (r.length - 1) : 0, pts = r.map((q, i) => [W - 15 - i * st, H - (mn(q.a) / mx) * (H - 14) - 4]); return mTitle(x) + mSvg(W, H + 24, `<polygon points="${pts[0] ? pts[0][0] : 0},${H} ${pts.map((p) => p.join(",")).join(" ")} ${pts.length ? pts[pts.length - 1][0] : 0},${H}" fill="#e8ccd1"/><polyline points="${pts.map((p) => p.join(",")).join(" ")}" fill="none" stroke="${MC[0]}" stroke-width="2.5"/>${r.map((q, i) => mT(pts[i][0], H + 16, q.l, { s: 9, w: 600 })).join("")}`, 380); }),
@@ -12938,8 +13007,8 @@ function shapeAutoData(shapeId, ctx) {
       let rows = [];
       if (k === "l1" || k === "l2") { const h = Math.ceil(its.length / 2); rows = (k === "l1" ? its.slice(0, h) : its.slice(h)).map((i) => i.title); }
       else if (isChk) rows = its.slice(0, cap).map((i) => (i.done ? "+ " : "- ") + i.title);
-      else if (numFirst) rows = (allNum.length ? allNum : []).slice(0, cap).map((i) => fmt(i.num) + "|" + i.title);
-      else if (numSecond) rows = allNum.slice(0, cap).map((i) => i.title + "|" + fmt(i.num) + (cols > 2 ? "|" + (i.subs[0] || "") : ""));
+      else if (numFirst) rows = (allNum.length ? its : []).slice(0, cap).map((i) => (i.num == null ? "—" : fmt(i.num)) + "|" + i.title);
+      else if (numSecond) rows = (allNum.length ? its : []).slice(0, cap).map((i) => i.title + "|" + (i.num == null ? "—" : fmt(i.num)) + (cols > 2 ? "|" + (i.target != null ? fmt(i.target) : (i.subs[0] || "")) : ""));
       else if (sh.cat === "time" && cols > 1) rows = its.slice(0, cap).map((i, n) => (i.date || String(n + 1)) + "|" + i.title);
       else if (cols > 1) rows = its.slice(0, cap).map((i) => { const r = [i.title].concat(i.subs); while (r.length < cols) r.push(""); return r.slice(0, cols).join("|"); });
       else rows = its.slice(0, cap).map((i) => i.title);
@@ -12973,11 +13042,14 @@ function shpBestId(ctx) {
   try { its = ctx && ctx.items ? ctx.items : (ctx && ctx.sectionId ? shpSecItems(ctx.sectionId, ctx.data).items : []); } catch (e) { its = []; }
   const nums = its.filter((i) => i.num != null), withT = nums.filter((i) => i.target != null && shpN(i.target) > 0);
   const pcs = nums.filter((i) => /نسبة|٪|%|percent|rate/.test(String(i.numLabel || "")));
-  if (withT.length) return "m20";
+  const hv = (() => { let h = 0; const t = String((ctx && ctx.label) || (ctx && ctx.sectionId) || ""); for (let k = 0; k < t.length; k++) h = (h * 31 + t.charCodeAt(k)) >>> 0; return h; })();
+  const pick = (arr) => arr[hv % arr.length];
+  if (withT.length) return pick(["m20", "m81", "m35"]);
   if (pcs.length === 1 && nums.length === 1) return "m1";
-  if (nums.length >= 2 && nums.some((i) => i.date)) return "m7";
-  if (nums.length >= 2) return "m22";
-  if (nums.length === 1) return "m19";
+  if (nums.length >= 2 && nums.some((i) => i.date)) return pick(["m7", "m8", "m41"]);
+  if (nums.length >= 2 && nums.some((i) => i.num < 0)) return "m52";
+  if (nums.length >= 2) return pick(["m22", "m70", "m47", "m43", "m12", "m32", "m58"]);
+  if (nums.length === 1) return pick(["m19", "m67"]);
   if (its.some((i) => i.date)) return "m23";
   return "mf2";
 }
@@ -13550,6 +13622,7 @@ function fullReportOrPreviewBody(unit, report, afterPage, opts) {
     });
     const stBody = opts.capture ? "" : statsPageBodyHtml(s, [{ unit, report }]);
     if (stBody) { const stPg = { html: execChapterHtml("", rptIcon(""), s.statsTitle || "الإحصائيات", stBody), ids: [], summary: false }; const ai = pages.findIndex((p) => p.appr); if (ai >= 0) pages.splice(ai, 0, stPg); else pages.push(stPg); } // الإحصائيات قبل صفحة الاعتماد
+    if (!opts.capture && s.chartsPage !== false) { const cp = chartsSummaryPages(pages.map((x) => x.html).join(""), s.chartsTitle || "ملخص الرسوم"); if (cp.length) { const ai2 = pages.findIndex((p) => p.appr); const at = ai2 >= 0 ? ai2 : pages.length; pages.splice(at, 0, ...cp.map((h) => ({ html: h, ids: [], summary: false }))); } }
     const hasCover = !!s.showCover;
     const total = pages.length + (hasCover ? 1 : 0);
     return (hasCover ? reportCoverPageHtml(unit, report, dept, s, total) : "") +
@@ -14501,6 +14574,7 @@ function attachClickListener() {
       case "vw-pend": { S.ui.vwPend = { ctx: ds.ctx, val: ds.val }; render(); break; }
       case "vw-pend-cancel": { S.ui.vwPend = null; render(); break; }
       case "vw-cat": { S.ui.vwCat = ds.cat; render(); break; }
+      case "cc-sort": { S.ui.ccSort = { ...(S.ui.ccSort || {}), [ds.id]: ds.v }; render(); break; }
       case "ss-card": { S.ui.ssOpenCard = !S.ui.ssOpenCard; break; }
       case "ss-pick": { S.ui.ssOpen = S.ui.ssOpen === ds.sec ? "" : ds.sec; render(); break; }
       case "ss-set": { if (!S.isAdmin) break; const cfg = JSON.parse(JSON.stringify(dashConfig())); cfg._secShapes = cfg._secShapes || {}; if (ds.val) cfg._secShapes[ds.sec] = ds.val; else delete cfg._secShapes[ds.sec]; S.ui.vwPend = null; S.ui.ssOpen = ""; S.dashboardConfig = cfg; dataStore.saveDashboardConfig(cfg); render(); break; }
