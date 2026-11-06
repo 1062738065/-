@@ -3792,29 +3792,57 @@ function tvShapeItems(tb) {
     const subs = c.map((v, k) => ({ v, k })).filter((o) => o.k >= (unitFirst0(heads) ? 2 : 1)).filter((o) => o.v && o.v !== "—" && o.k !== used && o.k !== iTgt && o.k !== iBase).map((o) => o.v).slice(0, 3);
     const unitFirst = heads[0] === "الوحدة" && c.length > 1, ttl0 = unitFirst ? c[1] + " · " + c[0] : c[0];
     const it = { title: ttl0, subs, num, numLabel, date: "", long: "", done: false };
-    const mt = tr.querySelector(".ind-meta"); if (mt) { it.meta = mt.getAttribute("data-m") || ""; it.better = mt.getAttribute("data-b") || "H"; }
+    const mt = tr.querySelector(".ind-meta"); if (mt) { it.meta = mt.getAttribute("data-m") || ""; it.better = mt.getAttribute("data-b") || "H"; try { const xj = mt.getAttribute("data-x"); if (xj) it.x = JSON.parse(xj); } catch (e) {} }
     if (used > 0 && /[٪%]/.test(c[used] || "")) it.unit = "%";
     if (target != null) it.target = target;
     if (base != null) it.base = base;
     out.push(it); });
   return out;
 }
+/* مصفوفة الأولويات: صفوف = حالة التحقق، أعمدة = التغير عن خط الأساس، والمؤشرات بطاقات داخل الخانات */
+function priorityMatrixHtml(items) {
+  const rows = []; let nodata = 0;
+  items.forEach((i) => {
+    if (i.num == null || i.target == null || !(i.target > 0)) { nodata++; return; }
+    const low = i.better === "L", p = Math.min(100, Math.round((low ? (i.num > 0 ? i.target / i.num : 1) : i.num / i.target) * 100));
+    let ch = null; if (i.base != null) ch = (i.num - i.base) * (low ? -1 : 1);
+    rows.push({ n: i.title, p, band: p >= 100 ? "ok" : p >= 70 ? "mid" : "bad", c: ch == null ? "na" : ch < 0 ? "down" : ch > 0 ? "up" : "same" });
+  });
+  if (!rows.length) return "";
+  rows.sort((a, b) => a.p - b.p); rows.forEach((r, k) => { r.i = k + 1; });
+  const col = (p) => (p >= 100 ? "#2f8f6b" : p >= 90 ? "#d9a04a" : p >= 70 ? "#e08a3c" : "#c0392b");
+  const bands = [["ok", "متحقق", "#e9f4ee"], ["mid", "قريب / يحتاج تدخلاً", "#fff4e2"], ["bad", "متعثر", "#fdeceb"]];
+  const cols = [["down", "تراجع", "#fdeceb"], ["same", "ثابت", "#f3e3e5"], ["up", "تحسّن", "#e9f4ee"]];
+  if (rows.some((r) => r.c === "na")) cols.push(["na", "بدون خط أساس", "#f1ece8"]);
+  const g = `grid-template-columns:90px repeat(${cols.length},1fr)`;
+  let h = `<div class="pmx" style="${g}"><div></div>${cols.map((c) => `<div class="pmx-h" style="background:${c[2]}">${c[1]}</div>`).join("")}`;
+  bands.forEach((b) => {
+    h += `<div class="pmx-r" style="background:${b[2]}">${b[1]}</div>`;
+    cols.forEach((c) => {
+      const its = rows.filter((r) => r.band === b[0] && r.c === c[0]), pri = b[0] === "bad" && c[0] === "down";
+      h += `<div class="pmx-c" style="background:${b[2]};${pri ? "outline:2px solid #c0392b66;" : ""}">${its.map((r) => `<span class="pmx-chip"><b style="background:${col(r.p)}">${r.i}</b>${esc(r.n)} · ${r.p}٪</span>`).join("")}${pri && its.length ? `<span class="pmx-pri">⚠ أولوية</span>` : ""}</div>`;
+    });
+  });
+  h += `</div><div class="hint" style="margin-top:8px;text-align:center">الصفوف = حالة التحقق من المستهدف · الأعمدة = التغير عن خط الأساس (يراعي اتجاه المؤشر)${nodata ? ` · ${nodata} مؤشر بلا بيانات كافية لم يُدرج` : ""}</div>`;
+  return h;
+}
 /* صفحة «ملخص الرسوم»: تجمع رسم كل جدول رقمي في التقرير في شبكة واحدة (نفس شكل القسم إن وُجد وإلا تلقائي) */
 function chartsSummaryPages(pagesHtml, title) {
   try {
     const box = document.createElement("div"); box.innerHTML = pagesHtml;
-    const cards = [], seen = {};
+    const cards = [], seen = {}, indAll = [], indSeen = {};
     box.querySelectorAll("table").forEach((tb) => {
       if (tb.querySelector("table") || tb.closest(".rpt-v5")) return;
-      const items = tvShapeItems(tb); if (!items.length || !items.some((i) => i.num != null)) return;
+      const items = tvShapeItems(tb); if (items.some((q) => q.x || q.meta)) items.forEach((q) => { if (!indSeen[q.title]) { indSeen[q.title] = 1; indAll.push(q); } });
+      if (!items.length || !items.some((i) => i.num != null)) return;
       let ttl = ""; try { let el = (tb.closest(".table-wrap") || tb); const w = tb.closest(".tv-wrap"); if (w) el = w; let q = el.previousElementSibling; while (q && !ttl) { if (/rpt-subheading|^H[1-6]$|rpt-ch-title/.test((q.className || "") + " " + q.tagName)) ttl = q.textContent.trim(); q = q.previousElementSibling; } if (!ttl) { const ch = el.closest(".rpt-chapter,.rpt-ch,section"); const h = ch && ch.querySelector("h1,h2,h3,.rpt-ch-title"); ttl = h ? h.textContent.trim() : ""; } } catch (e) {}
       const key = ttl + "|" + items.map((i) => i.title).join(","); if (seen[key]) return; seen[key] = 1;
       let sh = ""; const w = tb.closest(".tv-wrap"), ex = w && w.querySelector(".rpt-v5");
       if (ex) sh = ex.innerHTML; else sh = shapeRender("auto", { auto: true }, { sectionId: "tbl", items, label: ttl, dash: true });
       if (sh) cards.push(`<div class="chs-card"><div class="chs-t">${esc(ttl || "—")}</div><div class="rpt-v5">${sh}</div></div>`);
     });
-    if (!cards.length) return [];
-    const out = []; for (let i = 0; i < cards.length; i += 6) out.push(execChapterHtml("", rptIcon(""), title + (cards.length > 6 ? " (" + (out.length + 1) + ")" : ""), `<div class="chs-grid">${cards.slice(i, i + 6).join("")}</div>`));
+    const out = []; const pm = priorityMatrixHtml(indAll); if (pm) out.push(execChapterHtml("", rptIcon(""), "مصفوفة الأولويات", pm));
+    if (!cards.length) return out; for (let i = 0; i < cards.length; i += 6) out.push(execChapterHtml("", rptIcon(""), title + (cards.length > 6 ? " (" + (Math.floor(i / 6) + 1) + ")" : ""), `<div class="chs-grid">${cards.slice(i, i + 6).join("")}</div>`));
     return out;
   } catch (e) { return []; }
 }
@@ -3832,7 +3860,7 @@ function tvApply(html, id, mode) {
         const sh = shapeRender(sid, { auto: true }, { sectionId: "tbl", items, label: ttl, dash: true }); if (!sh) { const hn = document.createElement("div"); hn.className = "hint no-print"; hn.style.marginBottom = "6px"; hn.textContent = "هذا الشكل لا يناسب بيانات هذا الجدول، فعُرض الجدول كما هو."; (tb.closest(".table-wrap") || tb).before(hn); return; }
         const host = tb.closest(".table-wrap") || tb; const tid = id + "#" + (n++); const showTbl = (S.ui.tv || {})[tid];
         const w = document.createElement("div"); w.className = "tv-wrap";
-        const hasT = items.some((q) => q.target != null), nl = (items.find((q) => q.numLabel) || {}).numLabel || ""; const hasB = items.some((q) => q.base != null || q.meta); const cap = hasB ? "▲ ▼ = التغير عن خط الأساس (العدد السابق)" : hasT ? "الرقم = المتحقق من المستهدف · الشريط الداكن = المتحقق · العلامة الذهبية = المستهدف" : (items.some((q) => q.unit === "%") ? "الأرقام نسب مئوية (٪)، والشريط الممتلئ = ١٠٠٪" : (nl ? "الأرقام: " + nl : "")); const capH = cap ? `<div class="tv-cap">${esc(cap)}</div>` : "";
+        const hasT = items.some((q) => q.target != null), nl = (items.find((q) => q.numLabel) || {}).numLabel || ""; const hasB = items.some((q) => q.base != null || q.meta); const cap = items.some((q) => q.x) ? "" : hasB ? "▲ ▼ = التغير عن خط الأساس (العدد السابق)" : hasT ? "الرقم = المتحقق من المستهدف · الشريط الداكن = المتحقق · العلامة الذهبية = المستهدف" : (items.some((q) => q.unit === "%") ? "الأرقام نسب مئوية (٪)، والشريط الممتلئ = ١٠٠٪" : (nl ? "الأرقام: " + nl : "")); const capH = cap ? `<div class="tv-cap">${esc(cap)}</div>` : "";
         w.innerHTML = `<div class="tv-bar no-print"><button type="button" class="pill-btn pill-ghost" data-action="tv-toggle" data-id="${esc(tid)}">${showTbl ? "عرض الرسم" : "عرض الجدول"}</button></div>${showTbl ? "" : `<div class="rpt-v5">${sh}</div>${capH}`}<div class="tv-tbl" style="${showTbl ? "" : "display:none;"}">${host.outerHTML}</div>`;
         host.replaceWith(w);
       });
@@ -6990,7 +7018,7 @@ function aggChapterBody(key, data, s) {
     const chart = rptChart("a-deptPerf", data.deptPerf.map((d) => ({ label: d.name, value: d.avg, color: "var(--rpt-burgundy)" })), { height: 170 });
     return chart + reportTable(["القسم", "عدد الوحدات", "متوسط الإنجاز"], data.deptPerf.map((d) => [esc(d.name), d.count, d.avg + "٪"])) + reportTable(["الوحدة", "القسم", "نسبة الإنجاز"], data.unitRows);
   }
-  if (key === "indicators") return data.indicators.length ? reportTable(["الوحدة", "المؤشر", "المستهدف", "خط الأساس", "المتحقق"], data.indicators.map((r) => { let def = null, rs = r, bs = null; try { def = findIndicatorDef(r.name); rs = resolveIndicatorRow(r, def); const pb = r.unitId && r._rep ? indicatorPrevBaseline(r.unitId, r._rep, r.name) : null; bs = pb ? pb.value : (r.baseline !== "" && r.baseline != null ? r.baseline : null); } catch (e) {} return [esc(r.unitName), esc(r.name) + indMetaSpan(rs), esc(def && def.target !== "" && def.target != null ? def.target : "—"), esc(bs != null ? bs : "—"), esc(r.actual !== "" && r.actual != null ? r.actual : "—")]; })) : emptyHint("لا توجد مؤشرات مُدخلة بعد.");
+  if (key === "indicators") return data.indicators.length ? reportTable(["الوحدة", "المؤشر", "المستهدف", "خط الأساس", "المتحقق"], data.indicators.map((r) => { let def = null, rs = r, bs = null; try { def = findIndicatorDef(r.name); rs = resolveIndicatorRow(r, def); const pb = r.unitId && r._rep ? indicatorPrevBaseline(r.unitId, r._rep, r.name) : null; bs = pb ? pb.value : (r.baseline !== "" && r.baseline != null ? r.baseline : null); } catch (e) {} return [esc(r.unitName), esc(r.name) + indMetaSpan(rs, indExtra(r, rs, (() => { try { return computeIndicatorStatus(rs); } catch (e) { return null; } })())), esc(def && def.target !== "" && def.target != null ? def.target : "—"), esc(bs != null ? bs : "—"), esc(r.actual !== "" && r.actual != null ? r.actual : "—")]; })) : emptyHint("لا توجد مؤشرات مُدخلة بعد.");
   if (key === "yearCompare") return data.yearCompareHtml();
   if (key === "programs") return data.programsHtml();
   if (key === "achievements") return data.achievements.length ? reportTable(["الوحدة", "العمل", "الأثر"], data.achievements.map((a) => [esc(a.unitName), esc(a.name || "—"), esc(a.highlightResult)])) : emptyHint("لا توجد إنجازات بارزة مُدخلة بعد.");
@@ -12360,10 +12388,15 @@ function textBlock(label, value) {
   if (!value) return "";
   return `<div style="margin-bottom:8px;"><div style="font-size:11px;color:${SUBTLE};font-weight:700;">${esc(label)}</div><div style="font-size:12.5px;">${esc(value)}</div></div>`;
 }
-function indMetaSpan(r) {
+function indMetaSpan(r, x) {
   if (!r) return "";
   const d = String(r.direction || ""), parts = [d, r.nature, r.unit, r.dataSource ? "المصدر: " + r.dataSource : ""].filter(Boolean).join(" · ").replace(/\|/g, "/");
-  return parts ? `<span class="ind-meta" data-m="${esc(parts)}" data-b="${indBetter(d)}" style="display:none"></span>` : "";
+  if (!parts && !x) return "";
+  return `<span class="ind-meta" data-m="${esc(parts)}" data-b="${indBetter(d)}"${x ? ` data-x="${esc(JSON.stringify(x))}"` : ""} style="display:none"></span>`;
+}
+function indExtra(row, resolved, status) {
+  let dev = null; try { dev = computeDeviationAmount(resolved); } catch (e) {}
+  return { st: status ? status.label : "", sc: status ? status.color : "", dev, ct: row.causeType || "", why: row.deviationReason || "", fix: row.correctiveAction || "", who: row.responsiblePerson || "", due: row.closureDate || "", sup: row.requiredSupport || "", fq: resolved.frequency || "" };
 }
 function reportTable(headers, rows) {
   if (!rows.length) return "";
@@ -12953,6 +12986,7 @@ Object.assign(SHAPES_LIB, {
   "m74": { cat: "stats", name: "٧٤ · مقارنة VS", fields: [SHP_F.t("aL", "الطرف الأول"), SHP_F.t("aV", "قيمته"), SHP_F.t("bL", "الطرف الثاني"), SHP_F.t("bV", "قيمته")], sample: { aL: "العام الماضي", aV: "250", bL: "هذا العام", bV: "356" }, render: (x) => `<div style="display:flex;align-items:center;gap:8px"><div style="flex:1;background:${MC[0]};color:#fff;border-radius:14px;padding:14px;text-align:center"><b style="font-size:26px;display:block">${shpE(x.aV)}</b><span style="font-size:11.5px">${shpE(x.aL)}</span></div><b style="flex:0 0 34px;height:34px;border-radius:50%;background:${MGOLD};color:#fff;display:flex;align-items:center;justify-content:center;font-size:12px">VS</b><div style="flex:1;background:${MC[2]};color:#fff;border-radius:14px;padding:14px;text-align:center"><b style="font-size:26px;display:block">${shpE(x.bV)}</b><span style="font-size:11.5px">${shpE(x.bL)}</span></div></div>` },
   "m75": mShape("stats", "٧٥ · تغير بين فترتين", { items: "الحضور|60|80\nالرضا|70|65\nالإنجاز|40|75" }, (x) => { const r = mRows(x).slice(0, 8); return mTitle(x) + `<div style="display:grid;gap:7px">${r.map((q) => { const d = mn(q.b) - mn(q.a), up = d >= 0; return `<div style="display:flex;align-items:center;gap:8px;background:${MPALE};border-radius:12px;padding:7px 10px"><span style="flex:1;font-size:12px;font-weight:700">${shpE(q.l)}</span><span style="font-size:11.5px;color:#6f6a63">${shpE(q.raw[1])} ← ${shpE(q.raw[2])}</span><b style="flex:0 0 58px;text-align:center;border-radius:99px;padding:2px 0;font-size:11.5px;color:#fff;background:${up ? MC[0] : MC[3]}">${up ? "▲" : "▼"} ${mf(Math.abs(d))}</b></div>`; }).join("")}</div>`; }, [SHP_F.a("items", "سطر لكل بند: العنوان|الفترة الأولى|الثانية")]),
   "m77": mShape("stats", "٧٧ · منحدر", { items: "الحضور|40|70\nالرضا|65|55\nالإنجاز|30|80" }, (x) => { const r = mRows(x).slice(0, 8), mx = Math.max(1, ...r.flatMap((q) => [mn(q.a), mn(q.b)])), H = 130; return mTitle(x) + mSvg(260, H + 20, r.map((q, i) => { const y1 = H - (mn(q.a) / mx) * (H - 12), y2 = H - (mn(q.b) / mx) * (H - 12); return `<line x1="200" y1="${y1}" x2="60" y2="${y2}" stroke="${mCol(i)}" stroke-width="2.5"/>` + mCirc(200, y1, 5, mCol(i)) + mCirc(60, y2, 5, mCol(i)) + mT(214, y1 + 4, q.l, { s: 10, a: "start" }) + mT(46, y2 + 4, q.raw[2] || "", { s: 10, a: "end", w: 800 }); }).join(""), 340); }, [SHP_F.a("items", "سطر لكل بند: العنوان|قبل|بعد")]),
+  "m90": mShape("stats", "٩٠ · بطاقة مؤشر كاملة", { items: "عدد الفرص المنفذة|15|5|20|تصاعدي: الارتفاع أفضل · تراكمي · عدد|H|متعثر|#c0392b|15|داخلي|نقص المتطوعات|فتح باب التسجيل|مسؤولة المتطوعين|١٤٤٨/٠٣/٠١|دعم إعلامي|شهري" }, (x) => { const r = mRows(x).slice(0, 6), ok = (t) => t != null && t !== "" && t !== "—"; return mTitle(x) + `<div style="display:grid;gap:12px">${r.map((q) => { const R = q.raw, base = mn(q.a), act = mn(q.b), tg = mn(q.c), mx = Math.max(1, base, act, tg) * 1.1, pc = (v) => Math.min(100, (v / mx) * 100), sc = /^#[0-9a-f]{3,8}$/i.test(R[7] || "") ? R[7] : "#8a7d7f", fl = [["السبب", ok(R[9]) ? R[9] + (ok(R[10]) ? " — " + R[10] : "") : R[10]], ["الإجراء", R[11]], ["المسؤولة", R[12]], ["موعد الإغلاق", R[13]], ["الدعم المطلوب", R[14]]].filter((f) => ok(f[1])), box = (l, v, c) => `<div style="flex:1;background:${MPALE};border-radius:8px;padding:5px 4px;text-align:center"><div style="font-size:9.5px;color:#8a7d7f">${l}</div><b style="font-size:13px;color:${c || "#3b2a2e"}">${shpE(ok(v) ? v : "—")}</b></div>`; return `<div style="border:1px solid #eedfe1;border-radius:12px;padding:10px 12px;background:#fff"><div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:8px"><b style="font-size:12.5px">${shpE(q.l)}</b><span style="display:flex;gap:5px;flex-shrink:0">${ok(R[15]) ? `<span style="font-size:10px;background:#f6ecd9;color:#8a6a35;border-radius:99px;padding:2px 8px">${shpE(R[15])}</span>` : ""}${ok(R[6]) ? `<span style="font-size:10.5px;font-weight:800;color:${sc};border:1px solid ${sc};border-radius:99px;padding:2px 9px">${shpE(R[6])}</span>` : ""}</span></div><div style="position:relative;height:16px;background:${MPALE};border-radius:8px;margin-bottom:8px"><i style="position:absolute;right:0;top:0;height:100%;width:${pc(act)}%;background:${MC[0]};border-radius:8px"></i>${ok(R[1]) ? `<i title="خط الأساس" style="position:absolute;top:-3px;right:calc(${pc(base)}% - 5px);width:10px;height:10px;border-radius:50%;background:#fff;border:2px solid ${MC[2]}"></i>` : ""}${ok(R[3]) ? `<i title="المستهدف" style="position:absolute;top:-4px;width:3px;height:24px;background:${MGOLD};right:${pc(tg)}%"></i>` : ""}</div><div style="display:flex;gap:6px">${box("خط الأساس", R[1])}${box("المتحقق", R[2], MC[0])}${box("المستهدف", R[3], "#b3772a")}${ok(R[8]) ? box("الانحراف", R[8], "#b3772a") : ""}</div>${fl.length ? `<div style="margin-top:8px;border-top:1px dashed #eedfe1;padding-top:6px;display:grid;gap:3px">${fl.map((f) => `<div style="font-size:10.5px"><span style="color:#8a7d7f">${f[0]}: </span><b>${shpE(f[1])}</b></div>`).join("")}</div>` : ""}${ok(R[4]) ? `<div style="font-size:10px;color:#8a7d7f;margin-top:6px">${shpE(R[4])}</div>` : ""}</div>`; }).join("")}</div><div style="display:flex;gap:14px;justify-content:center;font-size:10.5px;color:#6f6a63;margin-top:8px"><span><i style="display:inline-block;width:10px;height:10px;border-radius:3px;background:${MC[0]};margin-left:4px"></i>المتحقق</span><span><i style="display:inline-block;width:8px;height:8px;border-radius:50%;border:2px solid ${MC[2]};margin-left:4px"></i>خط الأساس</span><span><i style="display:inline-block;width:3px;height:11px;background:${MGOLD};margin-left:4px"></i>المستهدف</span></div>`; }, [SHP_F.a("items", "سطر لكل مؤشر (١٦ حقلاً مفصولة بـ |)")]),
   "m89": mShape("stats", "٨٩ · السابق مقابل الحالي", { items: "المستفيدات|120|180|250|الارتفاع أفضل ▲ · تراكمي · عدد\nالورش|10|8|10|الانخفاض أفضل ▼ · عدد" }, (x) => { const r = mRows(x).slice(0, 8), mx = Math.max(1, ...r.map((q) => Math.max(mn(q.a), mn(q.b), mn(q.c)) * 1.08)), anyB = r.some((q) => q.raw[1] && q.raw[1] !== "—"); const bar = (v, col, raw) => `<div style="display:flex;align-items:center;gap:6px"><div style="flex:1;height:11px;background:${MPALE};border-radius:6px;position:relative"><i style="position:absolute;right:0;top:0;height:100%;width:${(mn(v) / mx) * 100}%;background:${col};border-radius:6px"></i></div><b style="flex:0 0 38px;font-size:11px;color:#6f6a63;text-align:center">${shpE(raw || "—")}</b></div>`; return mTitle(x) + `<div style="display:grid;gap:13px">${r.map((q) => { const ok = (t) => t != null && t !== "" && t !== "—"; const d = ok(q.raw[2]) && ok(q.raw[1]) ? mn(q.b) - mn(q.a) : null, meta = q.raw[4] || "", bt = q.raw[5] || "H", lowBetter = bt === "L"; let v = ""; if (d != null) { const good = d === 0 ? null : (lowBetter ? d < 0 : d > 0), arrow = (d > 0 ? "▲ +" : "▼ ") + Math.round(d * 100) / 100; v = d === 0 ? `<span style="color:#6f6a63">ثابت</span>` : bt === "N" ? `<span style="color:#6f6a63">${arrow}</span>` : `<span style="color:${good ? MC[0] : "#b3772a"}">${good ? "تحسّن" : "تراجع"} ${arrow}</span>`; } return `<div><div style="display:flex;justify-content:space-between;font-size:11.5px;font-weight:800;margin-bottom:3px"><span>${shpE(q.l)}</span><span>${v}${ok(q.raw[3]) ? `<span style="color:#6f6a63;font-weight:600"> · المستهدف ${shpE(q.raw[3])}</span>` : ""}</span></div>${anyB ? bar(q.a, MC[2], q.raw[1]) : ""}${bar(q.b, MC[0], q.raw[2])}${meta ? `<div style="font-size:10px;color:#8a7d7f;margin-top:2px">${shpE(meta)}</div>` : ""}</div>`; }).join("")}</div><div style="display:flex;gap:14px;justify-content:center;font-size:10.5px;color:#6f6a63;margin-top:8px">${anyB ? `<span><i style="display:inline-block;width:10px;height:10px;border-radius:3px;background:${MC[2]};margin-left:4px"></i>خط الأساس (السابق)</span>` : ""}<span><i style="display:inline-block;width:10px;height:10px;border-radius:3px;background:${MC[0]};margin-left:4px"></i>المتحقق (الحالي)</span></div>`; }, [SHP_F.a("items", "سطر لكل بند: العنوان|السابق|الحالي|المستهدف|ملاحظة|ح (H/L/N)")]),
   "m81": mShape("stats", "٨١ · رصاصة (Bullet)", { items: "المستفيدات|180|250\nالورش|8|10" }, (x) => { const r = mRows(x).slice(0, 6), mx = Math.max(1, ...r.map((q) => Math.max(mn(q.a), mn(q.b)) * 1.1)); return mTitle(x) + `<div style="display:grid;gap:12px">${r.map((q) => `<div style="display:flex;align-items:center;gap:8px"><span style="flex:0 0 74px;font-size:11.5px;font-weight:700">${shpE(q.l)}</span><div style="position:relative;flex:1;height:22px;background:${MPALE};border-radius:4px"><i style="position:absolute;right:0;top:7px;height:8px;width:${(mn(q.a) / mx) * 100}%;background:${MC[0]};border-radius:2px"></i><i style="position:absolute;top:2px;width:3px;height:18px;background:${MGOLD};right:${(mn(q.b) / mx) * 100}%"></i></div><b style="flex:0 0 74px;font-size:11px;color:${MC[0]};text-align:center">${shpE(q.raw[1] || "—")} من ${shpE(q.raw[2] || "—")}</b></div>`).join("")}</div>`; }, [SHP_F.a("items", "سطر لكل بند: العنوان|المتحقق|المستهدف")]),
   "m82": mShape("stats", "٨٢ · مقارنة بالمتوسط", { items: "وحدتنا|82\nالمتوسط|70" }, (x) => { const r = mRows(x).slice(0, 2), a = r[0] || { l: "", a: 0, raw: [] }, b = r[1] || { l: "المتوسط", a: 0, raw: [] }, mx = Math.max(1, mn(a.a), mn(b.a)) * 1.1; return mTitle(x) + `<div style="position:relative;padding-top:6px"><div style="height:22px;background:${MPALE};border-radius:11px"><i style="display:block;height:100%;width:${(mn(a.a) / mx) * 100}%;background:${MC[0]};border-radius:11px;margin-right:0;float:right"></i></div><i style="position:absolute;top:0;right:${(mn(b.a) / mx) * 100}%;width:3px;height:34px;background:${MGOLD}"></i></div><div style="display:flex;justify-content:space-between;font-size:11.5px;font-weight:700;margin-top:8px"><span style="color:${MC[0]}">${shpE(a.l)}: ${shpE(a.raw[1])}</span><span style="color:${MC[3]}">${shpE(b.l)}: ${shpE(b.raw[1])}</span></div>`; }),
@@ -13012,6 +13046,7 @@ function shapeAutoData(shapeId, ctx) {
   const allNum = its.filter((i) => i.num != null);
   Object.keys(sh.sample).forEach((k) => {
     const f = (sh.fields || []).find((x) => x.k === k); if (f && f.type === "i") return;
+    if (shapeId === "m90" && k === "items") { const cl = (v) => String(v == null ? "" : v).replace(/\|/g, "/").replace(/\n/g, " "); out[k] = its.slice(0, 6).map((i) => { const x = i.x || {}; return [i.title, i.base != null ? fmt(i.base) : "—", i.num != null ? fmt(i.num) : "—", i.target != null ? fmt(i.target) : "", i.meta || "", i.better || "H", x.st || "", x.sc || "", x.dev != null ? fmt(x.dev) : "", x.ct || "", x.why || "", x.fix || "", x.who || "", x.due || "", x.sup || "", x.fq || ""].map(cl).join("|"); }).join("\n"); return; }
     if (shapeId === "m89" && k === "items") { const rr = its.slice(0, 8).map((i) => i.title + "|" + (i.base != null ? fmt(i.base) : "—") + "|" + (i.num != null ? fmt(i.num) : "—") + "|" + (i.target != null ? fmt(i.target) : "") + "|" + (i.meta || "") + "|" + (i.better || "H")); if (rr.length) out[k] = rr.join("\n"); return; }
     const sv = String(sh.sample[k] == null ? "" : sh.sample[k]);
     if (/\n/.test(sv) || (f && f.type === "a" && /\|/.test(sv))) {
@@ -13060,6 +13095,7 @@ function shpBestId(ctx) {
   const pcs = nums.filter((i) => /نسبة|٪|%|percent|rate/.test(String(i.numLabel || "")));
   const hv = (() => { let h = 0; const t = String((ctx && ctx.label) || (ctx && ctx.sectionId) || ""); for (let k = 0; k < t.length; k++) h = (h * 31 + t.charCodeAt(k)) >>> 0; return h; })();
   const pick = (arr) => arr[hv % arr.length];
+  if (its.some((i) => i.x)) return "m90";
   if (its.some((i) => i.base != null || i.meta)) return "m89";
   if (withT.length) return pick(["m20", "m81"]);
   if (pcs.length === 1 && nums.length === 1) return "m1";
@@ -13230,7 +13266,7 @@ function sectionBodyOnly(section, saved, report) {
         reportTable(["المؤشر", "المستهدف", "خط الأساس", "المتحقق", "الحالة"], barData.map((b) => {
           let bs = null; try { const pb = indicatorPrevBaseline(reportUnitIdOf(report), report, b.row.name); bs = pb ? pb.value : (b.row.baseline !== "" && b.row.baseline != null ? b.row.baseline : null); } catch (e) {}
           return [
-          esc(b.row.name) + indMetaSpan(resolveIndicatorRow(b.row, b.def)),
+          esc(b.row.name) + (() => { const rv = resolveIndicatorRow(b.row, b.def); return indMetaSpan(rv, indExtra(b.row, rv, b.status)); })(),
           esc(b.def && b.def.target !== "" ? b.def.target : "—"),
           esc(bs != null ? bs : "—"),
           esc(b.row.actual !== "" ? b.row.actual : "—"),

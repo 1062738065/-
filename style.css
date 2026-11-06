@@ -1014,3 +1014,5 @@ table.prs-table th, table.prs-table td, .shp-tbl th, .shp-tbl td, .table-wrap ta
 .chs-card{border:1px solid #eedfe1;border-radius:10px;padding:10px 12px;background:#fdf9f8;break-inside:avoid;overflow:hidden}
 .chs-t{font-size:12.5px;font-weight:800;color:#9a3f4e;text-align:center;margin-bottom:8px}
 .tv-cap{font-size:11px;color:#8a7d7f;text-align:center;margin:4px 0 8px}
+.pmx{display:grid;gap:6px}.pmx-h{text-align:center;font-size:12px;font-weight:800;padding:6px;border-radius:10px;color:#3b2a2e}.pmx-r{display:flex;align-items:center;justify-content:center;text-align:center;font-size:11.5px;font-weight:800;border-radius:10px;padding:4px;color:#3b2a2e}
+.pmx-c{border-radius:12px;min-height:70px;padding:6px;display:flex;flex-wrap:wrap;gap:5px;align-content:flex-start}.pmx-chip{display:flex;align-items:center;gap:5px;background:#fff;border-radius:99px;padding:2px 8px 2px 3px;font-size:10.5px;font-weight:700;box-shadow:0 1px 3px #0002;color:#3b2a2e}.pmx-chip b{width:19px;height:19px;border-radius:50%;color:#fff;text-align:center;line-height:19px;font-size:10px;flex-shrink:0}.pmx-pri{margin:auto;font-size:10px;color:#c0392b;font-weight:800}
