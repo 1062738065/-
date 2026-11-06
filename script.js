@@ -252,7 +252,7 @@ const SECTION_FIELD_SCHEMAS = {
       { id: "executingEntity", type: "text", label: "الجهة المنفذة", placeholder: "الجهة المسؤولة عن التنفيذ" },
       { id: "participatingEntities", type: "text", label: "الجهات المشاركة", placeholder: "الجهات المشاركة، إن وجدت" },
       { id: "responsiblePerson", type: "text", label: "المسؤولة عن التنفيذ", placeholder: "اسم المسؤولة" },
-      { id: "executionStatus", type: "radio", label: "حالة التنفيذ", options: EXECUTION_STATUSES, subheadBefore: "حالة التنفيذ" },
+      { id: "executionStatus", type: "select", label: "", hideLabel: true, options: EXECUTION_STATUSES, placeholder: "اختاري حالة التنفيذ", subheadBefore: "حالة التنفيذ" },
       { id: "completionPercent", type: "number", label: "نسبة الإنجاز", placeholder: "0", subheadBefore: "مستوى الإنجاز", rowGroup: "completion" },
       { id: "attendeesCount", type: "number", label: "عدد الحاضرات", placeholder: "0", rowGroup: "completion" },
       { id: "attendanceRate", type: "number", label: "نسبة الحضور", placeholder: "0", rowGroup: "rates" },
@@ -559,6 +559,7 @@ function renderSchemaFieldHtml(f, arrKey, itemId, value, customOptionsList, item
     f.type === "radio" ? (subArrKey ? radioSub(arrKey, itemId, subArrKey, subItemId, f.id, value, f.options || []) : radio(arrKey, itemId, f.id, value, f.options || [])) :
     f.type === "expandableSelect" ? expandableSelectHtml(f.id, value, f.baseOptions || [], customOptionsList || [], f.placeholder, f.otherLabel || "أخرى", arrKey, itemId, subArrKey, subItemId) :
     (subArrKey ? inpSub(arrKey, itemId, subArrKey, subItemId, f.id, value, f.placeholder, inputType) : inp(arrKey, itemId, f.id, value, f.placeholder, inputType));
+  if (f.hideLabel) return `<div class="field">${html}</div>`;
   return fieldWrap(f.label, !!f.required, html);
 }
 // visibleWhen اختياري: شرط ظهور بسيط يعتمد على قيمة حقل آخر بنفس القسم —
@@ -646,10 +647,11 @@ function schemaExpandedItemId(arrKey, items) {
   return items[items.length - 1].id;
 }
 function renderSchemaRepeaterHtml(schema, d) {
-  const items = d[schema.arrayKey] || [];
+  const pfN = (schema.arrayKey === "tools" || schema.arrayKey === "evidenceItems") ? pfName() : "";
+  const items = pfN ? (d[schema.arrayKey] || []).filter((x) => String(x.relatedProgram || "").trim() === pfN) : (d[schema.arrayKey] || []);
   const expandedId = schemaExpandedItemId(schema.arrayKey, items);
   const rows = items.map((item, i) => {
-    const isOpen = items.length === 1 || item.id === expandedId;
+    const isOpen = (items.length === 1 && schema.arrayKey !== "programs") || item.id === expandedId;
     const head = `<div class="repeat-item-head" style="cursor:pointer;" data-action="toggle-repeat-item" data-arr="${esc(schema.arrayKey)}" data-id="${esc(item.id)}"><span class="repeat-item-title">${esc(schema.itemLabel)} ${i + 1}${isOpen ? "" : ` — ${esc(item[schema.fields.find((f) => f.id)?.id] || "")}`}</span>${removeBtn(schema.arrayKey, item.id)}</div>`;
     if (!isOpen) return `<div class="repeat-item">${head}</div>`;
     return `<div class="repeat-item">${head}${renderSchemaFieldsHtml(schema.fields, schema.arrayKey, item.id, item, d)}${schema.arrayKey === "tools" ? svToolBlockHtml(item) : ""}${schema.arrayKey === "evidenceItems" ? svEvdProgramHtml(item) : ""}</div>`;
@@ -661,7 +663,9 @@ function renderSchemaRepeaterHtml(schema, d) {
   const addLabel = atMax ? `بلغتِ الحد الأقصى (${schema.maxItems} ${schema.itemLabelPlural || schema.itemLabel})` : `إضافة ${schema.itemLabel}`;
   const belowMin = schema.minItems != null && items.length > 0 && items.length < schema.minItems;
   const minWarningHtml = belowMin ? `<div class="hint bad">أضيفي ${schema.minItems - items.length} ${schema.itemLabelPlural || schema.itemLabel} إضافية على الأقل لاستيفاء الحد الأدنى (${schema.minItems}).</div>` : "";
-  return `${hintHtml}${rows}${pillBtn(addLabel, { variant: "ghost", icon: iconPlus(15, ROSE), action: "add-item", data: { arr: schema.arrayKey }, disabled: atMax })}${minWarningHtml}<div style="margin-top:18px;">${notesFieldHtml(d)}</div>`;
+  const addBtn = pillBtn(addLabel, { variant: "ghost", icon: iconPlus(15, ROSE), action: "add-item", data: { arr: schema.arrayKey }, disabled: atMax });
+  if (schema.arrayKey === "programs") return `${hintHtml}<div style="margin-bottom:14px;">${addBtn}</div>${rows}${minWarningHtml}<div style="margin-top:18px;">${notesFieldHtml(d)}</div>`;
+  return `${hintHtml}${rows}${addBtn}${minWarningHtml}<div style="margin-top:18px;">${notesFieldHtml(d)}</div>`;
 }
 
 
@@ -8131,11 +8135,12 @@ function pcCountBlockHtml(item, d) {
   const custom = (d && d.customCountUnits) || [];
   const all = [...new Set([...COUNT_UNITS_BASE, ...custom, ...(item.counts || []).map((x) => x.unit)])];
   const cur = item.counts || [];
-  const chips = all.map((u) => { const on = cur.some((x) => x.unit === u); return `<button type="button" class="radio-pill ${on ? "active" : ""}" data-action="pc-toggle" data-id="${esc(item.id)}" data-unit="${esc(u)}">${esc(u)}</button>`; }).join("");
-  const rows = cur.map((x) => `<div class="og-block" style="padding:10px 12px;"><div style="font-weight:800;font-size:12.5px;margin-bottom:8px;">${esc(x.unit)}</div><div class="row-flex">${fieldWrap("العدد المستهدف", inpSub("programs", item.id, "counts", x.id, "target", x.target, "0", "number"))}${fieldWrap("العدد المنجز فعليًا", inpSub("programs", item.id, "counts", x.id, "done", x.done, "0", "number"))}</div></div>`).join("");
-  return `<div class="field"><label class="field-label">وحدات العدّ (اختاري واحدة أو أكثر)</label><div class="radio-group">${chips}</div>
-    <div style="display:flex;gap:6px;margin-top:8px;flex-wrap:wrap;"><input class="input" id="pc-new-${esc(item.id)}" style="flex:1;min-width:160px;" placeholder="وحدة أخرى، مثال: مدرسة" /><button type="button" class="pill-btn pill-ghost" data-action="pc-add-custom" data-id="${esc(item.id)}">＋ إضافة</button></div>
-    <div class="hint">لكل وحدة عدّ اكتبي عددها المنجز، وتظهر الإحصائية في لوحة المعلومات.</div></div>${rows}`;
+  const open = S.ui && S.ui.pcOpen === item.id;
+  const sum = cur.length ? cur.map((x) => esc(x.unit)).join("، ") : "اختاري وحدة أو أكثر";
+  const menu = open ? `<div class="pc-menu">${all.map((u) => { const on = cur.some((x) => x.unit === u); return `<button type="button" class="pc-opt${on ? " on" : ""}" data-action="pc-toggle" data-id="${esc(item.id)}" data-unit="${esc(u)}"><span class="bx">${on ? "✓" : ""}</span>${esc(u)}</button>`; }).join("")}<div class="pc-add"><input class="input" id="pc-new-${esc(item.id)}" placeholder="وحدة أخرى، مثال: مدرسة" /><button type="button" class="pill-btn pill-ghost" data-action="pc-add-custom" data-id="${esc(item.id)}">＋ إضافة</button></div><button type="button" class="pill-btn pc-done" data-action="pc-menu" data-id="${esc(item.id)}">تم</button></div>` : "";
+  const rows = cur.map((x) => `<div class="pc-row"><div class="pc-u">${esc(x.unit)}</div>${inpSub("programs", item.id, "counts", x.id, "target", x.target, "0", "number")}${inpSub("programs", item.id, "counts", x.id, "done", x.done, "0", "number")}</div>`).join("");
+  const table = cur.length ? `<div class="pc-table"><div class="pc-row pc-head"><div>وحدة العد</div><div>العدد المستهدف</div><div>العدد المنجز الفعلي</div></div>${rows}</div>` : "";
+  return `<div class="field"><label class="field-label">وحدة العدّ (يمكن اختيار أكثر من وحدة)</label><button type="button" class="pc-dd input" data-action="pc-menu" data-id="${esc(item.id)}"><span>${sum}</span><span>${open ? "▴" : "▾"}</span></button>${menu}</div>${table}`;
 }
 function programAchievedValue(p) {
   const a = numOrNull(p.achievedCount);
@@ -10581,6 +10586,19 @@ function persistSection(sectionId, data, status) {
   saveReportEntry(unitId, updatedEntry);
 }
 
+function pfProgramsList() { const e = getCurrentReportEntry(); const sec = e && e.sections && e.sections.programs; const live = S.activeSectionId === "programs" && S.sectionDraft && S.sectionDraft.programs; return (live || (sec && sec.data && sec.data.programs) || []); }
+function pfName() { if (!S.ui.progFocus || !svMergeOn()) return ""; const p = pfProgramsList().find((x) => x.id === S.ui.progFocus); return p ? String(p.name || "").trim() : ""; }
+function pfEnterFrom(programs) {
+  const list = programs || [], ex = (S.ui.expandedRepeatItem || {}).programs;
+  const p = list.find((x) => x.id === ex) || list[list.length - 1];
+  S.ui.progFocus = p && String(p.name || "").trim() ? p.id : null;
+}
+function pfBannerHtml() {
+  const nm = pfName(); if (!nm) return "";
+  const on = S.activeSectionId;
+  const sub = on === "tools" ? "القياس" : on === "analysis" ? "التحليل" : "الشواهد";
+  return `<div class="no-print pf-banner"><div><small>العمل / البرنامج</small><b>${esc(nm)}</b><span> — ${sub}</span></div><button type="button" class="pill-btn pill-ghost" data-action="pf-all">عرض العام</button></div>`;
+}
 function svMeasureTabsHtml(report, unitId) {
   if (!svInMeasureGroup(S.activeSectionId)) return "";
   const ids = reportSectionsNav(report, unitId).map((x) => x.id).filter((id) => svInMeasureGroup(id));
@@ -10591,7 +10609,7 @@ function svMeasureTabsHtml(report, unitId) {
     const circle = `<span style="width:26px;height:26px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;font-size:12px;font-weight:800;flex-shrink:0;background:${on ? ROSE : done ? GREEN : "#efe6e6"};color:${on || done ? "#fff" : "#8b7e82"};">${done && !on ? "✓" : k + 1}</span>`;
     return `<button type="button" data-action="sv-tab" data-section="${id}" style="display:flex;align-items:center;gap:8px;background:${on ? "#fbefef" : "transparent"};border:none;border-radius:999px;padding:5px 12px 5px 14px;cursor:pointer;font-family:inherit;font-size:12.5px;font-weight:${on ? 800 : 600};color:${on ? ROSE : "#6b5f62"};white-space:nowrap;">${circle}${esc(SV_TAB_LABELS[id] || id)}</button>${k < ids.length - 1 ? `<span style="flex:0 0 18px;height:2px;background:${k < cur ? GREEN : "#e6dcdc"};"></span>` : ""}`;
   }).join("");
-  return `<div class="no-print" style="display:flex;align-items:center;gap:4px;overflow-x:auto;margin:0 0 16px;padding:6px 2px;">${stepHtml}</div>`;
+  return pfBannerHtml() + `<div class="no-print" style="display:flex;align-items:center;gap:4px;overflow-x:auto;margin:0 0 16px;padding:6px 2px;">${stepHtml}</div>`;
 }
 function sectionEditorHtml(unit, report) {
   const secList = reportSections(report, unit.id);
@@ -10610,7 +10628,7 @@ function sectionEditorHtml(unit, report) {
       ${shared.preparerName ? `<span>· أعدّته: <strong style="color:${INK}">${esc(shared.preparerName)}</strong></span>` : ""}
     </div>` : "";
 
-  const fieldsHtml = renderSectionFields(section, d, unit, report) + (section.id === "review" ? "" : shapeBlocksEditorHtml(S.sectionDraft || d, section.id)) + (S.ui.shpOpen ? shapePickerHtml() : "");
+  const fieldsHtml = renderSectionFields(section, d, unit, report) + (section.id === "review" ? "" : shapeBlocksEditorHtml(S.sectionDraft || d, section.id)) + (S.ui.shpOpen ? shapePickerHtml() : "") + (S.ui.moreProg ? `<div class="no-print" style="position:fixed;inset:0;background:rgba(40,20,30,.45);z-index:9000;display:flex;align-items:center;justify-content:center;padding:16px;"><div style="background:#fff;border-radius:18px;padding:22px;width:min(420px,100%);text-align:center;"><div style="font-size:17px;font-weight:800;color:#6b2337;margin-bottom:6px;">هل يوجد عمل أو برنامج آخر؟</div><div class="hint" style="margin-bottom:16px;">إن وُجد، نفتح لك عملًا جديدًا لتعبئته بنفس الخطوات.</div><div style="display:flex;gap:8px;"><button type="button" class="next-btn" style="flex:1;" data-action="mp-more">نعم، أضيف عملًا آخر</button><button type="button" class="pill-btn pill-ghost" style="flex:1;" data-action="mp-no">لا، التالي</button></div></div></div>` : "");
 
   return `
   <div class="card card-lg">
@@ -15018,6 +15036,7 @@ function handleReportEditorAction(action, ds) {
       } else render();
       return true;
     }
+    case "pc-menu": { S.ui.pcOpen = S.ui.pcOpen === ds.id ? null : ds.id; render(); return true; }
     case "pc-toggle": case "pc-add-custom": {
       const it = findById(getItemList("programs"), ds.id); if (!it) return true;
       it.counts = Array.isArray(it.counts) ? it.counts : [];
@@ -15032,7 +15051,11 @@ function handleReportEditorAction(action, ds) {
     case "sv-tab": {
       clearTimeout(__autoSaveTimer); __autoSaveTimer = null;
       if (!trySaveSectionWithStatus(S.sectionCompleted ? "completed" : "draft")) { render(); return true; }
-      openSection(ds.section); return true;
+      if (S.activeSectionId === "programs") { if (svMergeOn() && ds.section !== "programs") pfEnterFrom(getCurrentReportEntry().sections.programs && getCurrentReportEntry().sections.programs.data && getCurrentReportEntry().sections.programs.data.programs); S.ui.expandedRepeatItem = S.ui.expandedRepeatItem || {}; S.ui.expandedRepeatItem.programs = null; }
+      const goPrograms = ds.section === "programs" && S.ui.progFocus;
+      openSection(ds.section);
+      if (goPrograms) { S.ui.expandedRepeatItem = S.ui.expandedRepeatItem || {}; S.ui.expandedRepeatItem.programs = S.ui.progFocus; render(); }
+      window.scrollTo(0, 0); return true;
     }
     case "section-prev": {
       clearTimeout(__autoSaveTimer); __autoSaveTimer = null;
@@ -15041,9 +15064,15 @@ function handleReportEditorAction(action, ds) {
       if (idx > 0) openSection(list[idx - 1].id);
       return true;
     }
+    case "pf-all": { S.ui.progFocus = null; render(); return true; }
+    case "mp-more": { S.ui.moreProg = false; S.ui.progFocus = null; S.ui.expandedRepeatItem = S.ui.expandedRepeatItem || {}; openSection("programs"); const it = EMPTY_ITEM_FACTORY.programs(); getItemList("programs").push(it); S.ui.expandedRepeatItem.programs = it.id; render(); window.scrollTo(0, 0); return true; }
+    case "mp-no": { S.ui.moreProg = false; S.ui.progFocus = null; S.ui.mpAsked = true; const list = activeReportSections(), idx = list.findIndex((s) => s.id === S.activeSectionId); if (idx < list.length - 1) openSection(list[idx + 1].id); window.scrollTo(0, 0); return true; }
     case "section-next": {
       clearTimeout(__autoSaveTimer); __autoSaveTimer = null;
       if (!trySaveSectionWithStatus(S.sectionCompleted ? "completed" : "draft")) { render(); return true; }
+      if (S.activeSectionId === "programs") { if (svMergeOn()) pfEnterFrom(getCurrentReportEntry().sections.programs && getCurrentReportEntry().sections.programs.data && getCurrentReportEntry().sections.programs.data.programs); S.ui.expandedRepeatItem = S.ui.expandedRepeatItem || {}; S.ui.expandedRepeatItem.programs = null; }
+      if (svMergeOn() && S.activeSectionId === "evidence" && !S.ui.mpAsked) { S.ui.moreProg = true; render(); return true; }
+      S.ui.mpAsked = false;
       const list = activeReportSections(), idx = list.findIndex((s) => s.id === S.activeSectionId);
       if (idx < list.length - 1) openSection(list[idx + 1].id);
       return true;
@@ -15069,6 +15098,7 @@ function handleReportEditorAction(action, ds) {
         // معطّل بالواجهة (مثال: قسم "نقاط القوة" بحد أقصى 5).
         if (!schema || schema.maxItems == null || list.length < schema.maxItems) {
           const item = factory();
+          if ((ds.arr === "tools" || ds.arr === "evidenceItems") && pfName()) item.relatedProgram = pfName();
           list.push(item);
           if (schema) {
             S.ui.expandedRepeatItem = S.ui.expandedRepeatItem || {};
@@ -15076,14 +15106,14 @@ function handleReportEditorAction(action, ds) {
           }
         }
       }
-      render();
+      render(); if (ds.arr === "programs") window.scrollTo(0, 0);
       return true;
     }
     case "toggle-repeat-item": {
       S.ui.expandedRepeatItem = S.ui.expandedRepeatItem || {};
       const current = S.ui.expandedRepeatItem[ds.arr];
       S.ui.expandedRepeatItem[ds.arr] = current === ds.id ? null : ds.id;
-      render();
+      render(); if (S.ui.expandedRepeatItem[ds.arr] == null) window.scrollTo(0, 0);
       return true;
     }
     case "bk-open": { S.ui.bulk = { arr: ds.arr, text: "", preview: null }; render(); return true; }
