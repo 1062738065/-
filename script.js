@@ -3814,6 +3814,30 @@ function indicatorBoardItems(entries, multi) {
       out.push({ title: r.name + (multi && unit ? " · " + unit.name : ""), num: ac, target: tg, base: num(bs), unit: /%|٪|نسبة/.test(String((def && (def.unit || def.name)) || r.name)) ? "%" : "", better: indBetter(def && def.direction) }); }); });
   return out;
 }
+function priorityGridHtml(items) {
+  const rows = [];
+  items.forEach((i) => {
+    if (i.num == null || i.target == null || !(i.target > 0)) return;
+    const low = i.better === "L", p = Math.min(150, Math.round((low ? (i.num > 0 ? i.target / i.num : 1) : i.num / i.target) * 100));
+    let ch = null; if (i.base != null) ch = (i.num - i.base) * (low ? -1 : 1);
+    rows.push({ n: i.title, p, band: p >= 100 ? "ok" : p >= 70 ? "mid" : "bad", c: ch == null ? "na" : ch < 0 ? "down" : ch > 0 ? "up" : "same" });
+  });
+  if (!rows.length) return "";
+  rows.sort((a, b) => a.p - b.p);
+  const col = (p) => (p >= 100 ? "#2f8f6b" : p >= 90 ? "#d9a04a" : p >= 70 ? "#e08a3c" : "#c0392b");
+  const bands = [["bad", "متعثر", "#fdeceb"], ["mid", "قريب / يحتاج تدخلاً", "#fff4e2"], ["ok", "متحقق", "#e9f4ee"]];
+  const cols = [["down", "تراجع ▼", "#fdeceb"], ["same", "ثابت", "#f3e3e5"], ["up", "تحسّن ▲", "#e9f4ee"], ["na", "بدون خط أساس", "#f1ece8"]].filter((c) => rows.some((r) => r.c === c[0]));
+  const g = `grid-template-columns:78px repeat(${cols.length},1fr)`;
+  let h = `<div class="pmx" style="${g}"><div></div>${cols.map((c) => `<div class="pmx-h" style="background:${c[2]}">${c[1]}</div>`).join("")}`;
+  bands.forEach((b) => {
+    h += `<div class="pmx-r" style="background:${b[2]}">${b[1]}</div>`;
+    cols.forEach((c) => {
+      const its = rows.filter((r) => r.band === b[0] && r.c === c[0]), pri = b[0] === "bad" && c[0] === "down";
+      h += `<div class="pmx-c pmx-c2" style="background:${b[2]};${pri ? "outline:2px solid #c0392b66;" : ""}">${its.map((r) => `<div class="pmx-chip2" style="border-right:4px solid ${col(r.p)}"><span>${esc(r.n)}</span><b style="color:${col(r.p)}">${r.p}٪</b></div>`).join("")}</div>`;
+    });
+  });
+  return h + `</div><div class="hint" style="margin-top:8px;text-align:center">الصفوف = حالة التحقق من المستهدف · الأعمدة = التغير عن خط الأساس (يراعي اتجاه المؤشر) · الإطار الأحمر = الأولوية الأعلى</div>`;
+}
 function priorityMatrixHtml(items) {
   const rows = [];
   items.forEach((i) => {
@@ -3845,7 +3869,7 @@ function chartsSummaryPages(pagesHtml, title) {
       if (ex) sh = ex.innerHTML; else sh = shapeRender("auto", { auto: true }, { sectionId: "tbl", items, label: ttl, dash: true });
       if (sh) cards.push(`<div class="chs-card"><div class="chs-t">${esc(ttl || "—")}</div><div class="rpt-v5">${sh}</div></div>`);
     });
-    const out = []; const pm = /ibd-sum/.test(pagesHtml) ? "" : priorityMatrixHtml(indAll); if (pm) out.push(execChapterHtml("", rptIcon(""), "مؤشرات الأداء", pm));
+    const out = []; const pm = priorityGridHtml(indAll); if (pm) out.push(execChapterHtml("", rptIcon(""), "مؤشرات الأداء", pm));
     if (!cards.length) return out; for (let i = 0; i < cards.length; i += 6) out.push(execChapterHtml("", rptIcon(""), title + (cards.length > 6 ? " (" + (Math.floor(i / 6) + 1) + ")" : ""), `<div class="chs-grid">${cards.slice(i, i + 6).join("")}</div>`));
     return out;
   } catch (e) { return []; }
@@ -7037,19 +7061,44 @@ function aggChapterBody(key, data, s) {
   return "";
 }
 // مستند التقرير المجمّع كاملًا (غلاف + فصول) حسب التنسيق
+/* التقرير النهائي بنفس تنسيق تقرير الوحدة: لكل فصل صفحة لكل وحدة (نفس البطاقات والخط والألوان والرسوم) */
+function aggUnitStylePages(data) {
+  const ents = (data.flat || []).filter((e) => e && e.unit && e.report); if (!ents.length) return [];
+  const us = rptUnitSettings(ents[0].unit);
+  let chs = unitChapterDefs(null, "").filter((c) => !c.special && c.key !== "basic" && c.key !== "review" && !us.hidden[c.key] && !rptLevelHides(us, c.key));
+  chs = rptGroupChapters(rptOrdered(chs, us), ents[0].report);
+  const out = [];
+  chs.forEach((c) => {
+    const secs = c.sections || [c.key];
+    ents.forEach(({ unit, report }) => {
+      if (!secs.some((sid) => sectionHasData(report, sid))) return;
+      const html = rptWithCtx({ ...rptChartCtx(us), hiddenCols: rptHiddenColsForViewer(us), colsShow: us.colsShow, capture: null, unitId: unit.id }, () => {
+        const title = rptChapterTitle(c, us) + " — " + unit.name, extra = rptCustomChartsFor(us, c.key, [{ unit, report }], false);
+        const h = c.group ? rptGroupChapterHtml(c, rptIcon(c.icon), title, report, extra) : reportChapterHtml(rptIcon(c.icon), title, secs, report, extra);
+        return tvApply(h, "ur:" + c.key, secShapeOf(secs));
+      });
+      if (html) out.push(html);
+    });
+  });
+  return out;
+}
 function aggReportDocHtml(s, data) {
   return rptWithCtx({ ...rptChartCtx(s), hiddenCols: s.hiddenCols }, () => {
     const chapters = rptOrdered(aggChapterDefs(s), s).filter((c) => !s.hidden[c.key] && !rptLevelHides(s, c.key) && (s.showEmpty || (c.custom ? aggCustomChapterRows(c.custom, data).length : aggChapterHasData(c.key, data))));
     const pages = [];
     const per = Number(s.perPage) || 0;
-    let closingPage = -1;
+    let closingPage = -1, uDone = false, forceNew = false;
     chapters.forEach((c, i) => {
-      if (!pages.length || (per && i % per === 0)) pages.push("");
+      const uStyle = s.unitStyle !== false && !c.custom && (data.flat || []).length;
+      if (uStyle && AGG_SEC_MAP[c.key]) return; // تُعرض بتنسيق الوحدة أدناه
+      if (uStyle && !uDone && c.key !== "summary" && chapters.findIndex((x) => x.key === "summary") < 0) { uDone = true; try { if (!pages.length) pages.push(""); aggUnitStylePages(data).forEach((h) => pages.push(h)); forceNew = true; } catch (e) { console.error(e); } }
+      if (!pages.length || forceNew || (per && i % per === 0)) { pages.push(""); forceNew = false; }
       if (c.key === "closing") closingPage = pages.length - 1;
       RPT_CTX.section = c.key;
       const extra = rptCustomChartsFor(s, c.key, data.flat || [], true);
       pages[pages.length - 1] += tvApply(execChapterHtml(i + 1, rptIcon(c.icon), rptChapterTitle(c, s), extra + (c.custom ? aggCustomChapterBody(c.custom, data) : aggChapterBody(c.key, data, s))), "fr:" + c.key, secShapeOf(c.sections || (c.section ? [c.section] : [AGG_SEC_MAP[c.key] || c.key])));
       RPT_CTX.section = null;
+      if (uStyle && !uDone && c.key === "summary") { uDone = true; try { aggUnitStylePages(data).forEach((h) => pages.push(h)); forceNew = true; } catch (e) { console.error(e); } }
     });
     const stBody = statsPageBodyHtml(s, data.flat || []);
     if (stBody) { const stH = execChapterHtml("", rptIcon(""), s.statsTitle || "الإحصائيات", stBody); if (closingPage >= 0) pages.splice(closingPage, 0, stH); else pages.push(stH); } // قبل صفحة الاعتماد

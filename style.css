@@ -1023,3 +1023,4 @@ table.prs-table th, table.prs-table td, .shp-tbl th, .shp-tbl td, .table-wrap ta
 .ibd-st{font-size:10.5px;font-weight:800;border:1px solid;border-radius:99px;padding:2px 10px;white-space:nowrap}
 .ibd-bar{height:10px;background:#fbf1f0;border-radius:6px;overflow:hidden;position:relative}.ibd-bar i{position:absolute;right:0;top:0;height:100%;border-radius:6px}
 .ibd-bot{display:flex;gap:14px;flex-wrap:wrap;font-size:11px;color:#6f6a63;margin-top:6px}.ibd-bot b{color:#3b2a2e}.ibd-ch{font-weight:800;margin-right:auto}
+.pmx-c2{flex-direction:column;flex-wrap:nowrap;gap:5px}.pmx-chip2{display:flex;justify-content:space-between;align-items:center;gap:6px;background:#fff;border-radius:8px;padding:5px 8px;font-size:11px;line-height:1.5;break-inside:avoid}.pmx-chip2 b{white-space:nowrap}
