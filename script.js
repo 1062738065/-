@@ -3571,8 +3571,21 @@ function dashCCTable(items) {
 function dashCCBlock(title, list, color) {
   return `<div style="border:1px solid ${BORDER};border-radius:12px;padding:10px 12px;background:#fff;"><div style="font-weight:800;font-size:13px;margin-bottom:6px;display:flex;align-items:center;gap:6px;"><span style="width:3px;height:14px;border-radius:2px;background:${color};display:inline-block;"></span>${esc(title)}</div>${list.map((i) => `<div style="padding:6px 0;border-top:1px solid ${BORDER};font-size:12.5px;display:flex;gap:8px;align-items:baseline;"><span style="flex:1;font-weight:600;">${esc(i.title)}</span><span style="color:${SUBTLE};font-size:12px;">${esc((i.subs || []).slice(0, 2).join(" · "))}</span><span style="color:${SUBTLE};font-size:11px;">${esc(i.unit)}</span></div>`).join("") || `<div class="hint">لا توجد بيانات.</div>`}</div>`;
 }
+/* ربط الرسم: بطاقة اللوحة بخيار «مثل التقرير» تأخذ الشكل المختار لنفس القسم في فصول التقرير */
+function dashLinkCard(c) {
+  if (!c || c.view !== "report") return c;
+  let id = "";
+  try {
+    const st = rptSettings("unit") || {}, tv = st.tv || {}, secs = (c.secs || []);
+    const ch = (unitChapterDefs(null, null) || []).find((x) => (x.sections || []).some((q) => secs.includes(q)) && /^shape:/.test(tv[x.key] || ""));
+    if (ch) id = String(tv[ch.key]).slice(6);
+  } catch (e) { id = ""; }
+  if (!id) id = "auto";
+  return { ...c, view: "shape", shape: id };
+}
 function dashCCHtml(kind, units) {
-  return dashCC(kind).map((c) => {
+  return dashCC(kind).map((c0) => {
+    const c = dashLinkCard(c0);
     const secs = (c.secs || []).filter(Boolean);
     if (!secs.length) return "";
     const items = dashCCItems(units, secs, c.flds);
@@ -3629,7 +3642,7 @@ function dashCCEditorHtml(kid) {
   const secs = (SECTIONS || []).filter((x) => x.id !== "review");
   const shapes = Object.entries(SHAPES_LIB).filter(([, v]) => !v.live && v.cat !== "photo");
   const chip = (on, attrs, label) => `<button type="button" class="flt-chip${on ? " on" : ""}" ${attrs}>${esc(label)}</button>`;
-  const views = [["seq", "متتابعة"], ["two", "عمودان"], ["table", "جدول واحد"], ["shape", "شكل من المكتبة"]];
+  const views = [["report", "مثل التقرير"], ["seq", "متتابعة"], ["two", "عمودان"], ["table", "جدول واحد"], ["shape", "شكل من المكتبة"]];
   return `<div style="border:1px solid ${BORDER};border-radius:14px;background:#fff;padding:12px 14px;margin-bottom:12px;">
     <div style="font-weight:800;color:${ROSE};font-size:14px;margin-bottom:4px;">بطاقات مخصصة — دمج أقسام وعرضها</div>
     <div class="hint" style="margin-bottom:10px;">اختاري قسمًا أو أكثر وطريقة العرض، وتظهر بطاقة واحدة في اللوحة ببيانات هذه الأقسام. البيانات تبقى في أقسامها، والدمج في العرض فقط.</div>
