@@ -1954,7 +1954,13 @@ const appEl = document.getElementById("app");
 
 // صفحات قديمة دُمجت في غيرها: أي وصول لها (صلاحية دور قديمة مثلًا) يفتح الصفحة الجديدة
 const RETIRED_VIEWS = { "admin-reports": "browse-structure", "office-curation": "department-curation" };
+/* يحفظ موضع تمرير المعاينة عند كل إعادة رسم حتى لا ترجع لأعلى مع كل تعديل */
 function render() {
+  const pv = document.querySelector(".rm-preview-scroll"), pt = pv ? pv.scrollTop : null;
+  render0();
+  if (pt != null) { const pv2 = document.querySelector(".rm-preview-scroll"); if (pv2) pv2.scrollTop = pt; }
+}
+function render0() {
   syncReportTabCatalog();
   syncCustomReportPages();
   if (RETIRED_VIEWS[S.view]) S.view = RETIRED_VIEWS[S.view];
@@ -3667,13 +3673,20 @@ function tvOptionsHtml(cur, first) {
   return `<option value="">${esc(first)}</option><option value="chart" ${cur === "chart" ? "selected" : ""}>رسم + زر الجدول</option><option value="both" ${cur === "both" ? "selected" : ""}>رسم وجدول</option>${grp}`;
 }
 function vwLabel(v) { if (v === "chart") return "رسم + زر الجدول"; if (v === "both") return "رسم وجدول"; if (/^shape:/.test(v || "")) return "شكل: " + ((SHAPES_LIB[v.slice(6)] || {}).name || ""); return "جدول"; }
-function vwPickerHtml(cur, act, attrs) {
+function vwPickerHtml(cur, act, attrs, secs) {
+  secs = (secs || []).filter(Boolean);
+  let items = []; if (secs.length) { try { items = dashCCItems((S.units || []).filter((u) => u.status === "active"), secs); } catch (e) { items = []; } }
   const cats = (typeof SHP_CATS !== "undefined" ? SHP_CATS : []).filter(([cid]) => cid !== "photo" && Object.values(SHAPES_LIB).some((v) => v.cat === cid && !v.live));
   const cat = (S.ui.vwCat && cats.some(([c]) => c === S.ui.vwCat)) ? S.ui.vwCat : (cats[0] || [""])[0];
   const b = (val, label) => `<button type="button" class="flt-chip${cur === val ? " on" : ""}" data-action="${act}" ${attrs} data-val="${esc(val)}">${esc(label)}</button>`;
   const list = Object.entries(SHAPES_LIB).filter(([, v]) => v.cat === cat && !v.live);
-  const cards = list.map(([id, v]) => { const h = shpSamplePrev(id); return `<button type="button" class="shp-card${cur === "shape:" + id ? " on" : ""}" data-action="${act}" ${attrs} data-val="shape:${esc(id)}"><div class="shp-prev rpt-v5" style="pointer-events:none;">${h || ""}</div><div class="shp-nm">${esc(v.name)}</div></button>`; }).join("");
-  return `<div style="padding:10px 14px;background:#faf6f6;border-top:1px solid ${BORDER};"><div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px;">${b("", "جدول (كما هو)")}${b("chart", "رسم + زر الجدول")}${b("both", "رسم وجدول")}</div><div class="hint" style="margin-bottom:4px;">أو اختاري شكلًا من المكتبة (الاسم تحت كل معاينة — المعاينات أمثلة توضيحية، وبيانات التقرير تتعبّأ بدلها):</div><div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px;">${cats.map(([cid, cn]) => `<button type="button" class="flt-chip${cat === cid ? " on" : ""}" data-action="vw-cat" data-cat="${esc(cid)}">${esc(cn)}</button>`).join("")}</div><div class="shp-grid">${cards}</div></div>`;
+  const rows = list.map(([id, v]) => { let h = ""; if (items.length) { try { h = shapeRender(id, { auto: true }, { sectionId: secs[0], items, label: "", dash: true }); } catch (e) { h = ""; } } return { id, v, h, real: !!h }; });
+  rows.forEach((r) => { if (!r.h) r.h = shpSamplePrev(r.id); });
+  rows.sort((a, b) => (b.real ? 1 : 0) - (a.real ? 1 : 0));
+  const nReal = rows.filter((r) => r.real).length;
+  const cards = rows.map((r) => `<button type="button" class="shp-card${cur === "shape:" + r.id ? " on" : ""}" data-action="${act}" ${attrs} data-val="shape:${esc(r.id)}" style="${items.length && !r.real ? "opacity:.55;" : ""}"><div class="shp-prev rpt-v5" style="pointer-events:none;">${r.h || ""}</div><div class="shp-nm">${esc(r.v.name)}${items.length && !r.real ? " — لا تناسب بياناتك" : ""}</div></button>`).join("");
+  const note = items.length ? `المعاينات ببيانات «${esc(secs.map((x) => ((SECTIONS || []).find((y) => y.id === x) || {}).label || x).join(" + "))}» الفعلية (${items.length} بند)${nReal ? "" : " — لا شكل في هذا التبويب يناسبها، جرّبي تبويبًا آخر"}.` : (secs.length ? "لا توجد بيانات مُدخلة في هذا القسم بعد، فالمعاينات أمثلة توضيحية فقط (ليست من بياناتك)." : "هذه البطاقة ليست قسمًا واحدًا، فالمعاينات أمثلة توضيحية؛ وبياناتها الفعلية تتعبّأ بعد الاختيار.");
+  return `<div style="padding:10px 14px;background:#faf6f6;border-top:1px solid ${BORDER};"><div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px;">${b("", "جدول (كما هو)")}${b("chart", "رسم + زر الجدول")}${b("both", "رسم وجدول")}</div><div class="hint" style="margin-bottom:4px;">أو اختاري شكلًا من المكتبة (الاسم تحت كل معاينة). ${note}</div><div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px;">${cats.map(([cid, cn]) => `<button type="button" class="flt-chip${cat === cid ? " on" : ""}" data-action="vw-cat" data-cat="${esc(cid)}">${esc(cn)}</button>`).join("")}</div><div class="shp-grid">${cards}</div></div>`;
 }
 function tvShapeItems(tb) {
   const rows = [...tb.querySelectorAll("tbody tr")]; const out = [];
@@ -6331,7 +6344,7 @@ function dashKindPanelHtml() {
       <summary style="cursor:pointer;display:flex;align-items:center;gap:10px;padding:12px 14px;background:#faf4f6;font-weight:800;color:${ROSE};font-size:14px;list-style:none;"><span style="flex:1;">${esc(name)}</span><span class="badge" style="background:${GRAY_BG};color:${ROSE};">${shown} من ${list.length} ظاهرة</span>
         <button type="button" class="pill-btn pill-ghost" style="padding:4px 10px;" data-action="dash-group" data-kind="${esc(kid)}" data-keys="${esc(keys)}" data-show="1">إظهار الكل</button>
         <button type="button" class="pill-btn pill-ghost" style="padding:4px 10px;" data-action="dash-group" data-kind="${esc(kid)}" data-keys="${esc(keys)}" data-show="0">إخفاء الكل</button></summary>
-      ${list.map((b) => `<div style="display:flex;align-items:center;gap:12px;padding:10px 14px;border-top:1px solid ${BORDER};font-size:13.5px;"><span style="flex:1;">${esc(b.label)}</span>${(() => { const gm = ((dashConfig()[kid] || {}).grp) || {}, cur = gm[b.key] || "", names = [...new Set(Object.values(gm))]; return `<select class="input" data-grp-kind="${esc(kid)}" data-grp-key="${esc(b.key)}" title="ضمّ هذه البطاقة لمجموعة: البطاقات التي في المجموعة نفسها تظهر متجاورة تحت عنوان واحد" aria-label="المجموعة" style="width:150px;min-height:32px;padding:2px 6px;font-size:12px;"><option value="">بدون مجموعة</option>${names.map((n) => `<option value="${esc(n)}" ${n === cur ? "selected" : ""}>${esc(n)}</option>`).join("")}<option value="__new__">+ مجموعة جديدة…</option></select>`; })()}<button type="button" class="input" data-action="vw-pick" data-kind="${esc(kid)}" data-key="${esc(b.key)}" title="اختيار طريقة العرض أو الشكل مع معاينة" style="width:150px;min-height:32px;padding:2px 8px;font-size:12px;text-align:center;cursor:pointer;">${esc(vwLabel(dashViewOf(kid, b.key)))} ▾</button>${sw(!dashHidden(kid, b.key), b.key)}</div>${S.ui.vwOpen === kid + "|" + b.key ? vwPickerHtml(dashViewOf(kid, b.key), "vw-set", `data-kind="${esc(kid)}" data-key="${esc(b.key)}"`) : ""}`).join("")}
+      ${list.map((b) => `<div style="display:flex;align-items:center;gap:12px;padding:10px 14px;border-top:1px solid ${BORDER};font-size:13.5px;"><span style="flex:1;">${esc(b.label)}</span>${(() => { const gm = ((dashConfig()[kid] || {}).grp) || {}, cur = gm[b.key] || "", names = [...new Set(Object.values(gm))]; return `<select class="input" data-grp-kind="${esc(kid)}" data-grp-key="${esc(b.key)}" title="ضمّ هذه البطاقة لمجموعة: البطاقات التي في المجموعة نفسها تظهر متجاورة تحت عنوان واحد" aria-label="المجموعة" style="width:150px;min-height:32px;padding:2px 6px;font-size:12px;"><option value="">بدون مجموعة</option>${names.map((n) => `<option value="${esc(n)}" ${n === cur ? "selected" : ""}>${esc(n)}</option>`).join("")}<option value="__new__">+ مجموعة جديدة…</option></select>`; })()}<button type="button" class="input" data-action="vw-pick" data-kind="${esc(kid)}" data-key="${esc(b.key)}" title="اختيار طريقة العرض أو الشكل مع معاينة" style="width:150px;min-height:32px;padding:2px 8px;font-size:12px;text-align:center;cursor:pointer;">${esc(vwLabel(dashViewOf(kid, b.key)))} ▾</button>${sw(!dashHidden(kid, b.key), b.key)}</div>${S.ui.vwOpen === kid + "|" + b.key ? vwPickerHtml(dashViewOf(kid, b.key), "vw-set", `data-kind="${esc(kid)}" data-key="${esc(b.key)}"`, /^fld_/.test(b.key) ? [b.key.slice(4)] : /^cc_/.test(b.key) ? ((dashCC(kid).find((x) => "cc_" + x.id === b.key) || {}).secs || []) : []) : ""}`).join("")}
     </details>`;
   }).join("");
   return `<div style="width:100%;margin-bottom:10px;"><div style="font-size:13px;font-weight:800;margin-bottom:8px;">اختاري نوع الحساب</div>
@@ -7200,7 +7213,7 @@ function rmPanelHtml(st) {
           <button type="button" class="input" data-action="rm-pick" data-key="${esc(c.key)}" title="اختيار طريقة العرض أو الشكل مع معاينة" style="width:150px;flex:none;text-align:center;cursor:pointer;">${esc(vwLabel((d.tv || {})[c.key] || ""))} ▾</button>
           <button type="button" class="rm-pill${hid ? "" : " on"}" data-action="rm-hide" data-key="${esc(c.key)}" aria-pressed="${!hid}">${hid ? "مخفي" : "ظاهر"}</button>
         </div>
-        ${st.pick === c.key ? vwPickerHtml((d.tv || {})[c.key] || "", "rm-chview", `data-key="${esc(c.key)}"`) : ""}
+        ${st.pick === c.key ? vwPickerHtml((d.tv || {})[c.key] || "", "rm-chview", `data-key="${esc(c.key)}"`, c.sections || (c.section ? [c.section] : [])) : ""}
         ${(() => { const secs0 = c.sections || (c.section ? [c.section] : []); const sg = shpSuggestFor(secs0); if (!sg) return ""; return `<div class="rm-hint" style="margin:4px 0 0;">الرسم المقترح لهذا الفصل: <b>${esc(sg.label)}</b> — ${esc(sg.why)} <button type="button" class="rm-link" data-action="rm-prev" data-key="${esc(c.key)}">${st.prev === c.key ? "إخفاء المعاينة ▴" : "عاينيه ببياناتك ▾"}</button></div>${st.prev === c.key ? dashCCCandidatesHtml("ch", { id: c.key, secs: secs0, title: "" }, "rm-chshape") : ""}`; })()}
         ${isUnit && c.sections ? `<button type="button" class="rm-link" data-action="rm-cols" data-key="${esc(c.key)}">${open ? "إخفاء حقول الفصل ▴" : "حقول الفصل لكل حساب ▾"}</button>${colsHtml}` : ""}
         ${c.custom ? `<button type="button" class="rm-link" data-action="rm-cols" data-key="${esc(c.key)}">${st.openCols === c.key ? "إغلاق الإعداد ▴" : "إعداد الفصل (القسم والحقول) ▾"}</button>${st.openCols === c.key ? rmCustomChapterEditor(c.custom) : ""}` : ""}
@@ -7286,7 +7299,8 @@ function renderReportsManage() {
   const tabs = rmTabsFor(st.sel);
   if (!tabs.some((t) => t[0] === st.tab)) st.tab = "page";
   const [w] = rptPageDims(d);
-  const zoom = Math.min(0.6, 430 / (w * 3.78)).toFixed(3);
+  const dock = !!st.dock;
+  const zoom = dock ? Math.min(0.7, Math.max(0.3, (Math.min(window.innerWidth, 1100) - 60) / (w * 3.78))).toFixed(3) : Math.min(0.6, 430 / (w * 3.78)).toFixed(3);
   const doc = st.sel === "unit"
     ? fullReportOrPreviewBody(RPT_FAKE_UNIT, rptFakeUnitReport(), null, { settings: d })
     : aggReportDocHtml(d, aggFakeData(d));
@@ -7304,6 +7318,7 @@ function renderReportsManage() {
           <div style="font-size:15px;font-weight:800;">${esc(selName)}</div>
           <div class="rm-row">
             ${dirty ? `<span class="rm-dirty">تغييرات غير محفوظة</span>` : st.saved ? `<span class="rm-saved">تم الحفظ ✓</span>` : ""}
+            ${pillBtn(dock ? "إلغاء تثبيت المعاينة" : "معاينة مثبّتة بالأسفل", { variant: "ghost", action: "rm-dock" })}
             ${pillBtn("استعادة الافتراضي", { variant: "ghost", icon: iconX(14, INK), action: "rm-reset" })}
             ${pillBtn("حفظ التنسيق", { icon: iconCheckCircle(15, "#fff"), action: "rm-save", disabled: !dirty })}
           </div>
@@ -7311,11 +7326,12 @@ function renderReportsManage() {
         <div class="rm-tabs" role="tablist">${tabs.map(([k, l]) => `<button type="button" role="tab" aria-selected="${st.tab === k}" class="rm-tab${st.tab === k ? " on" : ""}" data-action="rm-tab" data-tab="${k}">${esc(l)}</button>`).join("")}</div>
         <div class="rm-body">${rmPanelHtml(st)}</div>
       </div>
-      <div class="rm-preview">
-        <div class="rm-row" style="justify-content:space-between;margin-bottom:8px;"><span class="rm-label" style="margin:0;">معاينة حية</span><span class="rm-badge">بيانات وهمية — لا تُعرض تقارير حقيقية</span></div>
+      <div class="rm-preview${dock ? " rm-docked" : ""}">
+        <div class="rm-row" style="justify-content:space-between;margin-bottom:8px;"><span class="rm-label" style="margin:0;">معاينة حية — تتغير فور أي تعديل</span>${dock ? pillBtn("إغلاق", { variant: "ghost", action: "rm-dock" }) : ""}<span class="rm-badge">بيانات وهمية — لا تُعرض تقارير حقيقية</span></div>
         <div class="rm-preview-scroll"><div style="zoom:${zoom};">${rptWrap(d, doc, true)}</div></div>
       </div>
     </div>
+    ${dock ? `<div style="height:52vh;"></div>` : ""}
   </div></div>`;
 }
 function handleReportsManageAction(action, ds) {
@@ -7337,6 +7353,7 @@ function handleReportsManageAction(action, ds) {
     case "st-sec": d.statsCards = (d.statsCards || []).map((x) => { if (x.id !== ds.id) return x; const l = [...(x.secs || [])]; const i = l.indexOf(ds.sec); if (i === -1) l.push(ds.sec); else l.splice(i, 1); return { ...x, secs: l }; }); break;
     case "st-fld": d.statsCards = (d.statsCards || []).map((x) => { if (x.id !== ds.id) return x; const l = [...(x.flds || [])]; const i = l.indexOf(ds.fld); if (i === -1) l.push(ds.fld); else l.splice(i, 1); return { ...x, flds: l }; }); break;
     case "st-cmp": d.statsCards = (d.statsCards || []).map((x) => (x.id === ds.id ? { ...x, cmp: !x.cmp } : x)); break;
+    case "rm-dock": st.dock = !st.dock; break;
     case "rm-pick": st.pick = st.pick === ds.key ? null : ds.key; break;
     case "rm-chview": rmSetField("tv:" + ds.key, ds.val || ""); break;
     case "rm-prev": st.prev = st.prev === ds.key ? null : ds.key; break;

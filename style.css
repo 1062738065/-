@@ -984,3 +984,7 @@ table.prs-table th, table.prs-table td, .shp-tbl th, .shp-tbl td, .table-wrap ta
 .tv-p div{height:10px;border-radius:5px}
 .tv-v{width:84px;flex:none;text-align:left;font-weight:700}
 .rpt-stat-grp{font-weight:800;font-size:14px;color:var(--rpt-burgundy,#6b2337);margin:14px 0 8px;border-bottom:1px solid #e7dccb;padding-bottom:4px}
+
+/* معاينة التنسيق المثبّتة بأسفل الشاشة: ترين أثر التعديل فورًا وأنتِ تعدّلين */
+.rm-layout > .rm-preview.rm-docked { position: fixed !important; left: 8px; right: 8px; bottom: 8px; top: auto; z-index: 60; flex: none; width: auto; max-height: 50vh; background: #fffdf9; border: 1px solid #e7dccb; border-radius: 16px; padding: 10px; box-shadow: 0 -8px 30px rgba(43,29,33,.22); }
+.rm-docked .rm-preview-scroll { max-height: calc(50vh - 60px); }
