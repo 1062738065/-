@@ -15488,8 +15488,27 @@ function decorateLinkInputs() {
     el.insertAdjacentElement("afterend", a); upd();
   });
 }
+/* لوحة المعلومات: أي بطاقة وحدها في صفّها (بدون جارة) تتمدّد على كامل العرض عشان ما يبقى فراغ */
+function dashFillGaps() {
+  try {
+    const box = document.querySelector(".page-inner.dash-wide");
+    if (!box) return;
+    const blks = [...box.querySelectorAll(":scope > .dash-blk")];
+    blks.forEach((b) => b.classList.remove("dash-span"));
+    if (getComputedStyle(box).display !== "grid") return;
+    for (let pass = 0; pass < 8; pass++) {
+      const rows = {}; let changed = false;
+      blks.forEach((b) => { if (b.classList.contains("dash-span")) return; const r = b.getBoundingClientRect(); if (!r.height) return; (rows[Math.round(r.top / 4)] = rows[Math.round(r.top / 4)] || []).push(b); });
+      const all = blks.filter((b) => !b.classList.contains("dash-span")).map((b) => Math.round(b.getBoundingClientRect().top / 4));
+      Object.keys(rows).forEach((k) => { if (rows[k].length === 1 && all.filter((t) => Math.abs(t - k) <= 1).length === 1) { rows[k][0].classList.add("dash-span"); changed = true; } });
+      if (!changed) break;
+    }
+  } catch (e) {}
+}
+window.addEventListener("resize", () => { clearTimeout(window.__dfg); window.__dfg = setTimeout(dashFillGaps, 200); });
 function afterRender() {
   applyButtonPermissions();
+  dashFillGaps();
   try { if (S.view === "full-report" || S.view === "report-preview" || S.view === "executive-final-report") linkifyReportView(); decorateLinkInputs(); } catch (e) { /* تجاهل */ }
   const loginUserEl = document.getElementById("login-username");
   if (loginUserEl) loginUserEl.focus();
