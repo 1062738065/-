@@ -283,6 +283,7 @@ const SECTION_FIELD_SCHEMAS = {
   },
   challenges: {
     arrayKey: "challenges",
+    hint: "(تحديات أو ظروف طارئة أثّرت على تنفيذ العمل، مثل: الأمطار، انقطاع الإنترنت، أو تعطل الأنظمة)",
     itemLabel: "الصعوبة",
     fields: [
       { id: "name", type: "text", label: "اسم الصعوبة", required: true, placeholder: "مثال: نقص الكادر المؤهل" },
@@ -304,6 +305,7 @@ const SECTION_FIELD_SCHEMAS = {
   },
   improvement: {
     arrayKey: "opportunities",
+    hint: "(جوانب قابلة للتطوير والمعالجة لتحسين العمل، مثل: قلة ساعات التنفيذ، عدم تهيئة المكان، أو نقص التجهيزات)",
     itemLabel: "فرصة التحسين",
     fields: [
       { id: "name", type: "text", label: "اسم فرصة التحسين", required: true, placeholder: "مثال: تسريع الاستجابة لطلبات المستفيدات" },
