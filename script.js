@@ -3443,6 +3443,85 @@ function dashRoutedHtml(kind, units) {
 function dashFieldBlocksHtml(kind, units) { return dashFieldBlocksHtml0(kind, units) + dashCCHtml(kind, units); }
 function dashFieldBlocksHtml0(kind, units) { return dashB(kind, "sharedInd", dashSharedIndHtml(kind, units)) + dashB(kind, "routed", dashRoutedHtml(kind, units)) + dashFieldSecIds().map((id) => dashHidden(kind, "fld_" + id) ? "" : dashB(kind, "fld_" + id, dashFieldBlockHtml(kind, id, units))).join(""); }
 
+
+/* ===== الرسم المقترح لكل قسم: يُحسب من نوع حقوله (أرقام، تواريخ، حالات، نص) ===== */
+function shpSuggest(sid) {
+  if (sid === "programs") return { shape: "hbars", label: "أشرطة أفقية", why: "فيه أرقام (المستهدف والمنجز) تُقارن بين الأعمال" };
+  const sc = SECTION_FIELD_SCHEMAS[sid === "analysis" ? "analysisComparisons" : sid];
+  const fields = sc ? (sc.fields || []).filter((f) => f && f.id) : [];
+  if (!fields.length) return { shape: "bul", label: "قائمة نقاط", why: "محتواه نصي بلا أرقام" };
+  const num = fields.filter((f) => f.type === "number" || /count|target|num|عدد|مستهدف/i.test(f.id));
+  const dt = fields.filter((f) => f.type === "date" || /date|month|deadline|تاريخ|موعد/i.test(f.id + (f.label || "")));
+  const done = fields.some((f) => /حالة|status/i.test(f.id + (f.label || "")) && (f.options || []).some((o) => /(^|\s)(مكتمل|منجز|تم)(\s|$)/.test(String(o))));
+  const cat = fields.filter((f) => (f.type === "select" || f.type === "radio") && /level|severity|priority|مستوى|أولوية|خطورة|نوع/i.test(f.id + (f.label || "")));
+  if (num.length) return { shape: "hbars", label: "أشرطة أفقية", why: "فيه أرقام تُقارن بين البنود (" + num.slice(0, 2).map((f) => f.label || f.id).join("، ") + ")" };
+  if (dt.length >= 2 || sid === "nextplan") return { shape: "tlv", label: "خط زمني", why: "فيه تواريخ ومواعيد" };
+  if (done) return { shape: "check", label: "قائمة تحقق", why: "فيه حالة إنجاز (منجز أو لا)" };
+  if (cat.length) return { shape: "t3", label: "جدول", why: "فيه مستويات أو تصنيفات (" + cat.slice(0, 2).map((f) => f.label || f.id).join("، ") + ")، والجدول أوضح لها" };
+  return { shape: "bul", label: "قائمة نقاط", why: "محتواه نصي بلا أرقام" };
+}
+function shpSuggestFor(secs) {
+  const list = (secs || []).map(shpSuggest);
+  return list.find((x) => x.shape === "hbars") || list[0] || null;
+}
+
+/* ===== صفحة «الإحصائيات» الأخيرة في التقرير النهائي وتقارير الوحدات: بطاقات تحددها مديرة النظام (قسم أو أقسام مدموجة) بأي عرض ===== */
+function statsItems(entries, secs) {
+  const latest = {};
+  (entries || []).forEach((e) => { if (!e || !e.unit || !e.report) return; const c = latest[e.unit.id]; if (!c || (e.report.createdAt || 0) > (c.report.createdAt || 0)) latest[e.unit.id] = e; });
+  const out = [];
+  Object.values(latest).forEach(({ unit, report }) => (secs || []).forEach((sid) => {
+    const lab = ((SECTIONS || []).find((x) => x.id === sid) || {}).label || sid;
+    shpSecItems(sid, (report.sections && report.sections[sid] && report.sections[sid].data) || {}).items.forEach((it) => out.push({ ...it, unit: unit.name, sec: lab, sid }));
+  }));
+  return out;
+}
+function statsCardHtml(c, entries) {
+  const secs = (c.secs || []).filter(Boolean); if (!secs.length) return "";
+  const items = statsItems(entries, secs);
+  if (!items.length) return "";
+  const sub = secs.map((sid) => ((SECTIONS || []).find((x) => x.id === sid) || {}).label || sid).join(" + ");
+  const lab = (sid) => ((SECTIONS || []).find((x) => x.id === sid) || {}).label || sid, cols = ["#a32d2d", "#3b6d11", "#6b2337", "#c9a24a"];
+  let body;
+  if (c.view === "table") body = dashCCTable(items);
+  else if (c.view === "two") body = `<div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;">${secs.map((sid, n) => dashCCBlock(lab(sid), items.filter((i) => i.sid === sid), cols[n % 4])).join("")}</div>`;
+  else if (c.view === "shape") {
+    const tbl = S.ui.ccTbl && S.ui.ccTbl[c.id];
+    const sh = SHAPES_LIB[c.shape] ? shapeRender(c.shape, { auto: true }, { sectionId: secs[0], items, label: c.title || sub, dash: true }) : "";
+    body = `<div class="no-print" style="display:flex;justify-content:flex-end;margin-bottom:6px;">${pillBtn(tbl ? "عرض الرسم" : "عرض الجدول", { variant: "ghost", action: "cc-tbl", data: { id: c.id } })}</div>${tbl ? dashCCTable(items) : (sh ? `<div class="rpt-v5">${sh}</div>` : "")}`;
+  } else body = `<div style="display:grid;gap:10px;">${secs.map((sid, n) => dashCCBlock(lab(sid), items.filter((i) => i.sid === sid), cols[n % 4])).join("")}</div>`;
+  return `<div class="prs-avoid-break" style="margin:0 0 14px;"><div class="rpt-subheading" style="margin-top:0;">${esc(c.title || sub)}</div>${body}</div>`;
+}
+function statsPageBodyHtml(s, entries) {
+  if (!s || !s.statsOn || !Array.isArray(s.statsCards) || !s.statsCards.length) return "";
+  let last = null;
+  const html = s.statsCards.map((c) => {
+    const h = statsCardHtml(c, entries); if (!h) return "";
+    const g = (c.group || "").trim(); const head = g && g !== last ? `<div class="rpt-stat-grp">${esc(g)}</div>` : ""; last = g || last;
+    return head + h;
+  }).join("");
+  return html;
+}
+function statsEditorHtml(d) {
+  const cards = Array.isArray(d.statsCards) ? d.statsCards : [];
+  const secs = (SECTIONS || []).filter((x) => x.id !== "review");
+  const chip = (on, attrs, label) => `<button type="button" class="flt-chip${on ? " on" : ""}" ${attrs}>${esc(label)}</button>`;
+  const views = [["seq", "متتابعة"], ["two", "عمودان"], ["table", "جدول واحد"], ["shape", "شكل من المكتبة"]];
+  const shapes = Object.entries(SHAPES_LIB).filter(([, v]) => !v.live && v.cat !== "photo");
+  return `<div style="margin-top:16px;border-top:1px solid ${BORDER};padding-top:14px;">
+    <div class="rm-label">صفحة «الإحصائيات» الأخيرة</div>
+    <div class="rm-hint">صفحة في آخر التقرير تضمّ بطاقات تحددينها: قسم أو أكثر مدموجة، وتختارين لكل بطاقة جدولًا أو أي شكل من المكتبة (يتعبّأ ببيانات الأقسام). تأتي بصفحة مستقلة.</div>
+    ${rmToggle("statsOn", d.statsOn ? "صفحة الإحصائيات تظهر" : "صفحة الإحصائيات مخفية", d.statsOn)}
+    ${d.statsOn ? `<div style="margin-top:10px;">${rmFieldHtml("عنوان الصفحة", rmText("statsTitle", d.statsTitle, "الإحصائيات"))}</div>
+    ${cards.map((c) => `<div style="border:1px solid ${BORDER};border-radius:12px;padding:10px 12px;margin-top:10px;background:#faf6f6;">
+      <div style="display:flex;gap:8px;align-items:center;margin-bottom:8px;"><input class="input" data-rm="st|${esc(c.id)}|title" value="${esc(c.title || "")}" placeholder="عنوان البطاقة" style="flex:1;" /><input class="input" data-rm="st|${esc(c.id)}|group" value="${esc(c.group || "")}" placeholder="مجموعة (اختياري)" style="width:130px;" />${pillBtn("حذف", { variant: "ghost", action: "st-del", data: { id: c.id } })}</div>
+      <div class="rm-hint" style="margin-bottom:4px;">الأقسام</div><div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px;">${secs.map((x) => chip((c.secs || []).includes(x.id), `data-action="st-sec" data-id="${esc(c.id)}" data-sec="${esc(x.id)}"`, x.label)).join("")}</div>
+      <div class="rm-hint" style="margin-bottom:4px;">طريقة العرض</div><div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px;">${views.map(([v, l]) => chip((c.view || "seq") === v, `data-action="st-view" data-id="${esc(c.id)}" data-view="${v}"`, l)).join("")}</div>
+      ${c.view === "shape" ? dashCCCandidatesHtml("st", c, "st-apply") + `<select class="input" data-rm="st|${esc(c.id)}|shape"><option value="">أو اختاري من القائمة</option>${shapes.map(([id, v]) => `<option value="${esc(id)}" ${c.shape === id ? "selected" : ""}>${esc(v.name)}</option>`).join("")}</select>` : ""}
+    </div>`).join("")}
+    <button type="button" class="rm-new" style="width:100%;margin-top:10px;" data-action="st-add">${iconPlus(14, ROSE)} إضافة بطاقة</button>` : ""}
+  </div>`;
+}
 /* ===== بطاقات مخصصة في لوحة المعلومات: دمج أقسام (أو قسم) وعرضها كقائمة/عمودين/جدول/أي شكل من المكتبة ===== */
 function dashCC(kind) { const c = dashConfig()[kind]; return c && Array.isArray(c.cards) ? c.cards : []; }
 function dashCCSave(kind, fn) {
@@ -3482,6 +3561,25 @@ function dashCCHtml(kind, units) {
     return dashB(kind, "cc_" + c.id, dashCard(c.title || sub, sub, body));
   }).join("");
 }
+
+/* معاينة حيّة لعدة أشكال مرشّحة ببيانات البطاقة الفعلية، لتختاري بالنظر */
+function dashCCCandidatesHtml(kid, c, act) {
+  act = act || "cc-apply";
+  const secs = (c.secs || []).filter(Boolean); if (!secs.length) return "";
+  const sg = shpSuggestFor(secs);
+  let items = [];
+  try { items = dashCCItems((S.units || []).filter((u) => u.status === "active"), secs); } catch (e) { items = []; }
+  if (!items.length) return `<div class="hint" style="margin-bottom:8px;">لا توجد بيانات مُدخلة في هذه الأقسام بعد، فلا معاينة. الرسم المقترح: <b>${esc(sg ? sg.label : "")}</b>${sg ? " — " + esc(sg.why) : ""}.</div>`;
+  const order = [...new Set([(sg || {}).shape, "hbars", "bars", "t3", "bul", "num", "check", "tlv", "pie", "stack"].filter(Boolean))];
+  const cards = order.map((id) => {
+    const sh = SHAPES_LIB[id]; if (!sh) return "";
+    const h = shapeRender(id, { auto: true }, { sectionId: secs[0], items, label: c.title || "", dash: true });
+    if (!h) return "";
+    const rec = sg && sg.shape === id;
+    return `<button type="button" class="shp-card${c.shape === id && c.view === "shape" ? " on" : ""}" data-action="${act}" data-kind="${esc(kid)}" data-id="${esc(c.id)}" data-shape="${esc(id)}" style="${rec ? "border:2px solid " + ROSE + ";" : ""}"><div class="shp-prev rpt-v5" style="pointer-events:none;">${h}</div><div class="shp-nm">${esc(sh.name)}${rec ? " — مقترح" : ""}</div></button>`;
+  }).filter(Boolean).slice(0, 8);
+  return `<div class="hint" style="margin-bottom:4px;">اختاري الشكل بالنظر (معاينة ببياناتك الفعلية)${sg ? ` — المقترح: <b>${esc(sg.label)}</b> لأن ${esc(sg.why)}` : ""}</div>${cards.length ? `<div class="shp-grid" style="margin-bottom:10px;">${cards.join("")}</div>` : `<div class="hint">لا توجد أرقام كافية لمعاينة الأشكال — جرّبي «جدول واحد» أو «متتابعة».</div>`}`;
+}
 function dashCCEditorHtml(kid) {
   if (kid === "admin") return "";
   const cards = dashCC(kid);
@@ -3495,6 +3593,7 @@ function dashCCEditorHtml(kid) {
     ${cards.map((c) => `<div style="border:1px solid ${BORDER};border-radius:12px;padding:10px 12px;margin-bottom:10px;background:#faf6f6;">
       <div style="display:flex;gap:8px;align-items:center;margin-bottom:8px;"><input class="input" data-cc-kind="${esc(kid)}" data-cc-id="${esc(c.id)}" data-cc-f="title" value="${esc(c.title || "")}" placeholder="عنوان البطاقة" style="flex:1;" />${pillBtn("حذف", { variant: "ghost", action: "cc-del", data: { kind: kid, id: c.id } })}</div>
       <div class="hint" style="margin-bottom:4px;">الأقسام</div><div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px;">${secs.map((x) => chip((c.secs || []).includes(x.id), `data-action="cc-sec" data-kind="${esc(kid)}" data-id="${esc(c.id)}" data-sec="${esc(x.id)}"`, x.label)).join("")}</div>
+      ${dashCCCandidatesHtml(kid, c)}
       <div class="hint" style="margin-bottom:4px;">طريقة العرض</div><div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px;">${views.map(([v, l]) => chip((c.view || "seq") === v, `data-action="cc-view" data-kind="${esc(kid)}" data-id="${esc(c.id)}" data-view="${v}"`, l)).join("")}</div>
       ${c.view === "shape" ? `<div class="hint" style="margin-bottom:4px;">الشكل (يتعبّأ ببيانات الأقسام تلقائيًا، وزر «عرض الجدول» يظهر لمن يفتح اللوحة)</div><select class="input" data-cc-kind="${esc(kid)}" data-cc-id="${esc(c.id)}" data-cc-f="shape"><option value="">اختاري شكلًا</option>${shapes.map(([id, v]) => `<option value="${esc(id)}" ${c.shape === id ? "selected" : ""}>${esc(v.name)}</option>`).join("")}</select>` : ""}
     </div>`).join("")}
@@ -3510,6 +3609,44 @@ function dashOrderList(kind) {
   return out;
 }
 // كل عنصر في اللوحة يُغلَّف بـ order حسب الترتيب المحفوظ (ليظهر بالترتيب اللي تحدده مديرة النظام)
+
+/* ===== عرض أي جدول كرسم (مع زر «عرض الجدول»): يحوّل الجدول نفسه إلى أشرطة بنفس بياناته، فلا تضيع معلومة ===== */
+const TV_COLS = ["#6b2337", "#3b6d11", "#c9a24a", "#2a6f9e", "#a32d2d"];
+function tvNum(v) { const m = String(v == null ? "" : v).trim().match(/^[+\-]?([\d٠-٩][\d٠-٩.,٫٬]*)\s*([٪%]?)(?:\s+[^\d٠-٩\s]\S*){0,2}$/); return m ? shpToNum(m[1] + (m[2] || "")) : null; }
+function tvChartFromTable(tb) {
+  const heads = [...tb.querySelectorAll("thead th")].map((x) => x.textContent.trim());
+  const rows = [...tb.querySelectorAll("tbody tr")].filter((r) => r.querySelectorAll("td").length === heads.length && heads.length > 1).map((r) => [...r.querySelectorAll("td")].map((c) => c.textContent.replace(/\s+/g, " ").trim()));
+  if (!heads.length || !rows.length) return "";
+  const isNum = (v) => tvNum(v) != null;
+  const numCols = [], txtCols = [];
+  heads.forEach((h, i) => { const vals = rows.map((r) => r[i]).filter((v) => v && v !== "—"); (vals.length && vals.filter(isNum).length / vals.length >= 0.6 ? numCols : txtCols).push(i); });
+  if (!numCols.length) return "";
+  const lc = txtCols.find((i) => /اسم|العمل|البند|المؤشر|الهدف|العنوان|الأداة|name/i.test(heads[i]));
+  const labelCol = lc != null ? lc : (txtCols[0] != null ? txtCols[0] : 0);
+  const details = txtCols.filter((i) => i !== labelCol);
+  const maxes = numCols.map((c) => Math.max(1, ...rows.map((r) => tvNum(r[c]) || 0)));
+  const legend = numCols.length > 1 ? `<div class="tv-lg">${numCols.map((c, k) => `<span><i style="background:${TV_COLS[k % 5]}"></i>${esc(heads[c])}</span>`).join("")}</div>` : "";
+  const items = rows.map((r) => `<div class="tv-it"><div class="tv-t"><b>${esc(r[labelCol] || "—")}</b>${details.map((d) => r[d] && r[d] !== "—" ? `<span class="tv-tag" title="${esc(heads[d])}">${esc(r[d])}</span>` : "").join("")}</div>${numCols.map((c, k) => { const n = tvNum(r[c]); return `<div class="tv-br"><span class="tv-l">${esc(numCols.length > 1 ? heads[c] : "")}</span><div class="tv-p"><div style="width:${n == null ? 0 : Math.min(100, Math.round(n / maxes[k] * 100))}%;background:${TV_COLS[k % 5]}"></div></div><span class="tv-v">${esc(r[c] || "—")}</span></div>`; }).join("")}</div>`).join("");
+  return `<div class="tv-chart">${legend}${items}</div>`;
+}
+function tvApply(html, id, mode) {
+  if (!mode || mode === "table" || !/<table/.test(html)) return html;
+  try {
+    const box = document.createElement("div"); box.innerHTML = html;
+    let n = 0;
+    box.querySelectorAll("table").forEach((tb) => {
+      if (tb.closest(".tv-wrap") || tb.querySelector("table")) return;
+      const ch = tvChartFromTable(tb); if (!ch) return;
+      const host = tb.closest(".table-wrap") || tb; const tid = id + "#" + (n++);
+      const showTbl = (S.ui.tv || {})[tid] || mode === "both";
+      const w = document.createElement("div"); w.className = "tv-wrap";
+      w.innerHTML = `${mode === "chart" ? `<div class="tv-bar no-print"><button type="button" class="pill-btn pill-ghost" data-action="tv-toggle" data-id="${esc(tid)}">${showTbl ? "عرض الرسم" : "عرض الجدول"}</button></div>` : ""}${mode === "both" ? ch : (showTbl ? "" : ch)}<div class="tv-tbl" style="${mode === "both" ? "margin-top:12px;" : showTbl ? "" : "display:none;"}">${host.outerHTML}</div>`;
+      host.replaceWith(w);
+    });
+    return box.innerHTML;
+  } catch (e) { return html; }
+}
+function dashViewOf(kind, key) { const v = ((dashConfig()[kind] || {}).view || {})[key]; return v === "chart" || v === "both" ? v : ""; }
 /* مجموعات اللوحة: كل عنصر يمكن ضمّه لمجموعة بعنوان (cfg[kind].grp = {المفتاح: العنوان}). أعضاء المجموعة يتجاورون عند أول عضو منها */
 function dashEff(kind) {
   const list = dashOrderList(kind), g = (dashConfig()[kind] || {}).grp || {}, seen = {}, out = [];
@@ -3527,6 +3664,7 @@ function dashB(kind, key, html) {
   const eff = dashEff(kind), e = eff.findIndex((x) => x.k === key), o = (e === -1 ? 500 : e) + 1;
   let head = "";
   if (e > 0 && eff[e].grp && eff[e - 1].head && dashEff(kind).filter((x) => x.grp === eff[e].grp && !dashHidden(kind, x.k))[0].k === key) head = `<div class="dash-grp-h" style="order:${o * 2 - 1};">${esc(eff[e].grp)}</div>`;
+  const vm = dashViewOf(kind, key); if (vm) html = tvApply(html, kind + ":" + key, vm);
   return head + `<div class="dash-blk" data-dk="${esc(key)}" style="order:${o * 2};">${html}</div>`;
 }
 function dashBlock(kind, key, html) { return dashB(kind, key, html); }
@@ -6124,7 +6262,7 @@ function dashKindPanelHtml() {
       <summary style="cursor:pointer;display:flex;align-items:center;gap:10px;padding:12px 14px;background:#faf4f6;font-weight:800;color:${ROSE};font-size:14px;list-style:none;"><span style="flex:1;">${esc(name)}</span><span class="badge" style="background:${GRAY_BG};color:${ROSE};">${shown} من ${list.length} ظاهرة</span>
         <button type="button" class="pill-btn pill-ghost" style="padding:4px 10px;" data-action="dash-group" data-kind="${esc(kid)}" data-keys="${esc(keys)}" data-show="1">إظهار الكل</button>
         <button type="button" class="pill-btn pill-ghost" style="padding:4px 10px;" data-action="dash-group" data-kind="${esc(kid)}" data-keys="${esc(keys)}" data-show="0">إخفاء الكل</button></summary>
-      ${list.map((b) => `<div style="display:flex;align-items:center;gap:12px;padding:10px 14px;border-top:1px solid ${BORDER};font-size:13.5px;"><span style="flex:1;">${esc(b.label)}</span><input class="input" data-grp-kind="${esc(kid)}" data-grp-key="${esc(b.key)}" value="${esc((((dashConfig()[kid] || {}).grp) || {})[b.key] || "")}" placeholder="مجموعة (اختياري)" style="width:150px;min-height:32px;padding:4px 8px;font-size:12.5px;" />${sw(!dashHidden(kid, b.key), b.key)}</div>`).join("")}
+      ${list.map((b) => `<div style="display:flex;align-items:center;gap:12px;padding:10px 14px;border-top:1px solid ${BORDER};font-size:13.5px;"><span style="flex:1;">${esc(b.label)}</span>${(() => { const gm = ((dashConfig()[kid] || {}).grp) || {}, cur = gm[b.key] || "", names = [...new Set(Object.values(gm))]; return `<select class="input" data-grp-kind="${esc(kid)}" data-grp-key="${esc(b.key)}" title="ضمّ هذه البطاقة لمجموعة: البطاقات التي في المجموعة نفسها تظهر متجاورة تحت عنوان واحد" aria-label="المجموعة" style="width:150px;min-height:32px;padding:2px 6px;font-size:12px;"><option value="">بدون مجموعة</option>${names.map((n) => `<option value="${esc(n)}" ${n === cur ? "selected" : ""}>${esc(n)}</option>`).join("")}<option value="__new__">+ مجموعة جديدة…</option></select>`; })()}<select class="input" data-view-kind="${esc(kid)}" data-view-key="${esc(b.key)}" title="طريقة عرض الجدول في هذه البطاقة (إن كان فيها جدول)" style="width:118px;min-height:32px;padding:2px 6px;font-size:12px;"><option value="">جدول</option><option value="chart" ${dashViewOf(kid, b.key) === "chart" ? "selected" : ""}>رسم + زر الجدول</option><option value="both" ${dashViewOf(kid, b.key) === "both" ? "selected" : ""}>رسم وجدول</option></select>${sw(!dashHidden(kid, b.key), b.key)}</div>`).join("")}
     </details>`;
   }).join("");
   return `<div style="width:100%;margin-bottom:10px;"><div style="font-size:13px;font-weight:800;margin-bottom:8px;">اختاري نوع الحساب</div>
@@ -6348,8 +6486,9 @@ function rptStore() {
     sizes: Array.isArray(t.sizes) ? t.sizes.filter((z) => z && z.id && Number(z.w) >= 50 && Number(z.h) >= 50) : [] };
 }
 function rptNormalize(s) {
-  ["hidden", "titles", "hiddenCols", "colsShow", "levelHidden", "levelCols"].forEach((k) => { if (!s[k] || typeof s[k] !== "object" || Array.isArray(s[k])) s[k] = {}; });
+  ["hidden", "titles", "hiddenCols", "colsShow", "levelHidden", "levelCols", "tv"].forEach((k) => { if (!s[k] || typeof s[k] !== "object" || Array.isArray(s[k])) s[k] = {}; });
   if (!Array.isArray(s.order)) s.order = [];
+  if (!Array.isArray(s.statsCards)) s.statsCards = [];
   if (!s.excl || typeof s.excl !== "object" || Array.isArray(s.excl)) s.excl = {};
   ["units", "depts"].forEach((k) => { if (!Array.isArray(s.excl[k])) s.excl[k] = []; });
   if (!s.charts || typeof s.charts !== "object" || Array.isArray(s.charts)) s.charts = {};
@@ -6660,9 +6799,11 @@ function aggReportDocHtml(s, data) {
       if (!pages.length || (per && i % per === 0)) pages.push("");
       RPT_CTX.section = c.key;
       const extra = rptCustomChartsFor(s, c.key, data.flat || [], true);
-      pages[pages.length - 1] += execChapterHtml(i + 1, rptIcon(c.icon), rptChapterTitle(c, s), extra + (c.custom ? aggCustomChapterBody(c.custom, data) : aggChapterBody(c.key, data, s)));
+      pages[pages.length - 1] += tvApply(execChapterHtml(i + 1, rptIcon(c.icon), rptChapterTitle(c, s), extra + (c.custom ? aggCustomChapterBody(c.custom, data) : aggChapterBody(c.key, data, s))), "fr:" + c.key, (s.tv || {})[c.key]);
       RPT_CTX.section = null;
     });
+    const stBody = statsPageBodyHtml(s, data.flat || []);
+    if (stBody) pages.push(execChapterHtml("", rptIcon(""), s.statsTitle || "الإحصائيات", stBody));
     const hasCover = !!s.showCover;
     const total = pages.length + (hasCover ? 1 : 0);
     const cover = hasCover ? rptUnifiedCoverHtml(s, {
@@ -6777,6 +6918,8 @@ const RPT_PRESETS = [
 ];
 function rmSetField(key, value) {
   const st = rmState(), d = st.draft;
+  if (key.indexOf("st|") === 0) { const [, id, prop] = key.split("|"); d.statsCards = (d.statsCards || []).map((x) => (x.id === id ? { ...x, [prop]: String(value).slice(0, 120) } : x)); return; }
+  if (key.indexOf("tv:") === 0) { const tk = key.slice(3); d.tv = { ...(d.tv || {}) }; if (value === "chart" || value === "both") d.tv[tk] = value; else delete d.tv[tk]; return; }
   if (key.indexOf("chart|") === 0 || key.indexOf("chartc|") === 0) {
     const [kind, id, prop] = key.split("|");
     const cur = { ...((d.charts || {})[id] || {}) };
@@ -6985,8 +7128,10 @@ function rmPanelHtml(st) {
             <button type="button" class="rm-arrow" data-action="rm-move" data-key="${esc(c.key)}" data-dir="1" ${i === list.length - 1 ? "disabled" : ""} aria-label="تحريك للأسفل">▼</button>
           </div>
           <input type="text" class="input" data-rm="title:${esc(c.key)}" value="${esc((d.titles || {})[c.key] || "")}" placeholder="${esc(c.title)}" style="flex:1;min-width:0;" aria-label="اسم الفصل" />
+          <select class="input" data-rm="tv:${esc(c.key)}" title="طريقة عرض جداول هذا الفصل" aria-label="عرض الجداول" style="width:126px;flex:none;"><option value="">الجداول كما هي</option><option value="chart" ${(d.tv || {})[c.key] === "chart" ? "selected" : ""}>رسم + زر الجدول</option><option value="both" ${(d.tv || {})[c.key] === "both" ? "selected" : ""}>رسم وجدول</option></select>
           <button type="button" class="rm-pill${hid ? "" : " on"}" data-action="rm-hide" data-key="${esc(c.key)}" aria-pressed="${!hid}">${hid ? "مخفي" : "ظاهر"}</button>
         </div>
+        ${(() => { const sg = shpSuggestFor(c.sections || (c.section ? [c.section] : [])); return sg ? `<div class="rm-hint" style="margin:4px 0 0;">الرسم المقترح لهذا الفصل: <b>${esc(sg.label)}</b> — ${esc(sg.why)}</div>` : ""; })()}
         ${isUnit && c.sections ? `<button type="button" class="rm-link" data-action="rm-cols" data-key="${esc(c.key)}">${open ? "إخفاء حقول الفصل ▴" : "حقول الفصل لكل حساب ▾"}</button>${colsHtml}` : ""}
         ${c.custom ? `<button type="button" class="rm-link" data-action="rm-cols" data-key="${esc(c.key)}">${st.openCols === c.key ? "إغلاق الإعداد ▴" : "إعداد الفصل (القسم والحقول) ▾"}</button>${st.openCols === c.key ? rmCustomChapterEditor(c.custom) : ""}` : ""}
       </div>`;
@@ -6998,6 +7143,7 @@ function rmPanelHtml(st) {
         ${rmFieldHtml("", rmToggle("showEmpty", d.showEmpty ? "الأقسام الفارغة تظهر (مكتوب تحتها «لا توجد بيانات»)" : "الأقسام الفارغة لا تظهر", d.showEmpty))}
         ${rmFieldHtml("عدد الفصول في كل صفحة", rmPills("perPage", d.perPage, [["1", "فصل واحد"], ["2", "فصلان"], ["3", "٣ فصول"], ["0", "متتابعة بلا فواصل"]]), isUnit ? "«ملخص التقرير» دائمًا بصفحة مستقلة." : "")}
       </div>
+      ${statsEditorHtml(d)}
       ${isUnit ? "" : rmFieldHtml("أقصى عدد عناصر في كل جدول", rmNum("limit", d.limit, 1, 100), "المؤشرات وأولويات الفترة القادمة: ضعف هذا العدد.")}`;
   }
   if (tab === "visuals") {
@@ -7116,6 +7262,11 @@ function handleReportsManageAction(action, ds) {
     case "rm-colv": { const lv = ds.lvl, lc = { ...(d.levelCols || {}) }; const bySec = { ...(lc[lv] || {}) }; const cur = new Set(bySec[ds.sec] || []); if (cur.has(ds.col)) cur.delete(ds.col); else cur.add(ds.col); bySec[ds.sec] = [...cur]; lc[lv] = bySec; d.levelCols = lc; break; }
     case "rm-lvl": { const lv = ds.lvl, cur = new Set((d.levelHidden || {})[lv] || []); if (cur.has(ds.key)) cur.delete(ds.key); else cur.add(ds.key); d.levelHidden = { ...(d.levelHidden || {}), [lv]: [...cur] }; break; }
     case "rm-excl": { const ex = { units: [...((d.excl || {}).units || [])], depts: [...((d.excl || {}).depts || [])] }; const l = ex[ds.kind]; const k = l.indexOf(ds.id); if (k >= 0) l.splice(k, 1); else l.push(ds.id); d.excl = ex; break; }
+    case "st-add": d.statsCards = [...(d.statsCards || []), { id: uid("st"), title: "", group: "", secs: [], view: "seq", shape: "" }]; break;
+    case "st-del": d.statsCards = (d.statsCards || []).filter((x) => x.id !== ds.id); break;
+    case "st-sec": d.statsCards = (d.statsCards || []).map((x) => { if (x.id !== ds.id) return x; const l = [...(x.secs || [])]; const i = l.indexOf(ds.sec); if (i === -1) l.push(ds.sec); else l.splice(i, 1); return { ...x, secs: l }; }); break;
+    case "st-view": d.statsCards = (d.statsCards || []).map((x) => (x.id === ds.id ? { ...x, view: ds.view } : x)); break;
+    case "st-apply": d.statsCards = (d.statsCards || []).map((x) => (x.id === ds.id ? { ...x, view: "shape", shape: ds.shape } : x)); break;
     case "rm-hide": d.hidden = { ...d.hidden, [ds.key]: !d.hidden[ds.key] }; break;
     case "rm-move": {
       const defs = st.sel === "unit" ? unitChapterDefs() : aggChapterDefs(d);
@@ -13074,9 +13225,11 @@ function fullReportOrPreviewBody(unit, report, afterPage, opts) {
         pg.html += reportSummaryHtml(report, title, mb) + extra; if (mb) pg.ids.push("basic");
       }
       else if (c.special === "approval") pg.html += reportApprovalHtml(report, title, s.approvalBoxes, extra);
-      else if (c.group) { pg.html += rptGroupChapterHtml(c, rptIcon(c.icon), title, report, extra); pg.ids.push(...c.sections); inPage++; }
-      else { pg.html += reportChapterHtml(rptIcon(c.icon), title, c.sections, report, extra); pg.ids.push(...c.sections); inPage++; }
+      else if (c.group) { pg.html += tvApply(rptGroupChapterHtml(c, rptIcon(c.icon), title, report, extra), "ur:" + c.key, (s.tv || {})[c.key]); pg.ids.push(...c.sections); inPage++; }
+      else { pg.html += tvApply(reportChapterHtml(rptIcon(c.icon), title, c.sections, report, extra), "ur:" + c.key, (s.tv || {})[c.key]); pg.ids.push(...c.sections); inPage++; }
     });
+    const stBody = opts.capture ? "" : statsPageBodyHtml(s, [{ unit, report }]);
+    if (stBody) pages.push({ html: execChapterHtml("", rptIcon(""), s.statsTitle || "الإحصائيات", stBody), ids: [], summary: false });
     const hasCover = !!s.showCover;
     const total = pages.length + (hasCover ? 1 : 0);
     return (hasCover ? reportCoverPageHtml(unit, report, dept, s, total) : "") +
@@ -13643,7 +13796,8 @@ function attachFormListeners() {
   appEl.addEventListener("change", (e) => {
     const t0 = e.target;
     if (t0 && t0.dataset && t0.dataset.ccKind && t0.dataset.ccId) { dashCCSave(t0.dataset.ccKind, (c) => { const k = c.cards.find((x) => x.id === t0.dataset.ccId); if (k) k[t0.dataset.ccF] = t0.value; }); render(); return; }
-    if (t0 && t0.dataset && t0.dataset.grpKind && t0.dataset.grpKey) { const kk = t0.dataset.grpKind; const cfg = JSON.parse(JSON.stringify(dashConfig())); cfg[kk] = cfg[kk] || {}; cfg[kk].grp = cfg[kk].grp || {}; const v = t0.value.trim(); if (v) cfg[kk].grp[t0.dataset.grpKey] = v; else delete cfg[kk].grp[t0.dataset.grpKey]; S.dashboardConfig = cfg; dataStore.saveDashboardConfig(cfg); render(); return; }
+    if (t0 && t0.dataset && t0.dataset.viewKind && t0.dataset.viewKey) { const kk = t0.dataset.viewKind; const cfg = JSON.parse(JSON.stringify(dashConfig())); cfg[kk] = cfg[kk] || {}; cfg[kk].view = cfg[kk].view || {}; if (t0.value) cfg[kk].view[t0.dataset.viewKey] = t0.value; else delete cfg[kk].view[t0.dataset.viewKey]; S.dashboardConfig = cfg; dataStore.saveDashboardConfig(cfg); render(); return; }
+    if (t0 && t0.dataset && t0.dataset.grpKind && t0.dataset.grpKey) { const kk = t0.dataset.grpKind; const cfg = JSON.parse(JSON.stringify(dashConfig())); cfg[kk] = cfg[kk] || {}; cfg[kk].grp = cfg[kk].grp || {}; let v = t0.value.trim(); if (v === "__new__") { v = (window.prompt("اكتبي عنوان المجموعة الجديدة (مثل: الإنجاز)") || "").trim(); } if (v) cfg[kk].grp[t0.dataset.grpKey] = v; else delete cfg[kk].grp[t0.dataset.grpKey]; S.dashboardConfig = cfg; dataStore.saveDashboardConfig(cfg); render(); return; }
     const el = e.target;
     if (el.id === "imp-file" && el.files && el.files[0]) { impReadFile(el.files[0]); return; }
     if (el.dataset && el.dataset.impMap) { const st = impState(); st.map[el.dataset.impMap] = el.value === "" ? undefined : +el.value; render(); return; }
@@ -14022,10 +14176,12 @@ function attachClickListener() {
         break;
       }
       case "nav-back-admin": S.view = "browse-structure"; render(); break;
+      case "tv-toggle": { S.ui.tv = S.ui.tv || {}; S.ui.tv[ds.id] = !S.ui.tv[ds.id]; render(); break; }
       case "cc-add": { dashCCSave(ds.kind, (c) => c.cards.push({ id: uid("cc"), title: "", secs: [], view: "seq", shape: "" })); render(); break; }
       case "cc-del": { dashCCSave(ds.kind, (c) => { c.cards = c.cards.filter((x) => x.id !== ds.id); }); render(); break; }
       case "cc-sec": { dashCCSave(ds.kind, (c) => { const k = c.cards.find((x) => x.id === ds.id); if (!k) return; k.secs = k.secs || []; const i = k.secs.indexOf(ds.sec); if (i === -1) k.secs.push(ds.sec); else k.secs.splice(i, 1); }); render(); break; }
       case "cc-view": { dashCCSave(ds.kind, (c) => { const k = c.cards.find((x) => x.id === ds.id); if (k) k.view = ds.view; }); render(); break; }
+      case "cc-apply": { dashCCSave(ds.kind, (c) => { const k = c.cards.find((x) => x.id === ds.id); if (k) { k.view = "shape"; k.shape = ds.shape; } }); render(); break; }
       case "cc-tbl": { S.ui.ccTbl = S.ui.ccTbl || {}; S.ui.ccTbl[ds.id] = !S.ui.ccTbl[ds.id]; render(); break; }
       case "dash-kind-tab": { S.ui.dashKindTab = ds.kind; render(); break; }
       case "dash-group": {
