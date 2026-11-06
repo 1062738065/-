@@ -3330,7 +3330,7 @@ function dashCatalog(kind) {
   // «أدوات القياس» مهمة لإدارة التعليم النسائي: تُوضع بعد البرامج (أو بعد خرائط الأداء) لا في آخر اللوحة
   let at = base.findIndex((b) => b.key === "programs"); if (at < 0) at = base.findIndex((b) => b.key === "exHeatGoal");
   if (at >= 0) base.splice(at + 1, 0, ...tools); else rest.unshift(...tools);
-  return base.concat(rest);
+  return base.concat(rest, dashCC(kind).map((c) => ({ key: "cc_" + c.id, label: "بطاقة مخصصة: " + (c.title || "بدون عنوان") })));
 }
 const DASH_SEC_VIEW = {
   tools: { title: "name", meta: ["toolType", "relatedProgram"], badges: ["resultQuality"], dist: ["toolType", "resultQuality"], stats: [{ k: "count", l: "أداة" }, { k: "sum", f: "sampleSize", l: "إجمالي العينات" }, { k: "sum", f: "respondentsCount", l: "المستجيبات" }, { k: "rate", f: "respondentsCount", of: "sampleSize", l: "نسبة الاستجابة" }] },
@@ -3440,7 +3440,67 @@ function dashRoutedHtml(kind, units) {
   const list = rows.slice(0, 40).map((x) => `<tr><td style="padding:8px 6px;font-size:12px;color:${SUBTLE};white-space:nowrap;">${esc(dashFieldSecLabel(x.sid))}</td><td style="padding:8px 6px;font-size:12.5px;font-weight:700;">${esc(ttl(x))}</td><td style="padding:8px 6px;font-size:12px;color:${SUBTLE};">${esc(x.u.name)}</td></tr>`).join("");
   return dashCard(lab, `${rows.length} بند — يظهر هنا ما يخصّ هذا المستوى فقط`, `<div style="overflow:auto;"><table style="width:100%;border-collapse:collapse;"><tbody>${list}</tbody></table></div>`);
 }
-function dashFieldBlocksHtml(kind, units) { return dashB(kind, "sharedInd", dashSharedIndHtml(kind, units)) + dashB(kind, "routed", dashRoutedHtml(kind, units)) + dashFieldSecIds().map((id) => dashHidden(kind, "fld_" + id) ? "" : dashB(kind, "fld_" + id, dashFieldBlockHtml(kind, id, units))).join(""); }
+function dashFieldBlocksHtml(kind, units) { return dashFieldBlocksHtml0(kind, units) + dashCCHtml(kind, units); }
+function dashFieldBlocksHtml0(kind, units) { return dashB(kind, "sharedInd", dashSharedIndHtml(kind, units)) + dashB(kind, "routed", dashRoutedHtml(kind, units)) + dashFieldSecIds().map((id) => dashHidden(kind, "fld_" + id) ? "" : dashB(kind, "fld_" + id, dashFieldBlockHtml(kind, id, units))).join(""); }
+
+/* ===== بطاقات مخصصة في لوحة المعلومات: دمج أقسام (أو قسم) وعرضها كقائمة/عمودين/جدول/أي شكل من المكتبة ===== */
+function dashCC(kind) { const c = dashConfig()[kind]; return c && Array.isArray(c.cards) ? c.cards : []; }
+function dashCCSave(kind, fn) {
+  if (!S.isAdmin || !DASH_KINDS.some((k) => k.id === kind)) return;
+  const cfg = JSON.parse(JSON.stringify(dashConfig())); cfg[kind] = cfg[kind] || {}; cfg[kind].cards = Array.isArray(cfg[kind].cards) ? cfg[kind].cards : [];
+  fn(cfg[kind]); S.dashboardConfig = cfg; dataStore.saveDashboardConfig(cfg);
+}
+function dashCCItems(units, secs) {
+  const series = dashSeries(units), out = [];
+  dashReports(series, true).forEach(({ unit, report }) => (secs || []).forEach((sid) => {
+    const lab = ((SECTIONS || []).find((x) => x.id === sid) || {}).label || sid;
+    shpSecItems(sid, (report.sections && report.sections[sid] && report.sections[sid].data) || {}).items.forEach((it) => out.push({ ...it, unit: unit.name, sec: lab, sid }));
+  }));
+  return out;
+}
+function dashCCTable(items) {
+  return `<div class="table-wrap"><table class="prs-table"><thead><tr><th>القسم</th><th>الوحدة</th><th>البند</th><th>التفاصيل</th><th>الرقم</th></tr></thead><tbody>${items.map((i) => `<tr><td>${esc(i.sec)}</td><td>${esc(i.unit)}</td><td style="font-weight:700;">${esc(i.title)}</td><td>${esc((i.subs || []).slice(0, 3).join(" · ") || "—")}</td><td>${i.num == null ? "—" : esc(String(i.num))}</td></tr>`).join("")}</tbody></table></div>`;
+}
+function dashCCBlock(title, list, color) {
+  return `<div style="border:1px solid ${BORDER};border-radius:12px;padding:10px 12px;background:#fff;"><div style="font-weight:800;font-size:13px;margin-bottom:6px;display:flex;align-items:center;gap:6px;"><span style="width:3px;height:14px;border-radius:2px;background:${color};display:inline-block;"></span>${esc(title)}</div>${list.map((i) => `<div style="padding:6px 0;border-top:1px solid ${BORDER};font-size:12.5px;display:flex;gap:8px;align-items:baseline;"><span style="flex:1;font-weight:600;">${esc(i.title)}</span><span style="color:${SUBTLE};font-size:12px;">${esc((i.subs || []).slice(0, 2).join(" · "))}</span><span style="color:${SUBTLE};font-size:11px;">${esc(i.unit)}</span></div>`).join("") || `<div class="hint">لا توجد بيانات.</div>`}</div>`;
+}
+function dashCCHtml(kind, units) {
+  return dashCC(kind).map((c) => {
+    const secs = (c.secs || []).filter(Boolean);
+    if (!secs.length) return "";
+    const items = dashCCItems(units, secs);
+    const sub = secs.map((sid) => ((SECTIONS || []).find((x) => x.id === sid) || {}).label || sid).join(" + ");
+    let body;
+    if (!items.length) body = `<div class="hint">لا توجد بيانات في ${esc(sub)} للفترة المختارة.</div>`;
+    else if (c.view === "table") body = dashCCTable(items);
+    else if (c.view === "two") body = `<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:10px;">${secs.map((sid, n) => dashCCBlock(((SECTIONS || []).find((x) => x.id === sid) || {}).label || sid, items.filter((i) => i.sid === sid), ["#a32d2d", "#3b6d11", "#6b2337", "#c9a24a"][n % 4])).join("")}</div>`;
+    else if (c.view === "shape") {
+      const tbl = S.ui.ccTbl && S.ui.ccTbl[c.id];
+      const sh = SHAPES_LIB[c.shape] ? shapeRender(c.shape, { auto: true }, { sectionId: secs[0], items, label: c.title || sub, dash: true }) : "";
+      body = `<div style="display:flex;justify-content:flex-end;margin-bottom:6px;" class="no-print">${pillBtn(tbl ? "عرض الرسم" : "عرض الجدول", { variant: "ghost", action: "cc-tbl", data: { id: c.id } })}</div>${tbl ? dashCCTable(items) : (sh ? `<div class="rpt-v5">${sh}</div>` : `<div class="hint">لا توجد أرقام كافية لهذا الشكل — جرّبي «جدول» أو شكلًا آخر.</div>`)}`;
+    } else body = `<div style="display:grid;gap:10px;">${secs.map((sid, n) => dashCCBlock(((SECTIONS || []).find((x) => x.id === sid) || {}).label || sid, items.filter((i) => i.sid === sid), ["#a32d2d", "#3b6d11", "#6b2337", "#c9a24a"][n % 4])).join("")}</div>`;
+    return dashB(kind, "cc_" + c.id, dashCard(c.title || sub, sub, body));
+  }).join("");
+}
+function dashCCEditorHtml(kid) {
+  if (kid === "admin") return "";
+  const cards = dashCC(kid);
+  const secs = (SECTIONS || []).filter((x) => x.id !== "review");
+  const shapes = Object.entries(SHAPES_LIB).filter(([, v]) => !v.live && v.cat !== "photo");
+  const chip = (on, attrs, label) => `<button type="button" class="flt-chip${on ? " on" : ""}" ${attrs}>${esc(label)}</button>`;
+  const views = [["seq", "متتابعة"], ["two", "عمودان"], ["table", "جدول واحد"], ["shape", "شكل من المكتبة"]];
+  return `<div style="border:1px solid ${BORDER};border-radius:14px;background:#fff;padding:12px 14px;margin-bottom:12px;">
+    <div style="font-weight:800;color:${ROSE};font-size:14px;margin-bottom:4px;">بطاقات مخصصة — دمج أقسام وعرضها</div>
+    <div class="hint" style="margin-bottom:10px;">اختاري قسمًا أو أكثر وطريقة العرض، وتظهر بطاقة واحدة في اللوحة ببيانات هذه الأقسام. البيانات تبقى في أقسامها، والدمج في العرض فقط.</div>
+    ${cards.map((c) => `<div style="border:1px solid ${BORDER};border-radius:12px;padding:10px 12px;margin-bottom:10px;background:#faf6f6;">
+      <div style="display:flex;gap:8px;align-items:center;margin-bottom:8px;"><input class="input" data-cc-kind="${esc(kid)}" data-cc-id="${esc(c.id)}" data-cc-f="title" value="${esc(c.title || "")}" placeholder="عنوان البطاقة" style="flex:1;" />${pillBtn("حذف", { variant: "ghost", action: "cc-del", data: { kind: kid, id: c.id } })}</div>
+      <div class="hint" style="margin-bottom:4px;">الأقسام</div><div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px;">${secs.map((x) => chip((c.secs || []).includes(x.id), `data-action="cc-sec" data-kind="${esc(kid)}" data-id="${esc(c.id)}" data-sec="${esc(x.id)}"`, x.label)).join("")}</div>
+      <div class="hint" style="margin-bottom:4px;">طريقة العرض</div><div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px;">${views.map(([v, l]) => chip((c.view || "seq") === v, `data-action="cc-view" data-kind="${esc(kid)}" data-id="${esc(c.id)}" data-view="${v}"`, l)).join("")}</div>
+      ${c.view === "shape" ? `<div class="hint" style="margin-bottom:4px;">الشكل (يتعبّأ ببيانات الأقسام تلقائيًا، وزر «عرض الجدول» يظهر لمن يفتح اللوحة)</div><select class="input" data-cc-kind="${esc(kid)}" data-cc-id="${esc(c.id)}" data-cc-f="shape"><option value="">اختاري شكلًا</option>${shapes.map(([id, v]) => `<option value="${esc(id)}" ${c.shape === id ? "selected" : ""}>${esc(v.name)}</option>`).join("")}</select>` : ""}
+    </div>`).join("")}
+    ${pillBtn("إضافة بطاقة", { variant: "ghost", action: "cc-add", data: { kind: kid } })}
+  </div>`;
+}
 function dashOrderList(kind) {
   const keys = dashCatalog(kind).map((b) => b.key);
   const saved = ((dashConfig()[kind] || {}).order) || [];
@@ -3450,10 +3510,24 @@ function dashOrderList(kind) {
   return out;
 }
 // كل عنصر في اللوحة يُغلَّف بـ order حسب الترتيب المحفوظ (ليظهر بالترتيب اللي تحدده مديرة النظام)
+/* مجموعات اللوحة: كل عنصر يمكن ضمّه لمجموعة بعنوان (cfg[kind].grp = {المفتاح: العنوان}). أعضاء المجموعة يتجاورون عند أول عضو منها */
+function dashEff(kind) {
+  const list = dashOrderList(kind), g = (dashConfig()[kind] || {}).grp || {}, seen = {}, out = [];
+  list.forEach((k) => {
+    const t = g[k];
+    if (!t) { out.push({ k }); return; }
+    if (seen[t]) return; seen[t] = 1;
+    out.push({ head: t });
+    list.filter((x) => g[x] === t).forEach((x) => out.push({ k: x, grp: t }));
+  });
+  return out;
+}
 function dashB(kind, key, html) {
   if (!html || dashHidden(kind, key)) return "";
-  const i = dashOrderList(kind).indexOf(key);
-  return `<div class="dash-blk" data-dk="${esc(key)}" style="order:${(i === -1 ? 500 : i) + 1};">${html}</div>`;
+  const eff = dashEff(kind), e = eff.findIndex((x) => x.k === key), o = (e === -1 ? 500 : e) + 1;
+  let head = "";
+  if (e > 0 && eff[e].grp && eff[e - 1].head && dashEff(kind).filter((x) => x.grp === eff[e].grp && !dashHidden(kind, x.k))[0].k === key) head = `<div class="dash-grp-h" style="order:${o * 2 - 1};">${esc(eff[e].grp)}</div>`;
+  return head + `<div class="dash-blk" data-dk="${esc(key)}" style="order:${o * 2};">${html}</div>`;
 }
 function dashBlock(kind, key, html) { return dashB(kind, key, html); }
 function dashRecentGrid(kind, recentHtml, totalHtml) {
@@ -6030,10 +6104,11 @@ const DASH_GROUPS = [
   ["الرسوم والخرائط", ["totalPie", "bars", "indPie", "goalPie", "trend", "exHeat", "exHeatGoal", "exCompare", "unitsCmp", "exStacks", "exTopBottom", "opsDeptCompliance"]],
   ["الجداول والإدارة", ["indicators", "goals", "indMatrix", "goalMatrix", "programs", "sharedInd", "opsSections", "opsAggReports", "opsRecent", "opsRoles"]],
   ["حقول أقسام التقرير", ["fld_*"]],
+  ["بطاقات مخصصة", ["cc_*"]],
   ["التحليل والمتابعة", ["*"]],
 ];
 function dashGroupOf(key) {
-  for (const [name, keys] of DASH_GROUPS) { if (keys.indexOf(key) !== -1 || (keys[0] === "fld_*" && key.indexOf("fld_") === 0)) return name; }
+  for (const [name, keys] of DASH_GROUPS) { if (keys.indexOf(key) !== -1 || (keys[0] === "fld_*" && key.indexOf("fld_") === 0) || (keys[0] === "cc_*" && key.indexOf("cc_") === 0)) return name; }
   return "التحليل والمتابعة";
 }
 function dashKindPanelHtml() {
@@ -6049,11 +6124,11 @@ function dashKindPanelHtml() {
       <summary style="cursor:pointer;display:flex;align-items:center;gap:10px;padding:12px 14px;background:#faf4f6;font-weight:800;color:${ROSE};font-size:14px;list-style:none;"><span style="flex:1;">${esc(name)}</span><span class="badge" style="background:${GRAY_BG};color:${ROSE};">${shown} من ${list.length} ظاهرة</span>
         <button type="button" class="pill-btn pill-ghost" style="padding:4px 10px;" data-action="dash-group" data-kind="${esc(kid)}" data-keys="${esc(keys)}" data-show="1">إظهار الكل</button>
         <button type="button" class="pill-btn pill-ghost" style="padding:4px 10px;" data-action="dash-group" data-kind="${esc(kid)}" data-keys="${esc(keys)}" data-show="0">إخفاء الكل</button></summary>
-      ${list.map((b) => `<div style="display:flex;align-items:center;gap:12px;padding:10px 14px;border-top:1px solid ${BORDER};font-size:13.5px;"><span style="flex:1;">${esc(b.label)}</span>${sw(!dashHidden(kid, b.key), b.key)}</div>`).join("")}
+      ${list.map((b) => `<div style="display:flex;align-items:center;gap:12px;padding:10px 14px;border-top:1px solid ${BORDER};font-size:13.5px;"><span style="flex:1;">${esc(b.label)}</span><input class="input" data-grp-kind="${esc(kid)}" data-grp-key="${esc(b.key)}" value="${esc((((dashConfig()[kid] || {}).grp) || {})[b.key] || "")}" placeholder="مجموعة (اختياري)" style="width:150px;min-height:32px;padding:4px 8px;font-size:12.5px;" />${sw(!dashHidden(kid, b.key), b.key)}</div>`).join("")}
     </details>`;
   }).join("");
   return `<div style="width:100%;margin-bottom:10px;"><div style="font-size:13px;font-weight:800;margin-bottom:8px;">اختاري نوع الحساب</div>
-    <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:14px;">${tabs}</div>${body}</div>`;
+    <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:14px;">${tabs}</div>${dashCCEditorHtml(kid)}${body}</div>`;
 }
 function dashSettingsCardHtml() {
   const group = (title, blocks, kindIds) => {
@@ -6340,7 +6415,7 @@ function rptWrap(s, inner, isPreview) {
   let vars = `--rpt-burgundy:${main};--rpt-burgundy-dark:${mixHex(main, "#000000", 0.25)};--rpt-paper:${rptCssSafe(s.paper)};--rpt-chapter-bg:${rptCssSafe(s.chapterBg)};` +
     `--rpt-font-body:'${rptCssSafe(s.fontBody)}';--rpt-font-title:'${rptCssSafe(s.fontTitle)}';--rpt-font-heading:'${rptCssSafe(s.fontHeading)}';` +
     `--rpt-page-w:${w}mm;--rpt-page-h:${h}mm;--rpt-mt:${t}mm;--rpt-mb:${b}mm;--rpt-mr:${r}mm;--rpt-ml:${l}mm;` +
-    `--rpt-th-align:${["right", "center", "left"].includes(s.thAlign) ? s.thAlign : "right"};--rpt-td-align:${["right", "center", "left"].includes(s.tdAlign) ? s.tdAlign : "right"};` +
+    `--rpt-th-align:${["right", "center", "left"].includes(s.thAlign) ? s.thAlign : "center"};--rpt-td-align:${["right", "center", "left"].includes(s.tdAlign) ? s.tdAlign : "center"};` +
     `--rpt-th-bg:${rptCssSafe(s.thBg)};--rpt-th-color:${rptCssSafe(s.thColor || main)};--rpt-table-fs:${Math.max(9, Math.min(16, Number(s.tableFs) || 12))}px;`;
   if (s.bgImage && RPT_DATA_IMG_RE.test(s.bgImage)) vars += `--rpt-bg-img:url("${s.bgImage}");`;
   const cls = ["rpt-wrap", s.oldLook ? "" : "rpt-v5", s.zebra ? "rpt-zebra" : "", s.tableBorders === "grid" ? "rpt-tgrid" : s.tableBorders === "none" ? "rpt-tnone" : "", s.frame ? "rpt-frame" : "", vars.indexOf("--rpt-bg-img") !== -1 ? "rpt-bgimg" : ""].filter(Boolean).join(" ");
@@ -12355,8 +12430,100 @@ Object.assign(SHAPES_LIB, {
   "st_heat": stShape("خريطة حرارية", "prev", stHeatH),
 });
 SHP_CATS.unshift(["live", "إحصائيات ورسوم"]);
-function shapeRender(shapeId, data, ctx) { const s = SHAPES_LIB[shapeId]; if (!s) return ""; try { const h = s.render(data || {}, ctx); return h ? `<div class="shp">${h}</div>` : ""; } catch (e) { return ""; } }
-function rptShapeBlocksHtml(blocks, report) { const ctx = { report, unitId: report ? reportUnitIdOf(report) : "" }; return (blocks || []).map((b) => shapeRender(b.shapeId, b, ctx)).join(""); }
+
+/* ===== أشكال المكتبة كلها قوالب: تُعبَّأ تلقائيًا من بيانات القسم المُدخلة في التقرير (بدون بيانات وهمية) ===== */
+const SHP_NUMRE = /^[\s+\-]*[\d٠-٩][\d٠-٩.,٫٬]*\s*[٪%]?\s*$/;
+function shpToNum(v) { const t = String(v == null ? "" : v).replace(/[٠-٩]/g, (c) => "٠١٢٣٤٥٦٧٨٩".indexOf(c)).replace(/[٫]/g, ".").replace(/[٬,]/g, "").replace(/[٪%\s]/g, ""); if (t === "" || isNaN(Number(t))) return null; return Number(t); }
+function shpSecItems(sid, d) {
+  d = d || {}; const out = { items: [], label: ((SECTIONS || []).find((x) => x.id === sid) || {}).label || "" };
+  try {
+    if (sid === "programs") {
+      (d.programs || []).filter((p) => p && (p.name || p.workType)).forEach((p) => {
+        const c = programCounts(p)[0] || {};
+        out.items.push({ title: p.name || p.workType, subs: [p.name ? p.workType : "", p.targetGroup, p.executionStatus].filter(Boolean), num: c.done, numLabel: c.unit || "", target: c.target, date: "", long: p.highlightResult || "", done: /مكتمل/.test(String(p.executionStatus || "")) });
+      });
+      return out;
+    }
+    const sc = rptSchemaFor(sid);
+    if (sc) {
+      const fields = rptVisibleFields(sid);
+      const txt = (it, f) => schemaFieldText(it[f.id]).trim();
+      const mk = (it) => {
+        const shorts = fields.filter((f) => f.type !== "textarea"), longs = fields.filter((f) => f.type === "textarea");
+        const titleF = shorts.find((f) => /^(name|title)$/.test(f.id)) || shorts.find((f) => f.type !== "number" && txt(it, f) && !SHP_NUMRE.test(txt(it, f))) || shorts[0];
+        const title = (titleF && txt(it, titleF)) || (longs[0] && txt(it, longs[0])) || "";
+        const subs = shorts.filter((f) => f !== titleF).map((f) => txt(it, f)).filter(Boolean);
+        let num = null, numLabel = "", target = null;
+        shorts.forEach((f) => { if (num == null && f !== titleF && SHP_NUMRE.test(txt(it, f)) && !/date|تاريخ|year|سنة/.test(f.id + f.label)) { num = shpToNum(txt(it, f)); numLabel = f.label || ""; } });
+        const dF = shorts.find((f) => /date|month|period|deadline|تاريخ|موعد|شهر|فترة/.test(f.id + " " + (f.label || "")) && txt(it, f));
+        const lg = longs.map((f) => txt(it, f)).find(Boolean) || "";
+        const done = shorts.some((f) => /مكتمل|منجز|تم |متحقق|تحقق/.test(txt(it, f)));
+        return { title, subs, num, numLabel, target, date: dF ? txt(it, dF) : "", long: lg, done };
+      };
+      if (sc.fixed) {
+        fields.filter((f) => schemaFieldText(d[f.id]).trim()).forEach((f) => { const t = schemaFieldText(d[f.id]).trim(); out.items.push({ title: f.label || f.id, subs: [t], num: SHP_NUMRE.test(t) ? shpToNum(t) : null, numLabel: f.label || "", date: "", long: f.type === "textarea" ? t : "", done: false }); });
+      } else {
+        (rptSectionItemsOf(sid, d) || []).filter(rptHasValue).forEach((it) => { const m = mk(it); if (m.title || m.subs.length) out.items.push(m); });
+      }
+    }
+    if (!out.items.length && d.content) String(d.content).split(/\n+/).map((x) => x.trim()).filter(Boolean).forEach((l) => out.items.push({ title: l, subs: [], num: null, numLabel: "", date: "", long: l, done: false }));
+  } catch (e) {}
+  return out;
+}
+function shapeAutoData(shapeId, ctx) {
+  const sh = SHAPES_LIB[shapeId]; if (!sh || sh.live || !sh.sample || !ctx || !ctx.sectionId) return {};
+  const sec = ctx.items ? { items: ctx.items, label: ctx.label || "" } : shpSecItems(ctx.sectionId, ctx.data), its = sec.items, out = {};
+  if (!its.length) return {};
+  const fmt = (n) => (n == null ? "" : String(Math.round(n * 100) / 100));
+  const allNum = its.filter((i) => i.num != null);
+  Object.keys(sh.sample).forEach((k) => {
+    const f = (sh.fields || []).find((x) => x.k === k); if (f && f.type === "i") return;
+    const sv = String(sh.sample[k] == null ? "" : sh.sample[k]);
+    if (/\n/.test(sv) || (f && f.type === "a" && /\|/.test(sv))) {
+      const lines = sv.split("\n"), first = lines[0].replace(/^[+\-]\s*/, ""), cols = first.split("|").length;
+      const isChk = /^[+\-]\s/.test(lines[0]);
+      const cap = ["list", "table", "time", "flow"].includes(sh.cat) ? Math.max(lines.length, 8) : lines.length;
+      const c0 = first.split("|")[0], c1 = first.split("|")[1] || "";
+      const numFirst = cols > 1 && SHP_NUMRE.test(c0), numSecond = cols > 1 && SHP_NUMRE.test(c1) && !numFirst;
+      let rows = [];
+      if (k === "l1" || k === "l2") { const h = Math.ceil(its.length / 2); rows = (k === "l1" ? its.slice(0, h) : its.slice(h)).map((i) => i.title); }
+      else if (isChk) rows = its.slice(0, cap).map((i) => (i.done ? "+ " : "- ") + i.title);
+      else if (numFirst) rows = (allNum.length ? allNum : []).slice(0, cap).map((i) => fmt(i.num) + "|" + i.title);
+      else if (numSecond) rows = allNum.slice(0, cap).map((i) => i.title + "|" + fmt(i.num) + (cols > 2 ? "|" + (i.subs[0] || "") : ""));
+      else if (sh.cat === "time" && cols > 1) rows = its.slice(0, cap).map((i, n) => (i.date || String(n + 1)) + "|" + i.title);
+      else if (cols > 1) rows = its.slice(0, cap).map((i) => { const r = [i.title].concat(i.subs); while (r.length < cols) r.push(""); return r.slice(0, cols).join("|"); });
+      else rows = its.slice(0, cap).map((i) => i.title);
+      if (rows.length) out[k] = rows.join("\n");
+      return;
+    }
+    if (shapeId === "swot") { const m = { strengths: "s", challenges: "w", improvement: "o" }[ctx.sectionId]; if (m === k) out[k] = its.map((i) => i.title).join("\n"); return; }
+    if (shapeId === "f6") { const a3 = [its[0], its.length > 2 ? its[Math.floor(its.length / 2)] : its[1], its.length > 1 ? its[its.length - 1] : null]; const v = a3[{ in: 0, proc: 1, out: 2 }[k]]; if (v) out[k] = v.title; return; }
+    if (shapeId === "foot2") { try { if (k === "a" && ctx.report) { const un = (S.units || []).find((u) => u.id === reportUnitIdOf(ctx.report)); if (un) out[k] = un.name; } if (k === "c" && ctx.report) out[k] = reportTermInfo(ctx.report).label || ""; } catch (e) {} return; }
+    if (shapeId === "datebadge") { const i0 = its.find((i) => i.date) || its[0]; if (k === "d") out[k] = i0.date || ""; if (k === "t") out[k] = i0.title; if (k === "s") out[k] = i0.subs[0] || ""; return; }
+    if (/^(title|t1|t2|q)$/.test(k)) { if (k === "t1" || k === "t2") return; out[k] = sec.label; return; }
+    if (k === "head") { const n = sv.split("|").length; const h = ["البند"]; const sample = its[0]; for (let i = 1; i < n; i++) h.push(i === 1 && sample.numLabel && n === 2 ? sample.numLabel : "التفاصيل"); out[k] = h.join("|"); return; }
+    if (k === "text") { const l = its.find((i) => i.long); out[k] = l ? l.long : its.map((i) => i.title).join("، "); return; }
+    if (k === "value") { out[k] = allNum.length ? fmt(allNum.reduce((a, b) => a + b.num, 0)) : String(its.length); return; }
+    if (k === "label") { out[k] = allNum.length ? (allNum[0].numLabel || sec.label) : "عدد البنود في " + sec.label; return; }
+    if (/^(pct|p1|p2)$/.test(k)) { const pc = allNum.filter((i) => /نسبة|٪|%|percent|rate/.test((i.numLabel || "") + "")); if (pc.length) out[k] = fmt(pc.reduce((a, b) => a + b.num, 0) / pc.length); return; }
+    if (/^(l1|l2)$/.test(k)) return;
+    if (/^(sub)$/.test(k)) { out[k] = ""; return; }
+    if (k === "yes" || k === "no") return;
+  });
+  return out;
+}
+function shapeRender(shapeId, data, ctx) {
+  const s = SHAPES_LIB[shapeId]; if (!s) return "";
+  try {
+    if (data && data.auto && ctx && ctx.sectionId && !s.live) {
+      const ad = shapeAutoData(shapeId, ctx);
+      if (!Object.values(ad).some((v) => String(v || "").trim())) return ctx.editor ? `<div class="shp-need">لا توجد بيانات في هذا القسم بعد — ستظهر هنا تلقائيًا بعد إدخالها.</div>` : "";
+      data = { ...data, ...ad };
+    }
+    const h = s.render(data || {}, ctx); return h ? `<div class="shp">${h}</div>` : "";
+  } catch (e) { return ""; }
+}
+function rptShapeBlocksHtml(blocks, report, sectionId, data) { const ctx = { report, unitId: report ? reportUnitIdOf(report) : "", sectionId, data }; return (blocks || []).map((b) => shapeRender(b.shapeId, b, ctx)).join(""); }
 function shapeDefaultsPanelHtml() {
   const secs = SECTIONS;
   const cur = ((S.siteSettings || {}).theme || {}).shapeDefaults || {};
@@ -12380,22 +12547,22 @@ function shapePickerHtml(target) {
   const list = Object.entries(SHAPES_LIB).filter(([, s]) => !cat || s.cat === cat);
   const tabs = [["", "الكل"], ...SHP_CATS].map(([id, n]) => `<button type="button" class="flt-chip${cat === id ? " on" : ""}" data-action="shp-cat" data-cat="${id}">${n}</button>`).join("");
   return `<div class="no-print" data-action="shp-close" style="position:fixed;inset:0;background:rgba(40,20,30,.45);z-index:9000;display:flex;align-items:flex-end;justify-content:center;"><div data-stop="1" style="background:#faf6f6;width:min(760px,100%);max-height:88vh;overflow:auto;border-radius:22px 22px 0 0;padding:16px 16px 24px;">
-    <div style="font-size:16px;font-weight:800;margin-bottom:8px;">مكتبة الأشكال والرسوم</div><div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px;">${tabs}</div>
+    <div style="font-size:16px;font-weight:800;margin-bottom:8px;">مكتبة الأشكال والرسوم</div><div class="hint" style="margin-bottom:10px;">اختاري أي شكل ويظهر مباشرة ببيانات هذا القسم المُدخلة في التقرير، وتقدرين تعدّلينه بعدها.</div><div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px;">${tabs}</div>
     <div class="shp-grid">${list.map(([id, s]) => `<button type="button" class="shp-card" data-action="shp-add" data-shape="${id}"><div class="shp-prev rpt-v5">${shapeRender(id, s.sample, { demo: true })}</div><div class="shp-nm">${esc(s.name)}</div></button>`).join("")}</div>
     <div style="margin-top:12px;">${pillBtn("إغلاق", { variant: "ghost", action: "shp-close" })}</div></div></div>`;
 }
-function shapeAutoFor(sectionId) { const id = shapeDefaultFor(sectionId); return id && SHAPES_LIB[id].live && sectionId !== "programs" ? id : ""; }
+function shapeAutoFor(sectionId) { const id = shapeDefaultFor(sectionId); return id && (SHAPES_LIB[id].live || SHAPES_LIB[id].cat !== "photo") && sectionId !== "programs" ? id : ""; }
 function shapeDefaultFor(sectionId) { const m = ((S.siteSettings || {}).theme || {}).shapeDefaults || {}; const id = m[sectionId]; return id && SHAPES_LIB[id] ? id : ""; }
 function shapeBlocksEditorHtml(d, sectionId) {
   const defId = (!(d.shapeBlocks || []).length && sectionId) ? shapeDefaultFor(sectionId) : "";
-  if (defId && shapeAutoFor(sectionId)) return shapeBlocksEditorInner(d) + `<div class="hint no-print" style="margin-top:8px;">يظهر تلقائيًا في التقرير: <b>${esc(SHAPES_LIB[defId].name)}</b></div><div class="rpt-v5 no-print">${shapeRender(defId, {}, { editor: true, report: getCurrentReportEntry(), unitId: S.currentUnitId })}</div>`;
+  if (defId && shapeAutoFor(sectionId)) return shapeBlocksEditorInner(d, sectionId) + `<div class="hint no-print" style="margin-top:8px;">يظهر تلقائيًا في التقرير: <b>${esc(SHAPES_LIB[defId].name)}</b></div><div class="rpt-v5 no-print">${shapeRender(defId, { auto: true }, { editor: true, report: getCurrentReportEntry(), unitId: S.currentUnitId, sectionId, data: d })}</div>`;
   const sug = defId ? `<div class="hint" style="margin-top:8px;">الشكل المقترح لهذا القسم: <b>${esc(SHAPES_LIB[defId].name)}</b> ${pillBtn("إضافته", { variant: "ghost", action: "shp-add", data: { shape: defId } })}</div>` : "";
-  return shapeBlocksEditorInner(d) + sug;
+  return shapeBlocksEditorInner(d, sectionId) + sug;
 }
-function shapeBlocksEditorInner(d) {
-  const rows = (d.shapeBlocks || []).map((b) => { const s = SHAPES_LIB[b.shapeId]; if (!s) return ""; return `<div class="repeat-item"><div class="repeat-item-head"><span class="repeat-item-title">${esc(s.name)}</span>${removeBtn("shapeBlocks", b.id)}</div>
-    ${s.fields.map((f) => fieldWrap(f.label, false, f.type === "i" ? `<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;"><input type="file" accept="image/*" data-shp-img="${esc(b.id)}" data-shp-key="${esc(f.k)}" />${b[f.k] ? `<img src="${esc(b[f.k])}" style="height:44px;border-radius:6px;" alt="" /><button type="button" class="pill-btn pill-ghost" data-action="shp-img-clear" data-id="${esc(b.id)}" data-key="${esc(f.k)}">حذف الصورة</button>` : ""}</div>` : f.type === "a" ? txt("shapeBlocks", b.id, f.k, b[f.k], f.ph || "", 70) : inp("shapeBlocks", b.id, f.k, b[f.k], f.ph || ""))).join("")}
-    <div class="shp-live rpt-v5">${shapeRender(b.shapeId, b, { editor: true, report: getCurrentReportEntry(), unitId: S.currentUnitId })}</div></div>`; }).join("");
+function shapeBlocksEditorInner(d, sectionId) {
+  const rows = (d.shapeBlocks || []).map((b) => { const s = SHAPES_LIB[b.shapeId]; if (!s) return ""; const ab = b.auto ? { ...b, ...shapeAutoData(b.shapeId, { sectionId: sectionId || b.sectionId, data: d }) } : b; return `<div class="repeat-item"><div class="repeat-item-head"><span class="repeat-item-title">${esc(s.name)}</span>${removeBtn("shapeBlocks", b.id)}</div>
+    ${s.fields.map((f) => fieldWrap(f.label, false, f.type === "i" ? `<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;"><input type="file" accept="image/*" data-shp-img="${esc(b.id)}" data-shp-key="${esc(f.k)}" />${b[f.k] ? `<img src="${esc(b[f.k])}" style="height:44px;border-radius:6px;" alt="" /><button type="button" class="pill-btn pill-ghost" data-action="shp-img-clear" data-id="${esc(b.id)}" data-key="${esc(f.k)}">حذف الصورة</button>` : ""}</div>` : f.type === "a" ? txt("shapeBlocks", b.id, f.k, ab[f.k], f.ph || "", 70) : inp("shapeBlocks", b.id, f.k, ab[f.k], f.ph || ""))).join("")}
+    <div class="shp-live rpt-v5">${shapeRender(b.shapeId, b, { editor: true, report: getCurrentReportEntry(), unitId: S.currentUnitId, sectionId: sectionId || b.sectionId, data: d })}</div></div>`; }).join("");
   return `<div class="subhead" style="margin-top:14px;">الأشكال والرسوم</div>${rows}<div style="margin-top:8px;">${pillBtn("اختيار من المكتبة", { variant: "ghost", action: "shp-open" })}</div>`;
 }
 
@@ -12628,8 +12795,8 @@ function sectionBodyOnly(section, saved, report) {
   }
   if (d.notes) body += textBlock("ملاحظات", d.notes);
   if (section.id === "programs" && report) body += (svMergeOn() ? rptStatsPageHtml(report) + rptMeasureHtml(report) : rptProgramCardsHtml(report));
-  if (d.shapeBlocks && d.shapeBlocks.length) body += rptShapeBlocksHtml(d.shapeBlocks, report);
-  else if (shapeAutoFor(section.id)) body += shapeRender(shapeAutoFor(section.id), {}, { report, unitId: report ? reportUnitIdOf(report) : "" });
+  if (d.shapeBlocks && d.shapeBlocks.length) body += rptShapeBlocksHtml(d.shapeBlocks, report, section.id, d);
+  else if (shapeAutoFor(section.id)) body += shapeRender(shapeAutoFor(section.id), { auto: true }, { report, unitId: report ? reportUnitIdOf(report) : "", sectionId: section.id, data: d });
   return body;
 }
 function comparisonJudgmentMeta(judgment) {
@@ -13260,6 +13427,10 @@ function liveUpdateComputed(el) {
 function attachFormListeners() {
   appEl.addEventListener("input", (e) => {
     const el = e.target;
+    if (el.dataset && el.dataset.arr === "shapeBlocks" && el.dataset.id) {
+      const ab = findById(getItemList("shapeBlocks"), el.dataset.id);
+      if (ab && ab.auto) { Object.assign(ab, shapeAutoData(ab.shapeId, { sectionId: ab.sectionId || S.activeSectionId, data: S.sectionDraft })); ab.auto = false; }
+    }
     if (el.dataset && el.dataset.svPaste) { S.ui.svPaste = S.ui.svPaste || {}; S.ui.svPaste[el.dataset.svPaste] = el.value; return; }
     if (el.id === "ops-recent-q") {
       S.ui.opsRecentQ = el.value; const pos = el.selectionStart; render();
@@ -13470,6 +13641,9 @@ function attachFormListeners() {
   });
 
   appEl.addEventListener("change", (e) => {
+    const t0 = e.target;
+    if (t0 && t0.dataset && t0.dataset.ccKind && t0.dataset.ccId) { dashCCSave(t0.dataset.ccKind, (c) => { const k = c.cards.find((x) => x.id === t0.dataset.ccId); if (k) k[t0.dataset.ccF] = t0.value; }); render(); return; }
+    if (t0 && t0.dataset && t0.dataset.grpKind && t0.dataset.grpKey) { const kk = t0.dataset.grpKind; const cfg = JSON.parse(JSON.stringify(dashConfig())); cfg[kk] = cfg[kk] || {}; cfg[kk].grp = cfg[kk].grp || {}; const v = t0.value.trim(); if (v) cfg[kk].grp[t0.dataset.grpKey] = v; else delete cfg[kk].grp[t0.dataset.grpKey]; S.dashboardConfig = cfg; dataStore.saveDashboardConfig(cfg); render(); return; }
     const el = e.target;
     if (el.id === "imp-file" && el.files && el.files[0]) { impReadFile(el.files[0]); return; }
     if (el.dataset && el.dataset.impMap) { const st = impState(); st.map[el.dataset.impMap] = el.value === "" ? undefined : +el.value; render(); return; }
@@ -13848,6 +14022,11 @@ function attachClickListener() {
         break;
       }
       case "nav-back-admin": S.view = "browse-structure"; render(); break;
+      case "cc-add": { dashCCSave(ds.kind, (c) => c.cards.push({ id: uid("cc"), title: "", secs: [], view: "seq", shape: "" })); render(); break; }
+      case "cc-del": { dashCCSave(ds.kind, (c) => { c.cards = c.cards.filter((x) => x.id !== ds.id); }); render(); break; }
+      case "cc-sec": { dashCCSave(ds.kind, (c) => { const k = c.cards.find((x) => x.id === ds.id); if (!k) return; k.secs = k.secs || []; const i = k.secs.indexOf(ds.sec); if (i === -1) k.secs.push(ds.sec); else k.secs.splice(i, 1); }); render(); break; }
+      case "cc-view": { dashCCSave(ds.kind, (c) => { const k = c.cards.find((x) => x.id === ds.id); if (k) k.view = ds.view; }); render(); break; }
+      case "cc-tbl": { S.ui.ccTbl = S.ui.ccTbl || {}; S.ui.ccTbl[ds.id] = !S.ui.ccTbl[ds.id]; render(); break; }
       case "dash-kind-tab": { S.ui.dashKindTab = ds.kind; render(); break; }
       case "dash-group": {
         if (!S.isAdmin) break;
@@ -15273,7 +15452,8 @@ function handleReportEditorAction(action, ds) {
     case "shp-add": {
       const sh = SHAPES_LIB[ds.shape]; if (!sh) return true;
       const list = getItemList("shapeBlocks");
-      list.push({ id: uid("shp"), shapeId: ds.shape, ...JSON.parse(JSON.stringify(sh.sample)) });
+      if (sh.live) list.push({ id: uid("shp"), shapeId: ds.shape, ...JSON.parse(JSON.stringify(sh.sample || {})) });
+      else list.push({ id: uid("shp"), shapeId: ds.shape, auto: sh.cat !== "photo", sectionId: S.activeSectionId });
       S.ui.shpOpen = false; autoSaveSchedule(); render(); return true;
     }
     case "remove-item": {

@@ -415,8 +415,8 @@ table.prs-table td { padding: 8px 10px; border-top: 1px solid var(--border); }
 .rpt-chapter-body, .rpt-wrap .hint { text-align: justify; text-align-last: right; }
 .rpt-chapter-body table.prs-table th { background: var(--rpt-th-bg, #f4ece4) !important; color: var(--rpt-th-color, var(--rpt-burgundy)) !important; }
 .rpt-wrap table.prs-table { font-size: var(--rpt-table-fs, 12px); }
-.rpt-wrap table.prs-table th { text-align: var(--rpt-th-align, right); }
-.rpt-wrap table.prs-table td { text-align: var(--rpt-td-align, right); text-align-last: auto; }
+.rpt-wrap table.prs-table th { text-align: var(--rpt-th-align, center); }
+.rpt-wrap table.prs-table td { text-align: var(--rpt-td-align, center); text-align-last: auto; }
 .rpt-zebra .rpt-chapter-body table.prs-table tbody tr:nth-child(even) td { background: rgba(107,35,55,0.045); }
 .rpt-tnone .rpt-chapter-body table.prs-table td { border-top-color: transparent !important; }
 .rpt-tgrid .rpt-chapter-body table.prs-table th, .rpt-tgrid .rpt-chapter-body table.prs-table td { border: 1px solid var(--rpt-line) !important; }
@@ -964,3 +964,10 @@ table.prs-table td { padding: 8px 10px; border-top: 1px solid var(--border); }
 .table-wrap td[style*="min-width"], .table-wrap th[style*="min-width"] { min-width: 0 !important; }
 .dash-wide .table-wrap th, .dash-wide .table-wrap td { padding: 7px 5px; font-size: 11.5px; }
 @media (max-width: 420px) { .table-wrap th, .table-wrap td { padding: 6px 2px !important; } }
+/* توسيط النص في كل الجداول */
+table.prs-table th, table.prs-table td, .shp-tbl th, .shp-tbl td, .table-wrap table th, .table-wrap table td, .a4-page table th, .a4-page table td { text-align: center !important; }
+.rpt-wrap table.prs-table th { text-align: var(--rpt-th-align, center) !important; }
+.rpt-wrap table.prs-table td { text-align: var(--rpt-td-align, center) !important; }
+.dash-grp-h{font-weight:800;font-size:15px;color:var(--rpt-burgundy,#6b2337);display:flex;align-items:center;gap:10px;margin:8px 0 2px;}
+.dash-grp-h:after{content:"";flex:1;height:1px;background:#e7dccb;}
+@media (min-width:1100px){.page-inner.dash-wide > .dash-grp-h{grid-column:1/-1;}}
