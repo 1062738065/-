@@ -252,7 +252,7 @@ const SECTION_FIELD_SCHEMAS = {
       { id: "executingEntity", type: "text", label: "الجهة المنفذة", placeholder: "الجهة المسؤولة عن التنفيذ" },
       { id: "participatingEntities", type: "text", label: "الجهات المشاركة", placeholder: "الجهات المشاركة، إن وجدت" },
       { id: "responsiblePerson", type: "text", label: "المسؤولة عن التنفيذ", placeholder: "اسم المسؤولة" },
-      { id: "executionStatus", type: "select", label: "", hideLabel: true, options: EXECUTION_STATUSES, placeholder: "اختاري حالة التنفيذ", subheadBefore: "حالة التنفيذ" },
+      { id: "executionStatus", type: "select", label: "حالة التنفيذ", hideLabel: true, options: EXECUTION_STATUSES, placeholder: "اختاري حالة التنفيذ", subheadBefore: "حالة التنفيذ" },
       { id: "completionPercent", type: "number", label: "نسبة الإنجاز", placeholder: "0", subheadBefore: "مستوى الإنجاز", rowGroup: "completion" },
       { id: "attendeesCount", type: "number", label: "عدد الحاضرات", placeholder: "0", rowGroup: "completion" },
       { id: "attendanceRate", type: "number", label: "نسبة الحضور", placeholder: "0", rowGroup: "rates" },
@@ -283,7 +283,6 @@ const SECTION_FIELD_SCHEMAS = {
   },
   challenges: {
     arrayKey: "challenges",
-    hint: "(تحديات أو ظروف طارئة أثّرت على تنفيذ العمل، مثل: الأمطار، انقطاع الإنترنت، أو تعطل الأنظمة)",
     itemLabel: "الصعوبة",
     fields: [
       { id: "name", type: "text", label: "اسم الصعوبة", required: true, placeholder: "مثال: نقص الكادر المؤهل" },
@@ -305,7 +304,6 @@ const SECTION_FIELD_SCHEMAS = {
   },
   improvement: {
     arrayKey: "opportunities",
-    hint: "(جوانب قابلة للتطوير والمعالجة لتحسين العمل، مثل: قلة ساعات التنفيذ، عدم تهيئة المكان، أو نقص التجهيزات)",
     itemLabel: "فرصة التحسين",
     fields: [
       { id: "name", type: "text", label: "اسم فرصة التحسين", required: true, placeholder: "مثال: تسريع الاستجابة لطلبات المستفيدات" },
@@ -10729,6 +10727,10 @@ function svMeasureTabsHtml(report, unitId) {
   }).join("");
   return pfBannerHtml() + `<div class="no-print" style="display:flex;align-items:center;gap:4px;overflow-x:auto;margin:0 0 16px;padding:6px 2px;">${stepHtml}</div>`;
 }
+const SECTION_TITLE_NOTES = {
+  challenges: "(تحديات أو ظروف طارئة أثّرت على تنفيذ العمل، مثل: الأمطار، انقطاع الإنترنت، أو تعطل الأنظمة)",
+  improvement: "(جوانب قابلة للتطوير والمعالجة لتحسين العمل، مثل: قلة ساعات التنفيذ، عدم تهيئة المكان، أو نقص التجهيزات)",
+};
 function sectionEditorHtml(unit, report) {
   const secList = reportSections(report, unit.id);
   const navList = reportSectionsNav(report, unit.id);
@@ -10758,7 +10760,7 @@ function sectionEditorHtml(unit, report) {
     <div style="display:flex;align-items:center;justify-content:space-between;margin:14px 0 18px;">
       <div style="display:flex;align-items:center;gap:12px;">
         <div style="width:42px;height:42px;border-radius:12px;background:${color.bg};display:flex;align-items:center;justify-content:center;">${iconLayers(20, color.fg)}</div>
-        <div class="prs-title" style="font-size:17px;font-weight:800;">${esc(section.label)}</div>
+        <div class="prs-title" style="font-size:17px;font-weight:800;">${esc(section.label)}</div>${SECTION_TITLE_NOTES[section.id] ? `<div class="sec-note">${esc(SECTION_TITLE_NOTES[section.id])}</div>` : ""}
       </div>
       ${(section.id !== "basic" && section.id !== "review" && /ربع|سنوي|نصف|فصلي/.test(reportPeriodType(report) || "")) ? `<button data-action="imp-open" style="display:flex;align-items:center;gap:6px;background:#fff;border:1px solid ${BORDER};border-radius:999px;padding:6px 12px;font-size:12px;font-weight:700;color:${ROSE};cursor:pointer;margin-inline-end:8px;">${iconDownload(14, ROSE)} استيراد من تقارير سابقة</button>` : ""}
       ${actionAllowed("toggle-section-completed") && autoSectionComplete(section.id, S.sectionDraft) === null && section.id === "basic" ? `<button data-action="toggle-section-completed" style="display:flex;align-items:center;gap:6px;background:${S.sectionCompleted ? GREEN_BG : "#fff"};border:1px solid ${S.sectionCompleted ? GREEN : BORDER};border-radius:999px;padding:6px 12px;cursor:pointer;font-size:11.5px;font-weight:700;color:${S.sectionCompleted ? GREEN : SUBTLE}">
@@ -12039,6 +12041,23 @@ function rptEvidenceGalleryHtml(items) {
   const chip = (n, one, many) => n ? `<span class="rpt-ev-chip">${n === 1 ? one : arabicDigits(n) + " " + many}</span>` : "";
   return `${tiles.length ? `<div class="rpt-ev-grid">${tiles.join("")}</div>` : ""}<div class="rpt-ev-chips">${chip(imgs, "صورة واحدة", "صور")}${chip(files, "ملف واحد", "ملفات")}${chip(links, "رابط واحد", "روابط")}</div><div class="rpt-ev-list">${rows}</div>`;
 }
+const RPT_GL_COL = { "عالية": "#a32d2d", "مرتفع": "#a32d2d", "حرج": "#a32d2d", "عاجل": "#a32d2d", "متوسط": "#c9a24a", "متوسطة": "#c9a24a", "منخفض": "#3b6d11", "منخفضة": "#3b6d11", "منخفضه": "#3b6d11" };
+function rptGlanceHtml(sid, items) {
+  const cfg = (typeof DASH_SEC_VIEW !== "undefined" && DASH_SEC_VIEW[sid]) || null, sc = rptSchemaFor(sid);
+  if (!cfg || !sc || items.length < 2 || sid === "recommendations" || sid === "kpi") return "";
+  const ids = (cfg.dist || []).filter((id) => (sc.fields || []).some((f) => f.id === id && (f.type === "select" || f.type === "radio"))).slice(0, 2);
+  const pal = ["#6b2337", "#b98a58", "#a38d6a", "#c4566a", "#7d8fa8", "#d9c7a8"];
+  const blocks = ids.map((id) => {
+    const f = sc.fields.find((x) => x.id === id), m = {};
+    items.forEach((it) => { const v = schemaFieldText(it[id]); if (v) m[v] = (m[v] || 0) + 1; });
+    const ent = Object.entries(m).sort((a, b) => b[1] - a[1]); const tot = ent.reduce((a, x) => a + x[1], 0);
+    if (ent.length < 1 || !tot) return "";
+    const col = (k, i) => RPT_GL_COL[k] || pal[i % pal.length];
+    return `<div class="rpt-gl-b"><div class="rpt-gl-t">${esc(f.label || id)}</div><div class="rpt-gl-bar">${ent.map(([k, n], i) => `<i style="flex:${n};background:${col(k, i)}"></i>`).join("")}</div><div class="rpt-gl-lg">${ent.map(([k, n], i) => `<span><i style="background:${col(k, i)}"></i>${esc(k)} <b>${fmtNum(n)}</b></span>`).join("")}</div></div>`;
+  }).join("");
+  if (!blocks) return "";
+  return `<div class="rpt-gl"><div class="rpt-gl-n"><b>${fmtNum(items.length)}</b><span>${esc((cfg.stats && cfg.stats[0] && cfg.stats[0].l) || "عنصر")}</span></div>${blocks}</div>`;
+}
 function rptSchemaItemsHtml(sid, items, emptyText) {
   items = (items || []).filter(rptHasValue);
   if (!items.length) return emptyHint(emptyText || "لم يُدخل محتوى بعد.");
@@ -12051,7 +12070,7 @@ function rptSchemaItemsHtml(sid, items, emptyText) {
   const short = fields.filter(asCol);
   const long = fields.filter((f) => !asCol(f));
   const titleOf = (it, i) => schemaFieldText(it.name) || schemaFieldText(it.title) || schemaFieldText(it[(short[0] || {}).id]) || arabicDigits(i + 1);
-  let html = anHtml + (short.length ? reportTable(short.map((f) => f.label || f.id), items.map((it) => short.map((f) => rptFieldCellHtml(sid, f, it)))) : "");
+  let html = rptGlanceHtml(sid, items) + anHtml + (short.length ? reportTable(short.map((f) => f.label || f.id), items.map((it) => short.map((f) => rptFieldCellHtml(sid, f, it)))) : "");
   items.forEach((it, i) => long.forEach((f) => { const t = schemaFieldText(it[f.id]); if (t) html += textBlock(`${f.label || f.id}${items.length > 1 || !short.length ? " — " + titleOf(it, i) : ""}`, t); }));
   return html;
 }
@@ -12579,14 +12598,7 @@ function sectionBodyOnly(section, saved, report) {
       const fields = rptVisibleFields("nextplan");
       const head = fields.find((f) => f.id === "name") || fields[0];
       const rest = fields.filter((f) => f !== head);
-      body = rows.map((it, i) => `
-        <div style="display:flex;gap:10px;align-items:flex-start;margin-bottom:10px;">
-          <div style="width:24px;height:24px;border-radius:50%;background:var(--rpt-burgundy);color:#fff;font-size:11px;font-weight:800;display:flex;align-items:center;justify-content:center;flex-shrink:0;">${arabicDigits(i + 1)}</div>
-          <div style="flex:1;border-bottom:1px solid var(--rpt-line);padding-bottom:8px;">
-            <div style="font-size:12px;font-weight:700;color:var(--rpt-ink);">${esc((head && schemaFieldText(it[head.id])) || "—")}</div>
-            ${rest.length ? `<div style="font-size:10.5px;color:var(--rpt-gray);margin-top:2px;">${rest.map((f) => esc(schemaFieldText(it[f.id]) || "—")).join(" — ")}</div>` : ""}
-          </div>
-        </div>`).join("");
+      body = `<div class="rpt-tl">${rows.map((it, i) => { const dt = fields.find((f) => /date|Date|تاريخ/.test(f.id + (f.label || "")) ); return `<div class="rpt-tl-i"><div class="rpt-tl-d">${arabicDigits(i + 1)}</div><div class="rpt-tl-c"><div class="rpt-tl-h"><b>${esc((head && schemaFieldText(it[head.id])) || "—")}</b>${dt && schemaFieldText(it[dt.id]) ? `<span class="rpt-tl-dt">${esc(schemaFieldText(it[dt.id]))}</span>` : ""}</div>${rest.filter((f) => f !== dt).length ? `<div class="rpt-tl-m">${rest.filter((f) => f !== dt).map((f) => schemaFieldText(it[f.id]) ? `<span><small>${esc(f.label || f.id)}</small> ${esc(schemaFieldText(it[f.id]))}</span>` : "").join("")}</div>` : ""}</div></div>`; }).join("")}</div>`;
     } else { body = emptyHint("لم تُضف أعمال رئيسة بعد."); }
 
   } else if (section.id === "evidence") {
@@ -12601,8 +12613,8 @@ function sectionBodyOnly(section, saved, report) {
     // المحرك، اللي تُخزَّن بنص الخيار نفسه.
     const checklistItems = (SECTION_FIELD_SCHEMAS.review.fields.find((f) => f.id === "checklist") || {}).options || [];
     const doneCount = checklistItems.filter((label) => checklist[label]).length;
-    body = kvBlock([kv("قائمة التحقق", `${doneCount} من ${checklistItems.length}`)]);
-    body += reportTable(["بند التحقق", "الحالة"], checklistItems.map((label) => [esc(label), checklist[label] ? `<span style="color:${GREEN};font-weight:800;">✓ تم</span>` : `<span style="color:${SUBTLE};">لم يتم</span>`]));
+    const ckPct = checklistItems.length ? Math.round((doneCount / checklistItems.length) * 100) : 0;
+    body = `<div class="rpt-ck"><div class="rpt-ck-h"><div><b>${fmtNum(doneCount)}</b> من ${fmtNum(checklistItems.length)}<small>بنود التحقق المُنجزة</small></div><div class="rpt-ck-p">${fmtNum(ckPct)}٪</div></div><div class="rpt-ck-bar"><i style="width:${ckPct}%"></i></div><div class="rpt-ck-l">${checklistItems.map((label) => `<div class="${checklist[label] ? "ok" : ""}"><span>${checklist[label] ? "✓" : ""}</span>${esc(label)}</div>`).join("")}</div></div>`;
     if (d.managerDecision) body += kvBlock([kv("قرار المراجعة", d.managerDecision)]);
     if (d.managerNotesText) body += textBlock("ملاحظات المديرة المباشرة", d.managerNotesText);
 
