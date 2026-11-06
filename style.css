@@ -1013,3 +1013,4 @@ table.prs-table th, table.prs-table td, .shp-tbl th, .shp-tbl td, .table-wrap ta
 .chs-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
 .chs-card{border:1px solid #eedfe1;border-radius:10px;padding:10px 12px;background:#fdf9f8;break-inside:avoid;overflow:hidden}
 .chs-t{font-size:12.5px;font-weight:800;color:#9a3f4e;text-align:center;margin-bottom:8px}
+.tv-cap{font-size:11px;color:#8a7d7f;text-align:center;margin:4px 0 8px}
