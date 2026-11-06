@@ -3585,7 +3585,7 @@ function dashCCHtml(kind, units) {
 }
 
 /* معاينة حيّة لعدة أشكال مرشّحة ببيانات البطاقة الفعلية، لتختاري بالنظر */
-function shpSamplePrev(id) { try { const h = shapeRender(id, {}, { dash: true }); return h || ""; } catch (e) { return ""; } }
+function shpSamplePrev(id) { try { const sh = SHAPES_LIB[id]; if (!sh) return ""; const h = shapeRender(id, sh.sample || {}, { demo: true }); return h || ""; } catch (e) { return ""; } }
 function shpSelPreview(c, items) {
   if (!c.shape || !SHAPES_LIB[c.shape]) return "";
   const secs = (c.secs || []).filter(Boolean);
@@ -3666,6 +3666,17 @@ function tvChartFromTable(tb) {
   const legend = numCols.length > 1 ? `<div class="tv-lg">${numCols.map((c, k) => `<span><i style="background:${TV_COLS[k % 5]}"></i>${esc(heads[c])}</span>`).join("")}</div>` : "";
   const items = rows.map((r) => `<div class="tv-it"><div class="tv-t"><b>${esc(r[labelCol] || "—")}</b>${details.map((d) => r[d] && r[d] !== "—" ? `<span class="tv-tag" title="${esc(heads[d])}">${esc(r[d])}</span>` : "").join("")}</div>${numCols.map((c, k) => { const n = tvNum(r[c]); return `<div class="tv-br"><span class="tv-l">${esc(numCols.length > 1 ? heads[c] : "")}</span><div class="tv-p"><div style="width:${n == null ? 0 : Math.min(100, Math.round(n / maxes[k] * 100))}%;background:${TV_COLS[k % 5]}"></div></div><span class="tv-v">${esc(r[c] || "—")}</span></div>`; }).join("")}</div>`).join("");
   return `<div class="tv-chart">${legend}${items}</div>`;
+}
+/* عند اختيار عرض (رسم/شكل) لبطاقة في اللوحة يظهر هو وحده: نحذف بقية رسومها وأرقامها الأصلية ونُبقي العنوان */
+function tvOnly(html) {
+  try {
+    const box = document.createElement("div"); box.innerHTML = html;
+    const wraps = [...box.querySelectorAll(".tv-wrap")]; if (!wraps.length) return html;
+    const mark = new Set(); wraps.forEach((w) => { let n = w; while (n && n !== box) { mark.add(n); n = n.parentElement; } });
+    const keepHead = (el) => el.matches && (el.matches(".prs-title,.hint,h1,h2,h3,h4,.rpt-subheading") || (!el.querySelector("svg,canvas,table,img") && (el.textContent || "").trim().length > 0 && (el.textContent || "").trim().length < 90 && !el.querySelector("button")));
+    const prune = (el) => { [...el.children].forEach((ch) => { if (mark.has(ch)) { if (!ch.classList.contains("tv-wrap")) prune(ch); return; } const nxt = ch.nextElementSibling; if (keepHead(ch) && (/^(prs-title|hint)$/.test(ch.className.split(" ")[0] || "") || (nxt && mark.has(nxt)))) return; ch.remove(); }); };
+    prune(box); return box.innerHTML;
+  } catch (e) { return html; }
 }
 function tvOptionsHtml(cur, first) {
   const cats = (typeof SHP_CATS !== "undefined" ? SHP_CATS : []);
@@ -3753,7 +3764,7 @@ function dashB(kind, key, html) {
   const eff = dashEff(kind), e = eff.findIndex((x) => x.k === key), o = (e === -1 ? 500 : e) + 1;
   let head = "";
   if (e > 0 && eff[e].grp && eff[e - 1].head && dashEff(kind).filter((x) => x.grp === eff[e].grp && !dashHidden(kind, x.k))[0].k === key) head = `<div class="dash-grp-h" style="order:${o * 2 - 1};">${esc(eff[e].grp)}</div>`;
-  const vm = dashViewOf(kind, key); if (vm) html = tvApply(html, kind + ":" + key, vm);
+  const vm = dashViewOf(kind, key); if (vm) html = tvOnly(tvApply(html, kind + ":" + key, vm));
   return head + `<div class="dash-blk" data-dk="${esc(key)}" style="order:${o * 2};">${html}</div>`;
 }
 function dashBlock(kind, key, html) { return dashB(kind, key, html); }

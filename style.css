@@ -988,3 +988,5 @@ table.prs-table th, table.prs-table td, .shp-tbl th, .shp-tbl td, .table-wrap ta
 /* معاينة التنسيق المثبّتة بأسفل الشاشة: ترين أثر التعديل فورًا وأنتِ تعدّلين */
 .rm-layout > .rm-preview.rm-docked { position: fixed !important; left: 8px; right: 8px; bottom: 8px; top: auto; z-index: 60; flex: none; width: auto; max-height: 50vh; background: #fffdf9; border: 1px solid #e7dccb; border-radius: 16px; padding: 10px; box-shadow: 0 -8px 30px rgba(43,29,33,.22); }
 .rm-docked .rm-preview-scroll { max-height: calc(50vh - 60px); }
+
+.shp-card{color:#2c2622}.shp-card .shp-nm{color:#2c2622}.shp-card.on{border:2px solid #6b2337}
