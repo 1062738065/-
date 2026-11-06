@@ -942,3 +942,25 @@ table.prs-table td { padding: 8px 10px; border-top: 1px solid var(--border); }
 }
 .sec-note{flex:1;min-width:220px;font-size:13px;line-height:1.8;color:#4d1827;font-weight:600;margin-right:6px}
 @media (min-width: 1100px) { .page-inner.dash-wide > .dash-blk.dash-span { grid-column: 1 / -1; } }
+/* الجداول: تظهر بياناتها كاملة بدون شريط تمرير أفقي — النص يلتف والأعمدة تتوزع على العرض */
+.table-wrap { overflow-x: visible !important; }
+.table-wrap > table, .table-wrap table { min-width: 0 !important; width: 100% !important; table-layout: auto; }
+.table-wrap th, .table-wrap td { white-space: normal !important; word-break: normal; overflow-wrap: break-word; vertical-align: middle; }
+@media (max-width: 700px) {
+  .table-wrap th, .table-wrap td { padding: 7px 5px !important; font-size: 11.5px !important; line-height: 1.6; }
+  .table-wrap th { font-size: 11px !important; }
+}
+@media print { .table-wrap { overflow: visible !important; } }
+@media (max-width: 700px) {
+  .table-wrap td div[style*="gap:6px"] > div[style*="flex:1"] { min-width: 26px !important; }
+  .table-wrap td div[style*="gap:6px"] { min-width: 0 !important; gap: 3px !important; }
+}
+@media (max-width: 480px) {
+  .table-wrap th, .table-wrap td { padding: 6px 3px !important; font-size: 10.5px !important; }
+  .table-wrap th { font-size: 10px !important; }
+  .table-wrap td span[style*="width:38px"] { width: auto !important; }
+  .table-wrap .badge, .table-wrap td [class*="badge"] { font-size: 10px !important; padding: 2px 5px !important; }
+}
+.table-wrap td[style*="min-width"], .table-wrap th[style*="min-width"] { min-width: 0 !important; }
+.dash-wide .table-wrap th, .dash-wide .table-wrap td { padding: 7px 5px; font-size: 11.5px; }
+@media (max-width: 420px) { .table-wrap th, .table-wrap td { padding: 6px 2px !important; } }
