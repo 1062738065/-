@@ -12343,7 +12343,7 @@ function shapeDefaultsPanelHtml() {
   const cur = ((S.siteSettings || {}).theme || {}).shapeDefaults || {};
   const opts = Object.entries(SHAPES_LIB).map(([id, sh]) => `<option value="${id}">${esc(sh.name)}</option>`).join("");
   const rows = secs.filter((x) => x.id !== "review").map((x) => `<div style="display:flex;align-items:center;gap:10px;padding:6px 0;border-top:1px solid ${BORDER};"><div style="flex:1;font-weight:700;font-size:13px;">${esc(x.label)}</div><select class="input" style="max-width:240px;" data-shp-def="${esc(x.id)}"><option value="">بدون</option>${opts.replace(`value="${cur[x.id]}"`, `value="${cur[x.id]}" selected`)}</select></div>`).join("");
-  return `<details class="card" style="margin-bottom:14px;"><summary style="font-weight:800;cursor:pointer;">الشكل المقترح لكل قسم</summary><div class="hint" style="margin-top:6px;">يظهر زر «إضافته» داخل القسم لما يكون بلا أشكال.</div>${rows}</details>`;
+  return `<details class="card" style="margin-bottom:14px;"><summary style="font-weight:800;cursor:pointer;">الشكل المقترح لكل قسم</summary><div class="hint" style="margin-top:6px;">الأشكال من تبويب «إحصائيات ورسوم» تظهر تلقائيًا في تقرير كل الحسابات بدون أي إضافة (وتختفي إذا ما فيه بيانات)؛ بقية الأشكال يظهر لها زر «إضافته» داخل القسم.</div>${rows}</details>`;
 }
 function renderShapesLibraryPage() {
   const cat = S.ui.shpCat || "";
@@ -12365,9 +12365,11 @@ function shapePickerHtml(target) {
     <div class="shp-grid">${list.map(([id, s]) => `<button type="button" class="shp-card" data-action="shp-add" data-shape="${id}"><div class="shp-prev rpt-v5">${shapeRender(id, s.sample, { demo: true })}</div><div class="shp-nm">${esc(s.name)}</div></button>`).join("")}</div>
     <div style="margin-top:12px;">${pillBtn("إغلاق", { variant: "ghost", action: "shp-close" })}</div></div></div>`;
 }
+function shapeAutoFor(sectionId) { const id = shapeDefaultFor(sectionId); return id && SHAPES_LIB[id].live && sectionId !== "programs" ? id : ""; }
 function shapeDefaultFor(sectionId) { const m = ((S.siteSettings || {}).theme || {}).shapeDefaults || {}; const id = m[sectionId]; return id && SHAPES_LIB[id] ? id : ""; }
 function shapeBlocksEditorHtml(d, sectionId) {
   const defId = (!(d.shapeBlocks || []).length && sectionId) ? shapeDefaultFor(sectionId) : "";
+  if (defId && shapeAutoFor(sectionId)) return shapeBlocksEditorInner(d) + `<div class="hint no-print" style="margin-top:8px;">يظهر تلقائيًا في التقرير: <b>${esc(SHAPES_LIB[defId].name)}</b></div><div class="rpt-v5 no-print">${shapeRender(defId, {}, { editor: true, report: getCurrentReportEntry(), unitId: S.currentUnitId })}</div>`;
   const sug = defId ? `<div class="hint" style="margin-top:8px;">الشكل المقترح لهذا القسم: <b>${esc(SHAPES_LIB[defId].name)}</b> ${pillBtn("إضافته", { variant: "ghost", action: "shp-add", data: { shape: defId } })}</div>` : "";
   return shapeBlocksEditorInner(d) + sug;
 }
@@ -12615,6 +12617,7 @@ function sectionBodyOnly(section, saved, report) {
   if (d.notes) body += textBlock("ملاحظات", d.notes);
   if (section.id === "programs" && report) body += (svMergeOn() ? rptStatsPageHtml(report) + rptMeasureHtml(report) : rptProgramCardsHtml(report));
   if (d.shapeBlocks && d.shapeBlocks.length) body += rptShapeBlocksHtml(d.shapeBlocks, report);
+  else if (shapeAutoFor(section.id)) body += shapeRender(shapeAutoFor(section.id), {}, { report, unitId: report ? reportUnitIdOf(report) : "" });
   return body;
 }
 function comparisonJudgmentMeta(judgment) {
