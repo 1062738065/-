@@ -1150,7 +1150,7 @@ const dataStore = {
         const ok = rb.ok && rb.data && rb.data[0] && stable(rb.data[0].config) === stable(cfg);
         S.ui.dashSync = ok ? { s: "ok" } : { s: "bad", m: rb.ok ? "أُرسل الإعداد لكن لم يُقرأ مطابقًا من القاعدة" : rb.error };
       }
-      if (S.view === "site-settings") render();
+      if (S.view === "site-settings" || S.view === "shapes-library" || S.view === "reports-manage") render();
     }).catch(() => {});
   },
   cacheOfficesLocally(o) { lsSet(OFFICES_KEY, JSON.stringify(o)); },
@@ -5283,16 +5283,31 @@ function saveSiteTheme(patch) {
   S.siteSettings = S.siteSettings || dataStore.getSiteSettings();
   S.siteSettings = { ...S.siteSettings, theme: { ...(S.siteSettings.theme || {}), ...mk(S.siteSettings.theme) } };
   lsSet(SITE_SETTINGS_KEY, JSON.stringify(S.siteSettings));
-  if (!dbConnected()) return;
+  S.ui = S.ui || {};
+  const note = (o) => { S.ui.themeSync = o; if (S.view === "shapes-library" || S.view === "reports-manage" || S.view === "site-settings") { try { render(); } catch (e) {} } };
+  if (!dbConnected()) { S.ui.themeSync = { s: "local" }; return; }
+  S.ui.themeSync = { s: "wait" };
   queueSupabaseTask("site_settings", async () => {
     const res = await supabaseRequest("site_settings?id=eq.main&select=*");
     const base = res.ok && Array.isArray(res.data) && res.data.length ? rowToSiteSettings(res.data[0]) : S.siteSettings;
     const merged = { ...base, theme: { ...(base.theme || {}), ...mk(base.theme) } };
     const up = await supabaseRequest("site_settings", { method: "POST", prefer: "return=minimal,resolution=merge-duplicates", body: JSON.stringify(siteSettingsToRow(merged)) });
-    if (!up.ok) { reportSupabaseWriteError("site_settings", up.error); return; }
+    if (!up.ok) { reportSupabaseWriteError("site_settings", up.error); note({ s: "bad", m: up.error }); return; }
     S.siteSettings = { ...S.siteSettings, theme: merged.theme };
     lsSet(SITE_SETTINGS_KEY, JSON.stringify(S.siteSettings));
+    try {
+      const rb = await supabaseRequest("site_settings?id=eq.main&select=*");
+      const back = rb.ok && Array.isArray(rb.data) && rb.data[0] ? rowToSiteSettings(rb.data[0]) : null;
+      const ok = back && JSON.stringify((back.theme || {}).reportTemplates || null) === JSON.stringify((merged.theme || {}).reportTemplates || null);
+      note(ok ? { s: "ok" } : { s: "bad", m: rb.ok ? "أُرسل الإعداد لكن لم يُقرأ مطابقًا من القاعدة" : rb.error });
+    } catch (e) { note({ s: "ok" }); }
   });
+}
+function syncBannerHtml() {
+  const rows = [["التنسيق والتقارير", (S.ui || {}).themeSync], ["اللوحات", (S.ui || {}).dashSync]].filter((x) => x[1]);
+  if (!rows.length) return "";
+  const m = (d) => ({ ok: [GREEN, "✓ حُفظ في القاعدة وتأكدتُ بقراءته — يظهر في بقية الحسابات"], wait: [SUBTLE, "جارٍ الحفظ والتحقق…"], local: [GOLD, "⚠ حُفظ على هذا الجهاز فقط — الموقع غير مربوط بالقاعدة"], bad: [DANGER, "✗ لم يُحفظ في القاعدة: " + (d.m || "") + " — لذلك ما يظهر في الحسابات الأخرى"] }[d.s] || [SUBTLE, ""]);
+  return `<div class="card" style="margin-bottom:12px;padding:10px 14px;">${rows.map(([n, d]) => { const x = m(d); return `<div style="font-size:12.5px;font-weight:700;color:${x[0]};">${esc(n)}: ${esc(x[1])}</div>`; }).join("")}</div>`;
 }
 function levelTypeChipHtml(type) {
   if (!type) return `<span style="font-size:10.5px;font-weight:700;padding:3px 9px;border-radius:999px;white-space:nowrap;color:#5c4f55;background:${GRAY_BG};">بدون نوع</span>`;
@@ -6137,6 +6152,7 @@ function handleOrgLevelsAction(action, ds) {
     case "ol-toggle-portal": saveSiteTheme({ portalEnabled: !portalEnabled() }); ui.msg = portalEnabled() ? `بوابة الدخول مفعّلة — تظهر ${portalEntries().length} ${portalEntries().length > 2 && portalEntries().length < 11 ? "جهات" : "جهة"} مجمّعة حسب أنواع المستويات (الجهات اللي لها دخول، وروابطها غير معطّلة).` : "بوابة الدخول موقوفة — صفحة الدخول العادية فقط."; break;
     default: return false;
   }
+  if (S.view === "shapes-library" && ["rm-hide", "rm-move", "rm-col", "rm-colv"].includes(action) && st.draft) { rptSave(st.sel, JSON.parse(JSON.stringify(st.draft))); st.draft = null; }
   render();
   return true;
 }
@@ -7592,6 +7608,7 @@ function renderReportsManage() {
   return `
   <div class="page-wrap"><div class="page-inner">
     ${topBarHtml({ title: "تصميم وتنسيق التقارير", subtitle: "شكل كل تقرير وما يظهر فيه · المعاينة ببيانات وهمية" })}
+    ${S.isAdmin ? syncBannerHtml() : ""}
     <div class="rm-layout${dock ? " rm-has-dock" : ""}">
       <div class="rm-selectbar">
         <label class="rm-label" for="rm-sel" style="margin:0;">التقرير</label>
@@ -13263,6 +13280,21 @@ function shapeDefaultsPanelHtml() {
   const rows = secs.filter((x) => x.id !== "review").map((x) => `<div style="display:flex;align-items:center;gap:10px;padding:6px 0;border-top:1px solid ${BORDER};"><div style="flex:1;font-weight:700;font-size:13px;">${esc(x.label)}</div><select class="input" style="max-width:240px;" data-shp-def="${esc(x.id)}"><option value="">بدون</option>${opts.replace(`value="${cur[x.id]}"`, `value="${cur[x.id]}" selected`)}</select></div>`).join("");
   return `<details class="card" style="margin-bottom:14px;"><summary style="font-weight:800;cursor:pointer;">الشكل المقترح لكل قسم</summary><div class="hint" style="margin-top:6px;">الأشكال من تبويب «إحصائيات ورسوم» تظهر تلقائيًا في تقرير كل الحسابات بدون أي إضافة (وتختفي إذا ما فيه بيانات)؛ بقية الأشكال يظهر لها زر «إضافته» داخل القسم.</div>${rows}</details>`;
 }
+function rmChaptersLibHtml() {
+  if (!S.isAdmin) return "";
+  try {
+    const st = rmState(); if (st.sel !== "unit" && st.sel !== "final") { st.sel = "final"; st.draft = null; }
+    const st2 = rmState();
+    const pill = (id, l) => `<button type="button" class="flt-chip${st2.sel === id ? " on" : ""}" data-action="rm-select" data-id="${id}">${l}</button>`;
+    const body = rmPanelHtml({ ...st2, tab: "chapters" });
+    const dirty = rmDirty(st2);
+    return `<details class="card" style="margin-bottom:14px;" open><summary style="font-weight:800;cursor:pointer;">📑 أقسام التقرير وحقولها — الظهور والترتيب والأسماء</summary>
+      <div style="display:flex;gap:6px;flex-wrap:wrap;margin:10px 0;">${pill("unit", "تقرير الوحدة")}${pill("final", "التقرير الإداري النهائي")}</div>
+      <div class="hint" style="margin-bottom:8px;">الإظهار والإخفاء والترتيب وحقول الأقسام تُحفظ على طول. تغيير اسم القسم يحتاج زر «حفظ».</div>
+      <div class="rm-panel">${body}</div>
+      <div style="margin-top:10px;">${pillBtn(dirty ? "حفظ التغييرات" : "محفوظ ✓", { action: "rm-save", disabled: !dirty })}</div></details>`;
+  } catch (e) { return ""; }
+}
 function rptLevelLibHtml() { try { const d = rptSettings("final"); return rptLevelTableHtml(d, aggChapterDefs(d), true); } catch (e) { return ""; } }
 function dashShapesPanelHtml() {
   const dm = (dashConfig() || {})._dashShapes || {};
@@ -13280,7 +13312,7 @@ function renderShapesLibraryPage() {
   return `<div class="page-wrap"><div class="page-inner">
     ${topBarHtml({ title: "تنسيق اللوحات والتقارير", subtitle: `${Object.keys(SHAPES_LIB).length} شكلًا — للاستعراض وضبط شكل كل قسم.`, right: "" })}
     <div style="display:flex;gap:6px;flex-wrap:wrap;margin:6px 0 14px;">${tabs}</div>
-    ${S.isAdmin ? dashShapesPanelHtml() + secShapesCardHtml() + rptLevelLibHtml() : ""}
+    ${S.isAdmin ? syncBannerHtml() + dashShapesPanelHtml() + secShapesCardHtml() + rmChaptersLibHtml() + rptLevelLibHtml() : ""}
     <div class="shp-grid">${list.map(([id, s]) => `<div class="shp-card" style="cursor:default;"><div class="shp-prev rpt-v5">${shapeRender(id, s.sample, { demo: true })}</div><div class="shp-nm">${esc(s.name)}</div></div>`).join("")}</div>
   </div></div>`;
 }
