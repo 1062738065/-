@@ -3491,8 +3491,23 @@ function dashKpiShapeHtml(units) {
     return h ? dashCard("مؤشرات الأداء", "", `<div class="rpt-v5">${h}</div>`) : "";
   } catch (e) { return ""; }
 }
+function dashFieldShapeHtml(kind, sid, units) {
+  // الشكل المختار لقسم في اللوحة يحلّ محل البطاقة القديمة (أرقام + توزيع + قائمة) بدل أن يُطبَّق على جدول غير موجود
+  const dm = (dashConfig() || {})._dashShapes || {}; const v = dm[sid] || "";
+  if (!/^shape:/.test(v) || v === "shape:auto" || !SHAPES_LIB[v.slice(6)]) return "";
+  try {
+    const items = dashCCItems(units, [DASH_FLD_OWNER[sid] || sid]); if (!items || !items.length) return "";
+    const h = shapeRender(v.slice(6), { auto: true }, { sectionId: DASH_FLD_OWNER[sid] || sid, items, label: "", dash: true });
+    return h ? dashCard(dashFieldSecLabel(sid), "", `<div class="rpt-v5" data-dshape="1">${h}</div>`) : "";
+  } catch (e) { return ""; }
+}
+function dashFieldHint(sid, oldHtml) {
+  const v = (((dashConfig() || {})._dashShapes || {})[sid]) || "";
+  if (!oldHtml || !/^shape:/.test(v) || v === "shape:auto" || !SHAPES_LIB[v.slice(6)]) return oldHtml;
+  return `<div class="hint no-print" style="margin-bottom:6px;">الشكل المختار («${esc(SHAPES_LIB[v.slice(6)].name)}») لا يناسب بيانات هذا القسم (نصوص بلا أرقام كافية)، فظهر العرض المعتاد.</div>` + oldHtml;
+}
 function dashKpiDevHtml(kind, units) { const h = dashFieldBlockHtml(kind, "kpiDeviation", units); if (!h) return ""; const vm = dashViewOf(kind, "fld_kpiDeviation"); return vm ? tvOnly(tvApply(h, kind + ":fld_kpiDeviation", vm)) : h; }
-function dashFieldBlocksHtml0(kind, units) { return dashB(kind, "indBoard", dashKpiShapeHtml(units) || dashIndBoardHtml(kind, units)) + dashB(kind, "sharedInd", dashSharedIndHtml(kind, units)) + dashB(kind, "routed", dashRoutedHtml(kind, units)) + dashFieldSecIds().map((id) => dashHidden(kind, "fld_" + id) ? "" : dashB(kind, "fld_" + id, (id === "analysisComparisons" ? dashAnalysisHeadHtml(units) : "") + dashFieldBlockHtml(kind, id, units))).join(""); }
+function dashFieldBlocksHtml0(kind, units) { return dashB(kind, "indBoard", dashKpiShapeHtml(units) || dashIndBoardHtml(kind, units)) + dashB(kind, "sharedInd", dashSharedIndHtml(kind, units)) + dashB(kind, "routed", dashRoutedHtml(kind, units)) + dashFieldSecIds().map((id) => dashHidden(kind, "fld_" + id) ? "" : dashB(kind, "fld_" + id, (id === "analysisComparisons" ? dashAnalysisHeadHtml(units) : "") + (dashFieldShapeHtml(kind, id, units) || dashFieldHint(id, dashFieldBlockHtml(kind, id, units))))).join(""); }
 
 
 /* ===== الرسم المقترح لكل قسم: يُحسب من نوع حقوله (أرقام، تواريخ، حالات، نص) ===== */
@@ -3974,7 +3989,7 @@ function dashB(kind, key, html) {
   const eff = dashEff(kind), e = eff.findIndex((x) => x.k === key), o = (e === -1 ? 500 : e) + 1;
   let head = "";
   if (e > 0 && eff[e].grp && eff[e - 1].head && dashEff(kind).filter((x) => x.grp === eff[e].grp && !dashHidden(kind, x.k))[0].k === key) head = `<div class="dash-grp-h" style="order:${o * 2 - 1};">${esc(eff[e].grp)}</div>`;
-  const vm = dashViewOf(kind, key); if (vm) html = tvOnly(tvApply(html, kind + ":" + key, vm));
+  const vm = dashViewOf(kind, key); if (vm && !/data-dshape/.test(html)) html = tvOnly(tvApply(html, kind + ":" + key, vm));
   return head + `<div class="dash-blk" data-dk="${esc(key)}" style="order:${o * 2};">${html}</div>`;
 }
 function dashBlock(kind, key, html) { return dashB(kind, key, html); }
