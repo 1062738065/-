@@ -1031,3 +1031,5 @@ table.prs-table th, table.prs-table td, .shp-tbl th, .shp-tbl td, .table-wrap ta
 
 /* حجم الخط العام للتقرير (من إعدادات التنسيق) */
 .rpt-wrap .rpt-chapter-body { zoom: var(--rpt-fs, 1); }
+
+.ibd-dev{display:flex;flex-wrap:wrap;gap:4px 14px;margin-top:8px;padding-top:7px;border-top:1px dashed rgba(107,35,55,.18);font-size:11.5px;color:#4a3b3f}.ibd-dev b{color:#6b2337}.ibd-tag{background:#f3e3e5;color:#6b2337;border-radius:999px;padding:1px 9px;font-weight:700}

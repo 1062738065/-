@@ -3483,7 +3483,7 @@ function dashKpiShapeHtml(units) {
   } catch (e) { return ""; }
 }
 function dashKpiDevHtml(kind, units) { const h = dashFieldBlockHtml(kind, "kpiDeviation", units); if (!h) return ""; const vm = dashViewOf(kind, "fld_kpiDeviation"); return vm ? tvOnly(tvApply(h, kind + ":fld_kpiDeviation", vm)) : h; }
-function dashFieldBlocksHtml0(kind, units) { return dashB(kind, "indBoard", dashKpiShapeHtml(units) || (dashIndBoardHtml(kind, units) + dashKpiDevHtml(kind, units))) + dashB(kind, "sharedInd", dashSharedIndHtml(kind, units)) + dashB(kind, "routed", dashRoutedHtml(kind, units)) + dashFieldSecIds().map((id) => dashHidden(kind, "fld_" + id) ? "" : dashB(kind, "fld_" + id, (id === "analysisComparisons" ? dashAnalysisHeadHtml(units) : "") + dashFieldBlockHtml(kind, id, units))).join(""); }
+function dashFieldBlocksHtml0(kind, units) { return dashB(kind, "indBoard", dashKpiShapeHtml(units) || dashIndBoardHtml(kind, units)) + dashB(kind, "sharedInd", dashSharedIndHtml(kind, units)) + dashB(kind, "routed", dashRoutedHtml(kind, units)) + dashFieldSecIds().map((id) => dashHidden(kind, "fld_" + id) ? "" : dashB(kind, "fld_" + id, (id === "analysisComparisons" ? dashAnalysisHeadHtml(units) : "") + dashFieldBlockHtml(kind, id, units))).join(""); }
 
 
 /* ===== الرسم المقترح لكل قسم: يُحسب من نوع حقوله (أرقام، تواريخ، حالات، نص) ===== */
@@ -3835,7 +3835,7 @@ function tvShapeItems(tb) {
     if (target != null) it.target = target;
     if (base != null) it.base = base;
     out.push(it); });
-  return out;
+  { const seen = {}; return out.filter((q) => { const k = [q.title, q.num, q.a, q.b, q.c, q.target].join("|"); if (q.title && seen[k]) return false; seen[k] = 1; return true; }); }
 }
 /* مصفوفة الأولويات: صفوف = حالة التحقق، أعمدة = التغير عن خط الأساس، والمؤشرات بطاقات داخل الخانات */
 /* مؤشرات الأداء: عناصر جاهزة للوحة والإحصائيات من تقارير (وحدة، تقرير) */
@@ -3844,7 +3844,7 @@ function indicatorBoardItems(entries, multi) {
   (entries || []).forEach(({ unit, report }) => { const rows = (report && report.sections && report.sections.kpi && report.sections.kpi.data && report.sections.kpi.data.indicators) || [];
     rows.forEach((r) => { if (!r || !r.name) return; let def = null, rs = r, bs = null; try { def = findIndicatorDef(r.name); rs = resolveIndicatorRow(r, def); const pb = unit && unit.id ? indicatorPrevBaseline(unit.id, report, r.name) : null; bs = pb ? pb.value : (r.baseline !== "" && r.baseline != null ? r.baseline : null); } catch (e) {}
       const tg = num(def && def.target), ac = num(r.actual); if (ac == null) return;
-      if (out.some((q) => q.unitName === (unit && unit.name) && q.rawName === r.name)) return; out.push({ rawName: r.name, unitName: unit && unit.name, title: r.name + (multi && unit ? " · " + unit.name : ""), num: ac, target: tg, base: num(bs), unit: /%|٪|نسبة/.test(String((def && (def.unit || def.name)) || r.name)) ? "%" : "", better: indBetter(def && def.direction), cum: !!(def && def.nature === "تراكمي") }); }); });
+      if (out.some((q) => q.unitName === (unit && unit.name) && q.rawName === r.name)) return; out.push({ rawName: r.name, unitName: unit && unit.name, title: r.name + (multi && unit ? " · " + unit.name : ""), num: ac, target: tg, base: num(bs), unit: /%|٪|نسبة/.test(String((def && (def.unit || def.name)) || r.name)) ? "%" : "", better: indBetter(def && def.direction), cum: !!(def && def.nature === "تراكمي"), dev: r.deviationReason, ct: Array.isArray(r.causeType) ? r.causeType.join("، ") : r.causeType, act: r.correctiveAction, who: r.responsiblePerson }); }); });
   return out;
 }
 function priorityGridHtml(items) {
@@ -3877,15 +3877,16 @@ function priorityMatrixHtml(items, noSum) {
     if (i.num == null || i.target == null || !(i.target > 0)) return;
     const low = i.better === "L", p = Math.min(150, Math.round((low ? (i.num > 0 ? i.target / i.num : 1) : i.num / i.target) * 100));
     let ch = null; if (i.base != null) ch = (i.num - i.base) * (low ? -1 : 1);
-    rows.push({ n: i.title, p, num: i.num, tg: i.target, base: i.base, u: i.unit === "%" ? "٪" : "", ch, N: i.better === "N", cum: !!i.cum || indMetaCum(i.meta) });
+    rows.push({ n: i.title, p, num: i.num, tg: i.target, base: i.base, u: i.unit === "%" ? "٪" : "", ch, N: i.better === "N", cum: !!i.cum || indMetaCum(i.meta), dev: i.dev, ct: i.ct, act: i.act, who: i.who });
   });
   if (!rows.length) return "";
   rows.sort((x, y) => x.p - y.p);
   const col = (p) => (p >= 100 ? "#2f8f6b" : p >= 90 ? "#d9a04a" : p >= 70 ? "#e08a3c" : "#c0392b"), st = (p) => (p >= 100 ? "متحقق" : p >= 90 ? "قريب جدًا" : p >= 70 ? "قريب" : "متعثر");
   const f = (v) => (v == null ? "—" : fmtNum(v));
   const chg = (r) => (r.cum && r.ch != null && r.ch > 0 ? `<span class="ibd-ch" style="color:#2f8f6b">▲ أُنجز هذه الفترة ${f(r.ch)}${r.u}</span>` : r.ch == null ? `<span class="ibd-ch" style="color:#8a7d7f">بدون خط أساس</span>` : r.ch === 0 ? `<span class="ibd-ch" style="color:#b3772a">ثابت</span>` : `<span class="ibd-ch" style="color:${r.N ? "#8a7d7f" : r.ch > 0 ? "#2f8f6b" : "#c0392b"}">${r.ch > 0 ? "▲" : "▼"} ${r.N ? "" : r.ch > 0 ? "تحسّن" : "تراجع"} ${f(Math.abs(r.ch))}${r.u}</span>`);
+  const devHtml = (r) => { if (r.p >= 100) return ""; const bits = [r.ct ? `<span class="ibd-tag">${esc(String(r.ct))}</span>` : "", r.dev ? `<span><b>سبب الانحراف:</b> ${esc(String(r.dev).slice(0, 160))}</span>` : "", r.act ? `<span><b>الإجراء التصحيحي:</b> ${esc(String(r.act).slice(0, 160))}</span>` : "", r.who ? `<span><b>المسؤولة:</b> ${esc(String(r.who))}</span>` : ""].filter(Boolean); return bits.length ? `<div class="ibd-dev">${bits.join("")}</div>` : ""; };
   const cnt = { ok: rows.filter((r) => r.p >= 100).length, bad: rows.filter((r) => r.p < 70).length };
-  return (noSum ? "" : `<div class="ibd-sum"><span style="color:#2f8f6b"><b>${cnt.ok}</b> متحقق</span><span style="color:#e08a3c"><b>${rows.length - cnt.ok - cnt.bad}</b> قريب</span><span style="color:#c0392b"><b>${cnt.bad}</b> متعثر</span><span style="color:#8a7d7f">من ${rows.length} مؤشر</span></div>`) + rows.map((r, k) => `<div class="ibd-r"><div class="ibd-top"><b class="ibd-n">${esc(r.n)}</b><span class="ibd-st" style="color:${col(r.p)};border-color:${col(r.p)}">${st(r.p)} · ${r.p}٪</span></div><div class="ibd-bar"><i style="width:${Math.min(100, r.p)}%;background:${col(r.p)}"></i></div><div class="ibd-bot"><span>المتحقق <b>${f(r.num)}${r.u}</b></span><span>المستهدف <b>${f(r.tg)}${r.u}</b></span><span>${r.cum ? "المتراكم سابقًا" : "خط الأساس"} <b>${f(r.base)}${r.base == null ? "" : r.u}</b></span>${chg(r)}</div></div>`).join("") + (noSum ? "" : `<div class="hint" style="margin-top:8px;text-align:center">مرتبة من الأضعف تحققًا إلى الأقوى · الشريط = نسبة التحقق من المستهدف (يراعي اتجاه المؤشر)</div>`);
+  return (noSum ? "" : `<div class="ibd-sum"><span style="color:#2f8f6b"><b>${cnt.ok}</b> متحقق</span><span style="color:#e08a3c"><b>${rows.length - cnt.ok - cnt.bad}</b> قريب</span><span style="color:#c0392b"><b>${cnt.bad}</b> متعثر</span><span style="color:#8a7d7f">من ${rows.length} مؤشر</span></div>`) + rows.map((r, k) => `<div class="ibd-r"><div class="ibd-top"><b class="ibd-n">${esc(r.n)}</b><span class="ibd-st" style="color:${col(r.p)};border-color:${col(r.p)}">${st(r.p)} · ${r.p}٪</span></div><div class="ibd-bar"><i style="width:${Math.min(100, r.p)}%;background:${col(r.p)}"></i></div><div class="ibd-bot"><span>المتحقق <b>${f(r.num)}${r.u}</b></span><span>المستهدف <b>${f(r.tg)}${r.u}</b></span><span>${r.cum ? "المتراكم سابقًا" : "خط الأساس"} <b>${f(r.base)}${r.base == null ? "" : r.u}</b></span>${chg(r)}</div>${devHtml(r)}</div>`).join("") + (noSum ? "" : `<div class="hint" style="margin-top:8px;text-align:center">مرتبة من الأضعف تحققًا إلى الأقوى · الشريط = نسبة التحقق من المستهدف (يراعي اتجاه المؤشر)</div>`);
 }
 /* صفحة «ملخص الرسوم»: تجمع رسم كل جدول رقمي في التقرير في شبكة واحدة (نفس شكل القسم إن وُجد وإلا تلقائي) */
 function chartsSummaryPages(pagesHtml, title) {
@@ -3957,6 +3958,7 @@ function dashEff(kind) {
   return out;
 }
 function dashB(kind, key, html) {
+  if (key === "indicators") return ""; // دُمجت في بطاقة «مؤشرات الأداء» (indBoard)
   if (!html || dashHidden(kind, key)) return "";
   const eff = dashEff(kind), e = eff.findIndex((x) => x.k === key), o = (e === -1 ? 500 : e) + 1;
   let head = "";
