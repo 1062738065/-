@@ -3462,7 +3462,7 @@ function indBoardByUnitHtml(items) {
   ${us.map((u) => `<details class="ibg-d"${u.bad ? " open" : ""}><summary><b>${esc(u.n)}</b><span style="color:${col(u.avg)}">${u.avg}٪ · ${u.a.length} مؤشر</span></summary>${priorityMatrixHtml(u.a, true)}</details>`).join("")}`;
 }
 function dashIndBoardHtml(kind, units) {
-  try { const ent = dashReports(dashSeries(units), true); const its = indicatorBoardItems(ent, (units || []).length > 1); const h = its.length ? ((units || []).length > 1 ? indBoardByUnitHtml(its) : priorityMatrixHtml(its)) : ""; return h ? dashCard("مؤشرات الأداء", "ملخص عام ثم ترتيب الوحدات ثم مؤشرات كل وحدة (المتحقق والمستهدف وخط الأساس)", h) : ""; } catch (e) { return ""; }
+  try { if (dashCC(kind).some((c) => (c.secs || []).includes("kpi"))) return ""; const ent = dashReports(dashSeries(units), true); const its = indicatorBoardItems(ent, (units || []).length > 1); const h = its.length ? ((units || []).length > 1 ? indBoardByUnitHtml(its) : priorityMatrixHtml(its)) : ""; return h ? dashCard("مؤشرات الأداء", "ملخص عام ثم ترتيب الوحدات ثم مؤشرات كل وحدة (المتحقق والمستهدف وخط الأساس)", h) : ""; } catch (e) { return ""; }
 }
 function dashFieldBlocksHtml0(kind, units) { return dashB(kind, "indBoard", dashIndBoardHtml(kind, units)) + dashB(kind, "sharedInd", dashSharedIndHtml(kind, units)) + dashB(kind, "routed", dashRoutedHtml(kind, units)) + dashFieldSecIds().map((id) => dashHidden(kind, "fld_" + id) ? "" : dashB(kind, "fld_" + id, dashFieldBlockHtml(kind, id, units))).join(""); }
 
@@ -3496,6 +3496,7 @@ function statsItems(entries, secs, flds) {
   const out = [];
   Object.values(latest).forEach(({ unit, report }) => (secs || []).forEach((sid) => {
     const lab = ((SECTIONS || []).find((x) => x.id === sid) || {}).label || sid;
+    if (sid === "kpi") { indicatorBoardItems([{ unit, report }], false).forEach((it) => out.push({ title: it.title, subs: [], num: it.num, numLabel: "", unit: it.unit, target: it.target, base: it.base, meta: "", better: it.better, x: null, unitName: unit.name, cum: it.cum, ...{ unit: unit.name, sec: lab, sid }, pctUnit: it.unit })); return; }
     shpSecItems(sid, (report.sections && report.sections[sid] && report.sections[sid].data) || {}, ccOnly(flds, sid)).items.forEach((it) => out.push({ ...it, unit: unit.name, sec: lab, sid }));
   }));
   return out;
@@ -7075,7 +7076,8 @@ function aggChapterBody(key, data, s) {
 // مستند التقرير المجمّع كاملًا (غلاف + فصول) حسب التنسيق
 /* التقرير النهائي بنفس تنسيق تقرير الوحدة: لكل فصل صفحة لكل وحدة (نفس البطاقات والخط والألوان والرسوم) */
 function aggUnitStylePages(data) {
-  const ents = (data.flat || []).filter((e) => e && e.unit && e.report); if (!ents.length) return [];
+  let ents = (data.flat || []).filter((e) => e && e.unit && e.report); if (!ents.length) return [];
+  { const best = new Map(); ents.forEach((e) => { const k = e.unit.id, t = Number(e.report.updatedAt || e.report.createdAt || 0), cur = best.get(k); if (!cur || t >= cur.t) best.set(k, { e, t }); }); ents = ents.filter((e) => best.get(e.unit.id).e === e); } // تقرير واحد لكل وحدة (الأحدث) حتى لا تتكرر
   const us = rptUnitSettings(ents[0].unit);
   let chs = unitChapterDefs(null, "").filter((c) => !c.special && c.key !== "basic" && c.key !== "review" && !us.hidden[c.key] && !rptLevelHides(us, c.key));
   chs = rptGroupChapters(rptOrdered(chs, us), ents[0].report);
