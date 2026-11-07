@@ -3473,8 +3473,17 @@ function dashAnalysisHeadHtml(units) {
   const ln = (c, t, v) => v ? `<div style="font-size:12px;margin-top:3px;"><b style="color:${c};">${t}:</b> ${esc(String(v).slice(0, 140))}</div>` : "";
   return `<div class="card" style="padding:14px 16px;margin-bottom:10px;"><div style="font-weight:800;font-size:14px;margin-bottom:6px;">تحليل النتائج</div>${items.slice(0, 8).map((x) => `<div style="border-top:1px solid ${BORDER};padding:8px 0;"><div style="font-weight:700;font-size:12.5px;">${esc(x.u || "")}</div>${ln(GREEN, "أبرز نتيجة إيجابية", x.d.positiveResult)}${ln(DANGER, "تحتاج تحسين", x.d.improvementResult)}${ln(SUBTLE, "الخلاصة", x.d.summary)}</div>`).join("")}</div>`;
 }
+function dashKpiShapeHtml(units) {
+  const dm = (dashConfig() || {})._dashShapes || {}; const v = dm.kpiDeviation || dm.kpi || "";
+  if (!/^shape:/.test(v) || v === "shape:auto") return "";
+  try {
+    const items = dashCCItems(units, ["kpi"]); if (!items || !items.length) return "";
+    const h = shapeRender(v.slice(6), { auto: true }, { sectionId: "kpi", items, label: "", dash: true });
+    return h ? dashCard("مؤشرات الأداء", "", `<div class="rpt-v5">${h}</div>`) : "";
+  } catch (e) { return ""; }
+}
 function dashKpiDevHtml(kind, units) { const h = dashFieldBlockHtml(kind, "kpiDeviation", units); if (!h) return ""; const vm = dashViewOf(kind, "fld_kpiDeviation"); return vm ? tvOnly(tvApply(h, kind + ":fld_kpiDeviation", vm)) : h; }
-function dashFieldBlocksHtml0(kind, units) { return dashB(kind, "indBoard", dashIndBoardHtml(kind, units) + dashKpiDevHtml(kind, units)) + dashB(kind, "sharedInd", dashSharedIndHtml(kind, units)) + dashB(kind, "routed", dashRoutedHtml(kind, units)) + dashFieldSecIds().map((id) => dashHidden(kind, "fld_" + id) ? "" : dashB(kind, "fld_" + id, (id === "analysisComparisons" ? dashAnalysisHeadHtml(units) : "") + dashFieldBlockHtml(kind, id, units))).join(""); }
+function dashFieldBlocksHtml0(kind, units) { return dashB(kind, "indBoard", dashKpiShapeHtml(units) || (dashIndBoardHtml(kind, units) + dashKpiDevHtml(kind, units))) + dashB(kind, "sharedInd", dashSharedIndHtml(kind, units)) + dashB(kind, "routed", dashRoutedHtml(kind, units)) + dashFieldSecIds().map((id) => dashHidden(kind, "fld_" + id) ? "" : dashB(kind, "fld_" + id, (id === "analysisComparisons" ? dashAnalysisHeadHtml(units) : "") + dashFieldBlockHtml(kind, id, units))).join(""); }
 
 
 /* ===== الرسم المقترح لكل قسم: يُحسب من نوع حقوله (أرقام، تواريخ، حالات، نص) ===== */
