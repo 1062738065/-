@@ -3394,6 +3394,7 @@ function dashFieldBlockHtml(kind, sid, units) {
   let cfg = DASH_SEC_VIEW[sid];
   if (!cfg) { const ts = sc.fields.filter((f) => f.type === "text" || f.type === "textarea"), ss = sc.fields.filter((f) => ["select", "radio", "expandableSelect"].includes(f.type)); cfg = { title: (ts[0] || {}).id, meta: [], badges: ss.slice(0, 2).map((f) => f.id), dist: ss.slice(0, 2).map((f) => f.id), stats: [{ k: "count", l: esc(sc.itemLabel || "إدخال") }] }; }
   const tile = (n, l) => `<div style="flex:1;min-width:110px;background:#faf5f3;border-radius:14px;padding:10px 12px;"><div style="font-size:22px;font-weight:800;color:${ROSE};line-height:1.2;">${n}</div><div style="font-size:11.5px;color:${SUBTLE};margin-top:2px;">${l}</div></div>`;
+  { const fsel = (((dashConfig() || {})[kind] || {}).fields || {})[sid]; if (Array.isArray(fsel)) { const ok = (id) => fsel.indexOf(id) !== -1; cfg = { ...cfg, meta: (cfg.meta || []).filter(ok), badges: (cfg.badges || []).filter(ok), dist: (cfg.dist || []).filter(ok), stats: (cfg.stats || []).filter((x) => x.k === "count" || ok(x.f)) }; } }
   // دمج المكرر: الحقل اللي يُعرض كتوزيع بنسب لا يتكرر كبطاقة رقم، وما يظهر مع كل بند (meta) لا يتكرر كتوزيع
   const distIds = (cfg.dist || []).filter((id) => !(cfg.meta || []).includes(id));
   const tiles = cfg.stats.filter((s) => !(s.k === "is" && distIds.includes(s.f))).map((s) => {
@@ -3507,7 +3508,7 @@ function dashFieldHint(sid, oldHtml) {
   return `<div class="hint no-print" style="margin-bottom:6px;">الشكل المختار («${esc(SHAPES_LIB[v.slice(6)].name)}») لا يناسب بيانات هذا القسم (نصوص بلا أرقام كافية)، فظهر العرض المعتاد.</div>` + oldHtml;
 }
 function dashKpiDevHtml(kind, units) { const h = dashFieldBlockHtml(kind, "kpiDeviation", units); if (!h) return ""; const vm = dashViewOf(kind, "fld_kpiDeviation"); return vm ? tvOnly(tvApply(h, kind + ":fld_kpiDeviation", vm)) : h; }
-function dashFieldBlocksHtml0(kind, units) { return dashB(kind, "indBoard", dashKpiShapeHtml(units) || dashIndBoardHtml(kind, units)) + dashB(kind, "sharedInd", dashSharedIndHtml(kind, units)) + dashB(kind, "routed", dashRoutedHtml(kind, units)) + dashFieldSecIds().map((id) => dashHidden(kind, "fld_" + id) ? "" : dashB(kind, "fld_" + id, (id === "analysisComparisons" ? dashAnalysisHeadHtml(units) : "") + (dashFieldShapeHtml(kind, id, units) || dashFieldHint(id, dashFieldBlockHtml(kind, id, units))))).join(""); }
+function dashFieldBlocksHtml0(kind, units) { return dashB(kind, "indBoard", dashKpiShapeHtml(units) || dashIndBoardHtml(kind, units)) + dashB(kind, "sharedInd", dashSharedIndHtml(kind, units)) + dashB(kind, "routed", dashRoutedHtml(kind, units)) + dashFieldSecIds().map((id) => (dashMergedSecs(kind).indexOf(id) !== -1 || dashHidden(kind, "fld_" + id)) ? "" : dashB(kind, "fld_" + id, (id === "analysisComparisons" ? dashAnalysisHeadHtml(units) : "") + (dashFieldShapeHtml(kind, id, units) || dashFieldHint(id, dashFieldBlockHtml(kind, id, units))))).join("") + dashMergesHtml(kind, units); }
 
 
 /* ===== الرسم المقترح لكل قسم: يُحسب من نوع حقوله (أرقام، تواريخ، حالات، نص) ===== */
@@ -6590,6 +6591,33 @@ function dashGroupOf(key) {
   for (const [name, keys] of DASH_GROUPS) { if (keys.indexOf(key) !== -1 || (keys[0] === "fld_*" && key.indexOf("fld_") === 0) || (keys[0] === "cc_*" && key.indexOf("cc_") === 0)) return name; }
   return "التحليل والمتابعة";
 }
+function dashMerges(kind) { const m = ((dashConfig() || {})[kind] || {}).merges; return Array.isArray(m) ? m : []; }
+function dashMergedSecs(kind) { return dashMerges(kind).reduce((a, m) => a.concat(m.secs || []), []); }
+function dashMergesHtml(kind, units) {
+  return dashMerges(kind).map((m) => {
+    if (dashHidden(kind, "mg_" + m.id)) return "";
+    const parts = (m.secs || []).map((sid) => ({ sid, h: dashFieldShapeHtml(kind, sid, units) || dashFieldBlockHtml(kind, sid, units) })).filter((x) => x.h);
+    if (!parts.length) return "";
+    const cmp = m.mode === "compare";
+    const body = parts.map((x) => `<div style="${cmp ? "flex:1 1 320px;min-width:0;" : "margin-top:10px;"}"><div style="font-weight:800;font-size:12.5px;color:${ROSE};margin-bottom:4px;">${esc(dashFieldSecLabel(x.sid))}</div>${x.h}</div>`).join("");
+    return dashB(kind, "mg_" + m.id, `<div class="card" style="padding:14px 16px;margin-bottom:10px;"><div style="font-weight:800;font-size:14px;">${esc(m.title || "أقسام مدمجة")}</div><div class="hint" style="margin:2px 0 4px;">${cmp ? "مقارنة جنبًا إلى جنب" : "دمج في بطاقة واحدة"}</div><div style="${cmp ? "display:flex;flex-wrap:wrap;gap:12px;" : ""}">${body}</div></div>`);
+  }).join("");
+}
+function dashFieldsMergeHtml(kid) {
+  const secs = dashFieldSecIds(), cfgK = (dashConfig() || {})[kid] || {}, open = S.ui.dashFldOpen;
+  const rows = secs.map((sid) => {
+    const sc = SECTION_FIELD_SCHEMAS[sid], sel = (cfgK.fields || {})[sid], isOpen = open === kid + "|" + sid;
+    const fl = (sc.fields || []).filter((f) => f && f.id && f.label);
+    const cnt = Array.isArray(sel) ? fl.filter((f) => sel.indexOf(f.id) !== -1).length : fl.length;
+    return `<div style="border-top:1px solid ${BORDER};padding:8px 0;"><div style="display:flex;align-items:center;gap:8px;"><span style="flex:1;font-weight:700;font-size:13px;">${esc(dashFieldSecLabel(sid))}</span><span class="hint" style="margin:0;">${cnt} من ${fl.length} حقلًا</span><button type="button" class="pill-btn pill-ghost" style="padding:4px 10px;" data-action="dash-fld-open" data-kind="${esc(kid)}" data-sid="${esc(sid)}">${isOpen ? "إغلاق ▴" : "الحقول ▾"}</button></div>${isOpen ? `<div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:8px;">${fl.map((f) => { const on = !Array.isArray(sel) || sel.indexOf(f.id) !== -1; return `<button type="button" class="flt-chip${on ? " on" : ""}" aria-pressed="${on}" data-action="dash-fld" data-kind="${esc(kid)}" data-sid="${esc(sid)}" data-f="${esc(f.id)}">${esc(f.label)}</button>`; }).join("")}</div>` : ""}</div>`;
+  }).join("");
+  const merges = dashMerges(kid);
+  const mrows = merges.map((m) => `<div style="display:flex;align-items:center;gap:8px;border-top:1px solid ${BORDER};padding:8px 0;font-size:13px;"><span style="flex:1;"><b>${esc(m.title || "")}</b> — ${m.mode === "compare" ? "مقارنة" : "دمج"}: ${esc((m.secs || []).map(dashFieldSecLabel).join("، "))}</span><button type="button" class="pill-btn pill-ghost" style="padding:4px 10px;" data-action="dash-merge-del" data-kind="${esc(kid)}" data-id="${esc(m.id)}">حذف</button></div>`).join("");
+  return `<details class="card" style="margin-bottom:12px;" open><summary style="font-weight:800;cursor:pointer;">الحقول الظاهرة في كل قسم لهذه اللوحة</summary><div class="hint" style="margin:6px 0;">اضغطي «الحقول» لأي قسم واختاري ما يظهر منها. اسم القسم يظهر دائمًا. يُحفظ فورًا.</div>${rows}</details>
+  <details class="card" style="margin-bottom:12px;" open><summary style="font-weight:800;cursor:pointer;">دمج أو مقارنة أقسام في هذه اللوحة</summary><div class="hint" style="margin:6px 0;">اختاري قسمين أو أكثر، ثم «دمج» (بطاقة واحدة) أو «مقارنة» (جنبًا إلى جنب). الأقسام المختارة تختفي من مكانها المنفصل وتظهر في البطاقة الجديدة.</div>
+    <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px;">${secs.map((sid) => `<label style="display:inline-flex;align-items:center;gap:5px;border:1px solid ${BORDER};border-radius:10px;padding:5px 10px;font-size:12.5px;background:#fff;"><input type="checkbox" class="dm-sec" value="${esc(sid)}" /> ${esc(dashFieldSecLabel(sid))}</label>`).join("")}</div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;"><input type="text" class="input" id="dm-title" placeholder="عنوان البطاقة" style="flex:1 1 200px;" /><select class="input" id="dm-mode" style="width:auto;"><option value="merge">دمج في بطاقة واحدة</option><option value="compare">مقارنة جنبًا إلى جنب</option></select><button type="button" class="pill-btn" data-action="dash-merge-add" data-kind="${esc(kid)}">إضافة</button></div>${mrows ? `<div style="margin-top:10px;">${mrows}</div>` : ""}</details>`;
+}
 function dashKindPanelHtml() {
   const kid = (DASH_KINDS.some((k) => k.id === S.ui.dashKindTab) ? S.ui.dashKindTab : "unit");
   const tabs = DASH_KINDS.map((k) => `<button type="button" data-action="dash-kind-tab" data-kind="${esc(k.id)}" style="font-family:inherit;min-height:40px;padding:0 14px;border-radius:12px;border:1px solid ${k.id === kid ? ROSE : BORDER};background:${k.id === kid ? ROSE : "#fff"};color:${k.id === kid ? "#fff" : INK};font-size:13px;font-weight:800;cursor:pointer;">${esc(k.label)}</button>`).join("");
@@ -6610,7 +6638,7 @@ function dashKindPanelHtml() {
     </details>`;
   }).join("");
   return `<div style="width:100%;margin-bottom:10px;"><div style="font-size:13px;font-weight:800;margin-bottom:8px;">اختاري نوع الحساب</div>
-    <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:14px;">${tabs}</div>${dashCCEditorHtml(kid)}${body}</div>`;
+    <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:14px;">${tabs}</div>${dashCCEditorHtml(kid)}${kid === "admin" ? "" : dashFieldsMergeHtml(kid)}${body}</div>`;
 }
 function dashSettingsCardHtml() {
   const group = (title, blocks, kindIds) => {
@@ -13318,7 +13346,7 @@ function dashShapesPanelHtml() {
   const cats = (typeof SHP_CATS !== "undefined" ? SHP_CATS : []);
   const grp = cats.map(([cid, cn]) => { const l = shp.filter(([, v]) => v.cat === cid); return l.length ? `<optgroup label="${esc(cn)}">${l.map(([id, v]) => `<option value="shape:${id}">${esc(v.name)}</option>`).join("")}</optgroup>` : ""; }).join("");
   const rows = dashFieldSecIds(true).map((id) => { const cur = dm[id] || ""; const opt = (v, l) => `<option value="${v}"${cur === v ? " selected" : ""}>${l}</option>`;
-    return `<div style="display:flex;align-items:center;gap:10px;padding:6px 0;border-top:1px solid ${BORDER};"><div style="flex:1;font-weight:700;font-size:13px;">${esc(dashFieldSecLabel(id))}</div><select class="input" style="max-width:260px;" data-dsh-sec="${esc(id)}">${opt("", "كما هو الآن (تلقائي)")}${opt("table", "جدول")}${opt("chart", "رسم + زر الجدول")}${opt("both", "رسم وجدول")}${grp.replace(`value="${cur}"`, `value="${cur}" selected`)}</select></div>`; }).join("");
+    return `<div style="display:flex;align-items:center;gap:10px;padding:6px 0;border-top:1px solid ${BORDER};"><div style="flex:1;"><div style="font-weight:700;font-size:13px;">${esc(dashFieldSecLabel(id))}</div>${(() => { let sg = null; try { sg = shpSuggestFor([id === "kpiDeviation" ? "kpi" : (DASH_FLD_OWNER[id] || id)]); } catch (e) {} return sg ? `<div class="hint" style="margin:2px 0 0;font-size:11.5px;">المناسب: <b>${esc(sg.label)}</b> — ${esc(sg.why)}</div>` : ""; })()}</div><select class="input" style="max-width:260px;" data-dsh-sec="${esc(id)}">${opt("", "كما هو الآن (تلقائي)")}${opt("table", "جدول")}${opt("chart", "رسم + زر الجدول")}${opt("both", "رسم وجدول")}${grp.replace(`value="${cur}"`, `value="${cur}" selected`)}</select></div>`; }).join("");
   return `<details class="card" style="margin-bottom:14px;" open><summary style="font-weight:800;cursor:pointer;">🎛️ شكل الأقسام وحقولها في لوحة المعلومات</summary><div class="hint" style="margin-top:6px;">اختاري لكل قسم شكله في اللوحات فقط (لا يغيّر التقارير). يُحفظ ويظهر في اللوحة على طول.</div>${rows}</details>`;
 }
 function renderShapesLibraryPage() {
@@ -13459,7 +13487,7 @@ function sectionBodyOnly(section, saved, report) {
       body = reportTable(["المؤشر", "المستهدف", "خط الأساس", "المتحقق", "الحالة", "الانحراف والإجراء"], barData.map((b) => {
           let bs = null; try { const pb = indicatorPrevBaseline(reportUnitIdOf(report), report, b.row.name); bs = pb ? pb.value : (b.row.baseline !== "" && b.row.baseline != null ? b.row.baseline : null); } catch (e) {}
           return [
-          esc(b.row.name) + (() => { const rv = resolveIndicatorRow(b.row, b.def); return indMetaSpan(rv, indExtra(b.row, rv, b.status)); })(),
+          esc(b.row.name) + (() => { const rv = resolveIndicatorRow(b.row, b.def); const dt = [["التصنيف", rv.category], ["الاتجاه", rv.direction], ["الطبيعة", rv.nature], ["الدورية", rv.frequency], ["الوحدة", rv.unit], ["المصدر", rv.dataSource], ["طريقة الحساب", rv.calculationMethod]].filter((x) => x[1]).map((x) => `<span style="white-space:nowrap;"><b>${x[0]}:</b> ${esc(String(x[1]))}</span>`).join(" · "); return (dt ? `<div style="font-size:10px;line-height:1.7;font-weight:400;color:${SUBTLE};margin-top:3px;">${dt}</div>` : "") + indMetaSpan(rv, indExtra(b.row, rv, b.status)); })(),
           esc(b.def && b.def.target !== "" ? b.def.target : "—"),
           esc(bs != null ? bs : "—"),
           esc(b.row.actual !== "" ? b.row.actual : "—"),
@@ -14860,6 +14888,31 @@ function attachClickListener() {
         S.dashboardConfig = cfg; dataStore.saveDashboardConfig(cfg);
         addPermLog("dashboard", kind, (DASH_KINDS.find((k) => k.id === kind) || {}).label || kind, (ds.show === "1" ? "إظهار" : "إخفاء") + " مجموعة (" + keys.length + " عنصر) من لوحة المعلومات");
         render(); break;
+      }
+      case "dash-fld-open": { S.ui.dashFldOpen = S.ui.dashFldOpen === ds.kind + "|" + ds.sid ? "" : ds.kind + "|" + ds.sid; render(); break; }
+      case "dash-fld": {
+        if (!S.isAdmin) break;
+        const kind = ds.kind, sid = ds.sid, sc = SECTION_FIELD_SCHEMAS[sid]; if (!sc || !DASH_KINDS.some((k) => k.id === kind)) break;
+        const all = (sc.fields || []).filter((f) => f && f.id && f.label).map((f) => f.id);
+        const cfg = JSON.parse(JSON.stringify(dashConfig())); cfg[kind] = cfg[kind] || {}; cfg[kind].fields = cfg[kind].fields || {};
+        let cur = Array.isArray(cfg[kind].fields[sid]) ? cfg[kind].fields[sid].slice() : all.slice();
+        const i = cur.indexOf(ds.f); if (i === -1) cur.push(ds.f); else cur.splice(i, 1);
+        if (cur.length >= all.length && all.every((x) => cur.indexOf(x) !== -1)) delete cfg[kind].fields[sid]; else cfg[kind].fields[sid] = cur;
+        S.dashboardConfig = cfg; dataStore.saveDashboardConfig(cfg); render(); break;
+      }
+      case "dash-merge-add": {
+        if (!S.isAdmin) break;
+        const kind = ds.kind; if (!DASH_KINDS.some((k) => k.id === kind)) break;
+        const secs = [...document.querySelectorAll(".dm-sec:checked")].map((x) => x.value);
+        if (secs.length < 2) { alert("اختاري قسمين على الأقل."); break; }
+        const title = ((document.getElementById("dm-title") || {}).value || "").trim(), mode = (document.getElementById("dm-mode") || {}).value === "compare" ? "compare" : "merge";
+        const cfg = JSON.parse(JSON.stringify(dashConfig())); cfg[kind] = cfg[kind] || {}; cfg[kind].merges = (cfg[kind].merges || []).concat([{ id: uid("mg"), title: title || secs.map(dashFieldSecLabel).join(" + "), mode, secs }]);
+        S.dashboardConfig = cfg; dataStore.saveDashboardConfig(cfg); render(); break;
+      }
+      case "dash-merge-del": {
+        if (!S.isAdmin) break;
+        const cfg = JSON.parse(JSON.stringify(dashConfig())); const k = cfg[ds.kind]; if (!k || !Array.isArray(k.merges)) break;
+        k.merges = k.merges.filter((m) => m.id !== ds.id); S.dashboardConfig = cfg; dataStore.saveDashboardConfig(cfg); render(); break;
       }
       case "dash-toggle": {
         if (!S.isAdmin) break;
