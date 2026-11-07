@@ -3329,8 +3329,8 @@ function dashMarkWrap(kind, html) { return String(html).replace(/\u0001(\w+)\u00
 function dashShow(kind, key, html) { return dashHidden(kind, key) ? "" : html; }
 // ===== حقول أقسام التقرير في لوحة المعلومات: بطاقة لكل قسم له حقول، كلها ظاهرة والمخفي يُحدَّد من إعدادات اللوحة =====
 const DASH_FLD_OWNER = { analysisComparisons: "analysis", kpiDeviation: "kpi" };
-const DASH_FLD_LABEL = { analysisComparisons: "تحليل النتائج — المقارنات", kpiDeviation: "مؤشرات الأداء — الانحرافات" };
-function dashFieldSecIds() { return Object.keys(SECTION_FIELD_SCHEMAS).filter((id) => { const sc = SECTION_FIELD_SCHEMAS[id]; return sc && sc.arrayKey && Array.isArray(sc.fields) && sc.fields.length; }); }
+const DASH_FLD_LABEL = { analysisComparisons: "تحليل النتائج (القسم كامل مع المقارنات)", kpiDeviation: "مؤشرات الأداء (مع حقولها والانحراف)", goalsEvidence: "الأهداف والمستهدفات — دليل التحقق" };
+function dashFieldSecIds(withKpi) { return Object.keys(SECTION_FIELD_SCHEMAS).filter((id) => { if (id === "kpiDeviation" && !withKpi) return false; const sc = SECTION_FIELD_SCHEMAS[id]; return sc && sc.arrayKey && Array.isArray(sc.fields) && sc.fields.length; }); }
 function dashFieldSecLabel(id) { return DASH_FLD_LABEL[id] || ((SECTIONS.find((x) => x.id === id) || DEFAULT_SECTIONS.find((x) => x.id === id) || {}).label) || id; }
 function dashFieldCatalog() { return dashFieldSecIds().map((id) => ({ key: "fld_" + id, label: "حقول: " + dashFieldSecLabel(id) })); }
 function dashCatalog(kind) {
@@ -3466,7 +3466,15 @@ function indBoardByUnitHtml(items) {
 function dashIndBoardHtml(kind, units) {
   try { const ent = dashReports(dashSeries(units), true); const its = indicatorBoardItems(ent, (units || []).length > 1); const h = its.length ? ((units || []).length > 1 ? indBoardByUnitHtml(its) : priorityMatrixHtml(its)) : ""; return h ? dashCard("مؤشرات الأداء", "ملخص عام ثم ترتيب الوحدات ثم مؤشرات كل وحدة (المتحقق والمستهدف وخط الأساس)", h) : ""; } catch (e) { return ""; }
 }
-function dashFieldBlocksHtml0(kind, units) { return dashB(kind, "indBoard", dashIndBoardHtml(kind, units)) + dashB(kind, "sharedInd", dashSharedIndHtml(kind, units)) + dashB(kind, "routed", dashRoutedHtml(kind, units)) + dashFieldSecIds().map((id) => dashHidden(kind, "fld_" + id) ? "" : dashB(kind, "fld_" + id, dashFieldBlockHtml(kind, id, units))).join(""); }
+function dashAnalysisHeadHtml(units) {
+  const items = [];
+  (units || []).forEach((u) => { const reps = dashRepsOf(u.id) || []; for (let i = reps.length - 1; i >= 0; i--) { const d = reps[i] && reps[i].sections && reps[i].sections.analysis && reps[i].sections.analysis.data; if (d && (d.positiveResult || d.improvementResult || d.summary)) { items.push({ u: u.name, d }); break; } } });
+  if (!items.length) return "";
+  const ln = (c, t, v) => v ? `<div style="font-size:12px;margin-top:3px;"><b style="color:${c};">${t}:</b> ${esc(String(v).slice(0, 140))}</div>` : "";
+  return `<div class="card" style="padding:14px 16px;margin-bottom:10px;"><div style="font-weight:800;font-size:14px;margin-bottom:6px;">تحليل النتائج</div>${items.slice(0, 8).map((x) => `<div style="border-top:1px solid ${BORDER};padding:8px 0;"><div style="font-weight:700;font-size:12.5px;">${esc(x.u || "")}</div>${ln(GREEN, "أبرز نتيجة إيجابية", x.d.positiveResult)}${ln(DANGER, "تحتاج تحسين", x.d.improvementResult)}${ln(SUBTLE, "الخلاصة", x.d.summary)}</div>`).join("")}</div>`;
+}
+function dashKpiDevHtml(kind, units) { const h = dashFieldBlockHtml(kind, "kpiDeviation", units); if (!h) return ""; const vm = dashViewOf(kind, "fld_kpiDeviation"); return vm ? tvOnly(tvApply(h, kind + ":fld_kpiDeviation", vm)) : h; }
+function dashFieldBlocksHtml0(kind, units) { return dashB(kind, "indBoard", dashIndBoardHtml(kind, units) + dashKpiDevHtml(kind, units)) + dashB(kind, "sharedInd", dashSharedIndHtml(kind, units)) + dashB(kind, "routed", dashRoutedHtml(kind, units)) + dashFieldSecIds().map((id) => dashHidden(kind, "fld_" + id) ? "" : dashB(kind, "fld_" + id, (id === "analysisComparisons" ? dashAnalysisHeadHtml(units) : "") + dashFieldBlockHtml(kind, id, units))).join(""); }
 
 
 /* ===== الرسم المقترح لكل قسم: يُحسب من نوع حقوله (أرقام، تواريخ، حالات، نص) ===== */
@@ -13238,7 +13246,7 @@ function dashShapesPanelHtml() {
   const shp = Object.entries(SHAPES_LIB).filter(([, v]) => !v.live && v.cat !== "photo" && v.cat !== "_auto");
   const cats = (typeof SHP_CATS !== "undefined" ? SHP_CATS : []);
   const grp = cats.map(([cid, cn]) => { const l = shp.filter(([, v]) => v.cat === cid); return l.length ? `<optgroup label="${esc(cn)}">${l.map(([id, v]) => `<option value="shape:${id}">${esc(v.name)}</option>`).join("")}</optgroup>` : ""; }).join("");
-  const rows = dashFieldSecIds().map((id) => { const cur = dm[id] || ""; const opt = (v, l) => `<option value="${v}"${cur === v ? " selected" : ""}>${l}</option>`;
+  const rows = dashFieldSecIds(true).map((id) => { const cur = dm[id] || ""; const opt = (v, l) => `<option value="${v}"${cur === v ? " selected" : ""}>${l}</option>`;
     return `<div style="display:flex;align-items:center;gap:10px;padding:6px 0;border-top:1px solid ${BORDER};"><div style="flex:1;font-weight:700;font-size:13px;">${esc(dashFieldSecLabel(id))}</div><select class="input" style="max-width:260px;" data-dsh-sec="${esc(id)}">${opt("", "كما هو الآن (تلقائي)")}${opt("table", "جدول")}${opt("chart", "رسم + زر الجدول")}${opt("both", "رسم وجدول")}${grp.replace(`value="${cur}"`, `value="${cur}" selected`)}</select></div>`; }).join("");
   return `<details class="card" style="margin-bottom:14px;" open><summary style="font-weight:800;cursor:pointer;">🎛️ شكل الأقسام وحقولها في لوحة المعلومات</summary><div class="hint" style="margin-top:6px;">اختاري لكل قسم شكله في اللوحات فقط (لا يغيّر التقارير). يُحفظ ويظهر في اللوحة على طول.</div>${rows}</details>`;
 }
@@ -13247,9 +13255,9 @@ function renderShapesLibraryPage() {
   const tabs = [["", "الكل"], ...SHP_CATS].map(([id, n]) => `<button type="button" class="flt-chip${cat === id ? " on" : ""}" data-action="shp-cat" data-cat="${id}">${n}</button>`).join("");
   const list = Object.entries(SHAPES_LIB).filter(([, s]) => !cat || s.cat === cat);
   return `<div class="page-wrap"><div class="page-inner">
-    ${topBarHtml({ title: "تنسيق اللوحات والتقارير", subtitle: `${Object.keys(SHAPES_LIB).length} شكلًا — للاستعراض. لإضافة شكل لتقرير: افتحي أي قسم ← «اختيار من المكتبة».`, right: "" })}
+    ${topBarHtml({ title: "تنسيق اللوحات والتقارير", subtitle: `${Object.keys(SHAPES_LIB).length} شكلًا — للاستعراض وضبط شكل كل قسم.`, right: "" })}
     <div style="display:flex;gap:6px;flex-wrap:wrap;margin:6px 0 14px;">${tabs}</div>
-    ${S.isAdmin ? dashShapesPanelHtml() + secShapesCardHtml() + rptLevelLibHtml() + shapeDefaultsPanelHtml() : ""}
+    ${S.isAdmin ? dashShapesPanelHtml() + secShapesCardHtml() + rptLevelLibHtml() : ""}
     <div class="shp-grid">${list.map(([id, s]) => `<div class="shp-card" style="cursor:default;"><div class="shp-prev rpt-v5">${shapeRender(id, s.sample, { demo: true })}</div><div class="shp-nm">${esc(s.name)}</div></div>`).join("")}</div>
   </div></div>`;
 }
@@ -13263,7 +13271,7 @@ function shapePickerHtml(target) {
     <div style="margin-top:12px;">${pillBtn("إغلاق", { variant: "ghost", action: "shp-close" })}</div></div></div>`;
 }
 function shapeAutoFor(sectionId) { const id = shapeDefaultFor(sectionId); return id && (SHAPES_LIB[id].live || SHAPES_LIB[id].cat !== "photo") && sectionId !== "programs" ? id : ""; }
-function shapeDefaultFor(sectionId) { const m = ((S.siteSettings || {}).theme || {}).shapeDefaults || {}; const id = m[sectionId]; return id && SHAPES_LIB[id] ? id : ""; }
+function shapeDefaultFor(sectionId) { return ""; } // الشكل المقترح القديم مُعطّل: الاختيار صار من «شكل كل قسم»
 function shapeBlocksEditorHtml(d, sectionId) {
   const defId = (!(d.shapeBlocks || []).length && sectionId) ? shapeDefaultFor(sectionId) : "";
   if (defId && shapeAutoFor(sectionId)) return shapeBlocksEditorInner(d, sectionId) + `<div class="hint no-print" style="margin-top:8px;">يظهر تلقائيًا في التقرير: <b>${esc(SHAPES_LIB[defId].name)}</b></div><div class="rpt-v5 no-print">${shapeRender(defId, { auto: true }, { editor: true, report: getCurrentReportEntry(), unitId: S.currentUnitId, sectionId, data: d })}</div>`;
@@ -13274,7 +13282,7 @@ function shapeBlocksEditorInner(d, sectionId) {
   const rows = (d.shapeBlocks || []).map((b) => { const s = SHAPES_LIB[b.shapeId]; if (!s) return ""; const ab = b.auto ? { ...b, ...shapeAutoData(b.shapeId, { sectionId: sectionId || b.sectionId, data: d }) } : b; return `<div class="repeat-item"><div class="repeat-item-head"><span class="repeat-item-title">${esc(s.name)}</span>${removeBtn("shapeBlocks", b.id)}</div>
     ${s.fields.map((f) => fieldWrap(f.label, false, f.type === "i" ? `<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;"><input type="file" accept="image/*" data-shp-img="${esc(b.id)}" data-shp-key="${esc(f.k)}" />${b[f.k] ? `<img src="${esc(b[f.k])}" style="height:44px;border-radius:6px;" alt="" /><button type="button" class="pill-btn pill-ghost" data-action="shp-img-clear" data-id="${esc(b.id)}" data-key="${esc(f.k)}">حذف الصورة</button>` : ""}</div>` : f.type === "a" ? txt("shapeBlocks", b.id, f.k, ab[f.k], f.ph || "", 70) : inp("shapeBlocks", b.id, f.k, ab[f.k], f.ph || ""))).join("")}
     <div class="shp-live rpt-v5">${shapeRender(b.shapeId, b, { editor: true, report: getCurrentReportEntry(), unitId: S.currentUnitId, sectionId: sectionId || b.sectionId, data: d })}</div></div>`; }).join("");
-  return `<div class="subhead" style="margin-top:14px;">الأشكال والرسوم</div>${rows}<div style="margin-top:8px;">${pillBtn("اختيار من المكتبة", { variant: "ghost", action: "shp-open" })}</div>`;
+  return `<div class="subhead" style="margin-top:14px;">الأشكال والرسوم</div>${rows}`;
 }
 
 function rptProgramNames(report) {
