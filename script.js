@@ -3720,18 +3720,18 @@ function dashCCCandidatesHtml(kid, c, act) {
   let items = [];
   try { items = dashCCItems((S.units || []).filter((u) => u.status === "active"), secs, c.flds); } catch (e) { items = []; }
   if (!items.length) {
-    const ord0 = [...new Set([(sg || {}).shape, "hbars", "bars", "t3", "bul", "num", "check", "tlv", "pie", "stack"].filter(Boolean))];
-    const cs0 = ord0.map((id) => { const sh = SHAPES_LIB[id]; const h = sh ? shpSamplePrev(id) : ""; if (!h) return ""; const rec = sg && sg.shape === id; return `<button type="button" class="shp-card${c.shape === id && c.view === "shape" ? " on" : ""}" data-action="${act}" data-kind="${esc(kid)}" data-id="${esc(c.id)}" data-shape="${esc(id)}" style="${rec ? "border:2px solid " + ROSE + ";" : ""}"><div class="shp-prev rpt-v5" style="pointer-events:none;">${h}</div><div class="shp-nm">${esc(sh.name)}${rec ? " — مقترح" : ""}</div></button>`; }).filter(Boolean).slice(0, 8);
+    const ord0 = [...new Set([(sg || {}).shape, "hbars", "bars", "t3", "bul", "num", "check", "tlv", "pie", "stack"].concat(c.max ? Object.keys(SHAPES_LIB).filter((k) => { const v = SHAPES_LIB[k]; return v && !v.live && v.cat !== "photo" && v.cat !== "_auto"; }) : []).filter(Boolean))];
+    const cs0 = ord0.map((id) => { const sh = SHAPES_LIB[id]; const h = sh ? shpSamplePrev(id) : ""; if (!h) return ""; const rec = sg && sg.shape === id; return `<button type="button" class="shp-card${c.shape === id && c.view === "shape" ? " on" : ""}" data-action="${act}" data-kind="${esc(kid)}" data-id="${esc(c.id)}" data-shape="${esc(id)}" style="${rec ? "border:2px solid " + ROSE + ";" : ""}"><div class="shp-prev rpt-v5" style="pointer-events:none;">${h}</div><div class="shp-nm">${esc(sh.name)}${rec ? " — مقترح" : ""}</div></button>`; }).filter(Boolean).slice(0, c.max || 8);
     return `<div class="hint" style="margin-bottom:4px;">لا توجد بيانات مُدخلة في هذه الأقسام بعد، فهذه أمثلة توضيحية للشكل فقط (ليست من بياناتك). المقترح: <b>${esc(sg ? sg.label : "")}</b>${sg ? " — " + esc(sg.why) : ""}.</div>${cs0.length ? `<div class="shp-grid" style="margin-bottom:10px;">${cs0.join("")}</div>` : ""}`;
   }
-  const order = [...new Set([(sg || {}).shape, "hbars", "bars", "t3", "bul", "num", "check", "tlv", "pie", "stack"].filter(Boolean))];
+  const order = [...new Set([(sg || {}).shape, "hbars", "bars", "t3", "bul", "num", "check", "tlv", "pie", "stack"].concat(c.max ? Object.keys(SHAPES_LIB).filter((k) => { const v = SHAPES_LIB[k]; return v && !v.live && v.cat !== "photo" && v.cat !== "_auto"; }) : []).filter(Boolean))];
   const cards = order.map((id) => {
     const sh = SHAPES_LIB[id]; if (!sh) return "";
     const h = shapeRender(id, { auto: true }, { sectionId: secs[0], items, label: c.title || "", dash: true });
     if (!h) return "";
     const rec = sg && sg.shape === id;
     return `<button type="button" class="shp-card${c.shape === id && c.view === "shape" ? " on" : ""}" data-action="${act}" data-kind="${esc(kid)}" data-id="${esc(c.id)}" data-shape="${esc(id)}" style="${rec ? "border:2px solid " + ROSE + ";" : ""}"><div class="shp-prev rpt-v5" style="pointer-events:none;">${h}</div><div class="shp-nm">${esc(sh.name)}${rec ? " — مقترح" : ""}</div></button>`;
-  }).filter(Boolean).slice(0, 8);
+  }).filter(Boolean).slice(0, c.max || 8);
   return `<div class="hint" style="margin-bottom:4px;">اختاري الشكل بالنظر (معاينة ببياناتك الفعلية)${sg ? ` — المقترح: <b>${esc(sg.label)}</b> لأن ${esc(sg.why)}` : ""}</div>${cards.length ? `<div class="shp-grid" style="margin-bottom:10px;">${cards.join("")}</div>` : `<div class="hint">لا توجد أرقام كافية لمعاينة الأشكال — جرّبي «جدول واحد» أو «متتابعة».</div>`}`;
 }
 function dashCCEditorHtml(kid) {
@@ -6038,7 +6038,7 @@ function handleOrgLevelsAction(action, ds) {
     case "ol-entity-status": { const e = treeEntity(ds.type === "exec" ? "unit" : ds.type, ds.id); if (e) treeSetEntity(ds.type === "exec" ? "unit" : ds.type, ds.id, { status: e.status === "disabled" ? "active" : "disabled" }); break; }
     case "ol-import-entities-ask": ui.importEntitiesConfirm = true; break;
     case "ol-preset-role": {
-      if (!S.isAdmin) break;
+      if (!S.isAdmin) { alert("هذا الضبط يعمل فقط من حساب مديرة النظام. سجّلي الدخول بحساب المدير ثم أعيدي المحاولة."); break; }
       const isA = ds.kind === "admin";
       const pages = isA
         ? SIDEBAR_PAGES.filter((p) => p.group !== "unit-extra" && !["departments-list", "admin-reports"].includes(p.id)).map((p) => p.id)
@@ -7227,7 +7227,7 @@ function aggReportDocHtml(s, data) {
     });
     const stBody = statsPageBodyHtml(s, data.flat || []);
     if (stBody) { const stH = execChapterHtml("", rptIcon(""), s.statsTitle || "الإحصائيات", stBody); if (closingPage >= 0) pages.splice(closingPage, 0, stH); else pages.push(stH); } // قبل صفحة الاعتماد
-    if (s.chartsPage !== false) { const cp = chartsSummaryPages(pages.join(""), s.chartsTitle || "ملخص الرسوم"); if (cp.length) { const ci = closingPage >= 0 ? pages.findIndex((x, k) => k > closingPage - 1 && /rpt-closing|اعتماد/.test("")) : -1; const at = closingPage >= 0 ? closingPage + (stBody ? 1 : 0) : pages.length; pages.splice(at, 0, ...cp); } }
+    if (s.chartsPage === true) { const cp = chartsSummaryPages(pages.join(""), s.chartsTitle || "ملخص الرسوم"); if (cp.length) { const ci = closingPage >= 0 ? pages.findIndex((x, k) => k > closingPage - 1 && /rpt-closing|اعتماد/.test("")) : -1; const at = closingPage >= 0 ? closingPage + (stBody ? 1 : 0) : pages.length; pages.splice(at, 0, ...cp); } }
     const hasCover = !!s.showCover;
     const total = pages.length + (hasCover ? 1 : 0);
     const cover = hasCover ? rptUnifiedCoverHtml(s, {
@@ -13346,7 +13346,9 @@ function dashShapesPanelHtml() {
   const cats = (typeof SHP_CATS !== "undefined" ? SHP_CATS : []);
   const grp = cats.map(([cid, cn]) => { const l = shp.filter(([, v]) => v.cat === cid); return l.length ? `<optgroup label="${esc(cn)}">${l.map(([id, v]) => `<option value="shape:${id}">${esc(v.name)}</option>`).join("")}</optgroup>` : ""; }).join("");
   const rows = dashFieldSecIds(true).map((id) => { const cur = dm[id] || ""; const opt = (v, l) => `<option value="${v}"${cur === v ? " selected" : ""}>${l}</option>`;
-    return `<div style="display:flex;align-items:center;gap:10px;padding:6px 0;border-top:1px solid ${BORDER};"><div style="flex:1;"><div style="font-weight:700;font-size:13px;">${esc(dashFieldSecLabel(id))}</div>${(() => { let sg = null; try { sg = shpSuggestFor([id === "kpiDeviation" ? "kpi" : (DASH_FLD_OWNER[id] || id)]); } catch (e) {} return sg ? `<div class="hint" style="margin:2px 0 0;font-size:11.5px;">المناسب: <b>${esc(sg.label)}</b> — ${esc(sg.why)}</div>` : ""; })()}</div><select class="input" style="max-width:260px;" data-dsh-sec="${esc(id)}">${opt("", "كما هو الآن (تلقائي)")}${opt("table", "جدول")}${opt("chart", "رسم + زر الجدول")}${opt("both", "رسم وجدول")}${grp.replace(`value="${cur}"`, `value="${cur}" selected`)}</select></div>`; }).join("");
+    const own = DASH_FLD_OWNER[id] || id, isOpen = S.ui.dshOpen === id;
+    const curName = /^shape:/.test(cur) ? ((SHAPES_LIB[cur.slice(6)] || {}).name || "") : (cur === "table" ? "جدول" : "تلقائي");
+    return `<div style="padding:8px 0;border-top:1px solid ${BORDER};"><div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;"><div style="flex:1;min-width:160px;"><div style="font-weight:700;font-size:13px;">${esc(dashFieldSecLabel(id))}</div>${(() => { let sg = null; try { sg = shpSuggestFor([id === "kpiDeviation" ? "kpi" : own]); } catch (e) {} return sg ? `<div class="hint" style="margin:2px 0 0;font-size:11.5px;">المناسب: <b>${esc(sg.label)}</b> — ${esc(sg.why)}</div>` : ""; })()}</div><span class="badge" style="background:${GRAY_BG};color:${ROSE};">${esc(curName)}</span><button type="button" class="pill-btn" style="padding:5px 12px;" data-action="dsh-open" data-id="${esc(id)}">${isOpen ? "إغلاق ▴" : "اختاري من المكتبة ▾"}</button><button type="button" class="pill-btn pill-ghost" style="padding:5px 10px;" data-action="dsh-pick" data-id="${esc(id)}" data-shape="">تلقائي</button><button type="button" class="pill-btn pill-ghost" style="padding:5px 10px;" data-action="dsh-pick" data-id="${esc(id)}" data-shape="__table">جدول</button></div>${isOpen ? `<div style="margin-top:8px;">${dashCCCandidatesHtml("dsh", { id, secs: [own], title: "", shape: /^shape:/.test(cur) ? cur.slice(6) : "", view: /^shape:/.test(cur) ? "shape" : "", max: 30 }, "dsh-pick")}</div>` : ""}</div>`; }).join("");
   return `<details class="card" style="margin-bottom:14px;" open><summary style="font-weight:800;cursor:pointer;">🎛️ شكل الأقسام وحقولها في لوحة المعلومات</summary><div class="hint" style="margin-top:6px;">اختاري لكل قسم شكله في اللوحات فقط (لا يغيّر التقارير). يُحفظ ويظهر في اللوحة على طول.</div>${rows}</details>`;
 }
 function renderShapesLibraryPage() {
@@ -13900,7 +13902,7 @@ function fullReportOrPreviewBody(unit, report, afterPage, opts) {
     });
     const stBody = opts.capture ? "" : statsPageBodyHtml(s, [{ unit, report }]);
     if (stBody) { const stPg = { html: execChapterHtml("", rptIcon(""), s.statsTitle || "الإحصائيات", stBody), ids: [], summary: false }; const ai = pages.findIndex((p) => p.appr); if (ai >= 0) pages.splice(ai, 0, stPg); else pages.push(stPg); } // الإحصائيات قبل صفحة الاعتماد
-    if (!opts.capture && s.chartsPage !== false) { const cp = chartsSummaryPages(pages.map((x) => x.html).join(""), s.chartsTitle || "ملخص الرسوم"); if (cp.length) { const ai2 = pages.findIndex((p) => p.appr); const at = ai2 >= 0 ? ai2 : pages.length; pages.splice(at, 0, ...cp.map((h) => ({ html: h, ids: [], summary: false }))); } }
+    if (!opts.capture && s.chartsPage === true) { const cp = chartsSummaryPages(pages.map((x) => x.html).join(""), s.chartsTitle || "ملخص الرسوم"); if (cp.length) { const ai2 = pages.findIndex((p) => p.appr); const at = ai2 >= 0 ? ai2 : pages.length; pages.splice(at, 0, ...cp.map((h) => ({ html: h, ids: [], summary: false }))); } }
     const hasCover = !!s.showCover;
     const total = pages.length + (hasCover ? 1 : 0);
     return (hasCover ? reportCoverPageHtml(unit, report, dept, s, total) : "") +
@@ -14476,7 +14478,7 @@ function attachFormListeners() {
     if (el.dataset && el.dataset.svFilltool) { S.ui.svFillTool = el.value; render(); return; }
     if (el.dataset && el.dataset.svPrev) { S.ui.svPrevRep = el.value; render(); return; }
     if (el.dataset && el.dataset.dshSec) {
-      if (!S.isAdmin) return;
+      if (!S.isAdmin) { alert("هذا الضبط يعمل فقط من حساب مديرة النظام. سجّلي الدخول بحساب المدير ثم أعيدي المحاولة."); return; }
       const cfg = JSON.parse(JSON.stringify(dashConfig() || {})); cfg._dashShapes = cfg._dashShapes || {};
       if (el.value) cfg._dashShapes[el.dataset.dshSec] = el.value; else delete cfg._dashShapes[el.dataset.dshSec];
       S.dashboardConfig = cfg; dataStore.saveDashboardConfig(cfg); render(); return;
@@ -14862,11 +14864,11 @@ function attachClickListener() {
       case "vw-cat": { S.ui.vwCat = ds.cat; render(); break; }
       case "cc-sort": { S.ui.ccSort = { ...(S.ui.ccSort || {}), [ds.id]: ds.v }; render(); break; }
       case "ss-card": { S.ui.ssOpenCard = !S.ui.ssOpenCard; break; }
-      case "lvl-lib": { if (!S.isAdmin) break; const d = JSON.parse(JSON.stringify(rptSettings("final"))); const cur = new Set((d.levelHidden || {})[ds.lvl] || []); if (cur.has(ds.key)) cur.delete(ds.key); else cur.add(ds.key); d.levelHidden = { ...(d.levelHidden || {}), [ds.lvl]: [...cur] }; rptSave("final", d); if (S.ui.rm) S.ui.rm.draft = null; render(); break; }
+      case "lvl-lib": { if (!S.isAdmin) { alert("هذا الضبط يعمل فقط من حساب مديرة النظام. سجّلي الدخول بحساب المدير ثم أعيدي المحاولة."); break; } const d = JSON.parse(JSON.stringify(rptSettings("final"))); const cur = new Set((d.levelHidden || {})[ds.lvl] || []); if (cur.has(ds.key)) cur.delete(ds.key); else cur.add(ds.key); d.levelHidden = { ...(d.levelHidden || {}), [ds.lvl]: [...cur] }; rptSave("final", d); if (S.ui.rm) S.ui.rm.draft = null; render(); break; }
       case "ss-pick": { S.ui.ssOpen = S.ui.ssOpen === ds.sec ? "" : ds.sec; render(); break; }
-      case "ss-set": { if (!S.isAdmin) break; const cfg = JSON.parse(JSON.stringify(dashConfig())); cfg._secShapes = cfg._secShapes || {}; if (ds.val) cfg._secShapes[ds.sec] = ds.val; else delete cfg._secShapes[ds.sec]; S.ui.vwPend = null; S.ui.ssOpen = ""; S.dashboardConfig = cfg; dataStore.saveDashboardConfig(cfg); render(); break; }
+      case "ss-set": { if (!S.isAdmin) { alert("هذا الضبط يعمل فقط من حساب مديرة النظام. سجّلي الدخول بحساب المدير ثم أعيدي المحاولة."); break; } const cfg = JSON.parse(JSON.stringify(dashConfig())); cfg._secShapes = cfg._secShapes || {}; if (ds.val) cfg._secShapes[ds.sec] = ds.val; else delete cfg._secShapes[ds.sec]; S.ui.vwPend = null; S.ui.ssOpen = ""; S.dashboardConfig = cfg; dataStore.saveDashboardConfig(cfg); render(); break; }
       case "vw-pick": { const k = ds.kind + "|" + ds.key; S.ui.vwOpen = S.ui.vwOpen === k ? "" : k; render(); break; }
-      case "vw-set": { if (!S.isAdmin) break; const cfg = JSON.parse(JSON.stringify(dashConfig())); cfg[ds.kind] = cfg[ds.kind] || {}; cfg[ds.kind].view = cfg[ds.kind].view || {}; if (ds.val) cfg[ds.kind].view[ds.key] = ds.val; else delete cfg[ds.kind].view[ds.key]; S.ui.vwPend = null; S.dashboardConfig = cfg; dataStore.saveDashboardConfig(cfg); render(); break; }
+      case "vw-set": { if (!S.isAdmin) { alert("هذا الضبط يعمل فقط من حساب مديرة النظام. سجّلي الدخول بحساب المدير ثم أعيدي المحاولة."); break; } const cfg = JSON.parse(JSON.stringify(dashConfig())); cfg[ds.kind] = cfg[ds.kind] || {}; cfg[ds.kind].view = cfg[ds.kind].view || {}; if (ds.val) cfg[ds.kind].view[ds.key] = ds.val; else delete cfg[ds.kind].view[ds.key]; S.ui.vwPend = null; S.dashboardConfig = cfg; dataStore.saveDashboardConfig(cfg); render(); break; }
       case "cc-add": { dashCCSave(ds.kind, (c) => c.cards.push({ id: uid("cc"), title: "", secs: [], view: "report", shape: "" })); render(); break; }
       case "cc-del": { dashCCSave(ds.kind, (c) => { c.cards = c.cards.filter((x) => x.id !== ds.id); }); render(); break; }
       case "cc-sec": { dashCCSave(ds.kind, (c) => { const k = c.cards.find((x) => x.id === ds.id); if (!k) return; k.secs = k.secs || []; k.flds = k.flds || []; const i = k.secs.indexOf(ds.sec); const has = k.flds.some((f) => String(f).startsWith(ds.sec + ".")); if (i === -1) k.secs.push(ds.sec); else if (has) k.flds = k.flds.filter((f) => !String(f).startsWith(ds.sec + ".")); else k.secs.splice(i, 1); }); render(); break; }
@@ -14877,7 +14879,7 @@ function attachClickListener() {
       case "cc-tbl": { S.ui.ccTbl = S.ui.ccTbl || {}; S.ui.ccTbl[ds.id] = !S.ui.ccTbl[ds.id]; render(); break; }
       case "dash-kind-tab": { S.ui.dashKindTab = ds.kind; render(); break; }
       case "dash-group": {
-        if (!S.isAdmin) break;
+        if (!S.isAdmin) { alert("هذا الضبط يعمل فقط من حساب مديرة النظام. سجّلي الدخول بحساب المدير ثم أعيدي المحاولة."); break; }
         const kind = ds.kind; if (!DASH_KINDS.some((k) => k.id === kind)) break;
         const keys = String(ds.keys || "").split(",").filter(Boolean);
         const cfg = JSON.parse(JSON.stringify(dashConfig()));
@@ -14889,9 +14891,16 @@ function attachClickListener() {
         addPermLog("dashboard", kind, (DASH_KINDS.find((k) => k.id === kind) || {}).label || kind, (ds.show === "1" ? "إظهار" : "إخفاء") + " مجموعة (" + keys.length + " عنصر) من لوحة المعلومات");
         render(); break;
       }
+      case "dsh-open": { S.ui.dshOpen = S.ui.dshOpen === ds.id ? "" : ds.id; render(); break; }
+      case "dsh-pick": {
+        if (!S.isAdmin) { alert("هذا الضبط يعمل فقط من حساب مديرة النظام. سجّلي الدخول بحساب المدير ثم أعيدي المحاولة."); break; }
+        const cfg = JSON.parse(JSON.stringify(dashConfig() || {})); cfg._dashShapes = cfg._dashShapes || {};
+        if (ds.shape === "__table") cfg._dashShapes[ds.id] = "table"; else if (ds.shape) cfg._dashShapes[ds.id] = "shape:" + ds.shape; else delete cfg._dashShapes[ds.id];
+        S.dashboardConfig = cfg; dataStore.saveDashboardConfig(cfg); render(); break;
+      }
       case "dash-fld-open": { S.ui.dashFldOpen = S.ui.dashFldOpen === ds.kind + "|" + ds.sid ? "" : ds.kind + "|" + ds.sid; render(); break; }
       case "dash-fld": {
-        if (!S.isAdmin) break;
+        if (!S.isAdmin) { alert("هذا الضبط يعمل فقط من حساب مديرة النظام. سجّلي الدخول بحساب المدير ثم أعيدي المحاولة."); break; }
         const kind = ds.kind, sid = ds.sid, sc = SECTION_FIELD_SCHEMAS[sid]; if (!sc || !DASH_KINDS.some((k) => k.id === kind)) break;
         const all = (sc.fields || []).filter((f) => f && f.id && f.label).map((f) => f.id);
         const cfg = JSON.parse(JSON.stringify(dashConfig())); cfg[kind] = cfg[kind] || {}; cfg[kind].fields = cfg[kind].fields || {};
@@ -14901,7 +14910,7 @@ function attachClickListener() {
         S.dashboardConfig = cfg; dataStore.saveDashboardConfig(cfg); render(); break;
       }
       case "dash-merge-add": {
-        if (!S.isAdmin) break;
+        if (!S.isAdmin) { alert("هذا الضبط يعمل فقط من حساب مديرة النظام. سجّلي الدخول بحساب المدير ثم أعيدي المحاولة."); break; }
         const kind = ds.kind; if (!DASH_KINDS.some((k) => k.id === kind)) break;
         const secs = [...document.querySelectorAll(".dm-sec:checked")].map((x) => x.value);
         if (secs.length < 2) { alert("اختاري قسمين على الأقل."); break; }
@@ -14910,12 +14919,12 @@ function attachClickListener() {
         S.dashboardConfig = cfg; dataStore.saveDashboardConfig(cfg); render(); break;
       }
       case "dash-merge-del": {
-        if (!S.isAdmin) break;
+        if (!S.isAdmin) { alert("هذا الضبط يعمل فقط من حساب مديرة النظام. سجّلي الدخول بحساب المدير ثم أعيدي المحاولة."); break; }
         const cfg = JSON.parse(JSON.stringify(dashConfig())); const k = cfg[ds.kind]; if (!k || !Array.isArray(k.merges)) break;
         k.merges = k.merges.filter((m) => m.id !== ds.id); S.dashboardConfig = cfg; dataStore.saveDashboardConfig(cfg); render(); break;
       }
       case "dash-toggle": {
-        if (!S.isAdmin) break;
+        if (!S.isAdmin) { alert("هذا الضبط يعمل فقط من حساب مديرة النظام. سجّلي الدخول بحساب المدير ثم أعيدي المحاولة."); break; }
         const kind = ds.kind, key = ds.key;
         if (!DASH_KINDS.some((k) => k.id === kind) || !key) break;
         const cfg = JSON.parse(JSON.stringify(dashConfig()));
@@ -14940,7 +14949,7 @@ function attachClickListener() {
       case "pg-toggle": { const d = pgDraft(); d[ds.key] = !d[ds.key]; S.ui.pgMsg = ""; render(); break; }
       case "pg-reload": { S.ui.pgDraft = null; S.ui.pgMsg = ""; render(); break; }
       case "pg-apply": {
-        if (!S.isAdmin) break;
+        if (!S.isAdmin) { alert("هذا الضبط يعمل فقط من حساب مديرة النظام. سجّلي الدخول بحساب المدير ثم أعيدي المحاولة."); break; }
         const d = pgDraft();
         const m = RPT_MARGINS[d.margin];
         const patch = {}; PG_KEYS.forEach((k) => { patch[k] = d[k]; });
@@ -14960,7 +14969,7 @@ function attachClickListener() {
         break;
       }
       case "ar-toggle": {
-        if (!S.isAdmin) break;
+        if (!S.isAdmin) { alert("هذا الضبط يعمل فقط من حساب مديرة النظام. سجّلي الدخول بحساب المدير ثم أعيدي المحاولة."); break; }
         S.siteSettings = S.siteSettings || dataStore.getSiteSettings();
         const th = S.siteSettings.theme || {}; const cur = archiveCfg(th);
         S.siteSettings = { ...S.siteSettings, theme: { ...th, archive: { ...cur, [ds.key]: !cur[ds.key] } } };
@@ -14969,7 +14978,7 @@ function attachClickListener() {
       }
       case "pg-img-clear": { pgDraft()[ds.key] = ""; S.ui.pgMsg = ""; render(); break; }
       case "ul-img-clear": {
-        if (!S.isAdmin) break;
+        if (!S.isAdmin) { alert("هذا الضبط يعمل فقط من حساب مديرة النظام. سجّلي الدخول بحساب المدير ثم أعيدي المحاولة."); break; }
         const uid = S.ui.ulUnit; if (!uid) break;
         saveSiteTheme((th) => { const all = { ...((th || {}).unitLetterheads || {}) }; const cur = { ...(all[uid] || {}) }; delete cur[ds.key]; if (cur.head || cur.foot || cur.bg || cur.coverBg) all[uid] = cur; else delete all[uid]; return { unitLetterheads: all }; });
         render(); break;
@@ -14987,7 +14996,7 @@ function attachClickListener() {
         ulSetImage(uid, ds.key, ""); render(); break;
       }
       case "dash-move": {
-        if (!S.isAdmin) break;
+        if (!S.isAdmin) { alert("هذا الضبط يعمل فقط من حساب مديرة النظام. سجّلي الدخول بحساب المدير ثم أعيدي المحاولة."); break; }
         const kind = ds.kind, i = Number(ds.i), j = ds.dir === "up" ? i - 1 : i + 1;
         if (!DASH_KINDS.some((k) => k.id === kind)) break;
         const list = dashOrderList(kind);
@@ -15000,7 +15009,7 @@ function attachClickListener() {
         break;
       }
       case "dash-order-reset": {
-        if (!S.isAdmin) break;
+        if (!S.isAdmin) { alert("هذا الضبط يعمل فقط من حساب مديرة النظام. سجّلي الدخول بحساب المدير ثم أعيدي المحاولة."); break; }
         const kind = ds.kind;
         const cfg = JSON.parse(JSON.stringify(dashConfig()));
         if (cfg[kind]) delete cfg[kind].order;
@@ -15009,7 +15018,7 @@ function attachClickListener() {
         break;
       }
       case "dash-reset": {
-        if (!S.isAdmin) break;
+        if (!S.isAdmin) { alert("هذا الضبط يعمل فقط من حساب مديرة النظام. سجّلي الدخول بحساب المدير ثم أعيدي المحاولة."); break; }
         S.dashboardConfig = {};
         dataStore.saveDashboardConfig({});
         addPermLog("dashboard", "all", "كل الجهات", "إظهار كل عناصر لوحة المعلومات");
