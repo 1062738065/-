@@ -1028,3 +1028,6 @@ table.prs-table th, table.prs-table td, .shp-tbl th, .shp-tbl td, .table-wrap ta
 .ibg-top{display:grid;grid-template-columns:repeat(auto-fit,minmax(110px,1fr));gap:8px;margin-bottom:12px}.ibg-t{background:#fbf1f0;border-radius:12px;padding:8px;text-align:center}.ibg-t b{display:block;font-size:22px;line-height:1.3}.ibg-t span{font-size:10.5px;color:#8a7d7f}
 .ibg-rank{border:1px solid #eedfe1;border-radius:12px;padding:8px 12px;margin-bottom:10px}.ibg-rk{display:flex;align-items:center;gap:10px;margin:7px 0;font-size:12px}.ibg-n{width:150px;font-weight:700}.ibg-rk .ibd-bar{flex:1}.ibg-c{display:flex;gap:6px;font-weight:800}.ibg-c i{font-style:normal}
 .ibg-d{border:1px solid #eedfe1;border-radius:12px;margin-bottom:8px;padding:6px 10px;background:#fff}.ibg-d summary{display:flex;justify-content:space-between;cursor:pointer;font-size:12.5px;padding:4px 0}
+
+/* حجم الخط العام للتقرير (من إعدادات التنسيق) */
+.rpt-wrap .rpt-chapter-body { zoom: var(--rpt-fs, 1); }

@@ -2150,7 +2150,7 @@ const SIDEBAR_PAGES = [
   { id: "site-settings", label: "إعدادات الموقع", group: "الرئيسية", icon: "gauge" },
   { id: "all-reports", label: "جميع التقارير", group: "standalone", icon: "document" },
   { id: "indicators-manage", label: "إدارة مؤشرات الأداء", group: "إدارة التقارير", icon: "gauge" },
-  { id: "shapes-library", label: "مكتبة الأشكال والرسوم", group: "إدارة التقارير", icon: "layers" },
+  { id: "shapes-library", label: "تنسيق اللوحات والتقارير", group: "إدارة التقارير", icon: "layers" },
   { id: "goals-manage", label: "إدارة الأهداف والمستهدفات", group: "إدارة التقارير", icon: "target" },
   { id: "sections-manage", label: "إدارة أقسام التقرير", group: "إدارة التقارير", icon: "layers" },
   { id: "report-tabs-manage", label: "إدارة أزرار التقارير", group: "إدارة التقارير", icon: "layers" },
@@ -3254,6 +3254,7 @@ const DASH_STD_BLOCKS = [
   { key: "indPie", label: "توزيع حالات المؤشرات" },
   { key: "goalPie", label: "توزيع مستويات تحقق الأهداف" },
   { key: "indicators", label: "جدول مؤشرات الأداء" },
+  { key: "indBoard", label: "مؤشرات الأداء — ملخص وترتيب ومؤشرات كل وحدة" },
   { key: "goals", label: "جدول الأهداف التشغيلية" },
   { key: "trend", label: "رسم تطور التحقق فترة بعد فترة" },
   { key: "unitsCmp", label: "مقارنة الوحدات", not: ["unit"] },
@@ -3299,6 +3300,7 @@ const DASH_EX_BLOCKS = [
   { key: "exKpis", label: "بطاقات الأرقام مع خط التطور" },
   { key: "exHeat", label: "خريطة الأداء (المؤشرات)" },
   { key: "exHeatGoal", label: "خريطة تحقق الأهداف" },
+  { key: "indBoard", label: "مؤشرات الأداء — ملخص وترتيب ومؤشرات كل وحدة" },
   { key: "exCompare", label: "مقارنة المكاتب/الأقسام/الوحدات" },
   { key: "trend", label: "رسم تطور التحقق فترة بعد فترة" },
   { key: "exStacks", label: "حالات المؤشرات لكل مكتب/قسم" },
@@ -3338,7 +3340,7 @@ function dashCatalog(kind) {
   // «أدوات القياس» مهمة لإدارة التعليم النسائي: تُوضع بعد البرامج (أو بعد خرائط الأداء) لا في آخر اللوحة
   let at = base.findIndex((b) => b.key === "programs"); if (at < 0) at = base.findIndex((b) => b.key === "exHeatGoal");
   if (at >= 0) base.splice(at + 1, 0, ...tools); else rest.unshift(...tools);
-  return base.concat(rest, dashCC(kind).map((c) => ({ key: "cc_" + c.id, label: "بطاقة مخصصة: " + (c.title || "بدون عنوان") })));
+  return base.concat(rest);
 }
 const DASH_SEC_VIEW = {
   tools: { title: "name", meta: ["toolType", "relatedProgram"], badges: ["resultQuality"], dist: ["toolType", "resultQuality"], stats: [{ k: "count", l: "أداة" }, { k: "sum", f: "sampleSize", l: "إجمالي العينات" }, { k: "sum", f: "respondentsCount", l: "المستجيبات" }, { k: "rate", f: "respondentsCount", of: "sampleSize", l: "نسبة الاستجابة" }] },
@@ -3448,7 +3450,7 @@ function dashRoutedHtml(kind, units) {
   const list = rows.slice(0, 40).map((x) => `<tr><td style="padding:8px 6px;font-size:12px;color:${SUBTLE};white-space:nowrap;">${esc(dashFieldSecLabel(x.sid))}</td><td style="padding:8px 6px;font-size:12.5px;font-weight:700;">${esc(ttl(x))}</td><td style="padding:8px 6px;font-size:12px;color:${SUBTLE};">${esc(x.u.name)}</td></tr>`).join("");
   return dashCard(lab, `${rows.length} بند — يظهر هنا ما يخصّ هذا المستوى فقط`, `<div style="overflow:auto;"><table style="width:100%;border-collapse:collapse;"><tbody>${list}</tbody></table></div>`);
 }
-function dashFieldBlocksHtml(kind, units) { return dashFieldBlocksHtml0(kind, units) + dashCCHtml(kind, units); }
+function dashFieldBlocksHtml(kind, units) { return dashFieldBlocksHtml0(kind, units); } // البطاقات المخصصة محذوفة
 function indPctOf(i) { if (i.num == null || i.target == null || !(i.target > 0)) return null; const low = i.better === "L"; return Math.min(150, Math.round((low ? (i.num > 0 ? i.target / i.num : 1) : i.num / i.target) * 100)); }
 function indBoardByUnitHtml(items) {
   const g = {}; items.forEach((i) => { const p = indPctOf(i); if (p == null) return; (g[i.unitName || "—"] = g[i.unitName || "—"] || []).push({ ...i, _p: p }); });
@@ -3462,7 +3464,7 @@ function indBoardByUnitHtml(items) {
   ${us.map((u) => `<details class="ibg-d"${u.bad ? " open" : ""}><summary><b>${esc(u.n)}</b><span style="color:${col(u.avg)}">${u.avg}٪ · ${u.a.length} مؤشر</span></summary>${priorityMatrixHtml(u.a, true)}</details>`).join("")}`;
 }
 function dashIndBoardHtml(kind, units) {
-  try { if (dashCC(kind).some((c) => (c.secs || []).includes("kpi"))) return ""; const ent = dashReports(dashSeries(units), true); const its = indicatorBoardItems(ent, (units || []).length > 1); const h = its.length ? ((units || []).length > 1 ? indBoardByUnitHtml(its) : priorityMatrixHtml(its)) : ""; return h ? dashCard("مؤشرات الأداء", "ملخص عام ثم ترتيب الوحدات ثم مؤشرات كل وحدة (المتحقق والمستهدف وخط الأساس)", h) : ""; } catch (e) { return ""; }
+  try { const ent = dashReports(dashSeries(units), true); const its = indicatorBoardItems(ent, (units || []).length > 1); const h = its.length ? ((units || []).length > 1 ? indBoardByUnitHtml(its) : priorityMatrixHtml(its)) : ""; return h ? dashCard("مؤشرات الأداء", "ملخص عام ثم ترتيب الوحدات ثم مؤشرات كل وحدة (المتحقق والمستهدف وخط الأساس)", h) : ""; } catch (e) { return ""; }
 }
 function dashFieldBlocksHtml0(kind, units) { return dashB(kind, "indBoard", dashIndBoardHtml(kind, units)) + dashB(kind, "sharedInd", dashSharedIndHtml(kind, units)) + dashB(kind, "routed", dashRoutedHtml(kind, units)) + dashFieldSecIds().map((id) => dashHidden(kind, "fld_" + id) ? "" : dashB(kind, "fld_" + id, dashFieldBlockHtml(kind, id, units))).join(""); }
 
@@ -3691,6 +3693,7 @@ function dashCCCandidatesHtml(kid, c, act) {
   return `<div class="hint" style="margin-bottom:4px;">اختاري الشكل بالنظر (معاينة ببياناتك الفعلية)${sg ? ` — المقترح: <b>${esc(sg.label)}</b> لأن ${esc(sg.why)}` : ""}</div>${cards.length ? `<div class="shp-grid" style="margin-bottom:10px;">${cards.join("")}</div>` : `<div class="hint">لا توجد أرقام كافية لمعاينة الأشكال — جرّبي «جدول واحد» أو «متتابعة».</div>`}`;
 }
 function dashCCEditorHtml(kid) {
+  return ""; // حُذفت «بطاقات مخصصة — دمج أقسام وعرضها» من إعدادات لوحة المعلومات
   if (kid === "admin") return "";
   const cards = dashCC(kid);
   const secs = (SECTIONS || []).filter((x) => x.id !== "review");
@@ -3763,7 +3766,7 @@ function secShapesCardHtml() {
   if (!S.isAdmin) return "";
   const m = secShapeMap(), list = (SECTIONS || []).filter((x) => x && x.id);
   const nSet = list.filter((x) => m[x.id]).length;
-  return `<details class="card" style="margin-bottom:12px;padding:12px 14px;"${S.ui.ssOpenCard ? " open" : ""}><summary style="cursor:pointer;font-weight:800;font-size:14px;" data-action="ss-card">🎨 شكل كل قسم — اختاريه مرة واحدة ويسري على كل التقارير واللوحات <span style="font-weight:600;color:#8a7c80;font-size:12px;">(${nSet} من ${list.length} محدد)</span></summary>
+  return `<details class="card" style="margin-bottom:12px;padding:12px 14px;"${S.ui.ssOpenCard ? " open" : ""}><summary style="cursor:pointer;font-weight:800;font-size:14px;" data-action="ss-card">🎨 شكل كل قسم في التقارير — اختاريه مرة واحدة ويسري على كل التقارير <span style="font-weight:600;color:#8a7c80;font-size:12px;">(${nSet} من ${list.length} محدد)</span></summary>
     <div class="rm-hint" style="margin:8px 0;">كل حساب تظهر فيه بياناته هو بنفس الشكل. القسم الذي بلا شكل يبقى جدولًا.</div>
     ${list.map((x) => `<div style="border-top:1px solid ${BORDER};padding:8px 0;"><div style="display:flex;align-items:center;gap:10px;"><span style="flex:1;font-size:13.5px;font-weight:700;">${esc(x.label)}</span><button type="button" class="input" data-action="ss-pick" data-sec="${esc(x.id)}" style="width:190px;min-height:34px;padding:2px 8px;font-size:12px;text-align:center;cursor:pointer;">${esc(vwLabel(m[x.id] || ""))} ▾</button></div>${S.ui.ssOpen === x.id ? vwPickerHtml(m[x.id] || "", "ss-set", `data-sec="${esc(x.id)}"`, [x.id], "ss|" + x.id) : ""}</div>`).join("")}
   </details>`;
@@ -3923,7 +3926,7 @@ function tvApply(html, id, mode) {
     return box.innerHTML;
   } catch (e) { return html; }
 }
-function dashViewOf(kind, key) { const v = secShapeOf([/^fld_/.test(key) ? key.slice(4) : key]) || "shape:auto"; return v === "chart" || v === "both" || /^shape:/.test(v || "") ? v : ""; }
+function dashViewOf(kind, key) { const sid = /^fld_/.test(key) ? key.slice(4) : key; const dm = (dashConfig() || {})._dashShapes || {}; const v = dm[sid] === "table" ? "" : (dm[sid] || secShapeOf([sid]) || "shape:auto"); return v === "chart" || v === "both" || /^shape:/.test(v || "") ? v : ""; }
 /* مجموعات اللوحة: كل عنصر يمكن ضمّه لمجموعة بعنوان (cfg[kind].grp = {المفتاح: العنوان}). أعضاء المجموعة يتجاورون عند أول عضو منها */
 function dashEff(kind) {
   const list = dashOrderList(kind), g = (dashConfig()[kind] || {}).grp || {}, seen = {}, out = [];
@@ -6518,9 +6521,8 @@ const DASH_GROUPS = [
   ["البانر والفلاتر", ["banner", "periodFilter"]],
   ["الأرقام والبطاقات", ["stats", "exKpis", "opsCounts", "opsKpis", "achieve", "yearCompare", "recent"]],
   ["الرسوم والخرائط", ["totalPie", "bars", "indPie", "goalPie", "trend", "exHeat", "exHeatGoal", "exCompare", "unitsCmp", "exStacks", "exTopBottom", "opsDeptCompliance"]],
-  ["الجداول والإدارة", ["indicators", "goals", "indMatrix", "goalMatrix", "programs", "sharedInd", "opsSections", "opsAggReports", "opsRecent", "opsRoles"]],
+  ["الجداول والإدارة", ["indicators", "indBoard", "goals", "indMatrix", "goalMatrix", "programs", "sharedInd", "opsSections", "opsAggReports", "opsRecent", "opsRoles"]],
   ["حقول أقسام التقرير", ["fld_*"]],
-  ["بطاقات مخصصة", ["cc_*"]],
   ["التحليل والمتابعة", ["*"]],
 ];
 function dashGroupOf(key) {
@@ -6600,13 +6602,15 @@ const RPT_COMMON_DEFAULTS = {
   showHead: false, headRight: "", headLogo: true, headCenter: "", headLeft: "", showFoot: false, footText: "", pageNum: "none",
   order: [], hidden: {}, titles: {}, hiddenCols: {}, limit: 10, perPage: 0, showEmpty: false,
   charts: {}, thAlign: "right", tdAlign: "right", numCenter: false,
-  thBg: "#f4ece4", thColor: "", tableBorders: "rows", zebra: false, tableFs: 12,
+  thBg: "#f4ece4", thColor: "", tableBorders: "rows", zebra: false, tableFs: 12, fontScale: "1",
   fontBody: "Almarai", fontTitle: "Amiri", fontHeading: "Cairo", mainColor: "#6b2337", chapterBg: "#f3e8dd",
   showCover: true, showCoverMeta: true, assocName: "جمعية فرقان لتحفيظ القرآن الكريم بالطائف", coverTitle: "", coverSub: "", preparedBy: "",
 };
 const RPT_FINAL_DEFAULTS = { ...RPT_COMMON_DEFAULTS, coverTitle: "التقرير الإداري النهائي", coverSub: "تقرير منتقى — أبرز ما يستحق قرار الإدارة، لا كل البيانات", preparedBy: "إدارة التعليم النسائي" };
 const RPT_UNIT_DEFAULTS = { ...RPT_COMMON_DEFAULTS, fontTitle: "Cairo", pageNum: "paren", spine: true, perPage: 2 };
 const RPT_CUSTOM_DEFAULTS = { ...RPT_COMMON_DEFAULTS, name: "", scopeLevelId: "", periodKind: "all", year: "", coverSub: "", preparedBy: "" };
+// تنسيق مشترك بين كل التقارير (الباقي: الكليشة والخلفية والغلاف… لكل تقرير حسابه)
+const RPT_SHARED_KEYS = ["fontBody", "fontTitle", "fontHeading", "mainColor", "chapterBg", "thBg", "thColor", "thAlign", "tdAlign", "numCenter", "tableBorders", "zebra", "tableFs", "fontScale", "size", "margin", "mt", "mb", "mr", "ml"];
 const RPT_NUM_KEYS = ["mt", "mb", "mr", "ml", "limit", "tableFs", "year", "perPage"];
 // خانات الاعتماد (المسمى + الاسم). {المعدة} و{الرئيسة} تُستبدل من بيانات التقرير، و{الإعداد} من حقل «إعداد» بالغلاف
 const RPT_UNIT_APPROVAL = [{ role: "المسؤولة عن التقرير", name: "{المعدة}" }, { role: "المراجعة", name: "{الرئيسة}" }, { role: "الاعتماد", name: "" }];
@@ -6756,7 +6760,7 @@ function rptSizeList() { return [...Object.keys(RPT_SIZES).map((k) => ({ id: k, 
 function rptSizeOf(id) { return rptSizeList().find((x) => x.id === id) || null; }
 function rptSaveGlobal(patch) {
   const st = rptStore();
-  saveSiteTheme({ reportTemplates: { final: st.final, unit: st.unit, custom: st.custom, fonts: st.fonts, sizes: st.sizes, ...patch } });
+  saveSiteTheme({ reportTemplates: { final: st.final, unit: st.unit, custom: st.custom, fonts: st.fonts, sizes: st.sizes, shared: st.shared, ...patch } });
 }
 function rptIcon(key) {
   const m = { sparkles: iconSparkles, building: iconBuilding2, gauge: iconGauge2, layers: iconLayers, check: iconCheckCircle, bell: iconBell, pencil: iconPencil, calendar: iconCalendarSmall, document: iconDocument, target: iconTarget, save: iconSave };
@@ -6765,7 +6769,7 @@ function rptIcon(key) {
 function rptStore() {
   const th = ((S.siteSettings || {}).theme) || {};
   const t = th.reportTemplates || {};
-  return { final: t.final || null, unit: t.unit || null, custom: Array.isArray(t.custom) ? t.custom : [],
+  return { final: t.final || null, unit: t.unit || null, shared: (t.shared && typeof t.shared === "object" && !Array.isArray(t.shared)) ? t.shared : null, custom: Array.isArray(t.custom) ? t.custom : [],
     fonts: Array.isArray(t.fonts) ? t.fonts.filter((f) => RPT_FONT_NAME_RE.test(f)) : [],
     sizes: Array.isArray(t.sizes) ? t.sizes.filter((z) => z && z.id && Number(z.w) >= 50 && Number(z.h) >= 50) : [] };
 }
@@ -6786,6 +6790,11 @@ function rptNormalize(s) {
 }
 // إعدادات تقرير: "final" | "unit" | معرّف تقرير مجمّع جديد
 function rptSettings(id) {
+  const r = rptSettings0(id); if (!r) return r;
+  const sh = rptStore().shared; if (sh) RPT_SHARED_KEYS.forEach((k) => { if (sh[k] !== undefined) r[k] = sh[k]; });
+  return r;
+}
+function rptSettings0(id) {
   const st = rptStore();
   if (id === "final") {
     const legacy = ((((S.siteSettings || {}).theme) || {}).reportStyle) || {}; // إعدادات الشكل القديمة من إعدادات الموقع
@@ -6797,7 +6806,8 @@ function rptSettings(id) {
 }
 function rptSave(id, settings) {
   const st = rptStore();
-  const out = { final: st.final, unit: st.unit, custom: st.custom.slice(), fonts: st.fonts, sizes: st.sizes };
+  const out = { final: st.final, unit: st.unit, custom: st.custom.slice(), fonts: st.fonts, sizes: st.sizes, shared: st.shared };
+  { const sh = {}; RPT_SHARED_KEYS.forEach((k) => { if (settings[k] !== undefined) sh[k] = settings[k]; }); out.shared = sh; }
   if (id === "final" || id === "unit") out[id] = settings;
   else {
     const i = out.custom.findIndex((x) => x.id === id);
@@ -6808,7 +6818,7 @@ function rptSave(id, settings) {
 }
 function rptDeleteCustom(id) {
   const st = rptStore();
-  saveSiteTheme({ reportTemplates: { final: st.final, unit: st.unit, custom: st.custom.filter((x) => x.id !== id), fonts: st.fonts, sizes: st.sizes } });
+  saveSiteTheme({ reportTemplates: { final: st.final, unit: st.unit, custom: st.custom.filter((x) => x.id !== id), fonts: st.fonts, sizes: st.sizes, shared: st.shared } });
   syncCustomReportPages();
 }
 // كل تقرير مجمّع جديد = صفحة تُمنح بالدور (تظهر تحت «التقارير المجمّعة»)
@@ -6839,7 +6849,7 @@ function rptWrap(s, inner, isPreview) {
     `--rpt-font-body:'${rptCssSafe(s.fontBody)}';--rpt-font-title:'${rptCssSafe(s.fontTitle)}';--rpt-font-heading:'${rptCssSafe(s.fontHeading)}';` +
     `--rpt-page-w:${w}mm;--rpt-page-h:${h}mm;--rpt-mt:${t}mm;--rpt-mb:${b}mm;--rpt-mr:${r}mm;--rpt-ml:${l}mm;` +
     `--rpt-th-align:${["right", "center", "left"].includes(s.thAlign) ? s.thAlign : "center"};--rpt-td-align:${["right", "center", "left"].includes(s.tdAlign) ? s.tdAlign : "center"};` +
-    `--rpt-th-bg:${rptCssSafe(s.thBg)};--rpt-th-color:${rptCssSafe(s.thColor || main)};--rpt-table-fs:${Math.max(9, Math.min(16, Number(s.tableFs) || 12))}px;`;
+    `--rpt-th-bg:${rptCssSafe(s.thBg)};--rpt-th-color:${rptCssSafe(s.thColor || main)};--rpt-table-fs:${Math.max(9, Math.min(16, Number(s.tableFs) || 12))}px;--rpt-fs:${Math.max(0.8, Math.min(1.3, Number(s.fontScale) || 1))};`;
   if (s.bgImage && RPT_DATA_IMG_RE.test(s.bgImage)) vars += `--rpt-bg-img:url("${s.bgImage}");`;
   const cls = ["rpt-wrap", s.oldLook ? "" : "rpt-v5", s.zebra ? "rpt-zebra" : "", s.tableBorders === "grid" ? "rpt-tgrid" : s.tableBorders === "none" ? "rpt-tnone" : "", s.frame ? "rpt-frame" : "", vars.indexOf("--rpt-bg-img") !== -1 ? "rpt-bgimg" : ""].filter(Boolean).join(" ");
   ensureReportFontsLoaded();
@@ -7225,7 +7235,7 @@ function rptUnitColumns() {
 /* ---- صفحة «تنسيق وإنشاء التقارير» ---- */
 function rmCanEdit() { return !!S.currentUser && (S.isAdmin || pageAllowedForView("reports-manage")); }
 function rmState() {
-  const st = S.ui.rm = S.ui.rm || { sel: "final", tab: "page" };
+  const st = S.ui.rm = S.ui.rm || { sel: "final", tab: "fonts" };
   if (st.sel !== "final" && st.sel !== "unit" && !rptStore().custom.some((c) => c.id === st.sel)) { st.sel = "final"; st.draft = null; }
   if (!st.draft || st.draftFor !== st.sel) { st.draft = rptSettings(st.sel); st.draftFor = st.sel; }
   return st;
@@ -7339,7 +7349,7 @@ function rmCustomChapterEditor(ch) {
   </div>`;
 }
 function rmTabsFor(sel) {
-  return [["page", "الصفحة"], ["head", "الكليشة"], ["cover", "الغلاف والاعتماد"], ["chapters", "الفصول"], ["visuals", "الرسوم والجداول"], ["fonts", "الخطوط والألوان"], ["access", sel === "final" || sel === "unit" ? "من يشوفه" : "النطاق ومن يشوفه"]];
+  return [["fonts", "الخطوط والألوان"], ["head", "الكليشة"], ["cover", "الغلاف والاعتماد"], ["chapters", "الفصول"], ["visuals", "الرسوم والجداول"], ["page", "الصفحة"], ["access", sel === "final" || sel === "unit" ? "من يشوفه" : "النطاق ومن يشوفه"]];
 }
 
 /* ===== «ما يظهر لكل حساب» في التقرير الموحّد ===== */
@@ -7371,10 +7381,11 @@ function rptFieldMatrixHtml(sid, heads, d) {
     ${RPT_LEVELS.map(([k]) => { const off = !h.on || ((lc[k] || {})[sid] || []).includes(h.label); return `<td style="text-align:center;"><button type="button" class="rm-pill rm-pill-sm${off ? "" : " on"}" ${h.on ? "" : "disabled"} data-action="rm-colv" data-lvl="${k}" data-sec="${esc(sid)}" data-col="${esc(h.label)}" aria-pressed="${!off}">${off ? "—" : "✓"}</button></td>`; }).join("")}</tr>`).join("");
   return `<div style="overflow-x:auto;"><table style="width:100%;border-collapse:collapse;"><tr><th style="text-align:right;padding:4px 6px;font-size:11px;">الحقل</th>${th("الجميع")}${RPT_LEVELS.map(([, l]) => th(l)).join("")}</tr>${rows}</table></div>`;
 }
-function rptLevelTableHtml(d, defs) {
+function rptLevelTableHtml(d, defs, lib) {
   const list = rptOrdered(defs, d);
   const head = `<tr><th style="text-align:right;padding:6px 8px;">الفصل</th>${RPT_LEVELS.map(([, l]) => `<th style="padding:6px 6px;font-size:11px;">${esc(l)}</th>`).join("")}</tr>`;
-  const rows = list.map((c) => `<tr style="border-top:1px solid ${BORDER};"><td style="padding:6px 8px;font-size:12.5px;">${esc(rptChapterTitle(c, d))}</td>${RPT_LEVELS.map(([k]) => { const off = ((d.levelHidden || {})[k] || []).includes(c.key); return `<td style="text-align:center;"><button type="button" class="rm-pill${off ? "" : " on"}" data-action="rm-lvl" data-lvl="${k}" data-key="${esc(c.key)}" aria-pressed="${!off}" style="min-width:34px;padding:2px 8px;">${off ? "—" : "✓"}</button></td>`; }).join("")}</tr>`).join("");
+  const rows = list.map((c) => `<tr style="border-top:1px solid ${BORDER};"><td style="padding:6px 8px;font-size:12.5px;">${esc(rptChapterTitle(c, d))}</td>${RPT_LEVELS.map(([k]) => { const off = ((d.levelHidden || {})[k] || []).includes(c.key); return `<td style="text-align:center;"><button type="button" class="rm-pill${off ? "" : " on"}" data-action="${lib ? 'lvl-lib' : 'rm-lvl'}" data-lvl="${k}" data-key="${esc(c.key)}" aria-pressed="${!off}" style="min-width:34px;padding:2px 8px;">${off ? "—" : "✓"}</button></td>`; }).join("")}</tr>`).join("");
+  if (lib) return `<details class="card" style="margin-bottom:14px;" open><summary style="font-weight:800;cursor:pointer;">👁️ من يرى ماذا — ما يظهر لكل حساب في التقرير الإداري النهائي</summary><div class="rm-soft" style="overflow-x:auto;margin-top:8px;"><table style="width:100%;border-collapse:collapse;">${head}${rows}</table></div><div class="hint" style="margin-top:6px;">✓ = الفصل يظهر لهذا الحساب، و«—» = مخفي عنه. يُحفظ على طول. مديرة النظام ترى كل الفصول دائمًا.</div></details>`;
   return rmFieldHtml("ما يظهر لكل حساب", `<div class="rm-soft" style="overflow-x:auto;"><table style="width:100%;border-collapse:collapse;">${head}${rows}</table></div>`, "✓ = الفصل يظهر لهذا الحساب في العرض وPDF، و«—» = مخفي عنه. مديرة النظام ترى كل الفصول دائمًا. لا يغيّر شيئًا في التعبئة.");
 }
 function rptExclHtml(d) {
@@ -7508,11 +7519,12 @@ function rmPanelHtml(st) {
     return `<div class="rm-grid3">${rmFieldHtml("خط النصوص", rmFont("fontBody", d.fontBody))}${rmFieldHtml("خط عنوان الغلاف", rmFont("fontTitle", d.fontTitle))}${rmFieldHtml("خط عناوين الفصول", rmFont("fontHeading", d.fontHeading))}</div>` +
       rmFieldHtml("ألوان جاهزة للتقرير", `<div class="rm-row">${RPT_PRESETS.map((p, i) => `<button type="button" class="pill-btn pill-ghost" data-action="rm-preset" data-p="${i}" style="gap:6px;"><span style="display:inline-block;width:14px;height:14px;border-radius:50%;background:${p.main};"></span><span style="display:inline-block;width:14px;height:14px;border-radius:50%;background:${p.chapterBg};border:1px solid #ddd;"></span>${esc(p.name)}</button>`).join("")}</div>`, "يغيّر اللون الرئيسي وخلفية العناوين ورأس الجدول دفعة واحدة.") +
       rmFieldHtml("اللون الرئيسي", `<div class="rm-row">${["#6b2337", "#24527a", "#2E6B52", "#7a4d16", "#5b3a73"].map((c) => `<button type="button" class="rm-swatch${d.mainColor === c ? " on" : ""}" data-action="rm-set" data-key="mainColor" data-value="${c}" style="background:${c};" aria-label="لون ${c}"></button>`).join("")}${rmColor("mainColor", d.mainColor)}</div>`) +
-      rmFieldHtml("خلفية عناوين الفصول", rmColor("chapterBg", d.chapterBg)) + `<div class="rm-sep"></div>` + fontsMgr;
+      rmFieldHtml("حجم الخط", rmPills("fontScale", String(d.fontScale || "1"), [["0.9", "صغير"], ["1", "وسط"], ["1.12", "كبير"]])) +
+      rmFieldHtml("خلفية عناوين الفصول", rmColor("chapterBg", d.chapterBg)) + `<div class="rm-hint" style="margin:6px 0;">الخطوط والألوان وحجم الخط وتنسيق الجداول تنطبق على كل التقارير. الكليشة والخلفية والغلاف لكل تقرير حسابه.</div><div class="rm-sep"></div>` + fontsMgr;
   }
   if (tab === "access") {
     if (sel === "unit") return `<div class="rm-hint" style="font-size:12.5px;line-height:1.9;">«عرض التقرير كاملًا» يظهر بنفس صلاحيات التقارير الحالية (صاحبة التقرير، القسم، المكتب، مراحل مسار الاعتماد…). هنا يتغيّر الشكل فقط، لكل تقارير الوحدات.</div>` + `<div class="rm-sep"></div>` + rptLevelTableHtml(d, unitChapterDefs());
-    if (sel === "final") return rmRolesHtml("executive-final-report", "التقرير الإداري النهائي") + `<div class="rm-sep"></div>` + rptLevelTableHtml(d, aggChapterDefs(d)) + `<div class="rm-sep"></div>` + rptExclHtml(d);
+    if (sel === "final") return rmRolesHtml("executive-final-report", "التقرير الإداري النهائي") + `<div class="rm-sep"></div>` + rptExclHtml(d) + `<div class="hint" style="margin-top:8px;">«من يرى ماذا» نُقل إلى صفحة «تنسيق اللوحات والتقارير».</div>`;
     const levels = olActive();
     const depth = (l) => { let n = 0, p = l; while (p && p.parentId && n < 12) { p = olFind(p.parentId); n++; } return n; };
     const ordered = [];
@@ -7538,7 +7550,7 @@ function renderReportsManage() {
   ];
   const dirty = rmDirty(st);
   const tabs = rmTabsFor(st.sel);
-  if (!tabs.some((t) => t[0] === st.tab)) st.tab = "page";
+  if (!tabs.some((t) => t[0] === st.tab)) st.tab = "fonts";
   const [w] = rptPageDims(d);
   const wide = window.innerWidth >= 900;
   const dock = st.dock == null ? wide : !!st.dock;
@@ -7550,7 +7562,6 @@ function renderReportsManage() {
   return `
   <div class="page-wrap"><div class="page-inner">
     ${topBarHtml({ title: "تصميم وتنسيق التقارير", subtitle: "شكل كل تقرير وما يظهر فيه · المعاينة ببيانات وهمية" })}
-    ${secShapesCardHtml()}
     <div class="rm-layout${dock ? " rm-has-dock" : ""}">
       <div class="rm-selectbar">
         <label class="rm-label" for="rm-sel" style="margin:0;">التقرير</label>
@@ -13221,14 +13232,24 @@ function shapeDefaultsPanelHtml() {
   const rows = secs.filter((x) => x.id !== "review").map((x) => `<div style="display:flex;align-items:center;gap:10px;padding:6px 0;border-top:1px solid ${BORDER};"><div style="flex:1;font-weight:700;font-size:13px;">${esc(x.label)}</div><select class="input" style="max-width:240px;" data-shp-def="${esc(x.id)}"><option value="">بدون</option>${opts.replace(`value="${cur[x.id]}"`, `value="${cur[x.id]}" selected`)}</select></div>`).join("");
   return `<details class="card" style="margin-bottom:14px;"><summary style="font-weight:800;cursor:pointer;">الشكل المقترح لكل قسم</summary><div class="hint" style="margin-top:6px;">الأشكال من تبويب «إحصائيات ورسوم» تظهر تلقائيًا في تقرير كل الحسابات بدون أي إضافة (وتختفي إذا ما فيه بيانات)؛ بقية الأشكال يظهر لها زر «إضافته» داخل القسم.</div>${rows}</details>`;
 }
+function rptLevelLibHtml() { try { const d = rptSettings("final"); return rptLevelTableHtml(d, aggChapterDefs(d), true); } catch (e) { return ""; } }
+function dashShapesPanelHtml() {
+  const dm = (dashConfig() || {})._dashShapes || {};
+  const shp = Object.entries(SHAPES_LIB).filter(([, v]) => !v.live && v.cat !== "photo" && v.cat !== "_auto");
+  const cats = (typeof SHP_CATS !== "undefined" ? SHP_CATS : []);
+  const grp = cats.map(([cid, cn]) => { const l = shp.filter(([, v]) => v.cat === cid); return l.length ? `<optgroup label="${esc(cn)}">${l.map(([id, v]) => `<option value="shape:${id}">${esc(v.name)}</option>`).join("")}</optgroup>` : ""; }).join("");
+  const rows = dashFieldSecIds().map((id) => { const cur = dm[id] || ""; const opt = (v, l) => `<option value="${v}"${cur === v ? " selected" : ""}>${l}</option>`;
+    return `<div style="display:flex;align-items:center;gap:10px;padding:6px 0;border-top:1px solid ${BORDER};"><div style="flex:1;font-weight:700;font-size:13px;">${esc(dashFieldSecLabel(id))}</div><select class="input" style="max-width:260px;" data-dsh-sec="${esc(id)}">${opt("", "كما هو الآن (تلقائي)")}${opt("table", "جدول")}${opt("chart", "رسم + زر الجدول")}${opt("both", "رسم وجدول")}${grp.replace(`value="${cur}"`, `value="${cur}" selected`)}</select></div>`; }).join("");
+  return `<details class="card" style="margin-bottom:14px;" open><summary style="font-weight:800;cursor:pointer;">🎛️ شكل الأقسام وحقولها في لوحة المعلومات</summary><div class="hint" style="margin-top:6px;">اختاري لكل قسم شكله في اللوحات فقط (لا يغيّر التقارير). يُحفظ ويظهر في اللوحة على طول.</div>${rows}</details>`;
+}
 function renderShapesLibraryPage() {
   const cat = S.ui.shpCat || "";
   const tabs = [["", "الكل"], ...SHP_CATS].map(([id, n]) => `<button type="button" class="flt-chip${cat === id ? " on" : ""}" data-action="shp-cat" data-cat="${id}">${n}</button>`).join("");
   const list = Object.entries(SHAPES_LIB).filter(([, s]) => !cat || s.cat === cat);
   return `<div class="page-wrap"><div class="page-inner">
-    ${topBarHtml({ title: "مكتبة الأشكال والرسوم", subtitle: `${Object.keys(SHAPES_LIB).length} شكلًا — للاستعراض. لإضافة شكل لتقرير: افتحي أي قسم ← «اختيار من المكتبة».`, right: "" })}
+    ${topBarHtml({ title: "تنسيق اللوحات والتقارير", subtitle: `${Object.keys(SHAPES_LIB).length} شكلًا — للاستعراض. لإضافة شكل لتقرير: افتحي أي قسم ← «اختيار من المكتبة».`, right: "" })}
     <div style="display:flex;gap:6px;flex-wrap:wrap;margin:6px 0 14px;">${tabs}</div>
-    ${S.isAdmin ? shapeDefaultsPanelHtml() : ""}
+    ${S.isAdmin ? dashShapesPanelHtml() + secShapesCardHtml() + rptLevelLibHtml() + shapeDefaultsPanelHtml() : ""}
     <div class="shp-grid">${list.map(([id, s]) => `<div class="shp-card" style="cursor:default;"><div class="shp-prev rpt-v5">${shapeRender(id, s.sample, { demo: true })}</div><div class="shp-nm">${esc(s.name)}</div></div>`).join("")}</div>
   </div></div>`;
 }
@@ -14347,6 +14368,12 @@ function attachFormListeners() {
     if (el.dataset && el.dataset.svMain) { const t = svFindTool(el.dataset.svMain); if (t) { t.mainSource = el.value; autoSaveSchedule(); render(); } return; }
     if (el.dataset && el.dataset.svFilltool) { S.ui.svFillTool = el.value; render(); return; }
     if (el.dataset && el.dataset.svPrev) { S.ui.svPrevRep = el.value; render(); return; }
+    if (el.dataset && el.dataset.dshSec) {
+      if (!S.isAdmin) return;
+      const cfg = JSON.parse(JSON.stringify(dashConfig() || {})); cfg._dashShapes = cfg._dashShapes || {};
+      if (el.value) cfg._dashShapes[el.dataset.dshSec] = el.value; else delete cfg._dashShapes[el.dataset.dshSec];
+      S.dashboardConfig = cfg; dataStore.saveDashboardConfig(cfg); render(); return;
+    }
     if (el.dataset && el.dataset.shpDef) {
       const sid = el.dataset.shpDef, v = el.value;
       saveSiteTheme((th) => { const m = { ...((th || {}).shapeDefaults || {}) }; if (v) m[sid] = v; else delete m[sid]; return { shapeDefaults: m }; });
@@ -14721,11 +14748,14 @@ function attachClickListener() {
       case "nav-back-admin": S.view = "browse-structure"; render(); break;
       case "tv-toggle": { S.ui.tv = S.ui.tv || {}; S.ui.tv[ds.id] = !S.ui.tv[ds.id]; render(); break; }
       case "dash-order-toggle": { S.ui.dashOrderOpen = !S.ui.dashOrderOpen; render(); break; }
-      case "vw-pend": { S.ui.vwPend = { ctx: ds.ctx, val: ds.val }; render(); break; }
+      case "vw-pend": {
+        if (/^ss\|/.test(ds.ctx || "") && S.isAdmin) { const sec = ds.ctx.slice(3); const cfg = JSON.parse(JSON.stringify(dashConfig())); cfg._secShapes = cfg._secShapes || {}; if (ds.val) cfg._secShapes[sec] = ds.val; else delete cfg._secShapes[sec]; S.ui.vwPend = null; S.dashboardConfig = cfg; dataStore.saveDashboardConfig(cfg); render(); break; }
+        S.ui.vwPend = { ctx: ds.ctx, val: ds.val }; render(); break; }
       case "vw-pend-cancel": { S.ui.vwPend = null; render(); break; }
       case "vw-cat": { S.ui.vwCat = ds.cat; render(); break; }
       case "cc-sort": { S.ui.ccSort = { ...(S.ui.ccSort || {}), [ds.id]: ds.v }; render(); break; }
       case "ss-card": { S.ui.ssOpenCard = !S.ui.ssOpenCard; break; }
+      case "lvl-lib": { if (!S.isAdmin) break; const d = JSON.parse(JSON.stringify(rptSettings("final"))); const cur = new Set((d.levelHidden || {})[ds.lvl] || []); if (cur.has(ds.key)) cur.delete(ds.key); else cur.add(ds.key); d.levelHidden = { ...(d.levelHidden || {}), [ds.lvl]: [...cur] }; rptSave("final", d); if (S.ui.rm) S.ui.rm.draft = null; render(); break; }
       case "ss-pick": { S.ui.ssOpen = S.ui.ssOpen === ds.sec ? "" : ds.sec; render(); break; }
       case "ss-set": { if (!S.isAdmin) break; const cfg = JSON.parse(JSON.stringify(dashConfig())); cfg._secShapes = cfg._secShapes || {}; if (ds.val) cfg._secShapes[ds.sec] = ds.val; else delete cfg._secShapes[ds.sec]; S.ui.vwPend = null; S.ui.ssOpen = ""; S.dashboardConfig = cfg; dataStore.saveDashboardConfig(cfg); render(); break; }
       case "vw-pick": { const k = ds.kind + "|" + ds.key; S.ui.vwOpen = S.ui.vwOpen === k ? "" : k; render(); break; }
