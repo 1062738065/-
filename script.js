@@ -2150,7 +2150,7 @@ const SIDEBAR_PAGES = [
   { id: "site-settings", label: "إعدادات الموقع", group: "الرئيسية", icon: "gauge" },
   { id: "all-reports", label: "جميع التقارير", group: "standalone", icon: "document" },
   { id: "indicators-manage", label: "إدارة مؤشرات الأداء", group: "إدارة التقارير", icon: "gauge" },
-  { id: "shapes-library", label: "تنسيق اللوحات والتقارير", group: "إدارة التقارير", icon: "layers" },
+  { id: "shapes-library", label: "تصميم اللوحات والتقارير", group: "إدارة التقارير", icon: "layers" },
   { id: "goals-manage", label: "إدارة الأهداف والمستهدفات", group: "إدارة التقارير", icon: "target" },
   { id: "sections-manage", label: "إدارة أقسام التقرير", group: "إدارة التقارير", icon: "layers" },
   { id: "report-tabs-manage", label: "إدارة أزرار التقارير", group: "إدارة التقارير", icon: "layers" },
@@ -6657,6 +6657,7 @@ const RPT_UNIT_DEFAULTS = { ...RPT_COMMON_DEFAULTS, fontTitle: "Cairo", pageNum:
 const RPT_CUSTOM_DEFAULTS = { ...RPT_COMMON_DEFAULTS, name: "", scopeLevelId: "", periodKind: "all", year: "", coverSub: "", preparedBy: "" };
 // تنسيق مشترك بين كل التقارير (الباقي: الكليشة والخلفية والغلاف… لكل تقرير حسابه)
 const RPT_SHARED_KEYS = ["fontBody", "fontTitle", "fontHeading", "mainColor", "chapterBg", "thBg", "thColor", "thAlign", "tdAlign", "numCenter", "tableBorders", "zebra", "tableFs", "fontScale", "size", "margin", "mt", "mb", "mr", "ml"];
+const RPT_DESIGN_KEYS = ["orient", "paper", "bgImage", "watermark", "frame", "spine", "showHead", "headRight", "headLogo", "headCenter", "headLeft", "showFoot", "footText", "pageNum"];
 const RPT_NUM_KEYS = ["mt", "mb", "mr", "ml", "limit", "tableFs", "year", "perPage"];
 // خانات الاعتماد (المسمى + الاسم). {المعدة} و{الرئيسة} تُستبدل من بيانات التقرير، و{الإعداد} من حقل «إعداد» بالغلاف
 const RPT_UNIT_APPROVAL = [{ role: "المسؤولة عن التقرير", name: "{المعدة}" }, { role: "المراجعة", name: "{الرئيسة}" }, { role: "الاعتماد", name: "" }];
@@ -6838,6 +6839,7 @@ function rptNormalize(s) {
 function rptSettings(id) {
   const r = rptSettings0(id); if (!r) return r;
   const sh = rptStore().shared; if (sh) RPT_SHARED_KEYS.forEach((k) => { if (sh[k] !== undefined) r[k] = sh[k]; });
+  if (id !== "unit") { const u = rptSettings0("unit"); RPT_DESIGN_KEYS.forEach((k) => { if (u && u[k] !== undefined) r[k] = u[k]; }); } // تصميم التقرير النهائي وغيره = نفس تصميم تقرير الوحدة
   return r;
 }
 function rptSettings0(id) {
@@ -7512,7 +7514,7 @@ function rmPanelHtml(st) {
           <button type="button" class="rm-pill${hid ? "" : " on"}" data-action="rm-hide" data-key="${esc(c.key)}" aria-pressed="${!hid}">${hid ? "مخفي" : "ظاهر"}</button>
         </div>
         
-        ${(() => { const secs0 = c.sections || (c.section ? [c.section] : []); const sg = shpSuggestFor(secs0); if (!sg) return ""; return `<div class="rm-hint" style="margin:4px 0 0;">الرسم المقترح لهذا الفصل: <b>${esc(sg.label)}</b> — ${esc(sg.why)} <button type="button" class="rm-link" data-action="rm-prev" data-key="${esc(c.key)}">${st.prev === c.key ? "إخفاء المعاينة ▴" : "عاينيه ببياناتك ▾"}</button></div>${st.prev === c.key ? dashCCCandidatesHtml("ch", { id: c.key, secs: secs0, title: "" }, "rm-chshape") : ""}`; })()}
+        ${(() => { const secs0 = c.sections || (c.section ? [c.section] : []); const sg = shpSuggestFor(secs0); if (!sg) return ""; const tv0 = String((d.tv || {})[c.key] || ""), chosen = tv0.indexOf("shape:") === 0 ? (SHAPES_LIB[tv0.slice(6)] || {}).name : ""; return `<div class="rm-hint" style="margin:4px 0 0;">الرسم المختار: <b>${esc(chosen || "الافتراضي (" + sg.label + ")")}</b> <button type="button" class="rm-link" data-action="rm-prev" data-key="${esc(c.key)}">${st.prev === c.key ? "إغلاق المكتبة ▴" : "اختاري من المكتبة ▾"}</button></div>${st.prev === c.key ? dashCCCandidatesHtml("ch", { id: c.key, secs: secs0, title: "" }, "rm-chshape") : ""}`; })()}
         ${isUnit && c.sections ? `<button type="button" class="rm-link" data-action="rm-cols" data-key="${esc(c.key)}">${open ? "إخفاء حقول الفصل ▴" : "حقول الفصل لكل حساب ▾"}</button>${colsHtml}` : ""}
         ${c.custom ? `<button type="button" class="rm-link" data-action="rm-cols" data-key="${esc(c.key)}">${st.openCols === c.key ? "إغلاق الإعداد ▴" : "إعداد الفصل (القسم والحقول) ▾"}</button>${st.openCols === c.key ? rmCustomChapterEditor(c.custom) : ""}` : ""}
       </div>`;
@@ -7570,7 +7572,7 @@ function rmPanelHtml(st) {
   }
   if (tab === "access") {
     if (sel === "unit") return `<div class="rm-hint" style="font-size:12.5px;line-height:1.9;">«عرض التقرير كاملًا» يظهر بنفس صلاحيات التقارير الحالية (صاحبة التقرير، القسم، المكتب، مراحل مسار الاعتماد…). هنا يتغيّر الشكل فقط، لكل تقارير الوحدات.</div>` + `<div class="rm-sep"></div>` + rptLevelTableHtml(d, unitChapterDefs());
-    if (sel === "final") return rmRolesHtml("executive-final-report", "التقرير الإداري النهائي") + `<div class="rm-sep"></div>` + rptExclHtml(d) + `<div class="hint" style="margin-top:8px;">«من يرى ماذا» نُقل إلى صفحة «تنسيق اللوحات والتقارير».</div>`;
+    if (sel === "final") return rmRolesHtml("executive-final-report", "التقرير الإداري النهائي") + `<div class="rm-sep"></div>` + rptExclHtml(d) + `<div class="hint" style="margin-top:8px;">«من يرى ماذا» نُقل إلى صفحة «تصميم اللوحات والتقارير».</div>`;
     const levels = olActive();
     const depth = (l) => { let n = 0, p = l; while (p && p.parentId && n < 12) { p = olFind(p.parentId); n++; } return n; };
     const ordered = [];
@@ -7586,6 +7588,7 @@ function rmPanelHtml(st) {
   return "";
 }
 function renderReportsManage() {
+  { const st0 = rmState(); if (st0.sel !== "unit") { st0.sel = "unit"; st0.draft = null; } }
   const st = rmState();
   const d = st.draft;
   const custom = rptStore().custom;
@@ -7610,13 +7613,9 @@ function renderReportsManage() {
     ${topBarHtml({ title: "تصميم وتنسيق التقارير", subtitle: "شكل كل تقرير وما يظهر فيه · المعاينة ببيانات وهمية" })}
     ${S.isAdmin ? syncBannerHtml() : ""}
     <div class="rm-layout${dock ? " rm-has-dock" : ""}">
-      <div class="rm-selectbar">
-        <label class="rm-label" for="rm-sel" style="margin:0;">التقرير</label>
-        <select id="rm-sel" class="input rm-sel">${items.map((it) => `<option value="${esc(it.id)}" ${st.sel === it.id ? "selected" : ""}>${esc(it.name)} — ${esc(it.kind)}</option>`).join("")}<option value="__new">＋ تقرير مجمّع جديد</option></select>
-      </div>
       <div class="rm-panel card">
         <div class="rm-panel-head">
-          <div style="font-size:15px;font-weight:800;">${esc(selName)}</div>
+          <div style="font-size:15px;font-weight:800;">تصميم كل التقارير (الوحدة والنهائي وغيرها)</div>
           <div class="rm-row">
             ${dirty ? `<span class="rm-dirty">تغييرات غير محفوظة</span>` : st.saved ? `<span class="rm-saved">تم الحفظ ✓</span>` : ""}
             ${pillBtn(dock ? "إلغاء تثبيت المعاينة" : "تثبيت المعاينة", { variant: "ghost", action: "rm-dock" })}
@@ -7640,7 +7639,7 @@ function handleReportsManageAction(action, ds) {
   const d = st.draft;
   st.saved = false;
   switch (action) {
-    case "rm-select": st.sel = ds.id; st.draft = null; st.confirmDel = false; st.openCols = null; break;
+    case "rm-select": S.ui.rmLib = ds.id; st.sel = ds.id; st.draft = null; st.confirmDel = false; st.openCols = null; break;
     case "rm-tab": st.tab = ds.tab; break;
     case "rm-set": rmSetField(ds.key, ds.value); break;
     case "rm-preset": { const pr = RPT_PRESETS[Number(ds.p)]; if (pr) { rmSetField("mainColor", pr.main); rmSetField("chapterBg", pr.chapterBg); rmSetField("thBg", pr.thBg); rmSetField("thColor", pr.main); } break; }
@@ -7749,7 +7748,7 @@ function handleReportsManageAction(action, ds) {
       const id = uid("rep").replace(/[^a-zA-Z0-9-]/g, "");
       const name = "تقرير مجمّع " + arabicDigits(n);
       rptSave(id, { ...RPT_CUSTOM_DEFAULTS, name, coverTitle: name, order: AGG_CHAPTERS.map((c) => c.key) });
-      st.sel = id; st.draft = null; st.tab = "access"; st.confirmDel = false; break;
+      st.sel = id; S.ui.rmLib = id; st.draft = null; st.tab = "access"; st.confirmDel = false; break;
     }
     case "rm-delete-ask": st.confirmDel = true; break;
     case "rm-delete-cancel": st.confirmDel = false; break;
@@ -13283,15 +13282,17 @@ function shapeDefaultsPanelHtml() {
 function rmChaptersLibHtml() {
   if (!S.isAdmin) return "";
   try {
-    const st = rmState(); if (st.sel !== "unit" && st.sel !== "final") { st.sel = "final"; st.draft = null; }
-    const st2 = rmState();
-    const pill = (id, l) => `<button type="button" class="flt-chip${st2.sel === id ? " on" : ""}" data-action="rm-select" data-id="${id}">${l}</button>`;
+    const want = S.ui.rmLib || "final";
+    { const s0 = rmState(); if (s0.sel !== want && (want === "unit" || want === "final" || rptStore().custom.some((c) => c.id === want))) { s0.sel = want; s0.draft = null; } }
+    const st2 = rmState(); S.ui.rmLib = st2.sel;
+    const pill = (id, l) => `<button type="button" class="flt-chip${st2.sel === id ? " on" : ""}" data-action="rm-select" data-id="${esc(id)}">${esc(l)}</button>`;
     const body = rmPanelHtml({ ...st2, tab: "chapters" });
-    const dirty = rmDirty(st2);
+    const dirty = rmDirty(st2), d = st2.draft;
+    const extra = st2.sel === "final" ? `<div class="rm-sep"></div>${rmFieldHtml("عنوان غلاف التقرير", rmText("coverTitle", d.coverTitle, ""))}${rmFieldHtml("عبارة الغلاف", rmText("coverSub", d.coverSub, ""))}${rmFieldHtml("إعداد", rmText("preparedBy", d.preparedBy, ""))}<div class="rm-sep"></div>${rmRolesHtml("executive-final-report", "التقرير الإداري النهائي")}<div class="rm-sep"></div>${rptExclHtml(d)}` : "";
     return `<details class="card" style="margin-bottom:14px;" open><summary style="font-weight:800;cursor:pointer;">📑 أقسام التقرير وحقولها — الظهور والترتيب والأسماء</summary>
-      <div style="display:flex;gap:6px;flex-wrap:wrap;margin:10px 0;">${pill("unit", "تقرير الوحدة")}${pill("final", "التقرير الإداري النهائي")}</div>
-      <div class="hint" style="margin-bottom:8px;">الإظهار والإخفاء والترتيب وحقول الأقسام تُحفظ على طول. تغيير اسم القسم يحتاج زر «حفظ».</div>
-      <div class="rm-panel">${body}</div>
+      <div style="display:flex;gap:6px;flex-wrap:wrap;margin:10px 0;">${pill("unit", "تقرير الوحدة")}${pill("final", "التقرير الإداري النهائي")}${rptStore().custom.map((c) => pill(c.id, c.name || "تقرير مجمّع")).join("")}<button type="button" class="flt-chip" data-action="rm-new">＋ تقرير مجمّع جديد</button></div>
+      <div class="hint" style="margin-bottom:8px;">الإظهار والإخفاء والترتيب وحقول الأقسام تُحفظ على طول. تغيير الأسماء يحتاج زر «حفظ». تصميم الشكل (الخطوط والألوان والكليشة) واحد لكل التقارير من صفحة «تنسيق وإنشاء التقارير».</div>
+      <div class="rm-panel">${body}${extra}</div>
       <div style="margin-top:10px;">${pillBtn(dirty ? "حفظ التغييرات" : "محفوظ ✓", { action: "rm-save", disabled: !dirty })}</div></details>`;
   } catch (e) { return ""; }
 }
@@ -13310,7 +13311,7 @@ function renderShapesLibraryPage() {
   const tabs = [["", "الكل"], ...SHP_CATS].map(([id, n]) => `<button type="button" class="flt-chip${cat === id ? " on" : ""}" data-action="shp-cat" data-cat="${id}">${n}</button>`).join("");
   const list = Object.entries(SHAPES_LIB).filter(([, s]) => !cat || s.cat === cat);
   return `<div class="page-wrap"><div class="page-inner">
-    ${topBarHtml({ title: "تنسيق اللوحات والتقارير", subtitle: `${Object.keys(SHAPES_LIB).length} شكلًا — للاستعراض وضبط شكل كل قسم.`, right: "" })}
+    ${topBarHtml({ title: "تصميم اللوحات والتقارير", subtitle: `${Object.keys(SHAPES_LIB).length} شكلًا — للاستعراض وضبط شكل كل قسم.`, right: "" })}
     <div style="display:flex;gap:6px;flex-wrap:wrap;margin:6px 0 14px;">${tabs}</div>
     ${S.isAdmin ? syncBannerHtml() + dashShapesPanelHtml() + secShapesCardHtml() + rmChaptersLibHtml() + rptLevelLibHtml() : ""}
     <div class="shp-grid">${list.map(([id, s]) => `<div class="shp-card" style="cursor:default;"><div class="shp-prev rpt-v5">${shapeRender(id, s.sample, { demo: true })}</div><div class="shp-nm">${esc(s.name)}</div></div>`).join("")}</div>
