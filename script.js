@@ -3463,7 +3463,16 @@ function indBoardByUnitHtml(items) {
   <div class="ibg-rank">${us.map((u) => `<div class="ibg-rk"><span class="ibg-n">${esc(u.n)}</span><div class="ibd-bar"><i style="width:${u.avg}%;background:${col(u.avg)}"></i></div><b style="color:${col(u.avg)}">${u.avg}٪</b><span class="ibg-c"><i style="color:#2f8f6b">${u.ok}</i><i style="color:#e08a3c">${u.mid}</i><i style="color:#c0392b">${u.bad}</i></span></div>`).join("")}<div class="hint" style="text-align:center">الوحدات مرتبة من الأضعف · الأرقام الملونة = متحقق / قريب / متعثر</div></div>
   ${us.map((u) => `<details class="ibg-d"${u.bad ? " open" : ""}><summary><b>${esc(u.n)}</b><span style="color:${col(u.avg)}">${u.avg}٪ · ${u.a.length} مؤشر</span></summary>${priorityMatrixHtml(u.a, true)}</details>`).join("")}`;
 }
+function dashIndComboHtml(units) {
+  const ent = dashReports(dashSeries(units), true), its = indicatorBoardItems(ent, false);
+  const col = (p) => (p >= 100 ? "#2f8f6b" : p >= 90 ? "#d9a04a" : p >= 70 ? "#e08a3c" : "#c0392b");
+  const bars = its.map((i) => { const p = indPctOf(i); return p == null ? null : { label: i.title, value: Math.min(100, p), color: col(p) }; }).filter(Boolean).slice(0, 12);
+  if (!bars.length) return "";
+  let sh = ""; try { const items = dashCCItems(units, ["kpi"]); if (items && items.length) sh = shapeRender("m96", { auto: true }, { sectionId: "kpi", items, label: "", dash: true }); } catch (e) {}
+  return dashCard("مؤشرات الأداء", "قياس الأداء مقابل المستهدف", svgBarChart(bars, { height: 200 }) + (sh ? `<div class="rpt-v5" style="margin-top:12px;">${sh}</div>` : ""));
+}
 function dashIndBoardHtml(kind, units) {
+  if ((units || []).length === 1) { try { const c = dashIndComboHtml(units); if (c) return c; } catch (e) {} }
   try { const ent = dashReports(dashSeries(units), true); const its = indicatorBoardItems(ent, (units || []).length > 1); const h = its.length ? ((units || []).length > 1 ? indBoardByUnitHtml(its) : priorityMatrixHtml(its)) : ""; return h ? dashCard("مؤشرات الأداء", "ملخص عام ثم ترتيب الوحدات ثم مؤشرات كل وحدة (المتحقق والمستهدف وخط الأساس)", h) : ""; } catch (e) { return ""; }
 }
 function dashAnalysisHeadHtml(units) {
@@ -3778,7 +3787,8 @@ function tvOptionsHtml(cur, first) {
 }
 /* ===== شكل كل قسم: اختيار واحد لكل قسم يسري على التقارير واللوحات كلها، وكل حساب تظهر فيه بياناته ===== */
 function secShapeMap() { return (dashConfig() || {})._secShapes || {}; }
-function secShapeOf(secs) { const m = secShapeMap(); for (const id of (secs || [])) { if (m[id]) return m[id]; } return ""; }
+function rptShapeOf(secs) { return (secs || []).includes("kpi") ? "" : secShapeOf(secs); } // المؤشرات في التقارير جدول فقط، والرسم في اللوحة
+function secShapeOf(secs) { if ((secs || []).includes("kpi")) return ""; const m = secShapeMap(); for (const id of (secs || [])) { if (m[id]) return m[id]; } return ""; }
 function secShapesCardHtml() {
   if (!S.isAdmin) return "";
   const m = secShapeMap(), list = (SECTIONS || []).filter((x) => x && x.id);
@@ -3897,13 +3907,14 @@ function chartsSummaryPages(pagesHtml, title) {
       if (tb.querySelector("table") || tb.closest(".rpt-v5")) return;
       const items = tvShapeItems(tb); if (items.some((q) => q.x || q.meta)) items.forEach((q) => { if (!indSeen[q.title]) { indSeen[q.title] = 1; indAll.push(q); } });
       if (!items.length || !items.some((i) => i.num != null)) return;
+      if (items.some((q) => q.x || q.meta)) return; // المؤشرات: رسمها في اللوحة فقط
       let ttl = ""; try { let el = (tb.closest(".table-wrap") || tb); const w = tb.closest(".tv-wrap"); if (w) el = w; let q = el.previousElementSibling; while (q && !ttl) { if (/rpt-subheading|^H[1-6]$|rpt-ch-title/.test((q.className || "") + " " + q.tagName)) ttl = q.textContent.trim(); q = q.previousElementSibling; } if (!ttl) { const ch = el.closest(".rpt-chapter,.rpt-ch,section"); const h = ch && ch.querySelector("h1,h2,h3,.rpt-ch-title"); ttl = h ? h.textContent.trim() : ""; } } catch (e) {}
       const key = ttl + "|" + items.map((i) => i.title).join(","); if (seen[key]) return; seen[key] = 1;
       let sh = ""; const w = tb.closest(".tv-wrap"), ex = w && w.querySelector(".rpt-v5");
       if (ex) sh = ex.innerHTML; else sh = shapeRender("auto", { auto: true }, { sectionId: "tbl", items, label: ttl, dash: true });
       if (sh) cards.push(`<div class="chs-card"><div class="chs-t">${esc(ttl || "—")}</div><div class="rpt-v5">${sh}</div></div>`);
     });
-    const out = []; const pm = priorityGridHtml(indAll); if (pm) out.push(execChapterHtml("", rptIcon(""), "مؤشرات الأداء", pm));
+    const out = [];
     if (!cards.length) return out; for (let i = 0; i < cards.length; i += 6) out.push(execChapterHtml("", rptIcon(""), title + (cards.length > 6 ? " (" + (Math.floor(i / 6) + 1) + ")" : ""), `<div class="chs-grid">${cards.slice(i, i + 6).join("")}</div>`));
     return out;
   } catch (e) { return []; }
@@ -7118,7 +7129,7 @@ function aggUnitStylePages(data) {
       const html = rptWithCtx({ ...rptChartCtx(us), hiddenCols: rptHiddenColsForViewer(us), colsShow: us.colsShow, capture: null, unitId: unit.id }, () => {
         const title = rptChapterTitle(c, us), extra = rptCustomChartsFor(us, c.key, [{ unit, report }], false);
         const h = c.group ? rptGroupChapterHtml(c, rptIcon(c.icon), title, report, extra) : reportChapterHtml(rptIcon(c.icon), title, secs, report, extra);
-        return tvApply(h, "ur:" + c.key, secShapeOf(secs));
+        return tvApply(h, "ur:" + c.key, rptShapeOf(secs));
       });
       if (html) parts.push({ unit, html });
     });
@@ -7149,7 +7160,7 @@ function aggReportDocHtml(s, data) {
       if (c.key === "closing") closingPage = pages.length - 1;
       RPT_CTX.section = c.key;
       const extra = rptCustomChartsFor(s, c.key, data.flat || [], true);
-      pages[pages.length - 1] += tvApply(execChapterHtml(i + 1, rptIcon(c.icon), rptChapterTitle(c, s), extra + (c.custom ? aggCustomChapterBody(c.custom, data) : aggChapterBody(c.key, data, s))), "fr:" + c.key, secShapeOf(c.sections || (c.section ? [c.section] : [AGG_SEC_MAP[c.key] || c.key])));
+      pages[pages.length - 1] += tvApply(execChapterHtml(i + 1, rptIcon(c.icon), rptChapterTitle(c, s), extra + (c.custom ? aggCustomChapterBody(c.custom, data) : aggChapterBody(c.key, data, s))), "fr:" + c.key, rptShapeOf(c.sections || (c.section ? [c.section] : [AGG_SEC_MAP[c.key] || c.key])));
       RPT_CTX.section = null;
       if (uStyle && !uDone && c.key === "summary") { uDone = true; try { aggUnitStylePages(data).forEach((h) => pages.push(h)); forceNew = true; } catch (e) { console.error(e); } }
     });
@@ -12562,6 +12573,7 @@ function rptFieldDefaultOn(sid, f) {
 }
 // ظهور الحقل حسب إعداد التنسيق (hidden = مخفي، show = إظهار حقل مخفي افتراضيًا). الاسم = مفتاح العمود.
 function rptFieldVisibleIn(sid, f, hiddenCols, colsShow) {
+  if (sid === "kpi") return true; // التقرير: جدول المؤشرات بكل بياناته (الانحراف والسبب والإجراء…)
   const lbl = f.label || f.id;
   if (((colsShow || {})[sid] || []).includes(lbl)) return true;
   return rptFieldDefaultOn(sid, f) && !(((hiddenCols || {})[sid] || []).includes(lbl));
@@ -13396,8 +13408,7 @@ function sectionBodyOnly(section, saved, report) {
         const status = def ? computeIndicatorStatus(resolved) : { emoji: "⚪", label: "—", color: SUBTLE, ratio: null };
         return { label: row.name, value: Math.round(Math.min(1, Math.max(0, status.ratio || 0)) * 100), color: status.color, row, def, status };
       });
-      body = rptChart("u-kpi", barData, { height: 190 }) +
-        reportTable(["المؤشر", "المستهدف", "خط الأساس", "المتحقق", "الحالة"], barData.map((b) => {
+      body = reportTable(["المؤشر", "المستهدف", "خط الأساس", "المتحقق", "الحالة", "الانحراف والإجراء"], barData.map((b) => {
           let bs = null; try { const pb = indicatorPrevBaseline(reportUnitIdOf(report), report, b.row.name); bs = pb ? pb.value : (b.row.baseline !== "" && b.row.baseline != null ? b.row.baseline : null); } catch (e) {}
           return [
           esc(b.row.name) + (() => { const rv = resolveIndicatorRow(b.row, b.def); return indMetaSpan(rv, indExtra(b.row, rv, b.status)); })(),
@@ -13405,6 +13416,7 @@ function sectionBodyOnly(section, saved, report) {
           esc(bs != null ? bs : "—"),
           esc(b.row.actual !== "" ? b.row.actual : "—"),
           `<span style="color:${b.status.color};font-weight:800;">${b.status.emoji} ${esc(b.status.label)}</span>`,
+          (() => { const r0 = b.row, ln = (t, v) => { v = Array.isArray(v) ? v.join("، ") : v; return v ? `<div><b>${t}:</b> ${esc(String(v))}</div>` : ""; }; const h = ln("السبب", r0.deviationReason) + ln("النوع", r0.causeType) + ln("الإجراء", r0.correctiveAction) + ln("المسؤولة", r0.responsiblePerson) + ln("الإغلاق", r0.closureDate) + ln("الدعم", r0.requiredSupport); return h ? `<div style="font-size:10.5px;line-height:1.6;text-align:right;">${h}</div>` : "—"; })(),
         ]; }));
     }
 
@@ -13807,8 +13819,8 @@ function fullReportOrPreviewBody(unit, report, afterPage, opts) {
         pg.html += reportSummaryHtml(report, title, mb) + extra; if (mb) pg.ids.push("basic");
       }
       else if (c.special === "approval") { pg.html += reportApprovalHtml(report, title, s.approvalBoxes, extra); pg.appr = true; }
-      else if (c.group) { pg.html += tvApply(rptGroupChapterHtml(c, rptIcon(c.icon), title, report, extra), "ur:" + c.key, secShapeOf(c.sections || (c.section ? [c.section] : [c.key]))); pg.ids.push(...c.sections); inPage++; }
-      else { pg.html += tvApply(reportChapterHtml(rptIcon(c.icon), title, c.sections, report, extra), "ur:" + c.key, secShapeOf(c.sections || (c.section ? [c.section] : [c.key]))); pg.ids.push(...c.sections); inPage++; }
+      else if (c.group) { pg.html += tvApply(rptGroupChapterHtml(c, rptIcon(c.icon), title, report, extra), "ur:" + c.key, rptShapeOf(c.sections || (c.section ? [c.section] : [c.key]))); pg.ids.push(...c.sections); inPage++; }
+      else { pg.html += tvApply(reportChapterHtml(rptIcon(c.icon), title, c.sections, report, extra), "ur:" + c.key, rptShapeOf(c.sections || (c.section ? [c.section] : [c.key]))); pg.ids.push(...c.sections); inPage++; }
     });
     const stBody = opts.capture ? "" : statsPageBodyHtml(s, [{ unit, report }]);
     if (stBody) { const stPg = { html: execChapterHtml("", rptIcon(""), s.statsTitle || "الإحصائيات", stBody), ids: [], summary: false }; const ai = pages.findIndex((p) => p.appr); if (ai >= 0) pages.splice(ai, 0, stPg); else pages.push(stPg); } // الإحصائيات قبل صفحة الاعتماد
