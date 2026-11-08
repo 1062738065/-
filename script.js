@@ -3500,7 +3500,7 @@ function indAggPts(it, mode) {
 function indStatusOf(actual, target, direction) { return computeIndicatorStatus({ actual: actual == null ? "" : actual, target: target == null ? "" : target, direction }); }
 function indDetailFieldsFor(kind) { const f = ((((dashConfig() || {})[kind] || {}).fields || {}).kpiDeviation); return Array.isArray(f) ? f : null; }
 function indCardHtml(it, kind) {
-  const mode = S.ui.indPer === "years" ? "years" : "terms", view = S.ui.indView === "table" ? "table" : "chart";
+  const mode = S.ui.indPer === "years" ? "years" : "terms", view = "chart";
   const pts = indAggPts(it, mode).slice(-6), last = pts[pts.length - 1] || {}, d = it.def || {};
   const st = indStatusOf(last.actual, last.target, last.direction), ratio = st.ratio == null || !isFinite(st.ratio) ? null : Math.max(0, st.ratio);
   const pctTxt = ratio == null ? "—" : Math.round(ratio * 100) + "٪", ringV = ratio == null ? 0 : Math.min(1, ratio) * 264;
@@ -3520,7 +3520,7 @@ function indCardHtml(it, kind) {
   return `<div class="ic-card"><div class="ic-top"><div class="ic-ring"><svg viewBox="0 0 100 100" width="84"><circle cx="50" cy="50" r="42" fill="none" stroke="#f3e6e8" stroke-width="10"/><circle cx="50" cy="50" r="42" fill="none" stroke="${st.color}" stroke-width="10" stroke-linecap="round" stroke-dasharray="${ringV.toFixed(1)} 264" transform="rotate(-90 50 50)"/></svg><b>${pctTxt}<small>من المستهدف</small></b></div>
   <div class="ic-ti"><div class="ic-n">${esc(it.name)}</div>${(dashConfig() || {})._x ? "" : ""}<div class="ic-sub">${esc(it.unit.name)}</div><div class="ic-m">${chips}</div>${defl ? `<div class="ic-def">${defl}</div>` : ""}</div>
   <div class="ic-kp">${kp("خط الأساس", indFmtV(base))}${kp("المتحقق", indFmtV(last.actual), "#6b2139")}${kp("المستهدف", indFmtV(last.target), "#a9842f")}${kp("الانحراف", dev == null ? "—" : (dev > 0 ? "+" : "") + indFmtV(dev), st.key === "achieved" ? "#2f6b3f" : st.color)}</div></div>
-  <div class="ic-sec"><div class="ic-h"><span>المقارنة عبر الفترات</span><span class="ic-sws">${sw("ind-per", "terms", "فصول", mode === "terms")}${sw("ind-per", "years", "سنوات", mode === "years")} ${sw("ind-view", "chart", "رسم", view === "chart")}${sw("ind-view", "table", "جدول", view === "table")}</span></div>${view === "table" ? tbl : `<div class="ic-cols">${cols}</div><div class="ic-lg"><span class="l1">المتحقق</span><span class="l2">المستهدف</span>${base != null ? `<span class="l3">خط الأساس</span>` : ""}</div>`}</div>
+  <div class="ic-sec"><div class="ic-h"><span>المقارنة عبر الفترات</span><span class="ic-sws">${sw("ind-per", "terms", "فصول", mode === "terms")}${sw("ind-per", "years", "سنوات", mode === "years")}</span></div>${view === "table" ? tbl : `<div class="ic-cols">${cols}</div><div class="ic-lg"><span class="l1">المتحقق</span><span class="l2">المستهدف</span>${base != null ? `<span class="l3">خط الأساس</span>` : ""}</div>`}</div>
   ${dv ? `<div class="ic-det">${dv}</div>` : ""}</div>`;
 }
 function dashIndCardsHtml(kind, units) {
@@ -3534,9 +3534,33 @@ function dashIndCardsHtml(kind, units) {
   const sum = `<div class="ic-sum"><div class="ic-big">${tot}<small>مؤشر</small></div><svg viewBox="0 0 120 120" width="96">${arcs}</svg><div class="ic-leg">${seg.map(([k, l, c]) => `<span><b style="background:${c}"></b>${l} ${cnt[k]}</span>`).join("")}</div></div>`;
   const byUnit = {}; items.forEach((it, i) => { const r = lastSt[i].ratio; if (r == null || !isFinite(r)) return; (byUnit[it.unit.name] = byUnit[it.unit.name] || []).push(Math.min(1, r)); });
   const rank = multi ? `<div class="ic-rank">${Object.keys(byUnit).map((n) => ({ n, a: Math.round(byUnit[n].reduce((t, v) => t + v, 0) / byUnit[n].length * 100) })).sort((x, y) => x.a - y.a).map((u) => `<div><span>${esc(u.n)}</span><div class="ic-rb"><i style="width:${u.a}%"></i></div><b>${u.a}٪</b></div>`).join("")}</div>` : "";
-  const groups = {}; items.forEach((it) => (groups[it.unit.name] = groups[it.unit.name] || []).push(it));
-  const body = Object.keys(groups).map((n) => (multi ? `<div class="ic-un">${esc(n)}</div>` : "") + groups[n].map((it) => indCardHtml(it, kind)).join("")).join("");
-  return dashCard("مؤشرات الأداء", "", sum + rank + body);
+  const groups = {}; items.forEach((it, ix) => (groups[it.unit.name] = groups[it.unit.name] || []).push({ it, st: lastSt[ix] }));
+  const view = ["cards", "table", "units"].indexOf(S.ui.indView) !== -1 ? S.ui.indView : "cards";
+  if (view === "units" && !multi) { /* لا معنى لمقارنة الوحدات بوحدة واحدة */ }
+  const vsw = (v, l) => `<button type="button" class="ic-sw${view === v ? " on" : ""}" data-action="ind-view" data-v="${v}">${l}</button>`;
+  const bar = `<div class="ic-vbar"><span>العرض:</span>${vsw("cards", "بطاقات")}${vsw("table", "جدول")}${multi ? vsw("units", "مقارنة الوحدات") : ""}</div>`;
+  let body = "";
+  if (view === "table") {
+    const mode = S.ui.indPer === "years" ? "years" : "terms";
+    const labels = []; items.forEach((it) => indAggPts(it, mode).forEach((x) => { if (labels.indexOf(x.label) === -1) labels.push(x.label); }));
+    const lb = labels.slice(-3);
+    body = `<div class="ic-tw"><table class="ic-tb ic-tb2"><thead><tr><th>المؤشر</th>${lb.map((l) => `<th>${esc(l)}</th>`).join("")}<th>المستهدف</th><th>الانحراف</th><th>الحالة</th></tr></thead><tbody>` +
+      Object.keys(groups).map((n) => (multi ? `<tr class="ic-ur"><td colspan="${lb.length + 4}">${esc(n)}</td></tr>` : "") + groups[n].map(({ it, st }) => {
+        const pts = indAggPts(it, mode), last = pts[pts.length - 1] || {}, dv = last.actual != null && last.target != null ? Math.round((last.actual - last.target) * 100) / 100 : null;
+        return `<tr><td><b>${esc(it.name)}</b></td>${lb.map((l) => { const q = pts.find((x) => x.label === l); return `<td>${q ? indFmtV(q.actual) : "—"}</td>`; }).join("")}<td>${indFmtV(last.target)}</td><td style="color:${st.color};font-weight:700">${dv == null ? "—" : (dv > 0 ? "+" : "") + indFmtV(dv)}</td><td style="color:${st.color};font-weight:700">${esc(st.label)}</td></tr>`;
+      }).join("")).join("") + `</tbody></table></div>`;
+  } else if (view === "units" && multi) {
+    const byName = {}; items.forEach((it, ix) => (byName[it.name] = byName[it.name] || []).push({ it, st: lastSt[ix] }));
+    const blocks = Object.keys(byName).filter((n) => byName[n].length > 1).map((n) => `<div class="ic-cmp"><div class="ic-cn">${esc(n)}</div>${byName[n].map(({ it, st }) => { const p = it.pts[it.pts.length - 1], pc = st.ratio == null || !isFinite(st.ratio) ? 0 : Math.min(100, Math.round(st.ratio * 100)); return `<div class="ic-cr"><span>${esc(it.unit.name)}</span><div class="ic-rb"><i style="width:${pc}%;background:${st.color}"></i></div><b>${indFmtV(p.actual)}</b><small>من ${indFmtV(p.target)}</small></div>`; }).join("")}</div>`).join("");
+    body = blocks || `<div class="hint">لا توجد مؤشرات مشتركة بين أكثر من وحدة للمقارنة.</div>`;
+  } else {
+    body = Object.keys(groups).map((n) => {
+      const g = groups[n], bad = g.filter((x) => x.st.key === "struggling").length;
+      const cards = g.map(({ it }) => indCardHtml(it, kind)).join("");
+      return multi ? `<details class="ic-ud"${bad || Object.keys(groups).length === 1 ? " open" : ""}><summary><b>${esc(n)}</b><span>${g.length} مؤشر${bad ? ` · <i style="color:#a1302f;font-style:normal">${bad} متعثر</i>` : ""}</span></summary>${cards}</details>` : cards;
+    }).join("");
+  }
+  return dashCard("مؤشرات الأداء", "", `<div data-dshape="1">${sum}${rank}${bar}${body}</div>`);
 }
 function dashIndBoardHtml(kind, units) {
   try { const nc = dashIndCardsHtml(kind, units); if (nc) return nc; } catch (e) { console.warn("ind cards", e); }
@@ -3990,7 +4014,6 @@ function chartsSummaryPages(pagesHtml, title) {
       if (tb.querySelector("table") || tb.closest(".rpt-v5")) return;
       const items = tvShapeItems(tb); if (items.some((q) => q.x || q.meta)) items.forEach((q) => { if (!indSeen[q.title]) { indSeen[q.title] = 1; indAll.push(q); } });
       if (!items.length || !items.some((i) => i.num != null)) return;
-      if (items.some((q) => q.x || q.meta)) return; // المؤشرات: رسمها في اللوحة فقط
       let ttl = ""; try { let el = (tb.closest(".table-wrap") || tb); const w = tb.closest(".tv-wrap"); if (w) el = w; let q = el.previousElementSibling; while (q && !ttl) { if (/rpt-subheading|^H[1-6]$|rpt-ch-title/.test((q.className || "") + " " + q.tagName)) ttl = q.textContent.trim(); q = q.previousElementSibling; } if (!ttl) { const ch = el.closest(".rpt-chapter,.rpt-ch,section"); const h = ch && ch.querySelector("h1,h2,h3,.rpt-ch-title"); ttl = h ? h.textContent.trim() : ""; } } catch (e) {}
       const key = ttl + "|" + items.map((i) => i.title).join(","); if (seen[key]) return; seen[key] = 1;
       let sh = ""; const w = tb.closest(".tv-wrap"), ex = w && w.querySelector(".rpt-v5");
@@ -6767,7 +6790,7 @@ const RPT_UNIT_DEFAULTS = { ...RPT_COMMON_DEFAULTS, fontTitle: "Cairo", pageNum:
 const RPT_CUSTOM_DEFAULTS = { ...RPT_COMMON_DEFAULTS, name: "", scopeLevelId: "", periodKind: "all", year: "", coverSub: "", preparedBy: "" };
 // تنسيق مشترك بين كل التقارير (الباقي: الكليشة والخلفية والغلاف… لكل تقرير حسابه)
 const RPT_SHARED_KEYS = ["fontBody", "fontTitle", "fontHeading", "mainColor", "chapterBg", "thBg", "thColor", "thAlign", "tdAlign", "numCenter", "tableBorders", "zebra", "tableFs", "fontScale", "size", "margin", "mt", "mb", "mr", "ml"];
-const RPT_DESIGN_KEYS = ["orient", "paper", "bgImage", "watermark", "frame", "spine", "showHead", "headRight", "headLogo", "headCenter", "headLeft", "showFoot", "footText", "pageNum"];
+const RPT_DESIGN_KEYS = ["chartMain", "orient", "paper", "bgImage", "watermark", "frame", "spine", "showHead", "headRight", "headLogo", "headCenter", "headLeft", "showFoot", "footText", "pageNum"];
 const RPT_NUM_KEYS = ["mt", "mb", "mr", "ml", "limit", "tableFs", "year", "perPage"];
 // خانات الاعتماد (المسمى + الاسم). {المعدة} و{الرئيسة} تُستبدل من بيانات التقرير، و{الإعداد} من حقل «إعداد» بالغلاف
 const RPT_UNIT_APPROVAL = [{ role: "المسؤولة عن التقرير", name: "{المعدة}" }, { role: "المراجعة", name: "{الرئيسة}" }, { role: "الاعتماد", name: "" }];
@@ -7012,7 +7035,9 @@ function rptWrap(s, inner, isPreview) {
   const cls = ["rpt-wrap", s.oldLook ? "" : "rpt-v5", s.zebra ? "rpt-zebra" : "", s.tableBorders === "grid" ? "rpt-tgrid" : s.tableBorders === "none" ? "rpt-tnone" : "", s.frame ? "rpt-frame" : "", vars.indexOf("--rpt-bg-img") !== -1 ? "rpt-bgimg" : ""].filter(Boolean).join(" ");
   ensureReportFontsLoaded();
   const pageCss = (isPreview ? "" : `<style>@page{size:${w}mm ${h}mm;margin:0}</style>`) + `<style>.a4-page.rpt-hasbg{min-height:${h}mm}@media print{.a4-page.rpt-hasbg{min-height:100vh}}</style>`;
-  return `${pageCss}<div class="${cls}" style="${vars}">${inner}</div>`;
+  const cm = /^#[0-9a-fA-F]{6}$/.test(s.chartMain) ? s.chartMain : "";
+  if (cm) { vars += `--chart-main:${cm};`; inner = String(inner).replace(/#9a3f4e/gi, cm).replace(/#b5606c/gi, mixHex(cm, "#ffffff", 0.3)).replace(/#7a2145/gi, cm); }
+  return `${pageCss}<div class="${cls}${cm ? " has-chartmain" : ""}" style="${vars}">${inner}</div>`;
 }
 function rptPageNumText(s, n, total) {
   if (s.pageNum === "paren") return `(${arabicDigits(n)})`;
@@ -7294,7 +7319,7 @@ function aggReportDocHtml(s, data) {
     });
     const stBody = statsPageBodyHtml(s, data.flat || []);
     if (stBody) { const stH = execChapterHtml("", rptIcon(""), s.statsTitle || "الإحصائيات", stBody); if (closingPage >= 0) pages.splice(closingPage, 0, stH); else pages.push(stH); } // قبل صفحة الاعتماد
-    if (s.chartsPage === true) { const cp = chartsSummaryPages(pages.join(""), s.chartsTitle || "ملخص الرسوم"); if (cp.length) { const ci = closingPage >= 0 ? pages.findIndex((x, k) => k > closingPage - 1 && /rpt-closing|اعتماد/.test("")) : -1; const at = closingPage >= 0 ? closingPage + (stBody ? 1 : 0) : pages.length; pages.splice(at, 0, ...cp); } }
+    if (s.chartsPage === true) { const cp = chartsSummaryPages(pages.join(""), s.chartsTitle || "الرسوم البيانية"); if (cp.length) { const ci = closingPage >= 0 ? pages.findIndex((x, k) => k > closingPage - 1 && /rpt-closing|اعتماد/.test("")) : -1; const at = closingPage >= 0 ? closingPage + (stBody ? 1 : 0) : pages.length; pages.splice(at, 0, ...cp); } }
     const hasCover = !!s.showCover;
     const total = pages.length + (hasCover ? 1 : 0);
     const cover = hasCover ? rptUnifiedCoverHtml(s, {
@@ -7659,7 +7684,9 @@ function rmPanelHtml(st) {
     const chartsAll = chartsHtml + (customHtml ? `<div class="rm-label" style="margin-top:6px;">رسوم مضافة</div>${customHtml}` : "") +
       (secs.length ? `<button type="button" class="rm-new" style="width:100%;" data-action="rm-cc-add">${iconPlus(14, ROSE)} رسم جديد (من حقل في أي قسم)</button>` : "") +
       `<div class="rm-hint">حقل اختيارات (مثل الحالة) = رسم توزيع. حقل رقم (مثل العدد) = رسم أرقام${isUnit ? " لكل عنصر" : " مجموعة لكل وحدة"}.</div>`;
-    return svSettingsHtml(d) + `<div class="rm-label">الرسوم البيانية — لكل رسم إعداده</div><div class="rm-hint">تظهر لكل رسم الأنواع المناسبة لبياناته فقط (التوزيع: دائري/أعمدة، والأرقام والنسب: أعمدة/خطي).</div>${chartsAll}` +
+    const chartsPageUi = rmFieldHtml("صفحة الرسوم", rmToggle("chartsPage", d.chartsPage ? "تظهر قبل الإغلاق والاعتماد" : "مخفية", d.chartsPage) + (d.chartsPage ? `<div style="margin-top:8px;">${rmText("chartsTitle", d.chartsTitle, "عنوان الصفحة (الرسوم البيانية)")}</div>` : ""), "تجمع رسم كل قسم (مؤشرات الأداء وغيرها) في صفحة وحدة قبل الاعتماد. الجدول يبقى في فصل القسم، والرسم لا يتكرر في مكان ثاني.") +
+      rmFieldHtml("لون الرسوم", `<div class="rm-row">${rmColor("chartMain", d.chartMain || d.mainColor)}<button type="button" class="rm-link" data-action="rm-chartmain-clear">الافتراضي (لون التقرير)</button></div>${["#6b2337", "#2f6b3f", "#1f5f8b", "#a9842f", "#5b4b8a", "#444444"].map((c) => `<button type="button" class="rm-sw" data-action="rm-chartmain" data-c="${c}" style="background:${c}" aria-label="${c}"></button>`).join("")}`, "يطبَّق على أشكال المكتبة ورسوم المؤشرات في التقرير. الحالات (متحقق/متعثر) تبقى بألوانها.");
+    return chartsPageUi + svSettingsHtml(d) + `<div class="rm-label">الرسوم البيانية — لكل رسم إعداده</div><div class="rm-hint">تظهر لكل رسم الأنواع المناسبة لبياناته فقط (التوزيع: دائري/أعمدة، والأرقام والنسب: أعمدة/خطي).</div>${chartsAll}` +
       `<div class="rm-sep"></div>` +
       rmFieldHtml("محاذاة رأس الجدول", rmPills("thAlign", d.thAlign, [["right", "يمين"], ["center", "وسط"], ["left", "يسار"]])) +
       rmFieldHtml("محاذاة الكلام داخل الجدول", rmPills("tdAlign", d.tdAlign, [["right", "يمين"], ["center", "وسط"], ["left", "يسار"]])) +
@@ -7754,6 +7781,8 @@ function handleReportsManageAction(action, ds) {
     case "rm-set": rmSetField(ds.key, ds.value); break;
     case "rm-preset": { const pr = RPT_PRESETS[Number(ds.p)]; if (pr) { rmSetField("mainColor", pr.main); rmSetField("chapterBg", pr.chapterBg); rmSetField("thBg", pr.thBg); rmSetField("thColor", pr.main); } break; }
     case "rm-toggle": d[ds.key] = !d[ds.key]; break;
+    case "rm-chartmain": d.chartMain = ds.c; break;
+    case "rm-chartmain-clear": d.chartMain = ""; break;
     case "rm-svx": { const cur = { ...((d.svx && typeof d.svx === "object") ? d.svx : SV_EXTRAS_DEFAULT) }; cur[ds.id] = !cur[ds.id]; d.svx = cur; break; }
     case "rm-colv": { const lv = ds.lvl, lc = { ...(d.levelCols || {}) }; const bySec = { ...(lc[lv] || {}) }; const cur = new Set(bySec[ds.sec] || []); if (cur.has(ds.col)) cur.delete(ds.col); else cur.add(ds.col); bySec[ds.sec] = [...cur]; lc[lv] = bySec; d.levelCols = lc; break; }
     case "rm-lvl": { const lv = ds.lvl, cur = new Set((d.levelHidden || {})[lv] || []); if (cur.has(ds.key)) cur.delete(ds.key); else cur.add(ds.key); d.levelHidden = { ...(d.levelHidden || {}), [lv]: [...cur] }; break; }
@@ -13971,7 +14000,7 @@ function fullReportOrPreviewBody(unit, report, afterPage, opts) {
     });
     const stBody = opts.capture ? "" : statsPageBodyHtml(s, [{ unit, report }]);
     if (stBody) { const stPg = { html: execChapterHtml("", rptIcon(""), s.statsTitle || "الإحصائيات", stBody), ids: [], summary: false }; const ai = pages.findIndex((p) => p.appr); if (ai >= 0) pages.splice(ai, 0, stPg); else pages.push(stPg); } // الإحصائيات قبل صفحة الاعتماد
-    if (!opts.capture && s.chartsPage === true) { const cp = chartsSummaryPages(pages.map((x) => x.html).join(""), s.chartsTitle || "ملخص الرسوم"); if (cp.length) { const ai2 = pages.findIndex((p) => p.appr); const at = ai2 >= 0 ? ai2 : pages.length; pages.splice(at, 0, ...cp.map((h) => ({ html: h, ids: [], summary: false }))); } }
+    if (!opts.capture && s.chartsPage === true) { const cp = chartsSummaryPages(pages.map((x) => x.html).join(""), s.chartsTitle || "الرسوم البيانية"); if (cp.length) { const ai2 = pages.findIndex((p) => p.appr); const at = ai2 >= 0 ? ai2 : pages.length; pages.splice(at, 0, ...cp.map((h) => ({ html: h, ids: [], summary: false }))); } }
     const hasCover = !!s.showCover;
     const total = pages.length + (hasCover ? 1 : 0);
     return (hasCover ? reportCoverPageHtml(unit, report, dept, s, total) : "") +
