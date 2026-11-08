@@ -194,6 +194,7 @@ const CONFIDENTIALITY_LEVELS = ["متاح في التقرير العام", "مت
 const YES_NO_OPTIONS = ["نعم", "لا"];
 const CHALLENGE_AREAS_BASE = ["الموظفات", "الإجراءات", "الأنظمة التقنية", "الميزانية", "التجهيزات", "المبنى", "الحضور", "التواصل", "المستفيدات", "البيانات", "الصلاحيات", "التنسيق بين الأقسام", "الشراكات"];
 const CHALLENGE_SEVERITY = ["منخفض", "متوسط", "مرتفع", "حرج"];
+const CHALLENGE_HANDLERS_BASE = ["القسم", "مساعدة مدير إدارة التعليم النسائي", "إدارة التعليم النسائي", "الإدارة العليا", "جهة خارجية"];
 const CHALLENGE_SCOPE = ["داخل الوحدة", "مشتركة مع وحدة أخرى", "تحتاج تدخل القسم", "تحتاج مساعدة مدير إدارة التعليم النسائي", "تحتاج قرار إدارة التعليم النسائي", "تحتاج قرار الإدارة العليا", "مرتبطة بجهة خارجية"];
 const ROUTE_TO_OPTIONS = ["الوحدة فقط", "مديرة القسم", "مساعدة مدير إدارة التعليم النسائي", "إدارة التعليم النسائي"];
 const IMPROVEMENT_EASE_OPTIONS = ["سهلة", "متوسطة", "معقدة"];
@@ -289,18 +290,18 @@ const SECTION_FIELD_SCHEMAS = {
     fields: [
       { id: "name", type: "text", label: "اسم الصعوبة", required: true, placeholder: "مثال: نقص الكادر المؤهل" },
       { id: "area", type: "expandableSelect", label: "مجال الصعوبة", required: true, baseOptions: CHALLENGE_AREAS_BASE, customKey: "customChallengeAreas", otherLabel: "أخرى", placeholder: "اختاري مجال الصعوبة" },
-      { id: "severity", type: "radio", label: "مستوى الصعوبة", options: CHALLENGE_SEVERITY },
+      { id: "severity", type: "select", label: "مستوى الصعوبة", options: CHALLENGE_SEVERITY },
       { id: "scope", type: "select", label: "نطاق الصعوبة", options: CHALLENGE_SCOPE },
       { id: "description", type: "textarea", label: "وصف الصعوبة", required: true, subheadBefore: "بيانات الصعوبة" },
       { id: "rootCause", type: "textarea", label: "سببها الجذري" },
       { id: "performanceImpact", type: "textarea", label: "أثرها في الأداء" },
       { id: "startedWhen", type: "date", label: "متى بدأت؟" },
-      { id: "recurred", type: "radio", label: "هل تكررت سابقًا؟", options: YES_NO_OPTIONS },
+      { id: "recurred", type: "select", label: "هل تكررت سابقًا؟", options: YES_NO_OPTIONS },
       { id: "actionTaken", type: "textarea", label: "الإجراء الذي اتخذته الوحدة" },
       { id: "actionResult", type: "textarea", label: "نتيجة الإجراء" },
-      { id: "stillOngoing", type: "radio", label: "هل ما زالت قائمة؟", options: YES_NO_OPTIONS },
+      { id: "stillOngoing", type: "select", label: "هل ما زالت قائمة؟", options: YES_NO_OPTIONS },
       { id: "supportNeeded", type: "textarea", label: "الدعم أو القرار المطلوب" },
-      { id: "proposedHandler", type: "text", label: "الجهة المقترحة للمعالجة", placeholder: "مثال: قسم شؤون المكاتب" },
+      { id: "proposedHandler", type: "expandableSelect", label: "الجهة المقترحة للمعالجة", baseOptions: CHALLENGE_HANDLERS_BASE, customKey: "customChallengeHandlers", otherLabel: "أخرى (إضافة جهة)", placeholder: "اختاري الجهة" },
       { id: "resolutionTime", type: "text", label: "المدة اللازمة للمعالجة", placeholder: "مثال: أسبوعان" },
     ],
   },
@@ -3359,9 +3360,53 @@ const DASH_SEV_COL = [[/عاجل|حرج/, "#b03a3a"], [/عالي|مرتفع|مت
 const DASH_ITEMS = {};
 const DASH_PAL = ["#6b2337", "#c9863a", "#5f8a6a", "#a05a72", "#7d8fa8", "#b89a5a"];
 
+const CH_LV = { "حرج": 0, "مرتفع": 1, "منخفض": 2 };
+function challTowersHtml(items) {
+  const g = {};
+  items.forEach((it) => { if (CH_LV[it.severity] == null) return; const a = String(it.area || "").trim() || "غير محدد"; (g[a] = g[a] || []).push(it); });
+  const names = Object.keys(g).sort((a, b) => g[b].length - g[a].length);
+  if (!names.length) return "";
+  const tw = names.map((a) => {
+    const fl = g[a].slice().sort((x, y) => CH_LV[x.severity] - CH_LV[y.severity]).map((it) => {
+      const cls = "ct-fl ct-l" + CH_LV[it.severity] + (it.key ? " ct-k" : "");
+      return `<div class="${cls}" title="${esc(it.name)} — ${esc(it.severity)}"${it.key ? ` data-action="dash-item" data-key="${esc(it.key)}"` : ""}>${esc(it.name)}</div>`;
+    }).join("");
+    return `<div class="ct-tw"><i class="ct-roof"></i><div class="ct-body">${fl}</div><div class="ct-nm">${esc(a)}<b>${g[a].length}</b></div></div>`;
+  }).join("");
+  const cnt = [0, 0, 0]; items.forEach((it) => { if (CH_LV[it.severity] != null) cnt[CH_LV[it.severity]]++; });
+  const lg = ["حرج", "مرتفع", "منخفض"].map((n, i) => `<span><i class="ct-d ct-l${i}"></i>${n} ${cnt[i]}</span>`).join("");
+  return `<div class="ct-wrap"><div class="ct-row">${tw}</div><div class="ct-lg">${lg}</div></div>`;
+}
+function challMatrixHtml(items) {
+  const g = {};
+  items.forEach((it) => { if (CH_LV[it.severity] == null) return; const a = String(it.area || "").trim() || "غير محدد"; (g[a] = g[a] || [[], [], []])[CH_LV[it.severity]].push(it); });
+  const areas = Object.keys(g).sort((a, b) => g[b].reduce((t, x) => t + x.length, 0) - g[a].reduce((t, x) => t + x.length, 0));
+  if (!areas.length) return "";
+  const head = `<tr><td></td>${["حرج", "مرتفع", "منخفض"].map((n, i) => `<td class="cm-h ct-l${i}">${n}</td>`).join("")}</tr>`;
+  const body = areas.map((a) => `<tr><td class="cm-a">${esc(a)}</td>${g[a].map((l, i) => `<td class="cm-c cm-c${i}">${l.map((it) => `<div class="cm-i cm-i${i}">${esc(it.name)}</div>`).join("")}</td>`).join("")}</tr>`).join("");
+  return `<div class="ct-wrap"><table class="cm-t">${head}${body}</table></div>`;
+}
+function dashChallModalHtml(rec) {
+  const it = rec.item, more = !!S.ui.dashItemMore;
+  const v = (id) => schemaFieldText(it[id]).trim();
+  const row = (k, id) => { const x = v(id); return x ? `<div class="ct-r"><span>${k}</span><b>${esc(x).replace(/\n/g, "<br>")}</b></div>` : ""; };
+  const grp = (t, body) => (body ? `<div class="ct-g"><div class="ct-gh">${t}</div>${body}</div>` : "");
+  const lvI = CH_LV[it.severity];
+  const g1 = grp("الشرح", row("الوصف", "description") + row("السبب الجذري", "rootCause") + row("الأثر في الأداء", "performanceImpact"));
+  const g2 = grp("الزمن", row("بدأت", "startedWhen") + row("تكررت سابقًا", "recurred") + row("ما زالت قائمة", "stillOngoing") + row("المدة اللازمة", "resolutionTime"));
+  const g3 = grp("المعالجة والتوجيه", row("الإجراء", "actionTaken") + row("نتيجة الإجراء", "actionResult") + row("الدعم المطلوب", "supportNeeded") + row("الجهة المقترحة", "proposedHandler"));
+  const sub = [rec.unit, v("area"), v("scope")].filter(Boolean).map(esc).join(" · ");
+  return `<div class="no-print" data-action="dashitem-close" style="position:fixed;inset:0;background:rgba(40,20,30,.45);z-index:9000;display:flex;align-items:flex-end;justify-content:center;">
+    <div data-stop="1" class="ct-sheet"><i class="ct-grab"></i>
+      <div class="ct-hd"><b>${esc(v("name") || "صعوبة")}</b>${lvI != null ? `<span class="ct-pill ct-l${lvI}">${esc(it.severity)}</span>` : ""}<button type="button" data-action="dashitem-close" style="background:none;border:none;cursor:pointer;">${iconX(18, SUBTLE)}</button></div>
+      ${sub ? `<div class="ct-sub">${sub}</div>` : ""}${g1}${g2}${g3 ? (more ? g3 : "") : ""}
+      ${g3 ? `<div style="text-align:center;margin-top:12px"><button type="button" class="ct-more" data-action="dashitem-more">${more ? "إخفاء ▴" : "المزيد ▾"}</button>${more ? "" : `<div class="ct-hint">المعالجة والتوجيه (الإجراء، النتيجة، الدعم، الجهة)</div>`}</div>` : ""}
+    </div></div>`;
+}
 function dashItemModalHtml(sid) {
   const k = S.ui.dashItem; if (!k) return "";
   const rec = DASH_ITEMS[k]; if (!rec || rec.sid !== sid) return "";
+  if (sid === "challenges") return dashChallModalHtml(rec);
   const sc = SECTION_FIELD_SCHEMAS[sid];
   const rowsH = sc.fields.map((f) => {
     const v = schemaFieldText(rec.item[f.id]).trim(); if (!v) return "";
@@ -3387,6 +3432,11 @@ function dashFieldBlockHtml(kind, sid, units) {
     for (let i = rows.length - 1; i >= 0; i--) { const x = rows[i]; const set = strict || String(x.routeTo || "").trim() !== ""; if (set && routeLevelOf(sid, x) !== lv) rows.splice(i, 1); }
   }
   if (!rows.length) return "";
+  if (sid === "challenges") {
+    const its = rows.filter((x) => x && x.name && x.stillOngoing !== "لا").map((x) => { const key = kind + "|challenges|" + rows.indexOf(x); DASH_ITEMS[key] = { sid, item: x, unit: unitOf.get(x) || "" }; return { name: x.name, area: x.area, severity: x.severity, key }; });
+    const tw = challTowersHtml(its);
+    return dashCard(dashFieldSecLabel(sid), `${its.length} صعوبة قائمة · اضغطي على أي صعوبة لتفاصيلها`, tw || `<div style="font-size:12px;color:${SUBTLE};padding:8px 0">لا توجد صعوبات قائمة بمستوى حرج أو مرتفع أو منخفض.</div>`);
+  }
   const fld = (id) => sc.fields.find((f) => f.id === id);
   const txt = (x, id) => { const v = x[id]; return v == null ? "" : schemaFieldText(v).trim(); };
   const num = (v) => { const n = Number(String(v == null ? "" : v).replace(/[٠-٩]/g, (c) => "٠١٢٣٤٥٦٧٨٩".indexOf(c))); return isFinite(n) && String(v).trim() !== "" ? n : null; };
@@ -3430,6 +3480,13 @@ const ROUTE_SECS = ["challenges", "recommendations", "improvement", "initiatives
 const ROUTE_KIND_LEVEL = { dept: "dept", role_asst: "asst", executive: "exec" };
 function routeLevelOf(sid, it) {
   if (!it || typeof it !== "object") return "unit";
+  if (sid === "challenges" && it.proposedHandler) { // الجهة المقترحة للمعالجة تغلب على النطاق
+    const h = String(it.proposedHandler);
+    if (/مساعد/.test(h)) return "asst";
+    if (/إدارة التعليم النسائي|الإدارة العليا/.test(h)) return "exec";
+    if (/القسم/.test(h)) return "dept";
+    return "unit";
+  }
   const t = String(sid === "challenges" ? it.scope : sid === "recommendations" ? it.level : it.routeTo) || "";
   if (/قرار/.test(t)) return "exec";
   if (/مساعدة مدير/.test(t)) return "asst";
@@ -4542,17 +4599,6 @@ function exBlocksInner(kind, units, extra) {
     const list = Object.entries(m).filter((x) => x[1] > 0).sort((a, b) => b[1] - a[1]).slice(0, 7);
     const max = Math.max(1, ...list.map((x) => x[1]));
     benH = dashCard("المستفيدون حسب نوع العمل", "", list.length ? `<div style="display:flex;align-items:flex-end;gap:10px;height:190px;padding-top:10px;">${list.map(([k, v]) => `<div style="flex:1;min-width:0;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;height:100%;gap:4px;"><b style="font-size:11.5px;">${fmtNum(v)}</b><div style="width:100%;max-width:48px;height:${Math.max(4, Math.round(v / max * 130))}px;background:#8B4A73;border-radius:6px 6px 0 0;"></div><span style="font-size:10.5px;color:${SUBTLE};text-align:center;line-height:1.3;">${esc(k)}</span></div>`).join("")}</div>` : emptyHint("لا توجد أعداد مستفيدين مُدخلة."));
-    html += "\u0003";
-  }
-  if (!dashHidden(kind, "exChal")) { html += "\u0001exChal\u0002";
-    const sev = [["حرج", DANGER], ["مرتفع", "#c9863a"], ["متوسط", "#E8C7A0"], ["منخفض", "#efe3d6"]];
-    const rows = childStats.map((c) => {
-      const k = {}; sev.forEach(([s]) => (k[s] = 0));
-      c.list.forEach((x) => { const l = dashUnitLatest(series, x.id); if (l) (l.report.sections?.challenges?.data?.challenges || []).forEach((ch) => { if (ch && ch.name && ch.stillOngoing !== "لا" && k[ch.severity] != null) k[ch.severity]++; }); });
-      const tot = sev.reduce((s, [x]) => s + k[x], 0);
-      return `<div style="display:flex;align-items:center;gap:10px;padding:5px 0;"><span style="width:140px;flex-shrink:0;font-size:12px;">${esc(c.name)}</span><div style="flex:1;display:flex;gap:2px;height:18px;">${sev.map(([s, col]) => (k[s] ? `<div title="${s}: ${k[s]}" style="width:${k[s] * 22}px;border-radius:4px;background:${col}"></div>` : "")).join("")}</div><b style="font-size:12px;width:22px;">${tot}</b></div>`;
-    }).join("");
-    chH = dashCard("الصعوبات القائمة حسب المستوى", "", `<div style="display:flex;gap:10px;font-size:11.5px;flex-wrap:wrap;margin-bottom:8px;">${sev.map(([s, c]) => `<span style="display:flex;align-items:center;gap:5px;"><span style="width:12px;height:12px;border-radius:3px;background:${c}"></span>${s}</span>`).join("")}</div>${rows}`);
     html += "\u0003";
   }
   if (!dashHidden(kind, "exSubm")) { html += "\u0001exSubm\u0002";
@@ -6914,6 +6960,7 @@ const AGG_CHAPTERS = [
   { key: "recs", title: "التوصيات التي تحتاج قرار الإدارة", icon: "pencil" },
   { key: "initiatives", title: "المبادرات القابلة للتعميم", icon: "layers" },
   { key: "nextTasks", title: "أولويات الفترة القادمة", icon: "calendar" },
+  { key: "challengesChart", title: "رسم الصعوبات القائمة", icon: "bell" },
   { key: "closing", title: "الخاتمة والاعتماد", icon: "check" },
 ];
 // ربط فصول التقرير النهائي بأقسام التعبئة ليأخذ كل فصل «شكل القسم» نفسه المختار لتقرير الوحدة
@@ -7111,7 +7158,7 @@ function syncCustomReportPages() {
 function rptOrdered(defs, s) {
   const keys = defs.map((d) => d.key);
   const ord = (s.order || []).filter((k) => keys.includes(k));
-  keys.forEach((k) => { if (!ord.includes(k)) ord.push(k); });
+  keys.forEach((k) => { if (!ord.includes(k)) { const ci = k === "challengesChart" ? ord.indexOf("closing") : -1; if (ci >= 0) ord.splice(ci, 0, k); else ord.push(k); } });
   return ord.map((k) => defs.find((d) => d.key === k));
 }
 function rptChapterTitle(def, s) { return ((s.titles || {})[def.key] || "").trim() || def.title; }
@@ -7278,7 +7325,7 @@ function aggReportData(s) {
   flat.forEach((x) => (x.report.sections?.strengths?.data?.strengths || []).forEach((it) => strengths.push({ unitName: x.unit.name, name: it.name, area: it.area, curated: curated(x, "strength", it.id) })));
   const severityRank = { "حرج": 3, "مرتفع": 2, "متوسط": 1, "منخفض": 0 };
   const challenges = [];
-  flat.forEach((x) => (x.report.sections?.challenges?.data?.challenges || []).forEach((c) => challenges.push({ ...c, unitName: x.unit.name, curated: curated(x, "challenge", c.id) })));
+  flat.forEach((x) => (x.report.sections?.challenges?.data?.challenges || []).filter((c) => routeLevelOf("challenges", c) === "exec" && c.stillOngoing !== "لا").forEach((c) => challenges.push({ ...c, unitName: x.unit.name, curated: curated(x, "challenge", c.id) })));
   const priorityRank = { "عاجلة": 3, "عالية": 2, "متوسطة": 1, "منخفضة": 0 };
   const recs = [];
   flat.forEach((x) => (x.report.sections?.recommendations?.data?.recommendations || []).forEach((r) => recs.push({ ...r, unitName: x.unit.name, curated: curated(x, "recommendation", r.id) })));
@@ -7325,7 +7372,7 @@ function aggFakeData(s) {
     indicators: rows(Math.min(lim * 2, 8), (i, u) => ({ unitName: u, name: "مؤشر نموذجي " + arabicDigits(i + 1), actual: String(70 + i * 3) })),
     achievements: rows(Math.min(lim, 12), (i, u) => ({ unitName: u, name: "عمل نموذجي " + arabicDigits(i + 1), highlightResult: "نتيجة نموذجية ذات أثر", curated: i < 2 })),
     strengths: rows(Math.min(lim, 12), (i, u) => ({ unitName: u, name: "نقطة قوة " + arabicDigits(i + 1), area: "مجال نموذجي", curated: i < 1 })),
-    challenges: rows(Math.min(lim, 12), (i, u) => ({ unitName: u, name: "صعوبة نموذجية " + arabicDigits(i + 1), severity: sev[i % 4], curated: false })),
+    challenges: rows(Math.min(lim, 12), (i, u) => ({ unitName: u, name: "صعوبة نموذجية " + arabicDigits(i + 1), severity: sev[i % 4], area: ["الموظفات", "التقنية", "التجهيزات"][i % 3], description: "وصف نموذجي للصعوبة", performanceImpact: "أثر نموذجي", proposedHandler: "إدارة التعليم النسائي", curated: false })),
     recs: rows(Math.min(lim, 12), (i, u) => ({ unitName: u, text: "توصية نموذجية " + arabicDigits(i + 1), priority: pr[i % 4], curated: i < 1 })),
     initiatives: rows(Math.min(lim, 6), (i, u) => ({ unitName: u, name: "مبادرة نموذجية " + arabicDigits(i + 1), scalability: "قابلة للتعميم" })),
     nextTasks: rows(Math.min(lim * 2, 6), (i, u) => ({ unitName: u, name: "عمل قادم " + arabicDigits(i + 1), expectedDate: "١٤٤٨/٠٩/٠١" })),
@@ -7358,10 +7405,11 @@ function aggChapterBody(key, data, s) {
   }
   if (key === "indicators") return data.indicators.length ? reportTable(["الوحدة", "المؤشر", "المستهدف", "خط الأساس", "المتحقق"], data.indicators.map((r) => { let def = null, rs = r, bs = null; try { def = findIndicatorDef(r.name); rs = resolveIndicatorRow(r, def); const pb = r.unitId && r._rep ? indicatorPrevBaseline(r.unitId, r._rep, r.name) : null; bs = pb ? pb.value : (r.baseline !== "" && r.baseline != null ? r.baseline : null); } catch (e) {} return [esc(r.unitName), esc(r.name) + indMetaSpan(rs, indExtra(r, rs, (() => { try { return computeIndicatorStatus(rs); } catch (e) { return null; } })())), esc(def && def.target !== "" && def.target != null ? def.target : "—"), esc(bs != null ? bs : "—"), esc(r.actual !== "" && r.actual != null ? r.actual : "—")]; }), { mergeFirst: true }) : emptyHint("لا توجد مؤشرات مُدخلة بعد.");
   if (key === "yearCompare") return data.yearCompareHtml();
+  if (key === "challengesChart") { const tw = challTowersHtml((data.challenges || []).map((c) => ({ name: c.name, area: c.area, severity: c.severity }))); return tw || emptyHint("لا توجد صعوبات قائمة موجهة للإدارة."); }
   if (key === "programs") return data.programsHtml();
   if (key === "achievements") return data.achievements.length ? reportTable(["الوحدة", "العمل", "الأثر"], data.achievements.map((a) => [esc(a.unitName), esc(a.name || "—"), esc(a.highlightResult)])) : emptyHint("لا توجد إنجازات بارزة مُدخلة بعد.");
   if (key === "strengths") return data.strengths.length ? reportTable(["الوحدة", "نقطة القوة", "المجال"], data.strengths.map((x) => [esc(x.unitName), esc(x.name || "—"), esc(x.area || "—")])) : emptyHint("لا توجد نقاط قوة مُدخلة بعد.");
-  if (key === "challenges") return data.challenges.length ? reportTable(["الوحدة", "الصعوبة", "المستوى"], data.challenges.map((c) => { const sm = challengeSeverityMeta(c.severity); return [esc(c.unitName), esc(c.name || "—"), c.severity ? badgeHtml(c.severity, sm.color, sm.bg) : "—"]; })) : emptyHint("لا توجد تحديات مُدخلة بعد.");
+  if (key === "challenges") return data.challenges.length ? challMatrixHtml(data.challenges.map((c) => ({ name: c.name, area: c.area, severity: c.severity }))) + reportTable(["الوحدة", "الصعوبة", "المجال", "المستوى", "الوصف", "الأثر في الأداء", "الجهة المقترحة للمعالجة"], data.challenges.map((c) => { const sm = challengeSeverityMeta(c.severity); return [esc(c.unitName), esc(c.name || "—"), esc(c.area || "—"), c.severity ? badgeHtml(c.severity, sm.color, sm.bg) : "—", esc(c.description || "—"), esc(c.performanceImpact || "—"), esc(c.proposedHandler || "—")]; })) : emptyHint("لا توجد تحديات مُدخلة بعد.");
   if (key === "recs") return data.recs.length ? reportTable(["الوحدة", "التوصية", "الأولوية"], data.recs.map((r) => { const pm = improvementPriorityMeta(r.priority); return [esc(r.unitName), esc(r.text || "—"), r.priority ? badgeHtml(r.priority, pm.color, pm.bg) : "—"]; })) : emptyHint("لا توجد توصيات مُدخلة بعد.");
   if (key === "initiatives") return data.initiatives.length ? reportTable(["الوحدة", "اسم المبادرة", "قابلية التعميم"], data.initiatives.map((it) => [esc(it.unitName), esc(it.name || "—"), esc(it.scalability || "—")])) : emptyHint("لا توجد مبادرات قابلة للتعميم مُدخلة بعد.");
   if (key === "nextTasks") return data.nextTasks.length ? reportTable(["الوحدة", "العمل الرئيسي القادم", "الموعد المتوقع"], data.nextTasks.map((t) => [esc(t.unitName), esc(t.name || "—"), esc(t.expectedDate || "—")])) : emptyHint("لم تُضف أولويات للفترة القادمة بعد.");
@@ -9317,7 +9365,7 @@ async function generateAiSummaryAsync() {
   };
   flat.forEach((x) => {
     (x.report.sections?.programs?.data?.programs || []).filter((p) => p.highlightResult).forEach((p) => data.achievements.push({ unit: x.unit.name, result: p.highlightResult }));
-    (x.report.sections?.challenges?.data?.challenges || []).forEach((c) => data.challenges.push({ unit: x.unit.name, name: c.name, severity: c.severity }));
+    (x.report.sections?.challenges?.data?.challenges || []).filter((c) => routeLevelOf("challenges", c) === "exec" && c.stillOngoing !== "لا").forEach((c) => data.challenges.push({ unit: x.unit.name, name: c.name, severity: c.severity }));
     (x.report.sections?.recommendations?.data?.recommendations || []).forEach((r) => data.recommendations.push({ unit: x.unit.name, text: r.text, priority: r.priority }));
   });
   const res = await fetch(`${SUPABASE_URL}/functions/v1/generate-executive-summary`, {
@@ -9362,7 +9410,7 @@ function renderExecutiveSummary(scopeUnits, scopeDepartments, opts) {
   const goalLevelCounts = {};
   allGoals.forEach((g) => { if (g.level) goalLevelCounts[g.level] = (goalLevelCounts[g.level] || 0) + 1; });
   const allChallengesAll = [];
-  flat.forEach((x) => (x.report.sections?.challenges?.data?.challenges || []).forEach((c) => allChallengesAll.push({ ...c, unitName: x.unit.name, curated: isItemCurated(x.unit, curationKey("challenge", x.report.id, c.id)) })));
+  flat.forEach((x) => (x.report.sections?.challenges?.data?.challenges || []).filter((c) => routeLevelOf("challenges", c) === "exec" && c.stillOngoing !== "لا").forEach((c) => allChallengesAll.push({ ...c, unitName: x.unit.name, curated: isItemCurated(x.unit, curationKey("challenge", x.report.id, c.id)) })));
   const allChallenges = sortCurated(allChallengesAll);
   const allRecommendationsAll = [];
   flat.forEach((x) => (x.report.sections?.recommendations?.data?.recommendations || []).forEach((r) => allRecommendationsAll.push({ ...r, unitName: x.unit.name, curated: isItemCurated(x.unit, curationKey("recommendation", x.report.id, r.id)) })));
@@ -9411,7 +9459,7 @@ function renderExecutiveSummary(scopeUnits, scopeDepartments, opts) {
     <div class="card" style="margin-bottom:16px;">
       <div class="prs-title" style="font-size:14px;font-weight:800;margin-bottom:10px;">أبرز التحديات</div>
       ${allChallenges.length === 0 ? emptyHint("لا توجد تحديات مُدخلة بعد.") :
-        reportTable(["اسم الصعوبة", "الوحدة", "المستوى"], allChallenges.slice(0, 8).map((c) => { const sm = challengeSeverityMeta(c.severity); return [esc(c.name || "—"), esc(c.unitName), c.severity ? badgeHtml(c.severity, sm.color, sm.bg) : "—"]; }))}
+        reportTable(["اسم الصعوبة", "الوحدة", "المستوى", "الجهة المقترحة للمعالجة"], allChallenges.slice(0, 8).map((c) => { const sm = challengeSeverityMeta(c.severity); return [esc(c.name || "—"), esc(c.unitName), c.severity ? badgeHtml(c.severity, sm.color, sm.bg) : "—", esc(c.proposedHandler || "—")]; }))}
     </div>
 
     <div class="card" style="margin-bottom:16px;">
@@ -12530,23 +12578,23 @@ function challengesSectionHtml(d) {
   const items = d.challenges || [];
   const customAreas = d.customChallengeAreas || [];
   const rows = items.map((item, i) => `
-    <div class="repeat-item">
+    <div class="repeat-item rpt-chl">
       <div class="repeat-item-head"><span class="repeat-item-title">الصعوبة ${i + 1}</span>${removeBtn("challenges", item.id)}</div>
       ${fieldWrap("اسم الصعوبة", true, inp("challenges", item.id, "name", item.name, "مثال: نقص الكادر المؤهل"))}
       ${fieldWrap("مجال الصعوبة", true, expandableSelectHtml("area", item.area, CHALLENGE_AREAS_BASE, customAreas, "اختاري مجال الصعوبة", "أخرى", "challenges", item.id))}
-      ${fieldWrap("مستوى الصعوبة", radio("challenges", item.id, "severity", item.severity, CHALLENGE_SEVERITY))}
+      ${fieldWrap("مستوى الصعوبة", sel("challenges", item.id, "severity", item.severity, CHALLENGE_SEVERITY))}
       ${fieldWrap("نطاق الصعوبة", sel("challenges", item.id, "scope", item.scope, CHALLENGE_SCOPE))}
       <div class="subhead">بيانات الصعوبة</div>
       ${fieldWrap("وصف الصعوبة", true, txt("challenges", item.id, "description", item.description))}
       ${fieldWrap("سببها الجذري", txt("challenges", item.id, "rootCause", item.rootCause))}
       ${fieldWrap("أثرها في الأداء", txt("challenges", item.id, "performanceImpact", item.performanceImpact))}
       ${fieldWrap("متى بدأت؟", inp("challenges", item.id, "startedWhen", item.startedWhen, "", "date"))}
-      ${fieldWrap("هل تكررت سابقًا؟", radio("challenges", item.id, "recurred", item.recurred, YES_NO_OPTIONS))}
+      ${fieldWrap("هل تكررت سابقًا؟", sel("challenges", item.id, "recurred", item.recurred, YES_NO_OPTIONS))}
       ${fieldWrap("الإجراء الذي اتخذته الوحدة", txt("challenges", item.id, "actionTaken", item.actionTaken))}
       ${fieldWrap("نتيجة الإجراء", txt("challenges", item.id, "actionResult", item.actionResult))}
-      ${fieldWrap("هل ما زالت قائمة؟", radio("challenges", item.id, "stillOngoing", item.stillOngoing, YES_NO_OPTIONS))}
+      ${fieldWrap("هل ما زالت قائمة؟", sel("challenges", item.id, "stillOngoing", item.stillOngoing, YES_NO_OPTIONS))}
       ${fieldWrap("الدعم أو القرار المطلوب", txt("challenges", item.id, "supportNeeded", item.supportNeeded))}
-      ${fieldWrap("الجهة المقترحة للمعالجة", inp("challenges", item.id, "proposedHandler", item.proposedHandler, "مثال: قسم شؤون المكاتب"))}
+      ${fieldWrap("الجهة المقترحة للمعالجة", expandableSelectHtml("proposedHandler", item.proposedHandler, CHALLENGE_HANDLERS_BASE, d.customChallengeHandlers || [], "اختاري الجهة", "أخرى (إضافة جهة)", "challenges", item.id))}
       ${fieldWrap("المدة اللازمة للمعالجة", inp("challenges", item.id, "resolutionTime", item.resolutionTime, "مثال: أسبوعان"))}
     </div>`).join("");
   return `${pillBtn("إضافة صعوبة", { variant: "ghost", icon: iconPlus(15, ROSE), action: "add-item", data: { arr: "challenges" } })}<div style="margin:14px 0;">${rows}</div>${notesFieldHtml(d)}`;
@@ -12750,6 +12798,7 @@ const CUSTOM_OPTION_FIELD_MAP = {
   "tools|toolType": "customToolTypes",
   "strengths|area": "customStrengthAreas",
   "challenges|area": "customChallengeAreas",
+  "challenges|proposedHandler": "customChallengeHandlers",
   "comparisons|changeReason": "customChangeReasons",
   "goals|evidenceType": "customEvidenceTypes",
 };
@@ -16123,7 +16172,8 @@ function attachClickListener() {
       case "shind-mode": S.ui.shInd.mode = ds.m; render(); break;
       case "shind-add": { const f = S.ui.shInd; const cur = (S.siteSettings.theme && S.siteSettings.theme.sharedInds) || []; saveSiteTheme({ sharedInds: [...cur, { id: uid("shind"), indName: f.indName, units: f.units.slice(), mode: f.mode, target: f.target }] }); S.ui.shInd = null; render(); break; }
       case "shind-del": { const cur = (S.siteSettings.theme && S.siteSettings.theme.sharedInds) || []; saveSiteTheme({ sharedInds: cur.filter((x) => x.id !== ds.id) }); render(); break; }
-      case "dash-item": S.ui.dashItem = ds.key; render(); break;
+      case "dash-item": S.ui.dashItem = ds.key; S.ui.dashItemMore = false; render(); break;
+      case "dashitem-more": S.ui.dashItemMore = !S.ui.dashItemMore; render(); break;
       case "dashitem-close": if (e.target.closest("[data-stop]") && !e.target.closest("button[data-action=dashitem-close]")) break; S.ui.dashItem = null; render(); break;
       case "ind-tab": S.ui.indTab = ds.tab; render(); break;
       case "scope-toggle": { const k = ds.kind + ":" + ds.id; S.ui.scopeOpen = S.ui.scopeOpen === k ? null : k; render(); break; }

@@ -1235,3 +1235,41 @@ html body table.prs-table:not(#z) tbody tr:last-child td,html body table.rpt-gta
 .ic-ja{box-shadow:none}.ic-jt .ic-ja{background:var(--c);box-shadow:none;z-index:2}.ic-jt .ic-ja em{top:-18px;font-size:12px;font-weight:800;color:var(--c)}
 .ic-jt2,.ic-jt .ic-jx{box-shadow:0 0 0 2px #c9a24b;border-radius:3px}.ic-jt .ic-jx{transform:rotate(45deg)}.ic-jt .ic-jx em{transform:translateX(50%) rotate(-45deg);top:20px}
 .ic-js{display:flex;flex-direction:column;align-items:center;gap:3px;min-width:96px}.ic-js small{font-size:10.5px;color:#6f6168}
+
+
+.sec-note{font-size:11.5px!important;font-weight:500!important;color:#8a3550!important;line-height:1.6;margin-top:3px}
+
+/* ===== أبراج الصعوبات (اللوحة والتقرير) ===== */
+.ct-wrap{font-family:"El Messiri","IBM Plex Sans Arabic",Tahoma,sans-serif}
+.ct-row{display:flex;gap:9px;align-items:flex-end}
+.ct-tw{flex:1;min-width:0;display:flex;flex-direction:column;justify-content:flex-end}
+.ct-roof{display:block;width:0;height:0;border-left:30px solid transparent;border-right:30px solid transparent;border-bottom:16px solid #7b7f86;margin:0 auto;border-radius:3px}
+.ct-body{background:#f1f2f3;border:2px solid #7b7f86;border-top:none;border-radius:0 0 10px 10px;padding:3px 5px 6px}
+.ct-fl{margin-top:3px;padding:8px 4px;border-radius:7px;font-size:10.5px;font-weight:800;text-align:center;line-height:1.3;overflow:hidden;text-overflow:ellipsis;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;box-shadow:0 1px 0 rgba(0,0,0,.08)}
+.ct-k{cursor:pointer}
+.ct-l0{background:#7d1d3f;color:#fff}.ct-l1{background:#c4577a;color:#fff}.ct-l2{background:#e7d7c1;color:#5a4630}
+.ct-nm{text-align:center;margin-top:6px;font-weight:800;font-size:12.5px;color:#4a4f55}
+.ct-nm b{display:inline-block;margin-right:5px;background:#7b7f86;color:#fff;border-radius:999px;font-size:10.5px;padding:0 7px}
+.ct-lg{display:flex;justify-content:center;gap:16px;flex-wrap:wrap;font-size:12px;margin-top:10px}
+.ct-lg span{display:inline-flex;align-items:center;gap:5px}
+.ct-d{display:inline-block;width:11px;height:11px;border-radius:4px}
+.ct-sheet{background:#fff;width:min(560px,100%);max-height:86vh;overflow:auto;border-radius:22px 22px 0 0;padding:14px 20px 26px;font-family:"El Messiri","IBM Plex Sans Arabic",Tahoma,sans-serif}
+.ct-grab{display:block;width:40px;height:4px;border-radius:2px;background:#d8c9bb;margin:0 auto 10px}
+.ct-hd{display:flex;align-items:center;gap:10px}.ct-hd b{flex:1;font-size:16px}
+.ct-pill{border-radius:999px;padding:1px 12px;font-size:11.5px}
+.ct-sub{font-size:11.5px;color:#8a7a80;margin-top:2px}
+.ct-g{margin-top:12px}.ct-gh{font-weight:800;font-size:12.5px;color:#6b2139;border-right:4px solid #6b2139;padding-right:8px;margin-bottom:2px}
+.ct-r{display:flex;gap:8px;padding:6px 0;border-bottom:1px solid #f0e6e9;font-size:12.5px}.ct-r span{width:96px;flex:none;color:#8a7a80}.ct-r b{line-height:1.7}
+.ct-more{border:1.5px solid #6b2139;background:#fff;color:#6b2139;border-radius:999px;padding:6px 22px;font-size:12.5px;font-weight:800;cursor:pointer}
+.ct-hint{font-size:10.5px;color:#a89aa0;margin-top:5px}
+@media print{.ct-fl{-webkit-line-clamp:3}}
+
+/* مصفوفة الصعوبات: الصف = المجال، العمود = المستوى */
+.cm-t{border-collapse:separate;border-spacing:4px;width:100%;margin-bottom:12px}
+.cm-h{text-align:center;border-radius:10px;padding:7px;font-weight:800;font-size:12.5px}
+.cm-a{background:#eceeef;color:#4a4f55;border-radius:10px;font-weight:800;font-size:12px;padding:8px;text-align:center;width:84px}
+.cm-c{border-radius:10px;padding:6px;vertical-align:top;min-width:96px}
+.cm-c0{background:#f6e8ed}.cm-c1{background:#f9eaf0}.cm-c2{background:#f7f1e8}
+.cm-i{background:#fff;border-radius:7px;padding:5px 8px;margin:3px 0;font-size:11.5px;font-weight:700;line-height:1.4;border-right:4px solid}
+.cm-i0{border-color:#7d1d3f}.cm-i1{border-color:#c4577a}.cm-i2{border-color:#cdb894}
+.cm-t,.cm-t *{-webkit-print-color-adjust:exact;print-color-adjust:exact}
