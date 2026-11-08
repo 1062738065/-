@@ -1217,3 +1217,21 @@ html body table.prs-table:not(#z) tbody tr:hover td,html body table.rpt-gtable:n
 html body table.prs-table:not(#z) td.ic-un,html body table.rpt-gtable:not(#z) td.ic-un,html body table.rpt-tbl:not(#z) td.ic-un,html body table.ic-tb:not(.ic-tb3):not(#z) td.ic-un,html body table.ic-tb3:not(#z) td.ic-un,html body table.kpi-t:not(#z) td.ic-un{background:var(--kt-u)!important;color:var(--kt-ut);font-weight:700}
 html body table.prs-table:not(#z) td.rt-un,html body table.rpt-gtable:not(#z) td.rt-un,html body table.rpt-tbl:not(#z) td.rt-un,html body table.ic-tb:not(.ic-tb3):not(#z) td.rt-un,html body table.ic-tb3:not(#z) td.rt-un,html body table.kpi-t:not(#z) td.rt-un{background:var(--kt-u)!important;color:var(--kt-ut);font-weight:700;min-width:110px}
 html body table.prs-table:not(#z) tbody tr:last-child td,html body table.rpt-gtable:not(#z) tbody tr:last-child td,html body table.rpt-tbl:not(#z) tbody tr:last-child td,html body table.ic-tb:not(.ic-tb3):not(#z) tbody tr:last-child td,html body table.ic-tb3:not(#z) tbody tr:last-child td,html body table.kpi-t:not(#z) tbody tr:last-child td{border-bottom:2px solid #fff!important}
+
+.ic-cks{display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:8px}
+.ic-ck{display:flex;align-items:center;gap:8px;border:1.5px solid #eadfe2;border-radius:12px;padding:9px 12px;cursor:pointer;background:#fff;font-size:13px;font-weight:700}
+.ic-ck.on{border-color:#6b2139;background:#fbf3f5}.ic-ck input{width:18px;height:18px;accent-color:#6b2139;margin:0}.ic-ck small{margin-right:auto;font-size:10px;color:#8a7d7a;font-weight:600}
+
+.st-jlg{display:flex;gap:14px;flex-wrap:wrap;font-size:11px;color:#6f6168;margin-bottom:8px}.st-jlg span{display:flex;align-items:center;gap:5px}
+.st-jr{display:flex;align-items:center;gap:12px;padding:10px 0;border-bottom:1px solid #f1e8ea}.st-jn{width:130px;font-weight:700;font-size:12.5px}.st-jt{position:relative;flex:1;height:30px}.st-jl{position:absolute;right:0;left:0;top:13px;height:4px;background:#eadfe2;border-radius:2px}.st-jp{position:absolute;top:13px;height:4px;opacity:.9}
+.st-j1,.st-j2,.st-j3{display:inline-block;width:14px;height:14px;border-radius:50%;background:#fff;box-shadow:0 0 0 2px #b9a9ad}.st-jt .st-j1,.st-jt .st-j2,.st-jt .st-j3{position:absolute;top:8px;margin-right:-7px;border:2px solid #fff}.st-j2{box-shadow:none}.st-j3{border-radius:3px;transform:rotate(45deg);box-shadow:0 0 0 2px #c9a24b}
+.st-jv{font-size:11.5px;color:#6f6168;min-width:150px;text-align:center}.st-jv em{font-style:normal}.st-jv strong{font-size:14px}
+
+.ic-jw{border:1px solid #eadfe2;border-radius:14px;background:#fff;padding:10px 14px}.ic-jlg{display:flex;gap:16px;flex-wrap:wrap;font-size:11px;color:#6f6168;margin-bottom:6px}.ic-jlg span{display:flex;align-items:center;gap:5px}
+.ic-jg{margin-top:8px}.ic-jh{font-weight:800;color:#6b2139;font-size:13.5px;padding:6px 0;border-bottom:2px solid #f0e4e8}
+.ic-jr{display:flex;align-items:center;gap:12px;width:100%;border:0;border-bottom:1px solid #f4ecee;background:none;font:inherit;padding:12px 4px 18px;cursor:pointer;text-align:center}.ic-jr.sel{background:#fbf3f5}
+.ic-jn{width:150px;font-weight:700;font-size:12.5px;text-align:center}.ic-jt{position:relative;flex:1;height:34px}.ic-jl{position:absolute;right:0;left:0;top:15px;height:4px;background:#eadfe2;border-radius:2px}.ic-jp{position:absolute;top:15px;height:4px;background:var(--c);opacity:.9}
+.ic-jd{display:inline-block;width:14px;height:14px;border-radius:50%;background:#fff;box-shadow:0 0 0 2px #b9a9ad}.ic-jt .ic-jd{position:absolute;top:10px;margin-right:-7px;border:2px solid #fff}.ic-jt .ic-jd em{position:absolute;top:18px;right:50%;transform:translateX(50%);white-space:nowrap;font-style:normal;font-size:10px;color:#6f6168;font-weight:700}
+.ic-ja{box-shadow:none}.ic-jt .ic-ja{background:var(--c);box-shadow:none;z-index:2}.ic-jt .ic-ja em{top:-18px;font-size:12px;font-weight:800;color:var(--c)}
+.ic-jt2,.ic-jt .ic-jx{box-shadow:0 0 0 2px #c9a24b;border-radius:3px}.ic-jt .ic-jx{transform:rotate(45deg)}.ic-jt .ic-jx em{transform:translateX(50%) rotate(-45deg);top:20px}
+.ic-js{display:flex;flex-direction:column;align-items:center;gap:3px;min-width:96px}.ic-js small{font-size:10.5px;color:#6f6168}
