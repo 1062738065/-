@@ -316,8 +316,8 @@ const SECTION_FIELD_SCHEMAS = {
       { id: "gap", type: "textarea", label: "الفجوة بينهما" },
       { id: "action", type: "textarea", label: "الإجراء التحسيني" },
       { id: "expectedImpact", type: "textarea", label: "الأثر المتوقع" },
-      { id: "ease", type: "radio", label: "سهولة التنفيذ", options: IMPROVEMENT_EASE_OPTIONS },
-      { id: "priority", type: "radio", label: "الأولوية", options: IMPROVEMENT_PRIORITY_OPTIONS },
+      { id: "ease", type: "select", label: "سهولة التنفيذ", options: IMPROVEMENT_EASE_OPTIONS, placeholder: "اختاري", rowGroup: "easePri" },
+      { id: "priority", type: "select", label: "الأولوية", options: IMPROVEMENT_PRIORITY_OPTIONS, placeholder: "اختاري", rowGroup: "easePri" },
       { id: "responsiblePerson", type: "text", label: "المسؤولة", placeholder: "اسم المسؤولة" },
       { id: "implementationDate", type: "date", label: "تاريخ التنفيذ" },
       { id: "successIndicator", type: "text", label: "مؤشر قياس نجاح التحسين", placeholder: "كيف ستعرفين أن التحسين نجح؟" },
@@ -3423,7 +3423,7 @@ function impVertHtml(items) { // أعمدة الأولوية مقسّمة بأل
   const grid = Array.from({ length: mx + 1 }, (_, k) => `<div style="position:absolute;right:0;left:0;bottom:${k * u}px;border-top:1px dashed #ead9dd;"><span style="position:absolute;right:-2px;top:-9px;font-size:10px;color:#b7a4a9;background:#fffdfd;padding:0 3px;">${k}</span></div>`).join("");
   const cols = P.map(([p, c]) => { const l = rows.filter((x) => x.priority === p);
     const segs = E.map(([e, g]) => { const n = l.filter((x) => x.ease === e).length; return n ? `<div style="height:${Math.max(n * u - 3, 18)}px;background:${g};color:#fff;font-weight:800;font-size:12.5px;display:flex;align-items:center;justify-content:center;border-radius:9px;text-shadow:0 1px 2px #0003;-webkit-print-color-adjust:exact;print-color-adjust:exact;">${n}</div>` : ""; }).join("");
-    const chips = l.map((x) => `<div style="display:flex;align-items:center;gap:5px;font-size:11px;font-weight:700;color:#4a3a3e;margin:4px 0;line-height:1.35;"><i style="width:6px;height:6px;border-radius:50%;background:${c};flex:none;"></i>${esc(x.name)}</div>`).join("");
+    const chips = l.map((x) => `<div${x.key ? ` data-action="dash-item" data-key="${esc(x.key)}"` : ""} style="${x.key ? "cursor:pointer;" : ""}display:flex;align-items:center;gap:5px;font-size:11px;font-weight:700;color:#4a3a3e;margin:4px 0;line-height:1.35;"><i style="width:6px;height:6px;border-radius:50%;background:${c};flex:none;"></i>${esc(x.name)}</div>`).join("");
     return `<div style="flex:1;min-width:0;display:flex;flex-direction:column;align-items:center;"><div style="height:${H + 26}px;width:100%;display:flex;flex-direction:column;justify-content:flex-end;align-items:center;"><div style="font-weight:800;font-size:15px;color:${c};margin-bottom:4px;">${l.length}</div><div style="width:58px;max-width:90%;display:flex;flex-direction:column;gap:3px;justify-content:flex-end;">${segs}</div></div><div style="margin-top:8px;font-weight:800;color:#fff;background:${c};border-radius:999px;padding:3px 14px;font-size:12.5px;-webkit-print-color-adjust:exact;print-color-adjust:exact;">${p}</div><div style="margin-top:8px;width:100%;padding:0 4px;">${chips}</div></div>`; }).join("");
   const leg = E.map(([e, g]) => `<span style="display:inline-flex;align-items:center;gap:6px;font-size:12px;margin-left:14px;color:#4a3a3e;"><i style="width:14px;height:14px;border-radius:5px;background:${g};display:inline-block;"></i>${e}</span>`).join("");
   return `<div style="margin:12px 0;"><div style="font-size:12px;color:#7a6a6e;margin-bottom:6px;">عدد الفرص في كل أولوية، مقسّمًا حسب سهولة التنفيذ</div><div style="margin-bottom:8px;">${leg}</div><div style="position:relative;"><div style="position:absolute;right:0;left:0;top:13px;height:${H}px;pointer-events:none;">${grid}</div><div style="position:relative;display:flex;gap:6px;padding-right:14px;">${cols}</div></div></div>`;
@@ -3481,6 +3481,13 @@ function dashFieldBlockHtml(kind, sid, units) {
     const handled = rows.filter((x) => x && x.name && routeStatusOf(sid, x)).map((x) => { const key = kind + "|challenges|" + rows.indexOf(x); DASH_ITEMS[key] = { sid, item: x, unit: unitOf.get(x) || "" }; return `<div data-action="dash-item" data-key="${esc(key)}" style="cursor:pointer;display:flex;justify-content:space-between;gap:8px;align-items:center;padding:7px 0;border-top:1px solid ${BORDER};font-size:12.5px;"><b>${esc(x.name)}</b>${routeBadgeHtml(sid, x)}</div>`; }).join("");
     const handledH = handled ? `<div style="margin-top:12px;"><div style="font-size:12px;font-weight:800;color:${ROSE};margin-bottom:2px;">مسار المعالجة</div>${handled}</div>` : "";
     return dashCard(dashFieldSecLabel(sid), `${its.length} صعوبة قائمة · اضغطي على أي صعوبة لتفاصيلها`, (tw || `<div style="font-size:12.5px;color:${SUBTLE};padding:10px 0">لا توجد صعوبات قائمة موجهة لهذا الحساب في الفترة المختارة.</div>`) + handledH + dashItemModalHtml(sid));
+  }
+  if (sid === "improvement") {
+    const ovH = dashFieldShapeHtml(kind, sid, units); if (ovH) return ovH;
+    const its = rows.filter((x) => x && x.name).map((x) => { const key = kind + "|improvement|" + rows.indexOf(x); DASH_ITEMS[key] = { sid, item: x, unit: unitOf.get(x) || "" }; return { ...x, key }; });
+    const chart = impVertHtml(its), noCls = its.filter((x) => IG_PRI.indexOf(x.priority) === -1 || IG_EASE.indexOf(x.ease) === -1);
+    const noClsH = noCls.length ? `<div style="margin-top:6px;"><div style="font-size:12px;font-weight:800;color:${ROSE};margin-bottom:4px;">بدون أولوية أو سهولة محددة (${fmtNum(noCls.length)})</div>${noCls.map((x) => `<div data-action="dash-item" data-key="${esc(x.key)}" style="cursor:pointer;display:inline-block;background:#faf5f6;border:1px solid ${BORDER};border-radius:999px;padding:4px 11px;margin:3px 0 3px 6px;font-size:11.5px;font-weight:700;">${esc(x.name)}</div>`).join("")}</div>` : "";
+    return dashCard(dashFieldSecLabel(sid), `${fmtNum(its.length)} فرصة تحسين · اضغطي على أي فرصة لتفاصيلها`, (chart || noClsH ? chart + noClsH : `<div style="font-size:12.5px;color:${SUBTLE};padding:8px 0;">لا توجد فرص مُدخلة.</div>`) + dashItemModalHtml(sid));
   }
   const fld = (id) => sc.fields.find((f) => f.id === id);
   const txt = (x, id) => { const v = x[id]; return v == null ? "" : schemaFieldText(v).trim(); };
@@ -11753,12 +11760,13 @@ function sectionEditorHtml(unit, report) {
   const d = S.sectionDraft || {};
   const shared = report.shared || {};
 
-  const sharedBar = (section.id !== "basic" && (shared.periodType || shared.preparerName)) ? `
-    <div style="display:flex;flex-wrap:wrap;gap:8px;background:#fdfbfa;border:1px solid ${BORDER};border-radius:12px;padding:10px 12px;margin-bottom:18px;font-size:11.5px;color:${SUBTLE}">
+  const impBtn = (section.id !== "basic" && section.id !== "review" && /ربع|سنوي|نصف|فصلي/.test(reportPeriodType(report) || "")) ? `<button data-action="imp-open" style="display:flex;align-items:center;gap:6px;background:#fff;border:1px solid ${BORDER};border-radius:999px;padding:5px 11px;font-size:11.5px;font-weight:700;color:${ROSE};cursor:pointer;">${iconDownload(13, ROSE)} استيراد من تقارير سابقة</button>` : "";
+  const sharedBar = (section.id !== "basic" && (shared.periodType || shared.preparerName || impBtn)) ? `
+    <div style="display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin-bottom:14px;"><div style="display:inline-flex;flex-wrap:wrap;gap:6px;background:#fdfbfa;border:1px solid ${BORDER};border-radius:999px;padding:4px 11px;font-size:11px;color:${SUBTLE}">
       ${shared.periodType ? `<span>الفترة: <strong style="color:${INK}">${esc(shared.periodType)}</strong></span>` : ""}
       ${shared.hijriYear ? `<span>· العام: <strong style="color:${INK}">${esc(shared.hijriYear)}${shared.hijriYearTo && shared.hijriYearTo !== shared.hijriYear ? " – " + esc(shared.hijriYearTo) : ""}</strong></span>` : ""}
       ${shared.preparerName ? `<span>· أعدّته: <strong style="color:${INK}">${esc(shared.preparerName)}</strong></span>` : ""}
-    </div>` : "";
+    </div>${impBtn}</div>` : "";
 
   const fieldsHtml = renderSectionFields(section, d, unit, report) + (section.id === "review" ? "" : shapeBlocksEditorHtml(S.sectionDraft || d, section.id)) + (S.ui.shpOpen ? shapePickerHtml() : "") + (S.ui.moreProg ? `<div class="no-print" style="position:fixed;inset:0;background:rgba(40,20,30,.45);z-index:9000;display:flex;align-items:center;justify-content:center;padding:16px;"><div style="background:#fff;border-radius:18px;padding:22px;width:min(420px,100%);text-align:center;"><div style="font-size:17px;font-weight:800;color:#6b2337;margin-bottom:6px;">هل يوجد عمل أو برنامج آخر؟</div><div class="hint" style="margin-bottom:16px;">إن وُجد، نفتح لك عملًا جديدًا لتعبئته بنفس الخطوات.</div><div style="display:flex;gap:8px;"><button type="button" class="next-btn" style="flex:1;" data-action="mp-more">نعم، أضيف عملًا آخر</button><button type="button" class="pill-btn pill-ghost" style="flex:1;" data-action="mp-no">لا، التالي</button></div></div></div>` : "");
 
@@ -11772,9 +11780,8 @@ function sectionEditorHtml(unit, report) {
     <div style="display:flex;align-items:center;justify-content:space-between;margin:14px 0 18px;">
       <div style="display:flex;align-items:center;gap:12px;">
         <div style="width:42px;height:42px;border-radius:12px;background:${color.bg};display:flex;align-items:center;justify-content:center;">${iconLayers(20, color.fg)}</div>
-        <div class="prs-title" style="font-size:17px;font-weight:800;">${esc(section.label)}</div>${SECTION_TITLE_NOTES[section.id] ? `<div class="sec-note">${esc(SECTION_TITLE_NOTES[section.id])}</div>` : ""}
+        <div style="min-width:0;"><div class="prs-title" style="font-size:17px;font-weight:800;">${esc(section.label)}</div>${SECTION_TITLE_NOTES[section.id] ? `<div class="sec-note" style="margin-right:0;min-width:0;">${esc(SECTION_TITLE_NOTES[section.id])}</div>` : ""}</div>
       </div>
-      ${(section.id !== "basic" && section.id !== "review" && /ربع|سنوي|نصف|فصلي/.test(reportPeriodType(report) || "")) ? `<button data-action="imp-open" style="display:flex;align-items:center;gap:6px;background:#fff;border:1px solid ${BORDER};border-radius:999px;padding:6px 12px;font-size:12px;font-weight:700;color:${ROSE};cursor:pointer;margin-inline-end:8px;">${iconDownload(14, ROSE)} استيراد من تقارير سابقة</button>` : ""}
       ${actionAllowed("toggle-section-completed") && autoSectionComplete(section.id, S.sectionDraft) === null && section.id === "basic" ? `<button data-action="toggle-section-completed" style="display:flex;align-items:center;gap:6px;background:${S.sectionCompleted ? GREEN_BG : "#fff"};border:1px solid ${S.sectionCompleted ? GREEN : BORDER};border-radius:999px;padding:6px 12px;cursor:pointer;font-size:11.5px;font-weight:700;color:${S.sectionCompleted ? GREEN : SUBTLE}">
         ${S.sectionCompleted ? iconCheckCircle(14, GREEN) : iconCircle(14, SUBTLE)} ${S.sectionCompleted ? "مكتمل" : "تحديد كمكتمل"}
       </button>` : ""}
