@@ -1274,3 +1274,9 @@ html body table.prs-table:not(#z) tbody tr:last-child td,html body table.rpt-gta
 .cm-i0{border-color:#7d1d3f}.cm-i1{border-color:#c4577a}.cm-i2{border-color:#cdb894}
 .cm-t,.cm-t *{-webkit-print-color-adjust:exact;print-color-adjust:exact}
 .ct-more[data-action="route-decide"]{flex:1}
+
+.ig-h{background:#f1e6e9;color:#6a1a25}.ig-c{background:#faf3f4;border-radius:10px;padding:6px;vertical-align:top;min-width:96px;height:44px}
+.ig-win{background:#f3e3e8;box-shadow:inset 0 0 0 2px #c4577a}
+.ig-i{border-color:#8c3b42}.ig-tag{font-size:10.5px;font-weight:800;color:#8c3b42;margin-bottom:2px}
+.ig-cap{font-size:11.5px;color:#7a6a6e;margin-bottom:4px}
+.ig-c,.ig-h{-webkit-print-color-adjust:exact;print-color-adjust:exact}

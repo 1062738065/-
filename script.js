@@ -3398,6 +3398,22 @@ function challMatrixHtml(items) {
   const body = areas.map((a) => `<tr><td class="cm-a">${esc(a)}</td>${g[a].map((l, i) => `<td class="cm-c cm-c${i}">${l.map((it) => `<div class="cm-i cm-i${i}">${esc(it.name)}</div>`).join("")}</td>`).join("")}</tr>`).join("");
   return `<div class="ct-wrap"><table class="cm-t">${head}${body}</table></div>`;
 }
+const IG_PRI = ["عاجلة", "عالية", "متوسطة", "منخفضة"], IG_EASE = ["سهلة", "متوسطة", "معقدة"];
+function impGridHtml(items) { // شبكة الأولوية × سهولة التنفيذ: الخانة العلوية اليمنى = «فرص سريعة»
+  const rows = (items || []).filter((x) => x && x.name && IG_PRI.indexOf(x.priority) !== -1 && IG_EASE.indexOf(x.ease) !== -1);
+  if (!rows.length) return "";
+  const head = `<tr><td></td>${IG_EASE.map((n) => `<td class="cm-h ig-h">${n}</td>`).join("")}</tr>`;
+  const body = IG_PRI.map((p, pi) => `<tr><td class="cm-a">${p}</td>${IG_EASE.map((e, ei) => { const l = rows.filter((x) => x.priority === p && x.ease === e), win = ei === 0 && pi < 2; return `<td class="cm-c ig-c${win ? " ig-win" : ""}">${win && l.length ? `<div class="ig-tag">فرص سريعة</div>` : ""}${l.map((it) => `<div class="cm-i ig-i">${esc(it.name)}</div>`).join("")}</td>`; }).join("")}</tr>`).join("");
+  return `<div class="ct-wrap"><div class="ig-cap">الأولوية (صفوف) × سهولة التنفيذ (أعمدة)</div><table class="cm-t">${head}${body}</table></div>`;
+}
+function impQuadHtml(items) { // «من أين نبدأ؟»: أربع خانات حسب الأولوية وسهولة التنفيذ
+  const rows = (items || []).filter((x) => x && x.name && IG_PRI.indexOf(x.priority) !== -1 && IG_EASE.indexOf(x.ease) !== -1);
+  if (!rows.length) return "";
+  const hi = (p) => p === "عاجلة" || p === "عالية";
+  const Q = [["ابدئي الآن", "سهلة أو متوسطة وأولويتها عالية", "#f3dfe5", "#7d1d3f", (i) => hi(i.priority) && i.ease !== "معقدة"], ["خطّطي لها", "أولويتها عالية وتحتاج جهدًا", "#f6eadd", "#8a6a3a", (i) => hi(i.priority) && i.ease === "معقدة"], ["حين يتاح الوقت", "سهلة أو متوسطة وأولويتها أقل", "#e8eaec", "#4a4f55", (i) => !hi(i.priority) && i.ease !== "معقدة"], ["أجّليها", "أولويتها أقل وتحتاج جهدًا", "#f1ecec", "#7a6a6e", (i) => !hi(i.priority) && i.ease === "معقدة"]];
+  const box = ([t, sub, bg, c, f]) => { const l = rows.filter(f); return `<div style="background:${bg};border-radius:16px;padding:12px 14px;min-height:110px;-webkit-print-color-adjust:exact;print-color-adjust:exact;"><div style="display:flex;align-items:center;gap:8px;"><b style="color:${c};font-size:14px;flex:1;">${t}</b><span style="background:#fff;color:${c};border-radius:999px;padding:1px 9px;font-weight:800;font-size:13px;">${l.length}</span></div><div style="font-size:11px;color:#7a6a6e;margin-bottom:6px;">${sub}</div>${l.map((i) => `<div style="background:#fff;border-radius:999px;padding:5px 11px;font-size:12px;font-weight:700;border-right:4px solid ${c};margin:4px 0;">${esc(i.name)}</div>`).join("")}</div>`; };
+  return `<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:10px;margin:12px 0;">${Q.map(box).join("")}</div>`;
+}
 function dashChallModalHtml(rec) {
   const it = rec.item, more = !!S.ui.dashItemMore;
   const v = (id) => schemaFieldText(it[id]).trim();
@@ -3488,7 +3504,7 @@ function dashFieldBlockHtml(kind, sid, units) {
     return `<div data-action="dash-item" data-key="${esc(key)}" style="cursor:pointer;display:flex;align-items:flex-start;justify-content:space-between;gap:10px;padding:9px 0;border-bottom:1px solid ${BORDER};"><div style="min-width:0;"><div style="font-size:13px;font-weight:700;line-height:1.6;">${esc(t.length > 110 ? t.slice(0, 110) + "…" : t)}</div><div style="font-size:11.5px;color:${SUBTLE};">${esc(meta)}</div></div><div style="display:flex;gap:4px;flex-wrap:wrap;justify-content:flex-end;flex:none;max-width:45%;">${bs}</div></div>`;
   }).join("")}${rows.length > items.length ? `<div style="font-size:11.5px;color:${SUBTLE};padding-top:8px;">و ${fmtNum(rows.length - items.length)} أخرى — تجدينها في التقارير</div>` : ""}</div>` : "";
   if (!tiles && !distH && !listH) return "";
-  return dashCard(dashFieldSecLabel(sid), `${rows.length} ${esc(sc.itemLabel || "إدخال")} من ${reports} تقرير — الفترة المختارة · اضغطي على أي بند لتفاصيله`, `<div style="display:flex;gap:8px;flex-wrap:wrap;">${tiles}</div>${distH}${listH}${dashItemModalHtml(sid)}`);
+  return dashCard(dashFieldSecLabel(sid), `${rows.length} ${esc(sc.itemLabel || "إدخال")} من ${reports} تقرير — الفترة المختارة · اضغطي على أي بند لتفاصيله`, `<div style="display:flex;gap:8px;flex-wrap:wrap;">${tiles}</div>${sid === "improvement" ? impQuadHtml(rows) : ""}${distH}${listH}${dashItemModalHtml(sid)}`);
 }
 
 const ROUTE_SECS = ["challenges", "recommendations", "improvement", "initiatives", "impact", "strengths"];
@@ -12684,8 +12700,7 @@ function improvementSectionHtml(d) {
       ${fieldWrap("الفجوة بينهما", txt("opportunities", item.id, "gap", item.gap))}
       ${fieldWrap("الإجراء التحسيني", txt("opportunities", item.id, "action", item.action))}
       ${fieldWrap("الأثر المتوقع", txt("opportunities", item.id, "expectedImpact", item.expectedImpact))}
-      ${fieldWrap("سهولة التنفيذ", radio("opportunities", item.id, "ease", item.ease, IMPROVEMENT_EASE_OPTIONS))}
-      ${fieldWrap("الأولوية", radio("opportunities", item.id, "priority", item.priority, IMPROVEMENT_PRIORITY_OPTIONS))}
+      <div style="display:flex;gap:12px;flex-wrap:wrap;"><div style="flex:1 1 200px;min-width:0;">${fieldWrap("سهولة التنفيذ", sel("opportunities", item.id, "ease", item.ease, IMPROVEMENT_EASE_OPTIONS, "اختاري"))}</div><div style="flex:1 1 200px;min-width:0;">${fieldWrap("الأولوية", sel("opportunities", item.id, "priority", item.priority, IMPROVEMENT_PRIORITY_OPTIONS, "اختاري"))}</div></div>
       ${fieldWrap("المسؤولة", inp("opportunities", item.id, "responsiblePerson", item.responsiblePerson, "اسم المسؤولة"))}
       ${fieldWrap("تاريخ التنفيذ", inp("opportunities", item.id, "implementationDate", item.implementationDate, "", "date"))}
       ${fieldWrap("مؤشر قياس نجاح التحسين", inp("opportunities", item.id, "successIndicator", item.successIndicator, "كيف ستعرفين أن التحسين نجح؟"))}
@@ -13890,7 +13905,7 @@ function sectionBodyOnly(section, saved, report) {
     } else { body = emptyHint("لا توجد صعوبات مُدخلة."); }
 
   } else if (section.id === "improvement") {
-    body = rptSchemaItemsHtml("improvement", d.opportunities, "لا توجد فرص تحسين مُدخلة.");
+    body = impGridHtml(d.opportunities) + rptSchemaItemsHtml("improvement", d.opportunities, "لا توجد فرص تحسين مُدخلة.");
 
   } else if (section.id === "initiatives") {
     body = rptSchemaItemsHtml("initiatives", d.initiatives, "لا توجد مبادرات مُدخلة.");
