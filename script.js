@@ -3414,6 +3414,20 @@ function impQuadHtml(items) { // «من أين نبدأ؟»: أربع خانات
   const box = ([t, sub, bg, c, f]) => { const l = rows.filter(f); return `<div style="background:${bg};border-radius:16px;padding:12px 14px;min-height:110px;-webkit-print-color-adjust:exact;print-color-adjust:exact;"><div style="display:flex;align-items:center;gap:8px;"><b style="color:${c};font-size:14px;flex:1;">${t}</b><span style="background:#fff;color:${c};border-radius:999px;padding:1px 9px;font-weight:800;font-size:13px;">${l.length}</span></div><div style="font-size:11px;color:#7a6a6e;margin-bottom:6px;">${sub}</div>${l.map((i) => `<div style="background:#fff;border-radius:999px;padding:5px 11px;font-size:12px;font-weight:700;border-right:4px solid ${c};margin:4px 0;">${esc(i.name)}</div>`).join("")}</div>`; };
   return `<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:10px;margin:12px 0;">${Q.map(box).join("")}</div>`;
 }
+function impVertHtml(items) { // أعمدة الأولوية مقسّمة بألوان سهولة التنفيذ (عمودي)
+  const rows = (items || []).filter((x) => x && x.name && IG_PRI.indexOf(x.priority) !== -1 && IG_EASE.indexOf(x.ease) !== -1);
+  if (!rows.length) return "";
+  const P = [["عاجلة", "#a8405a"], ["عالية", "#c4577a"], ["متوسطة", "#a9855a"], ["منخفضة", "#7f868d"]];
+  const E = [["سهلة", "linear-gradient(180deg,#eab3c4,#c4577a)"], ["متوسطة", "linear-gradient(180deg,#f3e2c8,#d9b38c)"], ["معقدة", "linear-gradient(180deg,#dde0e3,#a9afb6)"]];
+  const mx = Math.max(1, ...P.map(([p]) => rows.filter((x) => x.priority === p).length)), H = 150, u = H / mx;
+  const grid = Array.from({ length: mx + 1 }, (_, k) => `<div style="position:absolute;right:0;left:0;bottom:${k * u}px;border-top:1px dashed #ead9dd;"><span style="position:absolute;right:-2px;top:-9px;font-size:10px;color:#b7a4a9;background:#fffdfd;padding:0 3px;">${k}</span></div>`).join("");
+  const cols = P.map(([p, c]) => { const l = rows.filter((x) => x.priority === p);
+    const segs = E.map(([e, g]) => { const n = l.filter((x) => x.ease === e).length; return n ? `<div style="height:${Math.max(n * u - 3, 18)}px;background:${g};color:#fff;font-weight:800;font-size:12.5px;display:flex;align-items:center;justify-content:center;border-radius:9px;text-shadow:0 1px 2px #0003;-webkit-print-color-adjust:exact;print-color-adjust:exact;">${n}</div>` : ""; }).join("");
+    const chips = l.map((x) => `<div style="display:flex;align-items:center;gap:5px;font-size:11px;font-weight:700;color:#4a3a3e;margin:4px 0;line-height:1.35;"><i style="width:6px;height:6px;border-radius:50%;background:${c};flex:none;"></i>${esc(x.name)}</div>`).join("");
+    return `<div style="flex:1;min-width:0;display:flex;flex-direction:column;align-items:center;"><div style="height:${H + 26}px;width:100%;display:flex;flex-direction:column;justify-content:flex-end;align-items:center;"><div style="font-weight:800;font-size:15px;color:${c};margin-bottom:4px;">${l.length}</div><div style="width:58px;max-width:90%;display:flex;flex-direction:column;gap:3px;justify-content:flex-end;">${segs}</div></div><div style="margin-top:8px;font-weight:800;color:#fff;background:${c};border-radius:999px;padding:3px 14px;font-size:12.5px;-webkit-print-color-adjust:exact;print-color-adjust:exact;">${p}</div><div style="margin-top:8px;width:100%;padding:0 4px;">${chips}</div></div>`; }).join("");
+  const leg = E.map(([e, g]) => `<span style="display:inline-flex;align-items:center;gap:6px;font-size:12px;margin-left:14px;color:#4a3a3e;"><i style="width:14px;height:14px;border-radius:5px;background:${g};display:inline-block;"></i>${e}</span>`).join("");
+  return `<div style="margin:12px 0;"><div style="font-size:12px;color:#7a6a6e;margin-bottom:6px;">عدد الفرص في كل أولوية، مقسّمًا حسب سهولة التنفيذ</div><div style="margin-bottom:8px;">${leg}</div><div style="position:relative;"><div style="position:absolute;right:0;left:0;top:13px;height:${H}px;pointer-events:none;">${grid}</div><div style="position:relative;display:flex;gap:6px;padding-right:14px;">${cols}</div></div></div>`;
+}
 function dashChallModalHtml(rec) {
   const it = rec.item, more = !!S.ui.dashItemMore;
   const v = (id) => schemaFieldText(it[id]).trim();
@@ -3504,7 +3518,7 @@ function dashFieldBlockHtml(kind, sid, units) {
     return `<div data-action="dash-item" data-key="${esc(key)}" style="cursor:pointer;display:flex;align-items:flex-start;justify-content:space-between;gap:10px;padding:9px 0;border-bottom:1px solid ${BORDER};"><div style="min-width:0;"><div style="font-size:13px;font-weight:700;line-height:1.6;">${esc(t.length > 110 ? t.slice(0, 110) + "…" : t)}</div><div style="font-size:11.5px;color:${SUBTLE};">${esc(meta)}</div></div><div style="display:flex;gap:4px;flex-wrap:wrap;justify-content:flex-end;flex:none;max-width:45%;">${bs}</div></div>`;
   }).join("")}${rows.length > items.length ? `<div style="font-size:11.5px;color:${SUBTLE};padding-top:8px;">و ${fmtNum(rows.length - items.length)} أخرى — تجدينها في التقارير</div>` : ""}</div>` : "";
   if (!tiles && !distH && !listH) return "";
-  return dashCard(dashFieldSecLabel(sid), `${rows.length} ${esc(sc.itemLabel || "إدخال")} من ${reports} تقرير — الفترة المختارة · اضغطي على أي بند لتفاصيله`, `<div style="display:flex;gap:8px;flex-wrap:wrap;">${tiles}</div>${sid === "improvement" ? impQuadHtml(rows) : ""}${distH}${listH}${dashItemModalHtml(sid)}`);
+  return dashCard(dashFieldSecLabel(sid), `${rows.length} ${esc(sc.itemLabel || "إدخال")} من ${reports} تقرير — الفترة المختارة · اضغطي على أي بند لتفاصيله`, `<div style="display:flex;gap:8px;flex-wrap:wrap;">${tiles}</div>${sid === "improvement" ? impVertHtml(rows) : ""}${distH}${listH}${dashItemModalHtml(sid)}`);
 }
 
 const ROUTE_SECS = ["challenges", "recommendations", "improvement", "initiatives", "impact", "strengths"];
@@ -3843,6 +3857,7 @@ function dashFieldShapeHtml(kind, sid, units) {
   // الشكل المختار لقسم في اللوحة يحلّ محل البطاقة القديمة (أرقام + توزيع + قائمة) بدل أن يُطبَّق على جدول غير موجود
   // الصعوبات: التصميم الخاص (الأبراج) هو الافتراضي، وأي شكل تختاره مديرة النظام من المكتبة يحلّ محله
   const dm = (dashConfig() || {})._dashShapes || {}; const v = dm[sid] || "";
+  if (sid === "challenges" && !((dashConfig() || {})._dashShapesV2 || {})[sid]) return ""; // شكل قديم محفوظ قبل الأبراج يُتجاهل حتى تختار مديرة النظام شكلًا جديدًا
   if (!/^shape:/.test(v) || v === "shape:auto" || !SHAPES_LIB[v.slice(6)]) return "";
   try {
     const items = dashCCItems(units, [DASH_FLD_OWNER[sid] || sid]); if (!items || !items.length) return "";
@@ -13905,7 +13920,7 @@ function sectionBodyOnly(section, saved, report) {
     } else { body = emptyHint("لا توجد صعوبات مُدخلة."); }
 
   } else if (section.id === "improvement") {
-    body = impGridHtml(d.opportunities) + rptSchemaItemsHtml("improvement", d.opportunities, "لا توجد فرص تحسين مُدخلة.");
+    body = impVertHtml(d.opportunities) + rptSchemaItemsHtml("improvement", d.opportunities, "لا توجد فرص تحسين مُدخلة.");
 
   } else if (section.id === "initiatives") {
     body = rptSchemaItemsHtml("initiatives", d.initiatives, "لا توجد مبادرات مُدخلة.");
@@ -14833,7 +14848,7 @@ function attachFormListeners() {
     if (el.dataset && el.dataset.dshSec) {
       if (!S.isAdmin) { alert("هذا الضبط يعمل فقط من حساب مديرة النظام. سجّلي الدخول بحساب المدير ثم أعيدي المحاولة."); return; }
       const cfg = JSON.parse(JSON.stringify(dashConfig() || {})); cfg._dashShapes = cfg._dashShapes || {};
-      if (el.value) cfg._dashShapes[el.dataset.dshSec] = el.value; else delete cfg._dashShapes[el.dataset.dshSec];
+      if (el.value) cfg._dashShapes[el.dataset.dshSec] = el.value; else delete cfg._dashShapes[el.dataset.dshSec]; cfg._dashShapesV2 = cfg._dashShapesV2 || {}; if (el.value) cfg._dashShapesV2[el.dataset.dshSec] = true; else delete cfg._dashShapesV2[el.dataset.dshSec];
       S.dashboardConfig = cfg; dataStore.saveDashboardConfig(cfg); render(); return;
     }
     if (el.dataset && el.dataset.shpDef) {
@@ -15250,6 +15265,7 @@ function attachClickListener() {
         if (!S.isAdmin) { alert("هذا الضبط يعمل فقط من حساب مديرة النظام. سجّلي الدخول بحساب المدير ثم أعيدي المحاولة."); break; }
         const cfg = JSON.parse(JSON.stringify(dashConfig() || {})); cfg._dashShapes = cfg._dashShapes || {};
         if (ds.shape === "__table") cfg._dashShapes[ds.id] = "table"; else if (ds.shape) cfg._dashShapes[ds.id] = "shape:" + ds.shape; else delete cfg._dashShapes[ds.id];
+        cfg._dashShapesV2 = cfg._dashShapesV2 || {}; if (ds.shape && ds.shape !== "__table") cfg._dashShapesV2[ds.id] = true; else delete cfg._dashShapesV2[ds.id];
         S.dashboardConfig = cfg; dataStore.saveDashboardConfig(cfg); render(); break;
       }
       case "dash-fld-open": { S.ui.dashFldOpen = S.ui.dashFldOpen === ds.kind + "|" + ds.sid ? "" : ds.kind + "|" + ds.sid; render(); break; }
