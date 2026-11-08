@@ -3222,7 +3222,7 @@ const DASH_KINDS = [
 // يُتعرَّف على هذين الحسابين من اسم الدور (يحتوي «سكرتار» / «مساعد» مع «مدير»)
 function dashIndViewPickHtml(kid) {
   const cur = ((dashConfig() || {})[kid] || {}).indView || (kid === "executive" ? "map" : "cards");
-  const opts = [["cards", "بطاقات"], ["table", "جدول"], ["map", "مصفوفة الوحدات"], ["units", "مؤشر عبر الوحدات"], ["path", "المسار"], ["prio", "خريطة الأولويات"], ["trend", "التطور"]];
+  const opts = [["cards", "بطاقات"], ["table", "جدول"], ["map", "مصفوفة الوحدات"], ["units", "مؤشر عبر الوحدات"], ["path", "المسار"], ["prio", "أبراج الفجوات"], ["prio2", "خريطة الأولويات"], ["trend", "التطور"]];
   return `<div style="border:1px solid ${BORDER};border-radius:14px;background:#fff;padding:12px 14px;margin-bottom:12px;"><div style="font-weight:800;font-size:13.5px;color:${ROSE};margin-bottom:4px;">العرض الذي يظهر أولاً في «مؤشرات الأداء»</div><div class="hint" style="margin-bottom:8px;">خاص بهذا النوع من الحسابات فقط. المصفوفة والمقارنة والتطور تظهر عند وجود أكثر من وحدة، وإلا يُعرض «بطاقات».</div><div style="display:flex;gap:6px;flex-wrap:wrap;">${opts.map(([v, l]) => `<button type="button" class="ic-sw${cur === v ? " on" : ""}" data-action="dash-indview" data-kind="${esc(kid)}" data-v="${v}">${l}</button>`).join("")}</div></div>`;
 }
 function dashRoleKind() {
@@ -3258,12 +3258,10 @@ const DASH_STD_BLOCKS = [
   { key: "bars", label: "نسبة الإنجاز حسب الوحدة", not: ["unit"] },
   { key: "indPie", label: "توزيع حالات المؤشرات" },
   { key: "goalPie", label: "توزيع مستويات تحقق الأهداف" },
-  { key: "indicators", label: "جدول مؤشرات الأداء" },
   { key: "indBoard", label: "مؤشرات الأداء" },
   { key: "goals", label: "جدول الأهداف التشغيلية" },
   { key: "trend", label: "رسم تطور التحقق فترة بعد فترة" },
   { key: "unitsCmp", label: "مقارنة الوحدات", not: ["unit"] },
-  { key: "indMatrix", label: "جدول المؤشرات عبر الفترات" },
   { key: "goalMatrix", label: "جدول الأهداف عبر الفترات" },
   { key: "followUp", label: "يحتاج متابعة" },
   { key: "highlights", label: "أبرز ما يُعرض" },
@@ -3273,8 +3271,6 @@ const DASH_STD_BLOCKS = [
   { key: "exKpis", label: "بطاقات الأرقام مع خط التطور" },
   { key: "exHeat", label: "خريطة الأداء (المؤشرات)" },
   { key: "exHeatGoal", label: "خريطة تحقق الأهداف" },
-  { key: "exCompare", label: "مقارنة الوحدات (مؤشرات وأهداف)" },
-  { key: "exStacks", label: "حالات المؤشرات" },
   { key: "exBenef", label: "المستفيدون حسب نوع العمل" },
   { key: "exChal", label: "الصعوبات القائمة" },
   { key: "exSubm", label: "رفع التقارير واعتمادها" },
@@ -3306,9 +3302,7 @@ const DASH_EX_BLOCKS = [
   { key: "exHeat", label: "خريطة الأداء (المؤشرات)" },
   { key: "exHeatGoal", label: "خريطة تحقق الأهداف" },
   { key: "indBoard", label: "مؤشرات الأداء" },
-  { key: "exCompare", label: "مقارنة المكاتب/الأقسام/الوحدات" },
   { key: "trend", label: "رسم تطور التحقق فترة بعد فترة" },
-  { key: "exStacks", label: "حالات المؤشرات لكل مكتب/قسم" },
   { key: "exBenef", label: "المستفيدون حسب نوع العمل" },
   { key: "exChal", label: "الصعوبات القائمة حسب المستوى" },
   { key: "routed", label: "المرفوع إليّ (صعوبات وتوصيات وغيرها)" },
@@ -3549,13 +3543,13 @@ function dashIndCardsHtml(kind, units) {
   const groups = {}; items.forEach((it, ix) => (groups[it.unit.name] = groups[it.unit.name] || []).push({ it, st: lastSt[ix] }));
   const kDef = ((dashConfig() || {})[kind] || {}).indView || (kind === "executive" ? "map" : "cards");
   const wantV = S.ui.indView || kDef;
-  const view = ["cards", "table", "units", "map", "trend", "path", "prio"].indexOf(wantV) !== -1 && (multi || ["cards", "table"].indexOf(wantV) !== -1) ? wantV : "cards";
+  const view = ["cards", "table", "units", "map", "trend", "path", "prio", "prio2"].indexOf(wantV) !== -1 && (multi || ["cards", "table"].indexOf(wantV) !== -1) ? wantV : "cards";
   const fst = S.ui.indStat || "";
   if (fst) Object.keys(groups).forEach((n) => { groups[n] = groups[n].filter((x) => x.st.key === fst); if (!groups[n].length) delete groups[n]; });
   const selTag = (id, opts, cur) => `<select class="ic-sel" data-ind-sel="${id}">${opts.map(([v, l]) => `<option value="${v}"${v === cur ? " selected" : ""}>${l}</option>`).join("")}</select>`;
   const fbar = `<div class="ic-vbar"><span>الحالة:</span>${selTag("stat", [["", "الكل"], ["struggling", "متعثر"], ["needsAction", "يحتاج تدخلاً"], ["close", "قريب"], ["achieved", "متحقق"]], fst)}</div>`;
   if (view === "units" && !multi) { /* لا معنى لمقارنة الوحدات بوحدة واحدة */ }
-  const bar = `<div class="ic-vbar"><span>العرض:</span>${selTag("view", [["cards", "بطاقات"], ["table", "جدول"]].concat(multi ? [["map", "مصفوفة الوحدات"], ["units", "مؤشر عبر الوحدات"], ["path", "المسار"], ["prio", "خريطة الأولويات"], ["trend", "التطور"]] : []), view)}</div>`;
+  const bar = `<div class="ic-vbar"><span>العرض:</span>${selTag("view", [["cards", "بطاقات"], ["table", "جدول"]].concat(multi ? [["map", "مصفوفة الوحدات"], ["units", "مؤشر عبر الوحدات"], ["path", "المسار"], ["prio", "أبراج الفجوات"], ["prio2", "خريطة الأولويات"], ["trend", "التطور"]] : []), view)}</div>`;
   let body = "";
   if (view === "table") {
     const mode = S.ui.indPer === "years" ? "years" : "terms";
@@ -3573,23 +3567,25 @@ function dashIndCardsHtml(kind, units) {
     const op = S.ui.indOpen || "";
     const rows = uns.map((n) => {
       const avg = (() => { const r = groups[n].map((x) => x.st.ratio).filter((v) => v != null && isFinite(v)); return r.length ? Math.round(r.reduce((t, v) => t + Math.min(1, v), 0) / r.length * 100) : null; })();
-      const cells = names.map((nm) => { const x = groups[n].find((y) => y.it.name === nm); if (!x) return ""; const pp = x.it.pts.slice().reverse().find((q) => q.actual != null) || x.it.pts[x.it.pts.length - 1], bs = indNumV(x.it.pts[x.it.pts.length - 1].row.baseline), mx = Math.max(pp.actual || 0, pp.target || 0, bs || 0, 1) * 1.08, key = n + "||" + nm; const w = (v) => Math.max(0, Math.min(100, (v / mx) * 100)).toFixed(0); return `<div class="ic-mc"><div class="ic-mn" title="${esc(nm)}">${esc(nm)}</div><button type="button" class="icm ${cellCls[x.st.key] || "no"}${op === key ? " sel" : ""}" data-action="ind-open" data-k="${esc(key)}" title="${esc(x.st.label)}"><span class="icm-b"><i style="width:${w(pp.actual || 0)}%;background:${x.st.color}"></i>${pp.target != null ? `<u style="right:${100 - w(pp.target)}%"></u>` : ""}${bs != null ? `<s style="right:${100 - w(bs)}%"></s>` : ""}</span><span class="icm-v"><b style="color:${x.st.color}">${indFmtV(pp.actual)}</b><em>من ${indFmtV(pp.target)}</em></span></button></div>`; }).join("");
-      return `<div class="ic-mu"><div class="ic-mh"><b>${esc(n)}</b>${avg == null ? "" : `<span>متوسط التحقق ${avg}٪</span>`}</div><div class="ic-mg">${cells}</div></div>`;
+      const cells = names.map((nm) => { const x = groups[n].find((y) => y.it.name === nm); if (!x) return ""; const pp = x.it.pts.slice().reverse().find((q) => q.actual != null) || x.it.pts[x.it.pts.length - 1], bs = indNumV(x.it.pts[x.it.pts.length - 1].row.baseline), mx = Math.max(pp.actual || 0, pp.target || 0, bs || 0, 1) * 1.08, key = n + "||" + nm; const rt = x.st.ratio != null && isFinite(x.st.ratio) ? Math.max(3, Math.min(100, Math.round(x.st.ratio * 100))) : (pp.actual != null && pp.target > 0 ? Math.max(3, Math.min(100, Math.round(pp.actual / pp.target * 100))) : 0), dvn = pp.actual != null && pp.target != null ? Math.round((pp.actual - pp.target) * 100) / 100 : null, dvt = dvn == null ? "—" : dvn === 0 ? "0" : (dvn > 0 ? "+" : "−") + indFmtV(Math.abs(dvn)); const w = (v) => Math.max(0, Math.min(100, (v / mx) * 100)).toFixed(0); return `<div class="ic-mc"><div class="ic-mn" title="${esc(nm)}">${esc(nm)}</div><button type="button" class="icm ${cellCls[x.st.key] || "no"}${op === key ? " sel" : ""}" data-action="ind-open" data-k="${esc(key)}" title="${esc(x.st.label)}"><span class="icm-b"><i style="width:${rt}%;background:${x.st.color}"></i></span><span class="icm-v"><b style="color:${x.st.color}">${indFmtV(pp.actual)}</b><em>من ${indFmtV(pp.target)}</em></span><span class="icm-x"><span>الأساس ${bs != null ? indFmtV(bs) : "—"}</span><span>الانحراف ${dvt}</span></span></button></div>`; }).join("");
+      return `<div class="ic-mu"><div class="ic-mh"><b>${esc(n)}</b></div><div class="ic-mg">${cells}</div></div>`;
     }).join("");
     const sel = op && items.find((it) => (it.unit.name + "||" + it.name) === op);
     body = `<div class="ic-mw">${rows}</div><div class="ic-ml"><span><i class="k1"></i>المتحقق (لون الحالة)</span><span><i class="k2"></i>المستهدف</span><span><i class="k3"></i>خط الأساس</span> · الأضعف أولًا · اضغطي على خانة لعرض بطاقتها</div>${sel ? `<div style="margin-top:12px">${indCardHtml(sel, kind)}</div>` : ""}`;
-  } else if (view === "prio" && multi) {
+  } else if ((view === "prio" || view === "prio2") && multi) {
     const pal = ["#6b2139", "#1f5f8b", "#b08a2e", "#5b4b8a", "#2f8a7a", "#a1302f", "#7a6a70", "#c26b85"];
     const nm = []; items.forEach((it) => { if (nm.indexOf(it.name) === -1) nm.push(it.name); });
     const mode0 = S.ui.indPer === "years" ? "years" : "terms";
     const dots = items.map((it, ix) => { const p = it.pts.slice().reverse().find((q) => q.actual != null); if (!p || p.target == null || !p.target) return null; const ap = indAggPts(it, mode0), pv = ap.length > 1 ? ap[ap.length - 2].actual : null; const dir = (p.r && p.r.direction) || ""; const lowerBetter = /الانخفاض|أقل/.test(dir); let ratio = p.actual / p.target; if (lowerBetter && p.actual) ratio = p.target / p.actual; const chg = pv != null ? (p.actual - pv) / p.target * 100 * (lowerBetter ? -1 : 1) : null; return { it, ratio: ratio * 100, chg, st: lastSt[ix], c: pal[nm.indexOf(it.name) % pal.length] }; }).filter(Boolean);
     if (!dots.length) body = `<div class="hint">لا توجد بيانات كافية لرسم الخريطة.</div>`;
     else {
+      let svg = "";
+      if (view === "prio2") {
       const W = 760, H = 470, x0 = 40, x1 = W - 20, y0 = 20, y1 = H - 50;
       const xmin = Math.min(40, Math.floor(Math.min(...dots.map((d) => d.ratio)) / 10) * 10), xmax = Math.max(130, Math.ceil(Math.max(...dots.map((d) => d.ratio)) / 10) * 10);
       const cs = dots.map((d) => d.chg).filter((v) => v != null), cm = Math.max(30, Math.ceil(Math.max(...cs.map(Math.abs), 0) / 10) * 10);
       const X = (v) => x0 + (Math.min(xmax, Math.max(xmin, v)) - xmin) / (xmax - xmin) * (x1 - x0), Y = (v) => y1 - (Math.min(cm, Math.max(-cm, v)) + cm) / (2 * cm) * (y1 - y0);
-      let svg = `<svg viewBox="0 0 ${W} ${H}" width="100%" style="direction:ltr;display:block;margin:0 auto">`;
+      svg = `<svg viewBox="0 0 ${W} ${H}" width="100%" style="direction:ltr;display:block;margin:0 auto">`;
       [[X(100), y0, x1 - X(100), Y(0) - y0, "#e4f1e8", "متحقق ومتحسّن", "#2f6b3f", "end", x1 - 8, y0 + 16], [x0, y0, X(100) - x0, Y(0) - y0, "#fbf3dc", "قيد التحسّن — تابعي", "#8a6a1c", "start", x0 + 8, y0 + 16], [X(100), Y(0), x1 - X(100), y1 - Y(0), "#eef3ea", "متحقق لكن يتراجع — انتبهي", "#5d7a3a", "end", x1 - 8, y1 - 8], [x0, Y(0), X(100) - x0, y1 - Y(0), "#f7dcdc", "أولوية قصوى: متعثر ومتراجع", "#a1302f", "start", x0 + 8, y1 - 8]].forEach(([qx, qy, qw, qh, f, t, c, an, tx, ty]) => { svg += `<rect x="${qx}" y="${qy}" width="${qw}" height="${qh}" fill="${f}"/><text x="${tx}" y="${ty}" font-size="12" font-weight="800" fill="${c}" text-anchor="${an}">${t}</text>`; });
       svg += `<line x1="${X(100)}" x2="${X(100)}" y1="${y0}" y2="${y1}" stroke="#c9a24b" stroke-width="2.4" stroke-dasharray="6 4"/><line x1="${x0}" x2="${x1}" y1="${Y(0)}" y2="${Y(0)}" stroke="#b9a98a" stroke-dasharray="3 3"/>`;
       svg += `<text x="${X(100) + 4}" y="${y1 + 16}" font-size="10" fill="#a9842f" font-weight="700">المستهدف ١٠٠٪</text>`;
@@ -3600,10 +3596,17 @@ function dashIndCardsHtml(kind, units) {
         svg += `<circle data-action="ind-open" data-k="${esc(key)}" cx="${cx.toFixed(0)}" cy="${cy.toFixed(0)}" r="${on ? 11 : pri ? 9 : 6}" fill="${d.c}" fill-opacity="${pri ? 0.92 : 0.6}" stroke="${on ? "#2b1f24" : "#fff"}" stroke-width="1.6" style="cursor:pointer"><title>${esc(d.it.unit.name)} · ${esc(d.it.name)} · ${Math.round(d.ratio)}٪</title></circle>`;
         if (pri && d.ratio < 85 && !lbl.some((q) => Math.abs(q[0] - cx) < 90 && Math.abs(q[1] - cy) < 13) && lbl.length < 10) { lbl.push([cx, cy]); svg += `<text x="${(cx + 13).toFixed(0)}" y="${(cy + 4).toFixed(0)}" font-size="10" fill="#2b1f24" font-weight="700" style="pointer-events:none">${esc(d.it.unit.name)}</text>`; } });
       svg += "</svg>";
+      } else {
+      const byU = {}; dots.forEach((d) => { (byU[d.it.unit.name] = byU[d.it.unit.name] || []).push(d); });
+      const gp = (d) => Math.max(0, 100 - d.ratio);
+      const uk = Object.keys(byU).sort((a, b) => byU[b].reduce((t, d) => t + gp(d), 0) - byU[a].reduce((t, d) => t + gp(d), 0));
+      const mxg = Math.max(...uk.map((u) => byU[u].reduce((t, d) => t + gp(d), 0)), 1), hs = 200 / mxg;
+      svg = `<div class="ic-sky">${uk.map((u) => { const g = byU[u].filter((d) => gp(d) > 0).sort((a, b) => gp(b) - gp(a)), tg = Math.round(g.reduce((t, d) => t + gp(d), 0)); return `<div class="ic-tow"><div class="ic-st">${g.length ? g.map((d) => { const key = d.it.unit.name + "||" + d.it.name, h = Math.max(14, Math.round(gp(d) * hs)); return `<button type="button" class="ic-sg${S.ui.indOpen === key ? " on" : ""}" data-action="ind-open" data-k="${esc(key)}" style="height:${h}px;background:${d.c}" title="${esc(d.it.name)} · ${Math.round(d.ratio)}٪">${h >= 26 ? `<span>${Math.round(d.ratio)}٪${d.chg == null ? "" : d.chg < 0 ? " ▼" : d.chg > 0 ? " ▲" : ""}</span>` : ""}</button>`; }).join("") : `<div class="ic-okt">✓</div>`}</div><b>${esc(u)}</b><small>${g.length ? tg + " نقطة فجوة" : "لا فجوات"}</small></div>`; }).join("")}</div>`;
+      }
       const pr = dots.filter((d) => d.ratio < 100 && (d.chg == null || d.chg <= 0)).sort((a, b) => a.ratio - b.ratio).slice(0, 5);
       const prl = pr.length ? `<div class="ic-pri"><b>أولويات المتابعة</b>${pr.map((d) => `<button type="button" data-action="ind-open" data-k="${esc(d.it.unit.name + "||" + d.it.name)}"><span style="background:${d.c}"></span>${esc(d.it.unit.name)} · ${esc(d.it.name)}<em>${Math.round(d.ratio)}٪${d.chg == null ? "" : " · " + (d.chg > 0 ? "+" : "") + Math.round(d.chg) + "٪"}</em></button>`).join("")}</div>` : "";
       const sel2 = S.ui.indOpen && items.find((it) => (it.unit.name + "||" + it.name) === S.ui.indOpen);
-      body = `<div class="ic-cmp"><div class="ic-cn">خريطة الأولويات<small>كل نقطة مؤشر في وحدة · الدوائر الكبيرة الداكنة هي المتعثرة والمتراجعة وعليها اسم الوحدة · اضغطي على نقطة لعرض بطاقتها · المحور الرأسي: التغيّر عن الفترة السابقة</small></div>${svg}<div class="ic-lgd">${nm.map((n, i) => `<span><b style="background:${pal[i % pal.length]}"></b>${esc(n)}</span>`).join("")}</div>${prl}</div>${sel2 ? `<div style="margin-top:12px">${indCardHtml(sel2, kind)}</div>` : ""}`;
+      body = `<div class="ic-cmp">${view === "prio2" ? `<div class="ic-cn">خريطة الأولويات<small>كل نقطة مؤشر في وحدة · الدوائر الكبيرة الداكنة هي المتعثرة والمتراجعة وعليها اسم الوحدة · اضغطي على نقطة لعرض بطاقتها · المحور الرأسي: التغيّر عن الفترة السابقة</small></div>` : `<div class="ic-cn">أبراج الفجوات<small>برج لكل وحدة · كل طابق مؤشر لم يتحقق وارتفاعه حجم فجوته · الأعلى برجًا أحوج للمتابعة · اضغطي على طابق لعرض بطاقة المؤشر</small></div>`}${svg}<div class="ic-lgd">${nm.map((n, i) => `<span><b style="background:${pal[i % pal.length]}"></b>${esc(n)}</span>`).join("")}</div>${prl}</div>${sel2 ? `<div style="margin-top:12px">${indCardHtml(sel2, kind)}</div>` : ""}`;
     }
   } else if ((view === "units" || view === "trend" || view === "path") && multi) {
     const names = []; items.forEach((it) => { if (names.indexOf(it.name) === -1 && items.filter((q) => q.name === it.name).length > 1) names.push(it.name); });
@@ -3657,7 +3660,7 @@ function dashIndCardsHtml(kind, units) {
       return multi ? `<details class="ic-ud"${Object.keys(groups).length <= 2 || S.ui.indFilterOpen ? " open" : ""}><summary><b>${esc(n)}</b><span>${g.length} مؤشر${bad ? ` · <i style="color:#a1302f;font-style:normal">${bad} متعثر</i>` : ""}</span></summary>${cards}</details>` : cards;
     }).join("");
   }
-  return dashCard("مؤشرات الأداء", "", `<div data-dshape="1">${sum}${rank}<div class="ic-ctl">${bar}${["units", "trend", "path", "prio"].indexOf(view) !== -1 ? "" : fbar}</div>${Object.keys(groups).length || ["units", "path", "prio"].indexOf(view) !== -1 ? body : `<div class="hint">لا توجد مؤشرات بهذي الحالة.</div>`}</div>`);
+  return dashCard("مؤشرات الأداء", "", `<div data-dshape="1">${sum}${rank}<div class="ic-ctl">${bar}${["units", "trend", "path", "prio", "prio2"].indexOf(view) !== -1 ? "" : fbar}</div>${Object.keys(groups).length || ["units", "path", "prio", "prio2"].indexOf(view) !== -1 ? body : `<div class="hint">لا توجد مؤشرات بهذي الحالة.</div>`}</div>`);
 }
 function dashIndBoardHtml(kind, units) {
   try { const nc = dashIndCardsHtml(kind, units); if (nc) return nc; } catch (e) { console.warn("ind cards", e); }
@@ -4516,29 +4519,8 @@ function exBlocksInner(kind, units, extra) {
   // مقارنة الأبناء + التطور
   const childStats = sc.children.map((c) => ({ ...c,
     ind: dashAvg(c.list.map((u) => latestPct(u, dashReportIndAvg))), goal: dashAvg(c.list.map((u) => latestPct(u, dashReportGoalAvg))) }));
-  const cmp = dashHidden(kind, "exCompare") ? "" : dashCard("مقارنة " + childLabel[0], "آخر تقرير لكل وحدة · مرتّبة من الأضعف · اضغطي على الاسم للتفصيل",
-    `<div style="display:flex;gap:14px;font-size:11.5px;margin-bottom:8px;"><span style="display:flex;align-items:center;gap:5px;"><span style="width:12px;height:12px;border-radius:3px;background:${ROSE}"></span>تحقق المؤشرات</span><span style="display:flex;align-items:center;gap:5px;"><span style="width:12px;height:12px;border-radius:3px;background:#D9A066"></span>تحقق الأهداف</span></div>` +
-    childStats.slice().sort((a, b) => (a.ind == null ? 999 : a.ind) - (b.ind == null ? 999 : b.ind)).map((c) => {
-      const bar = (p, col) => `<div style="display:flex;align-items:center;gap:6px;"><div style="flex:1;height:10px;background:${GRAY_BG};border-radius:6px;"><div style="height:10px;border-radius:6px;background:${col};width:${p == null ? 0 : Math.min(100, p)}%"></div></div><span style="font-size:11.5px;width:38px;font-weight:800;">${p == null ? "—" : p + "٪"}</span></div>`;
-      const nameEl = c.leaf || !c.levelId ? `<span style="width:150px;flex-shrink:0;font-size:12.5px;font-weight:700;">${esc(c.name)}</span>` : exDrillBtn(sc.path.concat(c.levelId), esc(c.name), `width:150px;flex-shrink:0;text-align:right;padding:4px 0;min-height:36px;font-size:12.5px;font-weight:700;color:${ROSE};`);
-      return `<div style="display:flex;align-items:center;gap:10px;padding:5px 0;">${nameEl}<div style="flex:1;display:flex;flex-direction:column;gap:4px;">${bar(c.ind, ROSE)}${bar(c.goal, "#D9A066")}</div></div>`;
-    }).join(""));
-  html += dashB(kind, "exCompare", cmp) + (extra ? "" : dashB(kind, "trend", dashTrendHtml(kind, series, "التطور فترة بعد فترة — " + (sc.cur ? sc.cur.name : "الجمعية"))));
+  html += (extra ? "" : dashB(kind, "trend", dashTrendHtml(kind, series, "التطور فترة بعد فترة — " + (sc.cur ? sc.cur.name : "الجمعية"))));
   // حالات المؤشرات
-  const latestReports = dashReports(series, true);
-  let stacks = "";
-  if (!dashHidden(kind, "exStacks")) { html += "\u0001exStacks\u0002";
-    const cols = [["achieved", "متحقق", GREEN], ["close", "قريب", GOLD], ["needsAction", "يحتاج تدخلًا", "#c9863a"], ["struggling", "متعثر", DANGER]];
-    const rows = childStats.map((c) => {
-      const k = { achieved: 0, close: 0, needsAction: 0, struggling: 0 };
-      c.list.forEach((x) => { const l = dashUnitLatest(series, x.id); if (l) dashIndRows(l.report).forEach((row) => { const st = computeIndicatorStatus(resolveIndicatorRow(row, findIndicatorDef(row.name))); if (k[st.key] != null) k[st.key]++; }); });
-      const tot = cols.reduce((s, [key]) => s + k[key], 0);
-      return `<div style="display:flex;align-items:center;gap:10px;padding:5px 0;"><span style="width:140px;flex-shrink:0;font-size:12px;">${esc(c.name)}</span>${tot ? `<div style="flex:1;display:flex;height:18px;border-radius:6px;overflow:hidden;">${cols.map(([key, l, col]) => (k[key] ? `<div title="${l}: ${k[key]}" style="width:${(k[key] / tot * 100).toFixed(1)}%;background:${col}"></div>` : "")).join("")}</div><b style="font-size:11.5px;width:26px;">${tot}</b>` : `<span class="hint" style="margin:0">لا مؤشرات</span>`}</div>`;
-    }).join("");
-    stacks = dashCard("حالات المؤشرات لكل " + childLabel[1], "", `<div style="display:flex;gap:10px;font-size:11.5px;flex-wrap:wrap;margin-bottom:8px;">${cols.map(([, l, c]) => `<span style="display:flex;align-items:center;gap:5px;"><span style="width:12px;height:12px;border-radius:3px;background:${c}"></span>${l}</span>`).join("")}</div>${rows}`);
-    html += "\u0003";
-  }
-  html += dashB(kind, "exStacks", stacks);
   // المستفيدون / التحديات / رفع التقارير
   let benH = "", chH = "", subH = "";
   if (!dashHidden(kind, "exBenef")) { html += "\u0001exBenef\u0002";
@@ -6785,8 +6767,8 @@ function dashPreviewHtml(kind) {
 const DASH_GROUPS = [
   ["البانر والفلاتر", ["banner", "periodFilter"]],
   ["الأرقام والبطاقات", ["stats", "exKpis", "opsCounts", "opsKpis", "achieve", "yearCompare", "recent"]],
-  ["الرسوم والخرائط", ["totalPie", "bars", "indPie", "goalPie", "trend", "exHeat", "exHeatGoal", "exCompare", "unitsCmp", "exStacks", "exTopBottom", "opsDeptCompliance"]],
-  ["الجداول والإدارة", ["indicators", "indBoard", "goals", "indMatrix", "goalMatrix", "programs", "sharedInd", "opsSections", "opsAggReports", "opsRecent", "opsRoles"]],
+  ["الرسوم والخرائط", ["totalPie", "bars", "indPie", "goalPie", "trend", "exHeat", "exHeatGoal", "unitsCmp", "exTopBottom", "opsDeptCompliance"]],
+  ["الجداول والإدارة", ["indBoard", "goals", "goalMatrix", "programs", "sharedInd", "opsSections", "opsAggReports", "opsRecent", "opsRoles"]],
   ["حقول أقسام التقرير", ["fld_*"]],
   ["التحليل والمتابعة", ["*"]],
 ];
@@ -6903,7 +6885,7 @@ const RPT_UNIT_DEFAULTS = { ...RPT_COMMON_DEFAULTS, fontTitle: "Cairo", pageNum:
 const RPT_CUSTOM_DEFAULTS = { ...RPT_COMMON_DEFAULTS, name: "", scopeLevelId: "", periodKind: "all", year: "", coverSub: "", preparedBy: "" };
 // تنسيق مشترك بين كل التقارير (الباقي: الكليشة والخلفية والغلاف… لكل تقرير حسابه)
 const RPT_SHARED_KEYS = ["fontBody", "fontTitle", "fontHeading", "mainColor", "chapterBg", "thBg", "thColor", "thAlign", "tdAlign", "numCenter", "tableBorders", "zebra", "tableFs", "fontScale", "size", "margin", "mt", "mb", "mr", "ml"];
-const RPT_DESIGN_KEYS = ["chartMain", "orient", "paper", "bgImage", "watermark", "frame", "spine", "showHead", "headRight", "headLogo", "headCenter", "headLeft", "showFoot", "footText", "pageNum"];
+const RPT_DESIGN_KEYS = ["chartMain", "kpiPal", "orient", "paper", "bgImage", "watermark", "frame", "spine", "showHead", "headRight", "headLogo", "headCenter", "headLeft", "showFoot", "footText", "pageNum"];
 const RPT_NUM_KEYS = ["mt", "mb", "mr", "ml", "limit", "tableFs", "year", "perPage"];
 // خانات الاعتماد (المسمى + الاسم). {المعدة} و{الرئيسة} تُستبدل من بيانات التقرير، و{الإعداد} من حقل «إعداد» بالغلاف
 const RPT_UNIT_APPROVAL = [{ role: "المسؤولة عن التقرير", name: "{المعدة}" }, { role: "المراجعة", name: "{الرئيسة}" }, { role: "الاعتماد", name: "" }];
@@ -7150,6 +7132,7 @@ function rptWrap(s, inner, isPreview) {
   const pageCss = (isPreview ? "" : `<style>@page{size:${w}mm ${h}mm;margin:0}</style>`) + `<style>.a4-page.rpt-hasbg{min-height:${h}mm}@media print{.a4-page.rpt-hasbg{min-height:100vh}}</style>`;
   const cm = /^#[0-9a-fA-F]{6}$/.test(s.chartMain) ? s.chartMain : "";
   if (cm) { vars += `--chart-main:${cm};`; inner = String(inner).replace(/#9a3f4e/gi, cm).replace(/#b5606c/gi, mixHex(cm, "#ffffff", 0.3)).replace(/#7a2145/gi, cm); }
+  if (s.kpiPal && /^[a-z]+$/.test(s.kpiPal)) inner = String(inner).replace(/prs-table kpi-t/g, "prs-table kpi-t kpi-pal-" + s.kpiPal); if (s.kpiPal && /^[a-z]+$/.test(s.kpiPal)) inner = String(inner).replace(/class="(prs-table|rpt-gtable)(?! kpi-t)/g, (m) => m + " kpi-pal-" + s.kpiPal);
   return `${pageCss}<div class="${cls}${cm ? " has-chartmain" : ""}" style="${vars}">${inner}</div>`;
 }
 function rptPageNumText(s, n, total) {
@@ -7367,7 +7350,7 @@ function aggChapterBody(key, data, s) {
     const chart = rptChart("a-deptPerf", data.deptPerf.map((d) => ({ label: d.name, value: d.avg, color: "var(--rpt-burgundy)" })), { height: 170 });
     return chart + reportTable(["القسم", "عدد الوحدات", "متوسط الإنجاز"], data.deptPerf.map((d) => [esc(d.name), d.count, d.avg + "٪"])) + reportTable(["الوحدة", "القسم", "نسبة الإنجاز"], data.unitRows);
   }
-  if (key === "indicators") return data.indicators.length ? reportTable(["الوحدة", "المؤشر", "المستهدف", "خط الأساس", "المتحقق"], data.indicators.map((r) => { let def = null, rs = r, bs = null; try { def = findIndicatorDef(r.name); rs = resolveIndicatorRow(r, def); const pb = r.unitId && r._rep ? indicatorPrevBaseline(r.unitId, r._rep, r.name) : null; bs = pb ? pb.value : (r.baseline !== "" && r.baseline != null ? r.baseline : null); } catch (e) {} return [esc(r.unitName), esc(r.name) + indMetaSpan(rs, indExtra(r, rs, (() => { try { return computeIndicatorStatus(rs); } catch (e) { return null; } })())), esc(def && def.target !== "" && def.target != null ? def.target : "—"), esc(bs != null ? bs : "—"), esc(r.actual !== "" && r.actual != null ? r.actual : "—")]; })) : emptyHint("لا توجد مؤشرات مُدخلة بعد.");
+  if (key === "indicators") return data.indicators.length ? reportTable(["الوحدة", "المؤشر", "المستهدف", "خط الأساس", "المتحقق"], data.indicators.map((r) => { let def = null, rs = r, bs = null; try { def = findIndicatorDef(r.name); rs = resolveIndicatorRow(r, def); const pb = r.unitId && r._rep ? indicatorPrevBaseline(r.unitId, r._rep, r.name) : null; bs = pb ? pb.value : (r.baseline !== "" && r.baseline != null ? r.baseline : null); } catch (e) {} return [esc(r.unitName), esc(r.name) + indMetaSpan(rs, indExtra(r, rs, (() => { try { return computeIndicatorStatus(rs); } catch (e) { return null; } })())), esc(def && def.target !== "" && def.target != null ? def.target : "—"), esc(bs != null ? bs : "—"), esc(r.actual !== "" && r.actual != null ? r.actual : "—")]; }), { mergeFirst: true }) : emptyHint("لا توجد مؤشرات مُدخلة بعد.");
   if (key === "yearCompare") return data.yearCompareHtml();
   if (key === "programs") return data.programsHtml();
   if (key === "achievements") return data.achievements.length ? reportTable(["الوحدة", "العمل", "الأثر"], data.achievements.map((a) => [esc(a.unitName), esc(a.name || "—"), esc(a.highlightResult)])) : emptyHint("لا توجد إنجازات بارزة مُدخلة بعد.");
@@ -7798,6 +7781,7 @@ function rmPanelHtml(st) {
       (secs.length ? `<button type="button" class="rm-new" style="width:100%;" data-action="rm-cc-add">${iconPlus(14, ROSE)} رسم جديد (من حقل في أي قسم)</button>` : "") +
       `<div class="rm-hint">حقل اختيارات (مثل الحالة) = رسم توزيع. حقل رقم (مثل العدد) = رسم أرقام${isUnit ? " لكل عنصر" : " مجموعة لكل وحدة"}.</div>`;
     const chartsPageUi = rmFieldHtml("صفحة الرسوم", rmToggle("chartsPage", d.chartsPage ? "تظهر قبل الإغلاق والاعتماد" : "مخفية", d.chartsPage) + (d.chartsPage ? `<div style="margin-top:8px;">${rmText("chartsTitle", d.chartsTitle, "عنوان الصفحة (الرسوم البيانية)")}</div>` : ""), "تجمع رسم كل قسم (مؤشرات الأداء وغيرها) في صفحة وحدة قبل الاعتماد. الجدول يبقى في فصل القسم، والرسم لا يتكرر في مكان ثاني.") +
+      rmFieldHtml("لون جدول المؤشرات", `<div class="rm-row" style="gap:6px;flex-wrap:wrap;">${[["", "وردي", "#c98494"], ["gold", "ذهبي رملي", "#e3c27d"], ["sage", "أخضر مريمية", "#8fbfa5"], ["blue", "أزرق هادئ", "#8fb4d6"], ["plum", "بنفسجي ناعم", "#b79bd0"]].map(([v, l, c]) => `<button type="button" class="flt-chip${(d.kpiPal || "") === v ? " on" : ""}" data-action="rm-kpipal" data-v="${v}"><span style="display:inline-block;width:12px;height:12px;border-radius:50%;background:${c};margin-left:6px;vertical-align:middle"></span>${l}</button>`).join("")}</div>`, "لون عنوان جدول المؤشرات وصفوفه المتبادلة في التقرير (بتدرّج فاتح).") +
       rmFieldHtml("لون الرسوم", `<div class="rm-row">${rmColor("chartMain", d.chartMain || d.mainColor)}<button type="button" class="rm-link" data-action="rm-chartmain-clear">الافتراضي (لون التقرير)</button></div>${["#6b2337", "#2f6b3f", "#1f5f8b", "#a9842f", "#5b4b8a", "#444444"].map((c) => `<button type="button" class="rm-sw" data-action="rm-chartmain" data-c="${c}" style="background:${c}" aria-label="${c}"></button>`).join("")}`, "يطبَّق على أشكال المكتبة ورسوم المؤشرات في التقرير. الحالات (متحقق/متعثر) تبقى بألوانها.");
     return chartsPageUi + svSettingsHtml(d) + `<div class="rm-label">الرسوم البيانية — لكل رسم إعداده</div><div class="rm-hint">تظهر لكل رسم الأنواع المناسبة لبياناته فقط (التوزيع: دائري/أعمدة، والأرقام والنسب: أعمدة/خطي).</div>${chartsAll}` +
       `<div class="rm-sep"></div>` +
@@ -7894,6 +7878,7 @@ function handleReportsManageAction(action, ds) {
     case "rm-set": rmSetField(ds.key, ds.value); break;
     case "rm-preset": { const pr = RPT_PRESETS[Number(ds.p)]; if (pr) { rmSetField("mainColor", pr.main); rmSetField("chapterBg", pr.chapterBg); rmSetField("thBg", pr.thBg); rmSetField("thColor", pr.main); } break; }
     case "rm-toggle": d[ds.key] = !d[ds.key]; break;
+    case "rm-kpipal": d.kpiPal = ds.v; break;
     case "rm-chartmain": d.chartMain = ds.c; break;
     case "rm-chartmain-clear": d.chartMain = ""; break;
     case "rm-svx": { const cur = { ...((d.svx && typeof d.svx === "object") ? d.svx : SV_EXTRAS_DEFAULT) }; cur[ds.id] = !cur[ds.id]; d.svx = cur; break; }
@@ -12787,7 +12772,7 @@ function indExtra(row, resolved, status) {
   let dev = null; try { dev = computeDeviationAmount(resolved); } catch (e) {}
   return { st: status ? status.label : "", sc: status ? status.color : "", dev, ct: row.causeType || "", why: row.deviationReason || "", fix: row.correctiveAction || "", who: row.responsiblePerson || "", due: row.closureDate || "", sup: row.requiredSupport || "", fq: resolved.frequency || "" };
 }
-function reportTable(headers, rows) {
+function reportTable(headers, rows, opts) {
   if (!rows.length) return "";
   if (RPT_CTX && RPT_CTX.section) {
     if (RPT_CTX.capture) { const c = RPT_CTX.capture[RPT_CTX.section] = RPT_CTX.capture[RPT_CTX.section] || []; headers.forEach((h) => { if (h && !c.includes(h)) c.push(h); }); }
@@ -12799,7 +12784,7 @@ function reportTable(headers, rows) {
   }
   return `<div class="table-wrap" style="margin-bottom:10px;"><table class="prs-table">
     <thead><tr style="background:${GRAY_BG}">${headers.map((h) => `<th>${esc(h)}</th>`).join("")}</tr></thead>
-    <tbody>${rows.map((r) => `<tr>${r.map((c) => `<td${RPT_CTX && RPT_CTX.numCenter && rptIsNumCell(c) ? ' style="text-align:center"' : ""}>${c}</td>`).join("")}</tr>`).join("")}</tbody>
+    <tbody>${(() => { const mg = opts && opts.mergeFirst && headers[0] === "الوحدة"; const span = rows.map(() => 1); if (mg) { for (let i = 0; i < rows.length;) { let j = i + 1; while (j < rows.length && rows[j][0] === rows[i][0]) j++; span[i] = j - i; for (let k = i + 1; k < j; k++) span[k] = 0; i = j; } } return rows.map((r, ri) => `<tr>${r.map((c, ci) => (mg && ci === 0 ? (span[ri] ? `<td class="rt-un" rowspan="${span[ri]}">${c}</td>` : "") : `<td${RPT_CTX && RPT_CTX.numCenter && rptIsNumCell(c) ? ' style="text-align:center"' : ""}>${c}</td>`)).join("")}</tr>`).join(""); })()}</tbody>
   </table></div>`;
 }
 // خلية رقمية (عدد/نسبة/كسر) — لخيار «توسيط الأرقام تلقائيًا»
