@@ -3501,7 +3501,7 @@ function indStatusOf(actual, target, direction) { return computeIndicatorStatus(
 function indDetailFieldsFor(kind) { const f = ((((dashConfig() || {})[kind] || {}).fields || {}).kpiDeviation); return Array.isArray(f) ? f : null; }
 function indCardHtml(it, kind) {
   const mode = S.ui.indPer === "years" ? "years" : "terms", view = "chart";
-  const pts = indAggPts(it, mode).slice(-6), last = pts[pts.length - 1] || {}, d = it.def || {};
+  const pts = indAggPts(it, mode).slice(-6), last = pts.slice().reverse().find((x) => x.actual != null) || pts[pts.length - 1] || {}, d = it.def || {};
   const st = indStatusOf(last.actual, last.target, last.direction), ratio = st.ratio == null || !isFinite(st.ratio) ? null : Math.max(0, st.ratio);
   const pctTxt = ratio == null ? "—" : Math.round(ratio * 100) + "٪", ringV = ratio == null ? 0 : Math.min(1, ratio) * 264;
   const lastRow = it.pts[it.pts.length - 1].row, lastR = it.pts[it.pts.length - 1].r;
@@ -3527,7 +3527,7 @@ function dashIndCardsHtml(kind, units) {
   const items = indCardsData(units);
   if (!items.length) return "";
   const multi = (units || []).length > 1, cnt = { achieved: 0, close: 0, needsAction: 0, struggling: 0 };
-  const lastSt = items.map((it) => { const p = it.pts[it.pts.length - 1]; return indStatusOf(p.actual, p.target, p.r.direction); });
+  const lastSt = items.map((it) => { const p = it.pts.slice().reverse().find((x) => x.actual != null) || it.pts[it.pts.length - 1]; return indStatusOf(p.actual, p.target, p.r.direction); });
   lastSt.forEach((x) => { if (cnt[x.key] != null) cnt[x.key]++; });
   const tot = items.length, seg = [["achieved", "متحقق", "#2f6b3f"], ["close", "قريب", "#c9a24b"], ["needsAction", "يحتاج تدخلاً", "#c9863a"], ["struggling", "متعثر", "#a1302f"]];
   let off = 0; const arcs = seg.map(([k, , c]) => { const len = (cnt[k] / tot) * 264, a = `<circle cx="60" cy="60" r="42" fill="none" stroke="${c}" stroke-width="16" stroke-dasharray="${len.toFixed(1)} 264" stroke-dashoffset="${(-off).toFixed(1)}" transform="rotate(-90 60 60)"/>`; off += len; return cnt[k] ? a : ""; }).join("");
@@ -3535,10 +3535,14 @@ function dashIndCardsHtml(kind, units) {
   const byUnit = {}; items.forEach((it, i) => { const r = lastSt[i].ratio; if (r == null || !isFinite(r)) return; (byUnit[it.unit.name] = byUnit[it.unit.name] || []).push(Math.min(1, r)); });
   const rank = multi ? `<div class="ic-rank">${Object.keys(byUnit).map((n) => ({ n, a: Math.round(byUnit[n].reduce((t, v) => t + v, 0) / byUnit[n].length * 100) })).sort((x, y) => x.a - y.a).map((u) => `<div><span>${esc(u.n)}</span><div class="ic-rb"><i style="width:${u.a}%"></i></div><b>${u.a}٪</b></div>`).join("")}</div>` : "";
   const groups = {}; items.forEach((it, ix) => (groups[it.unit.name] = groups[it.unit.name] || []).push({ it, st: lastSt[ix] }));
-  const view = ["cards", "table", "units"].indexOf(S.ui.indView) !== -1 ? S.ui.indView : "cards";
+  const view = ["cards", "table", "units", "map"].indexOf(S.ui.indView) !== -1 && (S.ui.indView !== "map" || multi) ? S.ui.indView : "cards";
+  const fst = S.ui.indStat || "";
+  if (fst) Object.keys(groups).forEach((n) => { groups[n] = groups[n].filter((x) => x.st.key === fst); if (!groups[n].length) delete groups[n]; });
+  const fch = (v, l) => `<button type="button" class="ic-sw${fst === v ? " on" : ""}" data-action="ind-stat" data-v="${v}">${l}</button>`;
+  const fbar = `<div class="ic-vbar"><span>الحالة:</span>${fch("", "الكل")}${fch("struggling", "متعثر")}${fch("needsAction", "يحتاج تدخلاً")}${fch("close", "قريب")}${fch("achieved", "متحقق")}</div>`;
   if (view === "units" && !multi) { /* لا معنى لمقارنة الوحدات بوحدة واحدة */ }
   const vsw = (v, l) => `<button type="button" class="ic-sw${view === v ? " on" : ""}" data-action="ind-view" data-v="${v}">${l}</button>`;
-  const bar = `<div class="ic-vbar"><span>العرض:</span>${vsw("cards", "بطاقات")}${vsw("table", "جدول")}${multi ? vsw("units", "مقارنة الوحدات") : ""}</div>`;
+  const bar = `<div class="ic-vbar"><span>العرض:</span>${vsw("cards", "بطاقات")}${vsw("table", "جدول")}${multi ? vsw("map", "خريطة الحالات") + vsw("units", "مقارنة الوحدات") : ""}</div>`;
   let body = "";
   if (view === "table") {
     const mode = S.ui.indPer === "years" ? "years" : "terms";
@@ -3549,6 +3553,14 @@ function dashIndCardsHtml(kind, units) {
         const pts = indAggPts(it, mode), last = pts[pts.length - 1] || {}, dv = last.actual != null && last.target != null ? Math.round((last.actual - last.target) * 100) / 100 : null;
         return `<tr><td><b>${esc(it.name)}</b></td>${lb.map((l) => { const q = pts.find((x) => x.label === l); return `<td>${q ? indFmtV(q.actual) : "—"}</td>`; }).join("")}<td>${indFmtV(last.target)}</td><td style="color:${st.color};font-weight:700">${dv == null ? "—" : (dv > 0 ? "+" : "") + indFmtV(dv)}</td><td style="color:${st.color};font-weight:700">${esc(st.label)}</td></tr>`;
       }).join("")).join("") + `</tbody></table></div>`;
+  } else if (view === "map") {
+    const names = []; items.forEach((it) => { if (names.indexOf(it.name) === -1) names.push(it.name); });
+    const uns = Object.keys(groups).sort((a, b) => { const av = (g) => { const r = g.map((x) => x.st.ratio).filter((v) => v != null && isFinite(v)); return r.length ? r.reduce((t, v) => t + Math.min(1, v), 0) / r.length : 9; }; return av(groups[a]) - av(groups[b]); });
+    const cellCls = { achieved: "ok", close: "cl", needsAction: "na", struggling: "bd", noData: "no" };
+    const op = S.ui.indOpen || "";
+    const rows = uns.map((n) => `<tr><td>${esc(n)}</td>${names.map((nm) => { const x = groups[n].find((y) => y.it.name === nm); if (!x) return `<td><div class="icm no">·</div></td>`; const pp = x.it.pts.slice().reverse().find((q) => q.actual != null) || x.it.pts[x.it.pts.length - 1]; const key = n + "||" + nm; return `<td><button type="button" class="icm ${cellCls[x.st.key] || "no"}${op === key ? " sel" : ""}" data-action="ind-open" data-k="${esc(key)}" title="${esc(x.st.label)}">${indFmtV(pp.actual)}</button></td>`; }).join("")}</tr>`).join("");
+    const sel = op && items.find((it) => (it.unit.name + "||" + it.name) === op);
+    body = `<div class="ic-tw"><table class="ic-mp"><thead><tr><th></th>${names.map((nm) => `<th>${esc(nm)}</th>`).join("")}</tr></thead><tbody>${rows}</tbody></table></div><div class="ic-ml"><span><b style="background:#e4f1e8"></b>متحقق</span><span><b style="background:#fbf0d4"></b>قريب</span><span><b style="background:#fbe6d0"></b>يحتاج تدخلاً</span><span><b style="background:#f7dcdc"></b>متعثر</span><span><b style="background:#f1ecec"></b>لا بيانات</span> · الأضعف أولًا · اضغطي على خانة لعرض بطاقتها</div>${sel ? `<div style="margin-top:12px">${indCardHtml(sel, kind)}</div>` : ""}`;
   } else if (view === "units" && multi) {
     const byName = {}; items.forEach((it, ix) => (byName[it.name] = byName[it.name] || []).push({ it, st: lastSt[ix] }));
     const blocks = Object.keys(byName).filter((n) => byName[n].length > 1).map((n) => `<div class="ic-cmp"><div class="ic-cn">${esc(n)}</div>${byName[n].map(({ it, st }) => { const p = it.pts[it.pts.length - 1], pc = st.ratio == null || !isFinite(st.ratio) ? 0 : Math.min(100, Math.round(st.ratio * 100)); return `<div class="ic-cr"><span>${esc(it.unit.name)}</span><div class="ic-rb"><i style="width:${pc}%;background:${st.color}"></i></div><b>${indFmtV(p.actual)}</b><small>من ${indFmtV(p.target)}</small></div>`; }).join("")}</div>`).join("");
@@ -3556,11 +3568,11 @@ function dashIndCardsHtml(kind, units) {
   } else {
     body = Object.keys(groups).map((n) => {
       const g = groups[n], bad = g.filter((x) => x.st.key === "struggling").length;
-      const cards = g.map(({ it }) => indCardHtml(it, kind)).join("");
-      return multi ? `<details class="ic-ud"${bad || Object.keys(groups).length === 1 ? " open" : ""}><summary><b>${esc(n)}</b><span>${g.length} مؤشر${bad ? ` · <i style="color:#a1302f;font-style:normal">${bad} متعثر</i>` : ""}</span></summary>${cards}</details>` : cards;
+      const cards = `<div class="ic-grid">${g.map(({ it }) => indCardHtml(it, kind)).join("")}</div>`;
+      return multi ? `<details class="ic-ud"${Object.keys(groups).length <= 2 || S.ui.indFilterOpen ? " open" : ""}><summary><b>${esc(n)}</b><span>${g.length} مؤشر${bad ? ` · <i style="color:#a1302f;font-style:normal">${bad} متعثر</i>` : ""}</span></summary>${cards}</details>` : cards;
     }).join("");
   }
-  return dashCard("مؤشرات الأداء", "", `<div data-dshape="1">${sum}${rank}${bar}${body}</div>`);
+  return dashCard("مؤشرات الأداء", "", `<div data-dshape="1">${sum}${rank}${bar}${view === "units" ? "" : fbar}${Object.keys(groups).length || view === "units" ? body : `<div class="hint">لا توجد مؤشرات بهذي الحالة.</div>`}</div>`);
 }
 function dashIndBoardHtml(kind, units) {
   try { const nc = dashIndCardsHtml(kind, units); if (nc) return nc; } catch (e) { console.warn("ind cards", e); }
@@ -15355,6 +15367,8 @@ function attachClickListener() {
       }
       case "ind-per": S.ui.indPer = ds.v; render(); break;
       case "ind-view": S.ui.indView = ds.v; render(); break;
+      case "ind-open": S.ui.indOpen = S.ui.indOpen === ds.k ? "" : ds.k; render(); break;
+      case "ind-stat": S.ui.indStat = ds.v; render(); break;
       case "dash-period": S.ui.dashPeriod = ds.v; render(); break;
       case "dash-year": S.ui.dashYear = ds.v; render(); break;
       case "dash-pie-scope": S.ui.dashPieScope = ds.v; render(); break;
