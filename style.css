@@ -1120,3 +1120,18 @@ table.prs-table th, table.prs-table td, .shp-tbl th, .shp-tbl td, .table-wrap ta
 .ic-mh b{font-size:14px;color:#6b2139;font-weight:800}.ic-mh span{font-size:11px;color:#8a7d7a}
 .ic-mg{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:8px}
 .ic-mc{min-width:0}.ic-mn{font-size:11px;color:#6f6168;font-weight:700;margin-bottom:4px;line-height:1.35;min-height:16px;display:flex;align-items:flex-end}
+
+/* المسار وخريطة الأولويات */
+.ic-pr{display:flex;align-items:center;gap:10px;margin-bottom:12px;font-size:12px}
+.ic-pr .ic-n2{flex:0 0 120px;font-weight:700}
+.ic-pl{position:relative;flex:1;height:22px;background:#f7f0f1;border-radius:11px;direction:ltr;min-width:0}
+.ic-pln{position:absolute;top:9px;height:3px}
+.ic-pl em{position:absolute;top:3px;width:16px;height:16px;margin-left:-8px;border-radius:50%;font-style:normal}
+.ic-pbs{background:#fff;border:2px solid #8a7d7a}
+.ic-ptg{width:4px!important;border-radius:2px!important;background:#c9a24b;height:28px!important;top:-3px!important;margin-left:-2px!important}
+.ic-pac{width:36px!important;height:20px!important;margin-left:-18px!important;top:1px!important;border-radius:10px!important;color:#fff;font-size:10.5px;text-align:center;line-height:20px;font-weight:800;z-index:3}
+.ic-pr small{flex:0 0 auto;min-width:64px;text-align:center;font-size:11px}
+.ic-pri{margin-top:12px;border:1px solid #eadfe2;border-radius:12px;padding:10px 12px;background:#fff}
+.ic-pri>b{display:block;color:#a1302f;font-size:12.5px;margin-bottom:6px}
+.ic-pri button{display:flex;align-items:center;gap:8px;width:100%;border:0;background:none;font:inherit;font-size:12px;padding:6px 0;border-top:1px solid #f3eaec;cursor:pointer;text-align:right;color:inherit}
+.ic-pri button span{width:9px;height:9px;border-radius:50%;flex:none}.ic-pri button em{margin-right:auto;font-style:normal;color:#a1302f;font-weight:700;font-size:11px}

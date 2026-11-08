@@ -3222,7 +3222,7 @@ const DASH_KINDS = [
 // يُتعرَّف على هذين الحسابين من اسم الدور (يحتوي «سكرتار» / «مساعد» مع «مدير»)
 function dashIndViewPickHtml(kid) {
   const cur = ((dashConfig() || {})[kid] || {}).indView || (kid === "executive" ? "map" : "cards");
-  const opts = [["cards", "بطاقات"], ["table", "جدول"], ["map", "مصفوفة الوحدات"], ["units", "مؤشر عبر الوحدات"], ["trend", "التطور"]];
+  const opts = [["cards", "بطاقات"], ["table", "جدول"], ["map", "مصفوفة الوحدات"], ["units", "مؤشر عبر الوحدات"], ["path", "المسار"], ["prio", "خريطة الأولويات"], ["trend", "التطور"]];
   return `<div style="border:1px solid ${BORDER};border-radius:14px;background:#fff;padding:12px 14px;margin-bottom:12px;"><div style="font-weight:800;font-size:13.5px;color:${ROSE};margin-bottom:4px;">العرض الذي يظهر أولاً في «مؤشرات الأداء»</div><div class="hint" style="margin-bottom:8px;">خاص بهذا النوع من الحسابات فقط. المصفوفة والمقارنة والتطور تظهر عند وجود أكثر من وحدة، وإلا يُعرض «بطاقات».</div><div style="display:flex;gap:6px;flex-wrap:wrap;">${opts.map(([v, l]) => `<button type="button" class="ic-sw${cur === v ? " on" : ""}" data-action="dash-indview" data-kind="${esc(kid)}" data-v="${v}">${l}</button>`).join("")}</div></div>`;
 }
 function dashRoleKind() {
@@ -3542,14 +3542,14 @@ function dashIndCardsHtml(kind, units) {
   const groups = {}; items.forEach((it, ix) => (groups[it.unit.name] = groups[it.unit.name] || []).push({ it, st: lastSt[ix] }));
   const kDef = ((dashConfig() || {})[kind] || {}).indView || (kind === "executive" ? "map" : "cards");
   const wantV = S.ui.indView || kDef;
-  const view = ["cards", "table", "units", "map", "trend"].indexOf(wantV) !== -1 && (multi || ["cards", "table"].indexOf(wantV) !== -1) ? wantV : "cards";
+  const view = ["cards", "table", "units", "map", "trend", "path", "prio"].indexOf(wantV) !== -1 && (multi || ["cards", "table"].indexOf(wantV) !== -1) ? wantV : "cards";
   const fst = S.ui.indStat || "";
   if (fst) Object.keys(groups).forEach((n) => { groups[n] = groups[n].filter((x) => x.st.key === fst); if (!groups[n].length) delete groups[n]; });
   const fch = (v, l) => `<button type="button" class="ic-sw${fst === v ? " on" : ""}" data-action="ind-stat" data-v="${v}">${l}</button>`;
   const fbar = `<div class="ic-vbar"><span>الحالة:</span>${fch("", "الكل")}${fch("struggling", "متعثر")}${fch("needsAction", "يحتاج تدخلاً")}${fch("close", "قريب")}${fch("achieved", "متحقق")}</div>`;
   if (view === "units" && !multi) { /* لا معنى لمقارنة الوحدات بوحدة واحدة */ }
   const vsw = (v, l) => `<button type="button" class="ic-sw${view === v ? " on" : ""}" data-action="ind-view" data-v="${v}">${l}</button>`;
-  const bar = `<div class="ic-vbar"><span>العرض:</span>${vsw("cards", "بطاقات")}${vsw("table", "جدول")}${multi ? vsw("map", "مصفوفة الوحدات") + vsw("units", "مؤشر عبر الوحدات") + vsw("trend", "التطور") : ""}</div>`;
+  const bar = `<div class="ic-vbar"><span>العرض:</span>${vsw("cards", "بطاقات")}${vsw("table", "جدول")}${multi ? vsw("map", "مصفوفة الوحدات") + vsw("units", "مؤشر عبر الوحدات") + vsw("path", "المسار") + vsw("prio", "خريطة الأولويات") + vsw("trend", "التطور") : ""}</div>`;
   let body = "";
   if (view === "table") {
     const mode = S.ui.indPer === "years" ? "years" : "terms";
@@ -3572,7 +3572,34 @@ function dashIndCardsHtml(kind, units) {
     }).join("");
     const sel = op && items.find((it) => (it.unit.name + "||" + it.name) === op);
     body = `<div class="ic-mw">${rows}</div><div class="ic-ml"><span><i class="k1"></i>المتحقق (لون الحالة)</span><span><i class="k2"></i>المستهدف</span><span><i class="k3"></i>خط الأساس</span> · الأضعف أولًا · اضغطي على خانة لعرض بطاقتها</div>${sel ? `<div style="margin-top:12px">${indCardHtml(sel, kind)}</div>` : ""}`;
-  } else if ((view === "units" || view === "trend") && multi) {
+  } else if (view === "prio" && multi) {
+    const pal = ["#6b2139", "#1f5f8b", "#b08a2e", "#5b4b8a", "#2f8a7a", "#a1302f", "#7a6a70", "#c26b85"];
+    const nm = []; items.forEach((it) => { if (nm.indexOf(it.name) === -1) nm.push(it.name); });
+    const mode0 = S.ui.indPer === "years" ? "years" : "terms";
+    const dots = items.map((it, ix) => { const p = it.pts.slice().reverse().find((q) => q.actual != null); if (!p || p.target == null || !p.target) return null; const ap = indAggPts(it, mode0), pv = ap.length > 1 ? ap[ap.length - 2].actual : null; const dir = (p.r && p.r.direction) || ""; const lowerBetter = /الانخفاض|أقل/.test(dir); let ratio = p.actual / p.target; if (lowerBetter && p.actual) ratio = p.target / p.actual; const chg = pv != null ? (p.actual - pv) / p.target * 100 * (lowerBetter ? -1 : 1) : null; return { it, ratio: ratio * 100, chg, st: lastSt[ix], c: pal[nm.indexOf(it.name) % pal.length] }; }).filter(Boolean);
+    if (!dots.length) body = `<div class="hint">لا توجد بيانات كافية لرسم الخريطة.</div>`;
+    else {
+      const W = 760, H = 470, x0 = 40, x1 = W - 20, y0 = 20, y1 = H - 50;
+      const xmin = Math.min(40, Math.floor(Math.min(...dots.map((d) => d.ratio)) / 10) * 10), xmax = Math.max(130, Math.ceil(Math.max(...dots.map((d) => d.ratio)) / 10) * 10);
+      const cs = dots.map((d) => d.chg).filter((v) => v != null), cm = Math.max(30, Math.ceil(Math.max(...cs.map(Math.abs), 0) / 10) * 10);
+      const X = (v) => x0 + (Math.min(xmax, Math.max(xmin, v)) - xmin) / (xmax - xmin) * (x1 - x0), Y = (v) => y1 - (Math.min(cm, Math.max(-cm, v)) + cm) / (2 * cm) * (y1 - y0);
+      let svg = `<svg viewBox="0 0 ${W} ${H}" width="100%" style="direction:ltr;display:block;margin:0 auto">`;
+      [[X(100), y0, x1 - X(100), Y(0) - y0, "#e4f1e8", "متحقق ومتحسّن", "#2f6b3f", "end", x1 - 8, y0 + 16], [x0, y0, X(100) - x0, Y(0) - y0, "#fbf3dc", "قيد التحسّن — تابعي", "#8a6a1c", "start", x0 + 8, y0 + 16], [X(100), Y(0), x1 - X(100), y1 - Y(0), "#eef3ea", "متحقق لكن يتراجع — انتبهي", "#5d7a3a", "end", x1 - 8, y1 - 8], [x0, Y(0), X(100) - x0, y1 - Y(0), "#f7dcdc", "أولوية قصوى: متعثر ومتراجع", "#a1302f", "start", x0 + 8, y1 - 8]].forEach(([qx, qy, qw, qh, f, t, c, an, tx, ty]) => { svg += `<rect x="${qx}" y="${qy}" width="${qw}" height="${qh}" fill="${f}"/><text x="${tx}" y="${ty}" font-size="12" font-weight="800" fill="${c}" text-anchor="${an}">${t}</text>`; });
+      svg += `<line x1="${X(100)}" x2="${X(100)}" y1="${y0}" y2="${y1}" stroke="#c9a24b" stroke-width="2.4" stroke-dasharray="6 4"/><line x1="${x0}" x2="${x1}" y1="${Y(0)}" y2="${Y(0)}" stroke="#b9a98a" stroke-dasharray="3 3"/>`;
+      svg += `<text x="${X(100) + 4}" y="${y1 + 16}" font-size="10" fill="#a9842f" font-weight="700">المستهدف ١٠٠٪</text>`;
+      for (let v = Math.ceil(xmin / 10) * 10; v <= xmax; v += 20) if (Math.abs(v - 100) > 6) svg += `<text x="${X(v)}" y="${y1 + 16}" font-size="10" fill="#8a7d7a" text-anchor="middle">${v}٪</text>`;
+      svg += `<text x="${(x0 + x1) / 2}" y="${H - 8}" font-size="11" fill="#6f6168" text-anchor="middle">نسبة التحقق من المستهدف ←</text>`;
+      const lbl = [];
+      dots.slice().sort((a, b) => a.ratio - b.ratio).forEach((d) => { const key = d.it.unit.name + "||" + d.it.name, pri = d.ratio < 100 && (d.chg == null || d.chg < 0), cx = X(d.ratio), cy = Y(d.chg == null ? 0 : d.chg), on = S.ui.indOpen === key;
+        svg += `<circle data-action="ind-open" data-k="${esc(key)}" cx="${cx.toFixed(0)}" cy="${cy.toFixed(0)}" r="${on ? 11 : pri ? 9 : 6}" fill="${d.c}" fill-opacity="${pri ? 0.92 : 0.6}" stroke="${on ? "#2b1f24" : "#fff"}" stroke-width="1.6" style="cursor:pointer"><title>${esc(d.it.unit.name)} · ${esc(d.it.name)} · ${Math.round(d.ratio)}٪</title></circle>`;
+        if (pri && d.ratio < 85 && !lbl.some((q) => Math.abs(q[0] - cx) < 90 && Math.abs(q[1] - cy) < 13) && lbl.length < 10) { lbl.push([cx, cy]); svg += `<text x="${(cx + 13).toFixed(0)}" y="${(cy + 4).toFixed(0)}" font-size="10" fill="#2b1f24" font-weight="700" style="pointer-events:none">${esc(d.it.unit.name)}</text>`; } });
+      svg += "</svg>";
+      const pr = dots.filter((d) => d.ratio < 100 && (d.chg == null || d.chg <= 0)).sort((a, b) => a.ratio - b.ratio).slice(0, 5);
+      const prl = pr.length ? `<div class="ic-pri"><b>أولويات المتابعة</b>${pr.map((d) => `<button type="button" data-action="ind-open" data-k="${esc(d.it.unit.name + "||" + d.it.name)}"><span style="background:${d.c}"></span>${esc(d.it.unit.name)} · ${esc(d.it.name)}<em>${Math.round(d.ratio)}٪${d.chg == null ? "" : " · " + (d.chg > 0 ? "+" : "") + Math.round(d.chg) + "٪"}</em></button>`).join("")}</div>` : "";
+      const sel2 = S.ui.indOpen && items.find((it) => (it.unit.name + "||" + it.name) === S.ui.indOpen);
+      body = `<div class="ic-cmp"><div class="ic-cn">خريطة الأولويات<small>كل نقطة مؤشر في وحدة · الدوائر الكبيرة الداكنة هي المتعثرة والمتراجعة وعليها اسم الوحدة · اضغطي على نقطة لعرض بطاقتها · المحور الرأسي: التغيّر عن الفترة السابقة</small></div>${svg}<div class="ic-lgd">${nm.map((n, i) => `<span><b style="background:${pal[i % pal.length]}"></b>${esc(n)}</span>`).join("")}</div>${prl}</div>${sel2 ? `<div style="margin-top:12px">${indCardHtml(sel2, kind)}</div>` : ""}`;
+    }
+  } else if ((view === "units" || view === "trend" || view === "path") && multi) {
     const names = []; items.forEach((it) => { if (names.indexOf(it.name) === -1 && items.filter((q) => q.name === it.name).length > 1) names.push(it.name); });
     if (!names.length) body = `<div class="hint">لا توجد مؤشرات مشتركة بين أكثر من وحدة للمقارنة.</div>`;
     else {
@@ -3580,7 +3607,17 @@ function dashIndCardsHtml(kind, units) {
       const chips = `<div class="ic-vbar"><span>المؤشر:</span>${names.map((nm) => `<button type="button" class="ic-sw${nm === cur ? " on" : ""}" data-action="ind-sel" data-v="${esc(nm)}">${esc(nm)}</button>`).join("")}</div>`;
       const sel = items.map((it, ix) => ({ it, st: lastSt[ix] })).filter((x) => x.it.name === cur && groups[x.it.unit.name]);
       const mode = S.ui.indPer === "years" ? "years" : "terms";
-      if (view === "units") {
+      if (view === "path") {
+        const last = (x) => x.it.pts.slice().reverse().find((q) => q.actual != null) || x.it.pts[x.it.pts.length - 1];
+        const rowsP = sel.map((x) => ({ x, p: last(x), bs: indNumV(x.it.pts[x.it.pts.length - 1].row.baseline) }));
+        const mxp = Math.max(...rowsP.map((r) => Math.max(r.p.actual || 0, r.p.target || 0, r.bs || 0)), 1) * 1.12;
+        const P = (v) => Math.max(0, Math.min(100, (v / mxp) * 100)).toFixed(1);
+        rowsP.sort((a, b) => (a.x.st.ratio == null ? 9 : a.x.st.ratio) - (b.x.st.ratio == null ? 9 : b.x.st.ratio));
+        const u0 = sel[0].it.pts[sel[0].it.pts.length - 1].r.unit;
+        body = chips + `<div class="ic-cmp"><div class="ic-cn">${esc(cur)}<small>${esc(u0 || "")} · المسار من خط الأساس إلى المتحقق مقابل المستهدف · مرتبة من الأضعف</small></div>` + rowsP.map(({ x, p, bs }) => { const c = x.st.color, a = p.actual; const dv = a != null && p.target != null ? Math.round((a - p.target) * 100) / 100 : null;
+          const lo = bs != null && a != null ? Math.min(a, bs) : null, hi = bs != null && a != null ? Math.max(a, bs) : null;
+          return `<div class="ic-pr"><span class="ic-n2">${esc(x.it.unit.name)}</span><div class="ic-pl">${lo != null ? `<i class="ic-pln" style="left:${P(lo)}%;right:${(100 - P(hi)).toFixed(1)}%;background:${c}"></i>` : ""}${bs != null ? `<em class="ic-pbs" style="left:${P(bs)}%"></em>` : ""}${p.target != null ? `<em class="ic-ptg" style="left:${P(p.target)}%"></em>` : ""}<em class="ic-pac" style="left:${P(a || 0)}%;background:${c}">${indFmtV(a)}</em></div><small style="color:${c};font-weight:800">${esc(x.st.label)}</small><small style="color:${dv != null && dv >= 0 ? "#2f6b3f" : "#a1302f"}">${dv == null ? "—" : (dv > 0 ? "+" : "") + indFmtV(dv)}</small></div>`; }).join("") + `<div class="ic-ml"><span><i class="k3"></i>خط الأساس</span><span><i class="k2"></i>المستهدف</span><span><i class="k1" style="background:#a1302f"></i>المتحقق (لون الحالة)</span> · الرقم الأخير هو الانحراف عن المستهدف</div></div>`;
+      } else if (view === "units") {
         const last = (x) => x.it.pts.slice().reverse().find((q) => q.actual != null) || x.it.pts[x.it.pts.length - 1];
         const mx = Math.max(...sel.map((x) => Math.max(last(x).actual || 0, last(x).target || 0, indNumV(x.it.pts[x.it.pts.length - 1].row.baseline) || 0)), 1) * 1.08;
         const w = (v) => Math.max(0, Math.min(100, (v / mx) * 100)).toFixed(0);
@@ -3614,7 +3651,7 @@ function dashIndCardsHtml(kind, units) {
       return multi ? `<details class="ic-ud"${Object.keys(groups).length <= 2 || S.ui.indFilterOpen ? " open" : ""}><summary><b>${esc(n)}</b><span>${g.length} مؤشر${bad ? ` · <i style="color:#a1302f;font-style:normal">${bad} متعثر</i>` : ""}</span></summary>${cards}</details>` : cards;
     }).join("");
   }
-  return dashCard("مؤشرات الأداء", "", `<div data-dshape="1">${sum}${rank}${bar}${view === "units" || view === "trend" ? "" : fbar}${Object.keys(groups).length || view === "units" ? body : `<div class="hint">لا توجد مؤشرات بهذي الحالة.</div>`}</div>`);
+  return dashCard("مؤشرات الأداء", "", `<div data-dshape="1">${sum}${rank}${bar}${["units", "trend", "path", "prio"].indexOf(view) !== -1 ? "" : fbar}${Object.keys(groups).length || ["units", "path", "prio"].indexOf(view) !== -1 ? body : `<div class="hint">لا توجد مؤشرات بهذي الحالة.</div>`}</div>`);
 }
 function dashIndBoardHtml(kind, units) {
   try { const nc = dashIndCardsHtml(kind, units); if (nc) return nc; } catch (e) { console.warn("ind cards", e); }
@@ -4435,9 +4472,9 @@ function exBlocksInner(kind, units, extra) {
     html += "\u0003";
   }
   // خريطة الأداء: أبناء المستوى الحالي، وتحت كل واحد أبناؤه ومربعات وحداته
-  for (const [hk, hTitle, hSub, hFn] of [["exHeat", "خريطة الأداء", "كل مربع وحدة ملوّنة بنسبة تحقق مؤشراتها في آخر تقرير · اضغطي على أي اسم للتفصيل", dashReportIndAvg], ["exHeatGoal", "خريطة تحقق الأهداف", "كل مربع وحدة ملوّنة بمتوسط تحقق أهدافها التشغيلية في آخر تقرير · اضغطي على أي اسم للتفصيل", dashReportGoalAvg]]) { if (dashHidden(kind, hk)) continue; html += "\u0001" + hk + "\u0002";
+  for (const [hk, hTitle, hSub, hFn] of [["exHeat", "خريطة الأداء", "كل مربع وحدة ملوّنة بنسبة تحقق مؤشراتها في آخر تقرير · اضغطي على أي وحدة لفتح تقريرها", dashReportIndAvg], ["exHeatGoal", "خريطة تحقق الأهداف", "كل مربع وحدة ملوّنة بمتوسط تحقق أهدافها التشغيلية في آخر تقرير · اضغطي على أي وحدة لفتح تقريرها", dashReportGoalAvg]]) { if (dashHidden(kind, hk)) continue; html += "\u0001" + hk + "\u0002";
     const tileBg = (p) => (p == null ? "#cfc6ca" : pctColor(p));
-    const tiles = (list) => `<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(min(74px,100%),1fr));gap:6px;margin-top:6px;">${list.map((u) => { const p = latestPct(u, hFn); return `<div title="${esc(u.name)}" style="border-radius:8px;padding:6px;color:#fff;text-align:center;min-height:50px;display:flex;flex-direction:column;justify-content:center;background:${tileBg(p)};"><div style="font-size:10.5px;line-height:1.4;">${esc(u.name)}</div><div style="font-size:14px;font-weight:800;">${p == null ? "—" : p + "٪"}</div></div>`; }).join("")}</div>`;
+    const tiles = (list) => `<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(min(74px,100%),1fr));gap:6px;margin-top:6px;">${list.map((u) => { const p = latestPct(u, hFn), lt = dashUnitLatest(series, u.id), rid = lt && lt.report ? lt.report.id : ""; return `<${rid ? "button type=\"button\" data-action=\"open-report\" data-unit-id=\"" + esc(u.id) + "\" data-report-id=\"" + esc(rid) + "\"" : "div"} title="${esc(u.name)}${rid ? " — اضغطي لفتح آخر تقرير" : ""}" style="border-radius:8px;padding:6px;color:#fff;text-align:center;min-height:50px;display:flex;flex-direction:column;justify-content:center;background:${tileBg(p)};border:0;font-family:inherit;width:100%;${rid ? "cursor:pointer;" : ""}"><div style="font-size:10.5px;line-height:1.4;">${esc(u.name)}</div><div style="font-size:14px;font-weight:800;">${p == null ? "—" : p + "٪"}</div></${rid ? "button" : "div"}>`; }).join("")}</div>`;
     const pctOf = (list) => { const p = dashAvg(list.map((u) => latestPct(u, hFn))); return p == null ? "—" : p + "٪"; };
     const box = sc.children.map((c) => {
       const head = c.leaf || !c.levelId ? `<div style="padding:4px 2px;font-size:13.5px;font-weight:800;color:${INK};">${esc(c.name)} · ${pctOf(c.list)}</div>` : exDrillBtn(sc.path.concat(c.levelId), `${esc(c.name)} · ${pctOf(c.list)}`, `padding:4px 2px;font-size:13.5px;font-weight:800;color:${ROSE};text-align:right;`);
