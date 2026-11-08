@@ -3759,6 +3759,7 @@ function dashKpiShapeHtml(units) {
 }
 function dashFieldShapeHtml(kind, sid, units) {
   // الشكل المختار لقسم في اللوحة يحلّ محل البطاقة القديمة (أرقام + توزيع + قائمة) بدل أن يُطبَّق على جدول غير موجود
+  if (sid === "challenges") return ""; // الصعوبات لها أبراجها الثابتة ولا يغلبها شكل مختار
   const dm = (dashConfig() || {})._dashShapes || {}; const v = dm[sid] || "";
   if (!/^shape:/.test(v) || v === "shape:auto" || !SHAPES_LIB[v.slice(6)]) return "";
   try {
