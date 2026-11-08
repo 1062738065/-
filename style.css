@@ -1273,3 +1273,4 @@ html body table.prs-table:not(#z) tbody tr:last-child td,html body table.rpt-gta
 .cm-i{background:#fff;border-radius:7px;padding:5px 8px;margin:3px 0;font-size:11.5px;font-weight:700;line-height:1.4;border-right:4px solid}
 .cm-i0{border-color:#7d1d3f}.cm-i1{border-color:#c4577a}.cm-i2{border-color:#cdb894}
 .cm-t,.cm-t *{-webkit-print-color-adjust:exact;print-color-adjust:exact}
+.ct-more[data-action="route-decide"]{flex:1}

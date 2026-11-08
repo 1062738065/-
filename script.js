@@ -1994,6 +1994,8 @@ function render0() {
   } else if (S.view === "org-levels" || S.view === "units-manage" || S.view === "org-chart") {
     // صفحة "المستخدمون" الموحّدة (الهيكل + الحسابات + الأشخاص + الأدوار + المسارات)
     html = shellWrap(renderOrgLevelsPage());
+  } else if (S.view === "items-inbox") {
+    html = shellWrap(renderItemsInbox());
   } else if (S.view === "department-curation") {
     html = shellWrap(renderCurationUnified());
   } else if (S.view === "executive-dashboard") {
@@ -2163,6 +2165,7 @@ const SIDEBAR_PAGES = [
   // صفحة مستقلة قائمة بذاتها (نفس نمط "office-curation" للمكتب) — بدل ما تكون
   // قسمًا مدمجًا داخل صفحة أخرى، حسب طلب نجود الصريح.
   { id: "department-curation", label: "اعتماد أبرز النتائج والتوصيات", group: "الرئيسية", icon: "target" },
+  { id: "items-inbox", label: "الواردات", group: "الرئيسية", icon: "document" },
   // رابط ثابت لمديرة النظام فقط: بوّابة دخول لصفحات "unit-home" (نفس أفكار
   // "قسمي")، يختار أول وحدة/مركز نشط تلقائيًا ثم يحوّل فعليًا لعرض "تقارير"
   // (راجع case "nav-to" ومعالجته الخاصة لـ"unit-overview").
@@ -3275,7 +3278,6 @@ const DASH_STD_BLOCKS = [
   { key: "exHeat", label: "خريطة الأداء (المؤشرات)" },
   { key: "exHeatGoal", label: "خريطة تحقق الأهداف" },
   { key: "exBenef", label: "المستفيدون حسب نوع العمل" },
-  { key: "exChal", label: "الصعوبات القائمة" },
   { key: "exSubm", label: "رفع التقارير واعتمادها" },
 ];
 const DASH_STD_KINDS = ["office", "dept", "unit"];
@@ -3306,7 +3308,6 @@ const DASH_EX_BLOCKS = [
   { key: "indBoard", label: "مؤشرات الأداء" },
   { key: "trend", label: "رسم تطور التحقق فترة بعد فترة" },
   { key: "exBenef", label: "المستفيدون حسب نوع العمل" },
-  { key: "exChal", label: "الصعوبات القائمة حسب المستوى" },
   { key: "routed", label: "المرفوع إليّ (صعوبات وتوصيات وغيرها)" },
   { key: "sharedInd", label: "المؤشرات المشتركة بين وحدات" },
   { key: "exSubm", label: "رفع التقارير واعتمادها" },
@@ -3360,6 +3361,17 @@ const DASH_SEV_COL = [[/عاجل|حرج/, "#b03a3a"], [/عالي|مرتفع|مت
 const DASH_ITEMS = {};
 const DASH_PAL = ["#6b2337", "#c9863a", "#5f8a6a", "#a05a72", "#7d8fa8", "#b89a5a"];
 
+function routeStatusOf(sid, it) {
+  if (!it || !Array.isArray(it.routeHist) || !it.routeHist.length) return null;
+  const last = it.routeHist[it.routeHist.length - 1];
+  if (it.routeDone) return { txt: (ROUTE_DONE_LABEL[sid] || "تمت المعالجة") + " عند " + (ROUTE_LV_LABEL[last.lvl] || ""), col: "#2f8f6b" };
+  return { txt: "صعدت إلى " + (ROUTE_LV_LABEL[it.routeCur] || ""), col: "#c4577a" };
+}
+function routeBadgeHtml(sid, it) { const r = routeStatusOf(sid, it); return r ? `<span style="font-size:10.5px;font-weight:700;color:${r.col};background:${r.col}1a;border-radius:999px;padding:2px 9px;white-space:nowrap;">${esc(r.txt)}</span>` : ""; }
+function routeHistHtml(it) {
+  if (!it || !Array.isArray(it.routeHist) || !it.routeHist.length) return "";
+  return `<div class="ct-g"><div class="ct-gh">مسار المعالجة</div>${it.routeHist.map((h) => `<div class="ct-r"><span>${esc(ROUTE_LV_LABEL[h.lvl] || "")}</span><b>${h.dec === "done" ? "عولجت" : "لم تتم"}${h.note ? " — " + esc(h.note) : ""}</b></div>`).join("")}</div>`;
+}
 const CH_LV = { "حرج": 0, "مرتفع": 1, "منخفض": 2 };
 function challTowersHtml(items) {
   const g = {};
@@ -3399,7 +3411,7 @@ function dashChallModalHtml(rec) {
   return `<div class="no-print" data-action="dashitem-close" style="position:fixed;inset:0;background:rgba(40,20,30,.45);z-index:9000;display:flex;align-items:flex-end;justify-content:center;">
     <div data-stop="1" class="ct-sheet"><i class="ct-grab"></i>
       <div class="ct-hd"><b>${esc(v("name") || "صعوبة")}</b>${lvI != null ? `<span class="ct-pill ct-l${lvI}">${esc(it.severity)}</span>` : ""}<button type="button" data-action="dashitem-close" style="background:none;border:none;cursor:pointer;">${iconX(18, SUBTLE)}</button></div>
-      ${sub ? `<div class="ct-sub">${sub}</div>` : ""}${g1}${g2}${g3 ? (more ? g3 : "") : ""}
+      ${sub ? `<div class="ct-sub">${sub}</div>` : ""}${g1}${g2}${g3 ? (more ? g3 : "") : ""}${routeHistHtml(it)}
       ${g3 ? `<div style="text-align:center;margin-top:12px"><button type="button" class="ct-more" data-action="dashitem-more">${more ? "إخفاء ▴" : "المزيد ▾"}</button>${more ? "" : `<div class="ct-hint">المعالجة والتوجيه (الإجراء، النتيجة، الدعم، الجهة)</div>`}</div>` : ""}
     </div></div>`;
 }
@@ -3418,7 +3430,7 @@ function dashItemModalHtml(sid) {
     <div data-stop="1" style="background:#fff;width:min(560px,100%);max-height:86vh;overflow:auto;border-radius:22px 22px 0 0;padding:18px 20px 26px;">
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px;"><div style="font-size:16px;font-weight:800;">${esc(dashFieldSecLabel(sid))}</div><button type="button" data-action="dashitem-close" style="background:none;border:none;cursor:pointer;">${iconX(18, SUBTLE)}</button></div>
       ${rec.unit ? `<div style="font-size:12px;color:${SUBTLE};margin-bottom:6px;">${esc(rec.unit)}</div>` : ""}
-      ${rowsH}
+      ${rowsH}${routeHistHtml(rec.item)}
     </div></div>`;
 }
 function dashFieldBlockHtml(kind, sid, units) {
@@ -3431,11 +3443,13 @@ function dashFieldBlockHtml(kind, sid, units) {
     const strict = sid === "challenges" || sid === "recommendations", lv = ROUTE_KIND_LEVEL[kind];
     for (let i = rows.length - 1; i >= 0; i--) { const x = rows[i]; const set = strict || String(x.routeTo || "").trim() !== ""; if (set && routeLevelOf(sid, x) !== lv) rows.splice(i, 1); }
   }
-  if (!rows.length) return "";
+  if (!rows.length && sid !== "challenges") return "";
   if (sid === "challenges") {
-    const its = rows.filter((x) => x && x.name && x.stillOngoing !== "لا").map((x) => { const key = kind + "|challenges|" + rows.indexOf(x); DASH_ITEMS[key] = { sid, item: x, unit: unitOf.get(x) || "" }; return { name: x.name, area: x.area, severity: x.severity, key }; });
+    const its = rows.filter((x) => x && x.name && x.stillOngoing !== "لا" && !x.routeDone).map((x) => { const key = kind + "|challenges|" + rows.indexOf(x); DASH_ITEMS[key] = { sid, item: x, unit: unitOf.get(x) || "" }; return { name: x.name, area: x.area, severity: x.severity, key }; });
     const tw = challTowersHtml(its);
-    return dashCard(dashFieldSecLabel(sid), `${its.length} صعوبة قائمة · اضغطي على أي صعوبة لتفاصيلها`, tw || `<div style="font-size:12px;color:${SUBTLE};padding:8px 0">لا توجد صعوبات قائمة بمستوى حرج أو مرتفع أو منخفض.</div>`);
+    const handled = rows.filter((x) => x && x.name && routeStatusOf(sid, x)).map((x) => { const key = kind + "|challenges|" + rows.indexOf(x); DASH_ITEMS[key] = { sid, item: x, unit: unitOf.get(x) || "" }; return `<div data-action="dash-item" data-key="${esc(key)}" style="cursor:pointer;display:flex;justify-content:space-between;gap:8px;align-items:center;padding:7px 0;border-top:1px solid ${BORDER};font-size:12.5px;"><b>${esc(x.name)}</b>${routeBadgeHtml(sid, x)}</div>`; }).join("");
+    const handledH = handled ? `<div style="margin-top:12px;"><div style="font-size:12px;font-weight:800;color:${ROSE};margin-bottom:2px;">مسار المعالجة</div>${handled}</div>` : "";
+    return dashCard(dashFieldSecLabel(sid), `${its.length} صعوبة قائمة · اضغطي على أي صعوبة لتفاصيلها`, (tw || `<div style="font-size:12.5px;color:${SUBTLE};padding:10px 0">لا توجد صعوبات قائمة موجهة لهذا الحساب في الفترة المختارة.</div>`) + handledH);
   }
   const fld = (id) => sc.fields.find((f) => f.id === id);
   const txt = (x, id) => { const v = x[id]; return v == null ? "" : schemaFieldText(v).trim(); };
@@ -3467,7 +3481,7 @@ function dashFieldBlockHtml(kind, sid, units) {
   const items = rows.filter((x) => txt(x, cfg.title)).slice(0, 6);
   const listH = items.length ? `<div style="margin-top:14px;border-top:1px solid ${BORDER};">${items.map((x) => {
     const meta = [unitOf.get(x), ...(cfg.meta || []).map((id) => txt(x, id)).filter(Boolean)].filter(Boolean).map((m) => m.length > 60 ? m.slice(0, 60) + "…" : m).join(" · ");
-    const bs = (cfg.badges || []).map((id) => { const v = txt(x, id); if (!v) return ""; if (rows.length > 1 && rows.every((r) => txt(r, id) === v)) return ""; return badge(id, v); }).join("");
+    const bs = (cfg.badges || []).map((id) => { const v = txt(x, id); if (!v) return ""; if (rows.length > 1 && rows.every((r) => txt(r, id) === v)) return ""; return badge(id, v); }).join("") + routeBadgeHtml(sid, x);
     const t = txt(x, cfg.title);
     const key = kind + "|" + sid + "|" + rows.indexOf(x); DASH_ITEMS[key] = { sid, item: x, unit: unitOf.get(x) || "" };
     return `<div data-action="dash-item" data-key="${esc(key)}" style="cursor:pointer;display:flex;align-items:flex-start;justify-content:space-between;gap:10px;padding:9px 0;border-bottom:1px solid ${BORDER};"><div style="min-width:0;"><div style="font-size:13px;font-weight:700;line-height:1.6;">${esc(t.length > 110 ? t.slice(0, 110) + "…" : t)}</div><div style="font-size:11.5px;color:${SUBTLE};">${esc(meta)}</div></div><div style="display:flex;gap:4px;flex-wrap:wrap;justify-content:flex-end;flex:none;max-width:45%;">${bs}</div></div>`;
@@ -3480,6 +3494,8 @@ const ROUTE_SECS = ["challenges", "recommendations", "improvement", "initiatives
 const ROUTE_KIND_LEVEL = { dept: "dept", role_asst: "asst", executive: "exec" };
 function routeLevelOf(sid, it) {
   if (!it || typeof it !== "object") return "unit";
+  if (it.routeDone) return "done"; // عولج عند جهة: يبقى في تقرير الوحدة ولا يصعد
+  if (it.routeCur === "dept" || it.routeCur === "asst" || it.routeCur === "exec") return it.routeCur; // صعد من جهة لم تعالجه
   if (sid === "challenges" && it.proposedHandler) { // الجهة المقترحة للمعالجة تغلب على النطاق
     const h = String(it.proposedHandler);
     if (/مساعد/.test(h)) return "asst";
@@ -3492,6 +3508,55 @@ function routeLevelOf(sid, it) {
   if (/مساعدة مدير/.test(t)) return "asst";
   if (/القسم|تعاون|مشتركة/.test(t)) return "dept";
   return "unit";
+}
+const ROUTE_NEXT = { dept: "asst", asst: "exec", exec: "exec" };
+const ROUTE_LV_LABEL = { dept: "القسم", asst: "مساعدة مدير إدارة التعليم النسائي", exec: "إدارة التعليم النسائي" };
+const ROUTE_DONE_LABEL = { challenges: "تم حلها", recommendations: "تم اعتمادها", improvement: "تم تنفيذها", initiatives: "تم تبنيها", impact: "تم الاطلاع", strengths: "تم الاطلاع" };
+function routeItemTitle(it) { return String(it.name || it.title || it.text || it.impactType || "—").slice(0, 120); }
+function inboxScope() {
+  const act = (u) => u.status === "active" && u.role !== "self_report" && u.role !== "admin" && u.role !== "executive";
+  if (S.isDepartmentUser && S.currentDepartmentId) return { kind: "dept", units: S.units.filter((u) => u.departmentId === S.currentDepartmentId && u.status === "active") };
+  if (S.isExecutive) return { kind: dashRoleKind() === "role_asst" ? "role_asst" : "executive", units: S.units.filter(act) };
+  if (S.isAdmin) return { kind: "executive", units: S.units.filter(act) };
+  return null;
+}
+function inboxItems(kind, units) {
+  const lv = ROUTE_KIND_LEVEL[kind], out = [];
+  units.forEach((u) => ensureUnitReportsLoaded(u.id).forEach((r) => ROUTE_SECS.forEach((sid) => {
+    const sc = SECTION_FIELD_SCHEMAS[sid]; if (!sc) return; const owner = DASH_FLD_OWNER[sid] || sid;
+    const arr = r.sections && r.sections[owner] && r.sections[owner].data && r.sections[owner].data[sc.arrayKey];
+    if (Array.isArray(arr)) arr.forEach((it) => { if (it && it.id && routeLevelOf(sid, it) === lv) out.push({ u, r, sid, it }); });
+  })));
+  return out;
+}
+function renderItemsInbox() {
+  const sc = inboxScope();
+  const right = pillBtn("خروج", { variant: "danger", icon: iconLogout(15, DANGER), action: "logout" });
+  if (!sc || !ROUTE_KIND_LEVEL[sc.kind]) return `<div class="page-wrap"><div class="page-inner">${topBarHtml({ title: "الواردات", subtitle: "", right })}<div class="card" style="text-align:center;color:${SUBTLE};padding:36px;">هذه الصفحة لحسابات القسم ومساعدة المدير وإدارة التعليم النسائي.</div></div></div>`;
+  const lv = ROUTE_KIND_LEVEL[sc.kind], rows = inboxItems(sc.kind, sc.units);
+  const card = (x) => {
+    const id = [x.u.id, x.r.id, x.sid, x.it.id].join("|"), hist = (x.it.routeHist || []).map((h) => `<div style="font-size:11.5px;color:${SUBTLE};">↳ ${esc(ROUTE_LV_LABEL[h.lvl] || h.lvl)}: لم تتم — ${esc(h.note || "")}</div>`).join("");
+    const det = [x.it.description, x.it.text, x.it.impact].filter(Boolean)[0];
+    return `<div class="card" style="padding:14px 16px;margin-bottom:10px;">
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;"><span class="ct-pill ct-l1" style="background:#f3e8eb;color:#6b2139;">${esc(dashFieldSecLabel(x.sid))}</span><b style="font-size:14px;flex:1;">${esc(routeItemTitle(x.it))}</b>${x.it.severity ? `<span class="ct-pill ct-l${CH_LV[x.it.severity] ?? 2}">${esc(x.it.severity)}</span>` : ""}</div>
+      <div style="font-size:12px;color:${SUBTLE};margin:3px 0;">${esc(x.u.name)}${det ? " · " + esc(String(det).slice(0, 160)) : ""}</div>${hist}
+      <textarea id="rn-${esc(id)}" rows="2" placeholder="ملاحظة (إلزامية عند «لم تتم»)" style="width:100%;margin-top:8px;border:1px solid #e6dde0;border-radius:10px;padding:8px;font:inherit;font-size:12.5px;"></textarea>
+      <div style="display:flex;gap:8px;margin-top:8px;"><button type="button" class="ct-more" data-action="route-decide" data-id="${esc(id)}" data-dec="done" style="background:#6b2139;color:#fff;">${esc(ROUTE_DONE_LABEL[x.sid] || "تمت المعالجة")}</button><button type="button" class="ct-more" data-action="route-decide" data-id="${esc(id)}" data-dec="esc">${lv === "exec" ? "لم تتم — تبقى قائمة" : "لم تتم — تصعيد إلى " + esc(ROUTE_LV_LABEL[ROUTE_NEXT[lv]])}</button></div></div>`;
+  };
+  return `<div class="page-wrap"><div class="page-inner">${topBarHtml({ title: "الواردات", subtitle: ROUTE_LV_LABEL[lv] + " — " + rows.length + " بند بانتظار قرارك", right })}${rows.length ? rows.map(card).join("") : `<div class="card" style="text-align:center;color:${SUBTLE};padding:36px;">لا توجد بنود واردة بانتظارك.</div>`}</div></div>`;
+}
+function routeDecide(id, dec, note) {
+  const [uid_, rid, sid, iid] = String(id).split("|"); const sc = SECTION_FIELD_SCHEMAS[sid], owner = DASH_FLD_OWNER[sid] || sid;
+  const entry = ensureUnitReportsLoaded(uid_).find((r) => r.id === rid); if (!entry || !sc) return false;
+  const lv = (inboxScope() && ROUTE_KIND_LEVEL[inboxScope().kind]) || "exec";
+  const sec = (entry.sections || {})[owner]; const arr = sec && sec.data && sec.data[sc.arrayKey]; if (!Array.isArray(arr)) return false;
+  const nextArr = arr.map((it) => {
+    if (!it || it.id !== iid) return it;
+    const hist = (it.routeHist || []).concat([{ lvl: lv, dec, note: note || "", at: Date.now() }]);
+    return dec === "done" ? { ...it, routeHist: hist, routeDone: true, routeCur: lv } : { ...it, routeHist: hist, routeCur: ROUTE_NEXT[lv] };
+  });
+  saveReportEntry(uid_, { ...entry, sections: { ...entry.sections, [owner]: { ...sec, data: { ...sec.data, [sc.arrayKey]: nextArr } } } });
+  return true;
 }
 function dashRoutedHtml(kind, units) {
   const lv = ROUTE_KIND_LEVEL[kind]; if (!lv) return "";
@@ -4438,7 +4503,7 @@ function dashFollowUpHtml(kind, series) {
   series.units.forEach((u) => {
     const l = dashUnitLatest(series, u.id); if (!l) return;
     const where = (multi ? u.name + " · " : "") + l.col.label;
-    (l.report.sections?.challenges?.data?.challenges || []).forEach((c) => { if (c && c.name && c.stillOngoing !== "لا" && DASH_HIGH_SEVERITY.includes(c.severity)) rows.push({ text: c.name, kind: "صعوبة قائمة", level: c.severity, hi: c.severity === "حرج", where }); });
+    (l.report.sections?.challenges?.data?.challenges || []).forEach((c) => { if (c && c.name && c.stillOngoing !== "لا" && !c.routeDone && DASH_HIGH_SEVERITY.includes(c.severity) && (!ROUTE_KIND_LEVEL[kind] || routeLevelOf("challenges", c) === ROUTE_KIND_LEVEL[kind])) rows.push({ text: c.name, kind: "صعوبة قائمة", level: c.severity, hi: c.severity === "حرج", where }); });
     (l.report.sections?.improvement?.data?.opportunities || []).forEach((o) => { if (o && o.name && DASH_HIGH_PRIORITY.includes(o.priority)) rows.push({ text: o.name, kind: "فرصة تحسين", level: o.priority, hi: o.priority === "عاجلة", where }); });
   });
   rows.sort((a, b) => b.hi - a.hi);
@@ -4469,7 +4534,7 @@ function dashUnitStats(series, u) {
   const l = dashUnitLatest(series, u.id), r = l && l.report;
   const progs = r ? (r.sections?.programs?.data?.programs || []).filter((p) => p && p.name) : [];
   const done = progs.filter((p) => p.executionStatus === "مكتمل").length;
-  const openCh = r ? (r.sections?.challenges?.data?.challenges || []).filter((c) => c && c.name && c.stillOngoing !== "لا").length : 0;
+  const openCh = r ? (r.sections?.challenges?.data?.challenges || []).filter((c) => c && c.name && c.stillOngoing !== "لا" && !c.routeDone).length : 0;
   return { unit: u, latest: l, ind: r ? dashReportIndAvg(r) : null, goal: r ? dashReportGoalAvg(r) : null, works: progs.length ? Math.round(done / progs.length * 100) : null, openCh };
 }
 function dashUnitsCmpHtml(kind, series) {
@@ -4593,7 +4658,7 @@ function exBlocksInner(kind, units, extra) {
   html += (extra ? "" : dashB(kind, "trend", dashTrendHtml(kind, series, "التطور فترة بعد فترة — " + (sc.cur ? sc.cur.name : "الجمعية"))));
   // حالات المؤشرات
   // المستفيدون / التحديات / رفع التقارير
-  let benH = "", chH = "", subH = "";
+  let benH = "", subH = "";
   if (!dashHidden(kind, "exBenef")) { html += "\u0001exBenef\u0002";
     const progs = collectProgramsForUnits(series.units, series.year === "all" ? null : Number(series.year));
     const m = {}; progs.forEach(({ p }) => { const k = p.workType || "غير محدد"; m[k] = (m[k] || 0) + (numOrNull(p.actualBeneficiaries) || 0); });
@@ -4611,7 +4676,7 @@ function exBlocksInner(kind, units, extra) {
     }).join("") + `<div style="display:flex;gap:12px;font-size:11.5px;margin-top:8px;"><span style="display:flex;align-items:center;gap:5px;"><span style="width:12px;height:12px;border-radius:3px;background:${GREEN}"></span>معتمد</span><span style="display:flex;align-items:center;gap:5px;"><span style="width:12px;height:12px;border-radius:3px;background:#9CC9B0"></span>مرفوع ولم يُعتمد</span></div>` : emptyHint("لا توجد تقارير في الفترة المختارة."));
     html += "\u0003";
   }
-  html += dashB(kind, "exBenef", benH) + dashB(kind, "exChal", chH) + dashB(kind, "exSubm", subH);
+  html += dashB(kind, "exBenef", benH) + dashB(kind, "exSubm", subH);
   if (!extra) html += dashB(kind, "followUp", dashFollowUpHtml(kind, series)) + dashB(kind, "highlights", dashHighlightsHtml(kind, series));
   return html;
 }
@@ -5612,7 +5677,7 @@ function olSyncEntityParent(levelId) {
 }
 function olSyncSubtree(levelId) { [levelId, ...olDescendantIds(levelId)].forEach(olSyncEntityParent); }
 // الصفحات اللي تشتغل لحساب مستوى (يرى عدة وحدات) — أي صفحة أخرى بالدور تُتجاهل له.
-const LEVEL_COMPATIBLE_PAGES = ["dashboard", "executive-dashboard", "custom-path-inbox", "all-reports", "executive-summary", "executive-final-report", "office-summary", "office-archive", "unit-notifications", "department-curation"];
+const LEVEL_COMPATIBLE_PAGES = ["items-inbox", "dashboard", "executive-dashboard", "custom-path-inbox", "all-reports", "executive-summary", "executive-final-report", "office-summary", "office-archive", "unit-notifications", "department-curation"];
 function levelRoleSummary(roleId) {
   if (!roleId) return null;
   const role = rolesList().find((r) => r.id === roleId);
@@ -7326,7 +7391,7 @@ function aggReportData(s) {
   flat.forEach((x) => (x.report.sections?.strengths?.data?.strengths || []).forEach((it) => strengths.push({ unitName: x.unit.name, name: it.name, area: it.area, curated: curated(x, "strength", it.id) })));
   const severityRank = { "حرج": 3, "مرتفع": 2, "متوسط": 1, "منخفض": 0 };
   const challenges = [];
-  flat.forEach((x) => (x.report.sections?.challenges?.data?.challenges || []).filter((c) => routeLevelOf("challenges", c) === "exec" && c.stillOngoing !== "لا").forEach((c) => challenges.push({ ...c, unitName: x.unit.name, curated: curated(x, "challenge", c.id) })));
+  flat.forEach((x) => (x.report.sections?.challenges?.data?.challenges || []).filter((c) => routeLevelOf("challenges", c) === "exec" && c.stillOngoing !== "لا" && !c.routeDone).forEach((c) => challenges.push({ ...c, unitName: x.unit.name, curated: curated(x, "challenge", c.id) })));
   const priorityRank = { "عاجلة": 3, "عالية": 2, "متوسطة": 1, "منخفضة": 0 };
   const recs = [];
   flat.forEach((x) => (x.report.sections?.recommendations?.data?.recommendations || []).forEach((r) => recs.push({ ...r, unitName: x.unit.name, curated: curated(x, "recommendation", r.id) })));
@@ -9366,7 +9431,7 @@ async function generateAiSummaryAsync() {
   };
   flat.forEach((x) => {
     (x.report.sections?.programs?.data?.programs || []).filter((p) => p.highlightResult).forEach((p) => data.achievements.push({ unit: x.unit.name, result: p.highlightResult }));
-    (x.report.sections?.challenges?.data?.challenges || []).filter((c) => routeLevelOf("challenges", c) === "exec" && c.stillOngoing !== "لا").forEach((c) => data.challenges.push({ unit: x.unit.name, name: c.name, severity: c.severity }));
+    (x.report.sections?.challenges?.data?.challenges || []).filter((c) => routeLevelOf("challenges", c) === "exec" && c.stillOngoing !== "لا" && !c.routeDone).forEach((c) => data.challenges.push({ unit: x.unit.name, name: c.name, severity: c.severity }));
     (x.report.sections?.recommendations?.data?.recommendations || []).forEach((r) => data.recommendations.push({ unit: x.unit.name, text: r.text, priority: r.priority }));
   });
   const res = await fetch(`${SUPABASE_URL}/functions/v1/generate-executive-summary`, {
@@ -9411,7 +9476,7 @@ function renderExecutiveSummary(scopeUnits, scopeDepartments, opts) {
   const goalLevelCounts = {};
   allGoals.forEach((g) => { if (g.level) goalLevelCounts[g.level] = (goalLevelCounts[g.level] || 0) + 1; });
   const allChallengesAll = [];
-  flat.forEach((x) => (x.report.sections?.challenges?.data?.challenges || []).filter((c) => routeLevelOf("challenges", c) === "exec" && c.stillOngoing !== "لا").forEach((c) => allChallengesAll.push({ ...c, unitName: x.unit.name, curated: isItemCurated(x.unit, curationKey("challenge", x.report.id, c.id)) })));
+  flat.forEach((x) => (x.report.sections?.challenges?.data?.challenges || []).filter((c) => routeLevelOf("challenges", c) === "exec" && c.stillOngoing !== "لا" && !c.routeDone).forEach((c) => allChallengesAll.push({ ...c, unitName: x.unit.name, curated: isItemCurated(x.unit, curationKey("challenge", x.report.id, c.id)) })));
   const allChallenges = sortCurated(allChallengesAll);
   const allRecommendationsAll = [];
   flat.forEach((x) => (x.report.sections?.recommendations?.data?.recommendations || []).forEach((r) => allRecommendationsAll.push({ ...r, unitName: x.unit.name, curated: isItemCurated(x.unit, curationKey("recommendation", x.report.id, r.id)) })));
@@ -16173,6 +16238,12 @@ function attachClickListener() {
       case "shind-mode": S.ui.shInd.mode = ds.m; render(); break;
       case "shind-add": { const f = S.ui.shInd; const cur = (S.siteSettings.theme && S.siteSettings.theme.sharedInds) || []; saveSiteTheme({ sharedInds: [...cur, { id: uid("shind"), indName: f.indName, units: f.units.slice(), mode: f.mode, target: f.target }] }); S.ui.shInd = null; render(); break; }
       case "shind-del": { const cur = (S.siteSettings.theme && S.siteSettings.theme.sharedInds) || []; saveSiteTheme({ sharedInds: cur.filter((x) => x.id !== ds.id) }); render(); break; }
+      case "route-decide": {
+        const ta = document.getElementById("rn-" + ds.id), note = ta ? ta.value.trim() : "";
+        if (ds.dec === "esc" && !note) { alert("اكتبي سبب عدم المعالجة أولًا"); break; }
+        if (routeDecide(ds.id, ds.dec, note)) { render(); }
+        break;
+      }
       case "dash-item": S.ui.dashItem = ds.key; S.ui.dashItemMore = false; render(); break;
       case "dashitem-more": S.ui.dashItemMore = !S.ui.dashItemMore; render(); break;
       case "dashitem-close": if (e.target.closest("[data-stop]") && !e.target.closest("button[data-action=dashitem-close]")) break; S.ui.dashItem = null; render(); break;
