@@ -3330,7 +3330,7 @@ function dashMarkWrap(kind, html) { return String(html).replace(/\u0001(\w+)\u00
 function dashShow(kind, key, html) { return dashHidden(kind, key) ? "" : html; }
 // ===== حقول أقسام التقرير في لوحة المعلومات: بطاقة لكل قسم له حقول، كلها ظاهرة والمخفي يُحدَّد من إعدادات اللوحة =====
 const DASH_FLD_OWNER = { analysisComparisons: "analysis", kpiDeviation: "kpi" };
-const DASH_FLD_LABEL = { analysisComparisons: "تحليل النتائج (القسم كامل مع المقارنات)", kpiDeviation: "مؤشرات الأداء (مع حقولها والانحراف)", goalsEvidence: "الأهداف والمستهدفات — دليل التحقق" };
+const DASH_FLD_LABEL = { analysisComparisons: "تحليل النتائج (القسم كامل مع المقارنات)", kpiDeviation: "مؤشرات الأداء", goalsEvidence: "الأهداف والمستهدفات — دليل التحقق" };
 function dashFieldSecIds(withKpi) { return Object.keys(SECTION_FIELD_SCHEMAS).filter((id) => { if (id === "kpiDeviation" && !withKpi) return false; const sc = SECTION_FIELD_SCHEMAS[id]; return sc && sc.arrayKey && Array.isArray(sc.fields) && sc.fields.length; }); }
 function dashFieldSecLabel(id) { return DASH_FLD_LABEL[id] || ((SECTIONS.find((x) => x.id === id) || DEFAULT_SECTIONS.find((x) => x.id === id) || {}).label) || id; }
 function dashFieldCatalog() { return dashFieldSecIds().map((id) => ({ key: "fld_" + id, label: "حقول: " + dashFieldSecLabel(id) })); }
@@ -3445,6 +3445,7 @@ function dashFieldBlockHtml(kind, sid, units) {
   }
   if (!rows.length && sid !== "challenges") return "";
   if (sid === "challenges") {
+    const ovH = dashFieldShapeHtml(kind, sid, units); if (ovH) return ovH; // شكل اختارته مديرة النظام من المكتبة يحلّ محل الأبراج
     const its = rows.filter((x) => x && x.name && x.stillOngoing !== "لا" && !x.routeDone).map((x) => { const key = kind + "|challenges|" + rows.indexOf(x); DASH_ITEMS[key] = { sid, item: x, unit: unitOf.get(x) || "" }; return { name: x.name, area: x.area, severity: x.severity, key }; });
     const tw = challTowersHtml(its);
     const handled = rows.filter((x) => x && x.name && routeStatusOf(sid, x)).map((x) => { const key = kind + "|challenges|" + rows.indexOf(x); DASH_ITEMS[key] = { sid, item: x, unit: unitOf.get(x) || "" }; return `<div data-action="dash-item" data-key="${esc(key)}" style="cursor:pointer;display:flex;justify-content:space-between;gap:8px;align-items:center;padding:7px 0;border-top:1px solid ${BORDER};font-size:12.5px;"><b>${esc(x.name)}</b>${routeBadgeHtml(sid, x)}</div>`; }).join("");
@@ -3824,7 +3825,7 @@ function dashKpiShapeHtml(units) {
 }
 function dashFieldShapeHtml(kind, sid, units) {
   // الشكل المختار لقسم في اللوحة يحلّ محل البطاقة القديمة (أرقام + توزيع + قائمة) بدل أن يُطبَّق على جدول غير موجود
-  if (sid === "challenges") return ""; // الصعوبات لها أبراجها الثابتة ولا يغلبها شكل مختار
+  // الصعوبات: التصميم الخاص (الأبراج) هو الافتراضي، وأي شكل تختاره مديرة النظام من المكتبة يحلّ محله
   const dm = (dashConfig() || {})._dashShapes || {}; const v = dm[sid] || "";
   if (!/^shape:/.test(v) || v === "shape:auto" || !SHAPES_LIB[v.slice(6)]) return "";
   try {
@@ -6849,18 +6850,20 @@ function archiveCardHtml(theme) {
     <div class="hint" style="margin-top:6px;">اضغطي «حفظ» أسفل الصفحة ليثبت التغيير.</div>
   </div>`;
 }
+function dashIsSecKey(k) { return k === "indBoard" || String(k).indexOf("fld_") === 0; }
+function dashMoveBtn(kind, key, dir, dis, set, sz) { return `<button type="button" data-action="dash-move" data-kind="${esc(kind)}" data-key="${esc(key)}" data-set="${set}" data-dir="${dir}" ${dis ? "disabled" : ""} aria-label="${dir === "up" ? "أعلى" : "أسفل"}" style="width:${sz}px;height:${sz}px;border:1px solid ${BORDER};border-radius:10px;background:#fff;cursor:${dis ? "default" : "pointer"};opacity:${dis ? 0.35 : 1};font-size:15px;font-family:inherit;flex:none;">${dir === "up" ? "↑" : "↓"}</button>`; }
 function dashOrderCardHtml() {
   const kind = DASH_KINDS.some((k) => k.id === S.ui.dashOrderKind) ? S.ui.dashOrderKind : "office";
-  const list = dashOrderList(kind);
+  const list = dashOrderList(kind).filter((k) => !dashIsSecKey(k)); // أقسام التقرير وحقولها ترتيبها في لوحة «الحقول الظاهرة في كل قسم»
   const cat = dashCatalog(kind);
   const customized = Array.isArray((dashConfig()[kind] || {}).order) && dashConfig()[kind].order.length;
   const mb = (dir, i, dis) => `<button type="button" data-action="dash-move" data-kind="${esc(kind)}" data-i="${i}" data-dir="${dir}" ${dis ? "disabled" : ""} aria-label="${dir === "up" ? "أعلى" : "أسفل"}" style="width:38px;height:38px;border:1px solid ${BORDER};border-radius:10px;background:#fff;cursor:${dis ? "default" : "pointer"};opacity:${dis ? 0.35 : 1};font-size:16px;font-family:inherit;">${dir === "up" ? "↑" : "↓"}</button>`;
   const open = !!S.ui.dashOrderOpen;
   if (!open) return `<div class="card" style="margin-top:18px;padding:0;"><button type="button" data-action="dash-order-toggle" style="width:100%;display:flex;align-items:center;justify-content:space-between;gap:10px;padding:14px 16px;background:none;border:0;cursor:pointer;font-family:inherit;font-size:14px;font-weight:800;color:${INK};"><span>ترتيب عناصر اللوحة</span><span style="font-size:12px;color:${SUBTLE};font-weight:600;">اضغطي للفتح ▾</span></button></div>`;
   return `<div class="card" style="margin-top:18px;padding:0 16px 16px;"><button type="button" data-action="dash-order-toggle" style="width:100%;display:flex;align-items:center;justify-content:space-between;gap:10px;padding:14px 0;background:none;border:0;cursor:pointer;font-family:inherit;font-size:14px;font-weight:800;color:${INK};"><span>ترتيب عناصر اللوحة</span><span style="font-size:12px;color:${SUBTLE};font-weight:600;">إغلاق ▴</span></button><div>
-    <div class="hint" style="margin-bottom:10px;">اختاري الجهة ثم حرّكي كل عنصر بالأسهم. الترتيب من فوق لتحت في اللوحة (والشاشة العريضة تعرضها بأعمدة بنفس التسلسل). الباهت = مخفي.</div>
+    <div class="hint" style="margin-bottom:10px;">ترتيب بقية العناصر (أقسام التقرير ومؤشرات الأداء ترتيبها في لوحة «الحقول الظاهرة في كل قسم»). اختاري الجهة ثم حرّكي كل عنصر بالأسهم. الترتيب من فوق لتحت في اللوحة (والشاشة العريضة تعرضها بأعمدة بنفس التسلسل). الباهت = مخفي.</div>
     <select class="input" id="dash-order-kind" style="max-width:260px;margin-bottom:12px;">${DASH_KINDS.map((k) => `<option value="${esc(k.id)}" ${k.id === kind ? "selected" : ""}>${esc(k.label)}</option>`).join("")}</select>
-    <div style="display:flex;flex-direction:column;gap:6px;max-width:560px;">${list.map((key, i) => { const b = cat.find((x) => x.key === key); const off = dashHidden(kind, key); return `<div style="display:flex;align-items:center;gap:8px;padding:6px 10px;border:1px solid ${BORDER};border-radius:12px;background:#fff;${off ? "opacity:.5;" : ""}"><span style="width:24px;text-align:center;font-size:12px;color:${SUBTLE};">${i + 1}</span><span style="flex:1;font-size:13px;font-weight:600;">${esc(b ? b.label : key)}</span>${mb("up", i, i === 0)}${mb("down", i, i === list.length - 1)}</div>`; }).join("")}</div>
+    <div style="display:flex;flex-direction:column;gap:6px;max-width:560px;">${list.map((key, i) => { const b = cat.find((x) => x.key === key); const off = dashHidden(kind, key); return `<div style="display:flex;align-items:center;gap:8px;padding:6px 10px;border:1px solid ${BORDER};border-radius:12px;background:#fff;${off ? "opacity:.5;" : ""}"><span style="width:24px;text-align:center;font-size:12px;color:${SUBTLE};">${i + 1}</span><span style="flex:1;font-size:13px;font-weight:600;">${esc(b ? b.label : key)}</span>${dashMoveBtn(kind, key, "up", i === 0, "other", 38)}${dashMoveBtn(kind, key, "down", i === list.length - 1, "other", 38)}</div>`; }).join("")}</div>
     <div style="margin-top:12px;">${pillBtn("رجوع للترتيب الأصلي", { variant: "ghost", icon: iconX(14, INK), action: "dash-order-reset", data: { kind }, disabled: !customized })}</div>
   </div></div>`;
 }
@@ -6907,12 +6910,13 @@ function dashMergesHtml(kind, units) {
 }
 function dashFieldsMergeHtml(kid) {
   const secs = dashFieldSecIds(true), cfgK = (dashConfig() || {})[kid] || {}, open = S.ui.dashFldOpen;
-  const rows = secs.map((sid) => {
+  const ordAll = dashOrderList(kid), ordKey = (sid) => { const i = ordAll.indexOf(sid === "kpiDeviation" ? "indBoard" : "fld_" + sid); return i < 0 ? 999 : i; };
+  const rows = secs.slice().sort((a, b) => ordKey(a) - ordKey(b)).map((sid) => {
     const sc = SECTION_FIELD_SCHEMAS[sid], sel = (cfgK.fields || {})[sid], isOpen = open === kid + "|" + sid;
     const fl = (sc.fields || []).filter((f) => f && f.id && f.label);
     const cnt = Array.isArray(sel) ? fl.filter((f) => sel.indexOf(f.id) !== -1).length : fl.length;
-    const swKey = sid === "kpiDeviation" ? "indBoard" : "fld_" + sid, onSw = !dashHidden(kid, swKey), swH = `<button type="button" class="sw-tg ${onSw ? "on" : ""}" data-action="dash-toggle" data-kind="${esc(kid)}" data-key="${esc(swKey)}" aria-pressed="${onSw}" title="${onSw ? "ظاهر — اضغطي للإخفاء" : "مخفي — اضغطي للإظهار"}" style="flex:none;"><i></i></button>`;
-    return `<div style="border-top:1px solid ${BORDER};padding:8px 0;"><div style="display:flex;align-items:center;gap:8px;">${swH}<span style="flex:1;font-weight:700;font-size:13px;">${esc(dashFieldSecLabel(sid))}</span><span class="hint" style="margin:0;">${cnt} من ${fl.length} حقلًا</span><button type="button" class="pill-btn pill-ghost" style="padding:4px 10px;" data-action="dash-fld-open" data-kind="${esc(kid)}" data-sid="${esc(sid)}">${isOpen ? "إغلاق ▴" : "الحقول ▾"}</button></div>${isOpen ? `<div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:8px;">${fl.map((f) => { const on = !Array.isArray(sel) || sel.indexOf(f.id) !== -1; return `<button type="button" class="flt-chip${on ? " on" : ""}" aria-pressed="${on}" data-action="dash-fld" data-kind="${esc(kid)}" data-sid="${esc(sid)}" data-f="${esc(f.id)}">${esc(f.label)}</button>`; }).join("")}</div>` : ""}</div>`;
+    const swKey = sid === "kpiDeviation" ? "indBoard" : "fld_" + sid, ordSec = dashOrderList(kid).filter(dashIsSecKey), oi = ordSec.indexOf(swKey), arH = oi < 0 ? "" : dashMoveBtn(kid, swKey, "up", oi === 0, "sec", 30) + dashMoveBtn(kid, swKey, "down", oi === ordSec.length - 1, "sec", 30), onSw = !dashHidden(kid, swKey), swH = `<button type="button" class="sw-tg ${onSw ? "on" : ""}" data-action="dash-toggle" data-kind="${esc(kid)}" data-key="${esc(swKey)}" aria-pressed="${onSw}" title="${onSw ? "ظاهر — اضغطي للإخفاء" : "مخفي — اضغطي للإظهار"}" style="flex:none;"><i></i></button>`;
+    return `<div style="border-top:1px solid ${BORDER};padding:8px 0;"><div style="display:flex;align-items:center;gap:8px;">${swH}<span style="flex:1;font-weight:700;font-size:13px;">${esc(dashFieldSecLabel(sid))}</span>${arH}<span class="hint" style="margin:0;">${cnt} من ${fl.length} حقلًا</span><button type="button" class="pill-btn pill-ghost" style="padding:4px 10px;" data-action="dash-fld-open" data-kind="${esc(kid)}" data-sid="${esc(sid)}">${isOpen ? "إغلاق ▴" : "الحقول ▾"}</button></div>${isOpen ? `<div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:8px;">${fl.map((f) => { const on = !Array.isArray(sel) || sel.indexOf(f.id) !== -1; return `<button type="button" class="flt-chip${on ? " on" : ""}" aria-pressed="${on}" data-action="dash-fld" data-kind="${esc(kid)}" data-sid="${esc(sid)}" data-f="${esc(f.id)}">${esc(f.label)}</button>`; }).join("")}</div>` : ""}</div>`;
   }).join("");
   const merges = dashMerges(kid);
   const mrows = merges.map((m) => `<div style="display:flex;align-items:center;gap:8px;border-top:1px solid ${BORDER};padding:8px 0;font-size:13px;"><span style="flex:1;"><b>${esc(m.title || "")}</b> — ${m.mode === "compare" ? "مقارنة" : "دمج"}: ${esc((m.secs || []).map(dashFieldSecLabel).join("، "))}</span><button type="button" class="pill-btn pill-ghost" style="padding:4px 10px;" data-action="dash-merge-del" data-kind="${esc(kid)}" data-id="${esc(m.id)}">حذف</button></div>`).join("");
@@ -6958,6 +6962,7 @@ function dashSettingsCardHtml() {
     </div>`;
   };
   const anyHidden = DASH_KINDS.some((k) => (dashConfig()[k.id] && (dashConfig()[k.id].hidden || []).length));
+  if (S.ui.dashPrevOff === undefined) { S.ui.dashPrevOff = true; S.ui.dashPrevKind = ""; } // المعاينة مغلقة افتراضيًا وتُفتح عند الطلب
   if (!S.ui.dashPrevKind && !S.ui.dashPrevOff && DASH_KINDS.length) S.ui.dashPrevKind = DASH_KINDS[0].id;
   return `<div class="card dash-dockwrap" style="margin-bottom:16px;">
     <div class="subhead" style="margin-top:0;">ما يظهر في لوحة المعلومات</div>
@@ -6970,12 +6975,12 @@ function dashSettingsCardHtml() {
     ${dashKindPanelHtml()}
     </div>
     <div>${pillBtn("إظهار كل العناصر للجميع", { variant: "ghost", icon: iconX(14, INK), action: "dash-reset", disabled: !anyHidden })}</div>
-    <div class="dash-dock">
-      <div style="font-size:13px;font-weight:800;margin-bottom:6px;">معاينة مباشرة للوحة</div>
+    ${S.ui.dashPrevOff ? `<div style="margin-top:14px;">${pillBtn("فتح المعاينة المباشرة للوحة", { variant: "ghost", action: "dash-prev-toggle" })}</div>` : `<div class="dash-dock">
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;"><div style="font-size:13px;font-weight:800;flex:1;">معاينة مباشرة للوحة</div>${pillBtn("إغلاق", { variant: "ghost", action: "dash-prev-toggle" })}</div>
       <div class="hint" style="margin-bottom:10px;">اختاري الجهة لترين اللوحة كما تظهر لها (ببيانات التقارير الحالية)، ثم اضغطي ✓/✗ فوق وستتغير المعاينة فورًا.</div>
       <select class="input" id="dash-prev-kind" style="max-width:300px;margin-bottom:12px;"><option value="">بدون معاينة</option>${DASH_KINDS.map((k) => `<option value="${esc(k.id)}" ${S.ui.dashPrevKind === k.id ? "selected" : ""}>${esc(k.label)}</option>`).join("")}</select>
       ${S.ui.dashPrevKind ? `<div class="dash-dock-body" style="border:2px dashed ${BORDER};border-radius:18px;padding:6px;background:#faf6f6;overflow:auto;-webkit-overflow-scrolling:touch;overscroll-behavior:contain;touch-action:pan-y;"><div style="pointer-events:none;">${dashPreviewHtml(S.ui.dashPrevKind)}</div></div>` : ""}
-    </div>
+    </div>`}
     ${dashOrderCardHtml()}
   </div>`;
 }
@@ -13675,8 +13680,8 @@ function dashShapesPanelHtml() {
   const grp = cats.map(([cid, cn]) => { const l = shp.filter(([, v]) => v.cat === cid); return l.length ? `<optgroup label="${esc(cn)}">${l.map(([id, v]) => `<option value="shape:${id}">${esc(v.name)}</option>`).join("")}</optgroup>` : ""; }).join("");
   const rows = dashFieldSecIds(true).map((id) => { const cur = dm[id] || ""; const opt = (v, l) => `<option value="${v}"${cur === v ? " selected" : ""}>${l}</option>`;
     const own = DASH_FLD_OWNER[id] || id, isOpen = S.ui.dshOpen === id;
-    const curName = /^shape:/.test(cur) ? ((SHAPES_LIB[cur.slice(6)] || {}).name || "") : (cur === "table" ? "جدول" : "تلقائي");
-    return `<div style="padding:8px 0;border-top:1px solid ${BORDER};"><div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;"><div style="flex:1;min-width:160px;"><div style="font-weight:700;font-size:13px;">${esc(dashFieldSecLabel(id))}</div>${(() => { let sg = null; try { sg = shpSuggestFor([id === "kpiDeviation" ? "kpi" : own]); } catch (e) {} return sg ? `<div class="hint" style="margin:2px 0 0;font-size:11.5px;">المناسب: <b>${esc(sg.label)}</b> — ${esc(sg.why)}</div>` : ""; })()}</div><span class="badge" style="background:${GRAY_BG};color:${ROSE};">${esc(curName)}</span><button type="button" class="pill-btn" style="padding:5px 12px;" data-action="dsh-open" data-id="${esc(id)}">${isOpen ? "إغلاق ▴" : "اختاري من المكتبة ▾"}</button><button type="button" class="pill-btn pill-ghost" style="padding:5px 10px;" data-action="dsh-pick" data-id="${esc(id)}" data-shape="">تلقائي</button><button type="button" class="pill-btn pill-ghost" style="padding:5px 10px;" data-action="dsh-pick" data-id="${esc(id)}" data-shape="__table">جدول</button></div>${isOpen ? `<div style="margin-top:8px;">${dashCCCandidatesHtml("dsh", { id, secs: [own], title: "", shape: /^shape:/.test(cur) ? cur.slice(6) : "", view: /^shape:/.test(cur) ? "shape" : "", max: 30 }, "dsh-pick")}</div>` : ""}</div>`; }).join("");
+    const curName = /^shape:/.test(cur) ? ((SHAPES_LIB[cur.slice(6)] || {}).name || "") : (cur === "table" ? "جدول" : (id === "challenges" ? "أبراج الصعوبات" : id === "kpiDeviation" ? "تصميم المؤشرات" : "تلقائي"));
+    return `<div style="padding:8px 0;border-top:1px solid ${BORDER};"><div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;"><div style="flex:1;min-width:160px;"><div style="font-weight:700;font-size:13px;">${esc(dashFieldSecLabel(id))}</div>${(() => { let sg = null; try { sg = shpSuggestFor([id === "kpiDeviation" ? "kpi" : own]); } catch (e) {} return sg ? `<div class="hint" style="margin:2px 0 0;font-size:11.5px;">المناسب: <b>${esc(sg.label)}</b> — ${esc(sg.why)}</div>` : ""; })()}</div><span class="badge" style="background:${GRAY_BG};color:${ROSE};">${esc(curName)}</span><button type="button" class="pill-btn" style="padding:5px 12px;" data-action="dsh-open" data-id="${esc(id)}">${isOpen ? "إغلاق ▴" : "اختاري من المكتبة ▾"}</button><button type="button" class="pill-btn pill-ghost" style="padding:5px 10px;" data-action="dsh-pick" data-id="${esc(id)}" data-shape="">${id === "challenges" ? "أبراج الصعوبات" : id === "kpiDeviation" ? "تصميم المؤشرات" : "تلقائي"}</button><button type="button" class="pill-btn pill-ghost" style="padding:5px 10px;" data-action="dsh-pick" data-id="${esc(id)}" data-shape="__table">جدول</button></div>${isOpen ? `<div style="margin-top:8px;">${dashCCCandidatesHtml("dsh", { id, secs: [own], title: "", shape: /^shape:/.test(cur) ? cur.slice(6) : "", view: /^shape:/.test(cur) ? "shape" : "", max: 30 }, "dsh-pick")}</div>` : ""}</div>`; }).join("");
   return `<details class="card" style="margin-bottom:14px;" open><summary style="font-weight:800;cursor:pointer;">🎛️ شكل الأقسام وحقولها في لوحة المعلومات</summary><div class="hint" style="margin-top:6px;">اختاري لكل قسم شكله في اللوحات فقط (لا يغيّر التقارير). يُحفظ ويظهر في اللوحة على طول.</div>${rows}</details>`;
 }
 function renderShapesLibraryPage() {
@@ -15189,6 +15194,7 @@ function attachClickListener() {
       }
       case "nav-back-admin": S.view = "browse-structure"; render(); break;
       case "tv-toggle": { S.ui.tv = S.ui.tv || {}; S.ui.tv[ds.id] = !S.ui.tv[ds.id]; render(); break; }
+      case "dash-prev-toggle": { if (S.ui.dashPrevOff) { S.ui.dashPrevOff = false; S.ui.dashPrevKind = S.ui.dashPrevKind || (DASH_KINDS[0] || {}).id || ""; } else { S.ui.dashPrevOff = true; S.ui.dashPrevKind = ""; } render(); break; }
       case "dash-order-toggle": { S.ui.dashOrderOpen = !S.ui.dashOrderOpen; render(); break; }
       case "vw-pend": {
         if (/^ss\|/.test(ds.ctx || "") && S.isAdmin) { const sec = ds.ctx.slice(3); const cfg = JSON.parse(JSON.stringify(dashConfig())); cfg._secShapes = cfg._secShapes || {}; if (ds.val) cfg._secShapes[sec] = ds.val; else delete cfg._secShapes[sec]; S.ui.vwPend = null; S.dashboardConfig = cfg; dataStore.saveDashboardConfig(cfg); render(); break; }
@@ -15348,9 +15354,14 @@ function attachClickListener() {
       }
       case "dash-move": {
         if (!S.isAdmin) { alert("هذا الضبط يعمل فقط من حساب مديرة النظام. سجّلي الدخول بحساب المدير ثم أعيدي المحاولة."); break; }
-        const kind = ds.kind, i = Number(ds.i), j = ds.dir === "up" ? i - 1 : i + 1;
+        const kind = ds.kind;
         if (!DASH_KINDS.some((k) => k.id === kind)) break;
         const list = dashOrderList(kind);
+        let i = Number(ds.i), j = ds.dir === "up" ? i - 1 : i + 1;
+        if (ds.key) { // التحرك بين عناصر نفس المجموعة (أقسام التقرير / بقية العناصر) حتى لو تخللتها عناصر أخرى
+          const grp = list.filter((k) => dashIsSecKey(k) === (ds.set === "sec")), p = grp.indexOf(ds.key), nb = grp[ds.dir === "up" ? p - 1 : p + 1];
+          if (p < 0 || nb == null) break; i = list.indexOf(ds.key); j = list.indexOf(nb);
+        }
         if (isNaN(i) || j < 0 || j >= list.length) break;
         const t = list[i]; list[i] = list[j]; list[j] = t;
         const cfg = JSON.parse(JSON.stringify(dashConfig()));
