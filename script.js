@@ -3545,7 +3545,7 @@ function dashIndCardsHtml(kind, units) {
   let off = 0; const arcs = seg.map(([k, , c]) => { const len = (cnt[k] / tot) * 264, a = `<circle cx="60" cy="60" r="42" fill="none" stroke="${c}" stroke-width="16" stroke-dasharray="${len.toFixed(1)} 264" stroke-dashoffset="${(-off).toFixed(1)}" transform="rotate(-90 60 60)"/>`; off += len; return cnt[k] ? a : ""; }).join("");
   const sum = `<div class="ic-sum"><div class="ic-big">${tot}<small>مؤشر</small></div><svg viewBox="0 0 120 120" width="96">${arcs}</svg><div class="ic-leg">${seg.map(([k, l, c]) => `<span><b style="background:${c}"></b>${l} ${cnt[k]}</span>`).join("")}</div></div>`;
   const byUnit = {}; items.forEach((it, i) => { const r = lastSt[i].ratio; if (r == null || !isFinite(r)) return; (byUnit[it.unit.name] = byUnit[it.unit.name] || []).push(Math.min(1, r)); });
-  const rank = multi ? `<div class="ic-rank">${Object.keys(byUnit).map((n) => ({ n, a: Math.round(byUnit[n].reduce((t, v) => t + v, 0) / byUnit[n].length * 100) })).sort((x, y) => x.a - y.a).map((u) => `<div><span>${esc(u.n)}</span><div class="ic-rb"><i style="width:${u.a}%"></i></div><b>${u.a}٪</b></div>`).join("")}</div>` : "";
+  const rank = multi && Object.keys(byUnit).length > 1 ? `<div class="ic-rank">${Object.keys(byUnit).map((n) => ({ n, a: Math.round(byUnit[n].reduce((t, v) => t + v, 0) / byUnit[n].length * 100) })).sort((x, y) => x.a - y.a).map((u) => `<div><span>${esc(u.n)}</span><div class="ic-rb"><i style="width:${u.a}%"></i></div><b>${u.a}٪</b></div>`).join("")}</div>` : "";
   const groups = {}; items.forEach((it, ix) => (groups[it.unit.name] = groups[it.unit.name] || []).push({ it, st: lastSt[ix] }));
   const kDef = ((dashConfig() || {})[kind] || {}).indView || (kind === "executive" ? "map" : "cards");
   const wantV = S.ui.indView || kDef;
@@ -3610,7 +3610,7 @@ function dashIndCardsHtml(kind, units) {
     if (!names.length) body = `<div class="hint">لا توجد مؤشرات مشتركة بين أكثر من وحدة للمقارنة.</div>`;
     else {
       const cur = names.indexOf(S.ui.indSel) !== -1 ? S.ui.indSel : names[0];
-      const chips = `<div class="ic-vbar"><span>المؤشر:</span><select class="ic-sel" style="min-width:min(320px,100%)" data-ind-sel="ind">${names.map((nm) => `<option value="${esc(nm)}"${nm === cur ? " selected" : ""}>${esc(nm)}</option>`).join("")}</select></div>`;
+      const chips = `<div class="ic-vbar"><span>المؤشر:</span><select class="ic-sel" data-ind-sel="ind">${names.map((nm) => `<option value="${esc(nm)}"${nm === cur ? " selected" : ""}>${esc(nm)}</option>`).join("")}</select></div>`;
       const sel = items.map((it, ix) => ({ it, st: lastSt[ix] })).filter((x) => x.it.name === cur && groups[x.it.unit.name]);
       const mode = S.ui.indPer === "years" ? "years" : "terms";
       if (view === "path") {
@@ -3657,7 +3657,7 @@ function dashIndCardsHtml(kind, units) {
       return multi ? `<details class="ic-ud"${Object.keys(groups).length <= 2 || S.ui.indFilterOpen ? " open" : ""}><summary><b>${esc(n)}</b><span>${g.length} مؤشر${bad ? ` · <i style="color:#a1302f;font-style:normal">${bad} متعثر</i>` : ""}</span></summary>${cards}</details>` : cards;
     }).join("");
   }
-  return dashCard("مؤشرات الأداء", "", `<div data-dshape="1">${sum}${rank}${bar}${["units", "trend", "path", "prio"].indexOf(view) !== -1 ? "" : fbar}${Object.keys(groups).length || ["units", "path", "prio"].indexOf(view) !== -1 ? body : `<div class="hint">لا توجد مؤشرات بهذي الحالة.</div>`}</div>`);
+  return dashCard("مؤشرات الأداء", "", `<div data-dshape="1">${sum}${rank}<div class="ic-ctl">${bar}${["units", "trend", "path", "prio"].indexOf(view) !== -1 ? "" : fbar}</div>${Object.keys(groups).length || ["units", "path", "prio"].indexOf(view) !== -1 ? body : `<div class="hint">لا توجد مؤشرات بهذي الحالة.</div>`}</div>`);
 }
 function dashIndBoardHtml(kind, units) {
   try { const nc = dashIndCardsHtml(kind, units); if (nc) return nc; } catch (e) { console.warn("ind cards", e); }
