@@ -3220,6 +3220,11 @@ const DASH_KINDS = [
   { id: "role_sec", label: "السكرتارية" }, { id: "role_asst", label: "مساعدة مدير إدارة التعليم النسائي" },
 ];
 // يُتعرَّف على هذين الحسابين من اسم الدور (يحتوي «سكرتار» / «مساعد» مع «مدير»)
+function dashIndViewPickHtml(kid) {
+  const cur = ((dashConfig() || {})[kid] || {}).indView || (kid === "executive" ? "map" : "cards");
+  const opts = [["cards", "بطاقات"], ["table", "جدول"], ["map", "مصفوفة الوحدات"], ["units", "مؤشر عبر الوحدات"], ["trend", "التطور"]];
+  return `<div style="border:1px solid ${BORDER};border-radius:14px;background:#fff;padding:12px 14px;margin-bottom:12px;"><div style="font-weight:800;font-size:13.5px;color:${ROSE};margin-bottom:4px;">العرض الذي يظهر أولاً في «مؤشرات الأداء»</div><div class="hint" style="margin-bottom:8px;">خاص بهذا النوع من الحسابات فقط. المصفوفة والمقارنة والتطور تظهر عند وجود أكثر من وحدة، وإلا يُعرض «بطاقات».</div><div style="display:flex;gap:6px;flex-wrap:wrap;">${opts.map(([v, l]) => `<button type="button" class="ic-sw${cur === v ? " on" : ""}" data-action="dash-indview" data-kind="${esc(kid)}" data-v="${v}">${l}</button>`).join("")}</div></div>`;
+}
 function dashRoleKind() {
   // الربط الصريح من إعدادات اللوحة (بمعرّف الدور) يغلب على التعرّف من الاسم
   const map = (dashConfig()._roles) || {};
@@ -3535,7 +3540,9 @@ function dashIndCardsHtml(kind, units) {
   const byUnit = {}; items.forEach((it, i) => { const r = lastSt[i].ratio; if (r == null || !isFinite(r)) return; (byUnit[it.unit.name] = byUnit[it.unit.name] || []).push(Math.min(1, r)); });
   const rank = multi ? `<div class="ic-rank">${Object.keys(byUnit).map((n) => ({ n, a: Math.round(byUnit[n].reduce((t, v) => t + v, 0) / byUnit[n].length * 100) })).sort((x, y) => x.a - y.a).map((u) => `<div><span>${esc(u.n)}</span><div class="ic-rb"><i style="width:${u.a}%"></i></div><b>${u.a}٪</b></div>`).join("")}</div>` : "";
   const groups = {}; items.forEach((it, ix) => (groups[it.unit.name] = groups[it.unit.name] || []).push({ it, st: lastSt[ix] }));
-  const view = ["cards", "table", "units", "map", "trend"].indexOf(S.ui.indView) !== -1 && (multi || ["cards", "table"].indexOf(S.ui.indView) !== -1) ? S.ui.indView : "cards";
+  const kDef = ((dashConfig() || {})[kind] || {}).indView || (kind === "executive" ? "map" : "cards");
+  const wantV = S.ui.indView || kDef;
+  const view = ["cards", "table", "units", "map", "trend"].indexOf(wantV) !== -1 && (multi || ["cards", "table"].indexOf(wantV) !== -1) ? wantV : "cards";
   const fst = S.ui.indStat || "";
   if (fst) Object.keys(groups).forEach((n) => { groups[n] = groups[n].filter((x) => x.st.key === fst); if (!groups[n].length) delete groups[n]; });
   const fch = (v, l) => `<button type="button" class="ic-sw${fst === v ? " on" : ""}" data-action="ind-stat" data-v="${v}">${l}</button>`;
@@ -3558,10 +3565,13 @@ function dashIndCardsHtml(kind, units) {
     const uns = Object.keys(groups).sort((a, b) => { const av = (g) => { const r = g.map((x) => x.st.ratio).filter((v) => v != null && isFinite(v)); return r.length ? r.reduce((t, v) => t + Math.min(1, v), 0) / r.length : 9; }; return av(groups[a]) - av(groups[b]); });
     const cellCls = { achieved: "ok", close: "cl", needsAction: "na", struggling: "bd", noData: "no" };
     const op = S.ui.indOpen || "";
-    const heads = names.map((nm) => { const it = items.find((q) => q.name === nm), r0 = it.pts[it.pts.length - 1].r; return `<th>${esc(nm)}<small>${esc([r0.unit, "المستهدف " + indFmtV(it.pts[it.pts.length - 1].target)].filter(Boolean).join(" · "))}</small></th>`; }).join("");
-    const rows = uns.map((n) => `<tr><td>${esc(n)}</td>${names.map((nm) => { const x = groups[n].find((y) => y.it.name === nm); if (!x) return `<td><div class="icm no">·</div></td>`; const pp = x.it.pts.slice().reverse().find((q) => q.actual != null) || x.it.pts[x.it.pts.length - 1], bs = indNumV(x.it.pts[x.it.pts.length - 1].row.baseline), mx = Math.max(pp.actual || 0, pp.target || 0, bs || 0, 1) * 1.08, key = n + "||" + nm; const w = (v) => Math.max(0, Math.min(100, (v / mx) * 100)).toFixed(0); return `<td><button type="button" class="icm ${cellCls[x.st.key] || "no"}${op === key ? " sel" : ""}" data-action="ind-open" data-k="${esc(key)}" title="${esc(x.st.label)}"><span class="icm-b"><i style="width:${w(pp.actual || 0)}%;background:${x.st.color}"></i>${pp.target != null ? `<u style="right:${100 - w(pp.target)}%"></u>` : ""}${bs != null ? `<s style="right:${100 - w(bs)}%"></s>` : ""}</span><span class="icm-v"><b style="color:${x.st.color}">${indFmtV(pp.actual)}</b><em>من ${indFmtV(pp.target)}</em></span></button></td>`; }).join("")}</tr>`).join("");
+    const rows = uns.map((n) => {
+      const avg = (() => { const r = groups[n].map((x) => x.st.ratio).filter((v) => v != null && isFinite(v)); return r.length ? Math.round(r.reduce((t, v) => t + Math.min(1, v), 0) / r.length * 100) : null; })();
+      const cells = names.map((nm) => { const x = groups[n].find((y) => y.it.name === nm); if (!x) return ""; const pp = x.it.pts.slice().reverse().find((q) => q.actual != null) || x.it.pts[x.it.pts.length - 1], bs = indNumV(x.it.pts[x.it.pts.length - 1].row.baseline), mx = Math.max(pp.actual || 0, pp.target || 0, bs || 0, 1) * 1.08, key = n + "||" + nm; const w = (v) => Math.max(0, Math.min(100, (v / mx) * 100)).toFixed(0); return `<div class="ic-mc"><div class="ic-mn" title="${esc(nm)}">${esc(nm)}</div><button type="button" class="icm ${cellCls[x.st.key] || "no"}${op === key ? " sel" : ""}" data-action="ind-open" data-k="${esc(key)}" title="${esc(x.st.label)}"><span class="icm-b"><i style="width:${w(pp.actual || 0)}%;background:${x.st.color}"></i>${pp.target != null ? `<u style="right:${100 - w(pp.target)}%"></u>` : ""}${bs != null ? `<s style="right:${100 - w(bs)}%"></s>` : ""}</span><span class="icm-v"><b style="color:${x.st.color}">${indFmtV(pp.actual)}</b><em>من ${indFmtV(pp.target)}</em></span></button></div>`; }).join("");
+      return `<div class="ic-mu"><div class="ic-mh"><b>${esc(n)}</b>${avg == null ? "" : `<span>متوسط التحقق ${avg}٪</span>`}</div><div class="ic-mg">${cells}</div></div>`;
+    }).join("");
     const sel = op && items.find((it) => (it.unit.name + "||" + it.name) === op);
-    body = `<div class="ic-tw"><table class="ic-mp"><thead><tr><th></th>${heads}</tr></thead><tbody>${rows}</tbody></table></div><div class="ic-ml"><span><i class="k1"></i>المتحقق (لون الحالة)</span><span><i class="k2"></i>المستهدف</span><span><i class="k3"></i>خط الأساس</span> · الأضعف أولًا · اضغطي على خانة لعرض بطاقتها</div>${sel ? `<div style="margin-top:12px">${indCardHtml(sel, kind)}</div>` : ""}`;
+    body = `<div class="ic-mw">${rows}</div><div class="ic-ml"><span><i class="k1"></i>المتحقق (لون الحالة)</span><span><i class="k2"></i>المستهدف</span><span><i class="k3"></i>خط الأساس</span> · الأضعف أولًا · اضغطي على خانة لعرض بطاقتها</div>${sel ? `<div style="margin-top:12px">${indCardHtml(sel, kind)}</div>` : ""}`;
   } else if ((view === "units" || view === "trend") && multi) {
     const names = []; items.forEach((it) => { if (names.indexOf(it.name) === -1 && items.filter((q) => q.name === it.name).length > 1) names.push(it.name); });
     if (!names.length) body = `<div class="hint">لا توجد مؤشرات مشتركة بين أكثر من وحدة للمقارنة.</div>`;
@@ -6772,7 +6782,7 @@ function dashKindPanelHtml() {
     </details>`;
   }).join("");
   return `<div style="width:100%;margin-bottom:10px;"><div style="font-size:13px;font-weight:800;margin-bottom:8px;">اختاري نوع الحساب</div>
-    <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:14px;">${tabs}</div>${dashCCEditorHtml(kid)}${kid === "admin" ? "" : dashFieldsMergeHtml(kid)}${body}</div>`;
+    <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:14px;">${tabs}</div>${dashCCEditorHtml(kid)}${dashIndViewPickHtml(kid)}${kid === "admin" ? "" : dashFieldsMergeHtml(kid)}${body}</div>`;
 }
 function dashSettingsCardHtml() {
   const group = (title, blocks, kindIds) => {
@@ -15064,6 +15074,13 @@ function attachClickListener() {
         if (!S.isAdmin) { alert("هذا الضبط يعمل فقط من حساب مديرة النظام. سجّلي الدخول بحساب المدير ثم أعيدي المحاولة."); break; }
         const cfg = JSON.parse(JSON.stringify(dashConfig())); const k = cfg[ds.kind]; if (!k || !Array.isArray(k.merges)) break;
         k.merges = k.merges.filter((m) => m.id !== ds.id); S.dashboardConfig = cfg; dataStore.saveDashboardConfig(cfg); render(); break;
+      }
+      case "dash-indview": {
+        if (!S.isAdmin) { alert("هذا الضبط يعمل فقط من حساب مديرة النظام."); break; }
+        if (!DASH_KINDS.some((k) => k.id === ds.kind)) break;
+        const cfg = JSON.parse(JSON.stringify(dashConfig()));
+        cfg[ds.kind] = { ...(cfg[ds.kind] || {}), indView: ds.v };
+        S.dashboardConfig = cfg; dataStore.saveDashboardConfig(cfg); S.ui.indView = ""; render(); break;
       }
       case "dash-toggle": {
         if (!S.isAdmin) { alert("هذا الضبط يعمل فقط من حساب مديرة النظام. سجّلي الدخول بحساب المدير ثم أعيدي المحاولة."); break; }

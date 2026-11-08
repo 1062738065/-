@@ -1097,3 +1097,26 @@ table.prs-table th, table.prs-table td, .shp-tbl th, .shp-tbl td, .table-wrap ta
 .ic-bt2{position:relative;flex:1;min-width:120px;height:14px;background:#f3e6e8;border-radius:7px}.ic-bt2 i{position:absolute;right:0;top:0;bottom:0;border-radius:7px}.ic-bt2 u{position:absolute;top:-4px;bottom:-4px;width:3px;background:#c9a24b}.ic-bt2 s{position:absolute;top:2px;width:10px;height:10px;border-radius:50%;background:#fff;border:2px solid #b9a98a;margin-right:-5px}
 .ic-r2 b{min-width:40px;text-align:left;font-size:13.5px}.ic-r2 em{font-style:normal;font-weight:800;font-size:10.5px;border:1.5px solid;border-radius:10px;padding:1px 9px;background:#fff}.ic-r2 small{min-width:42px;font-size:11px;font-weight:700;color:#6f6168}
 .ic-lgd{display:flex;gap:10px;flex-wrap:wrap;font-size:10.5px;color:#6f6168;justify-content:center;margin:6px 0}.ic-lgd b{display:inline-block;width:9px;height:9px;border-radius:50%;margin-left:4px}
+
+/* مؤشرات الأداء بعرض الصفحة، وخريطتا الأداء والأهداف جنبًا إلى جنب */
+@media (min-width:1100px){
+.page-inner.dash-wide > .dash-blk[data-dk="indBoard"]{grid-column:1/-1}
+.page-inner.dash-wide > .dash-blk[data-dk="exHeat"]{grid-column:span 1}
+}
+@media (min-width:1500px){.page-inner.dash-wide > .dash-blk[data-dk="exHeat"]{grid-column:span 2}}
+/* جدول المؤشرات: محتوى الخلايا في الوسط وتنسيق أنيق */
+.ic-tb2{width:100%;border-collapse:separate;border-spacing:0;font-size:12.5px}
+.ic-tb2 th{background:#f6eef0;color:#6b2139;font-weight:800;padding:10px 8px;text-align:center;vertical-align:middle;border-bottom:2px solid #e3cfd5}
+.ic-tb2 td{padding:9px 8px;text-align:center;vertical-align:middle;border-bottom:1px solid #f0e6e9}
+.ic-tb2 tbody tr:nth-child(even) td{background:#fcf8f9}
+.ic-tb2 tbody tr:hover td{background:#f8eef1}
+.ic-tb2 td:first-child,.ic-tb2 th:first-child{text-align:right;font-weight:700}
+.ic-tb2 td>*{margin-inline:auto}
+
+/* مصفوفة الوحدات: اسم الوحدة فوق خلاياها */
+.ic-mw{display:flex;flex-direction:column;gap:10px}
+.ic-mu{border:1px solid #eadfe2;border-radius:12px;padding:10px 12px;background:#fff}
+.ic-mh{display:flex;align-items:baseline;justify-content:space-between;gap:10px;margin-bottom:8px}
+.ic-mh b{font-size:14px;color:#6b2139;font-weight:800}.ic-mh span{font-size:11px;color:#8a7d7a}
+.ic-mg{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:8px}
+.ic-mc{min-width:0}.ic-mn{font-size:11px;color:#6f6168;font-weight:700;margin-bottom:4px;line-height:1.35;min-height:16px;display:flex;align-items:flex-end}
