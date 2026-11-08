@@ -3449,7 +3449,7 @@ function dashFieldBlockHtml(kind, sid, units) {
     const tw = challTowersHtml(its);
     const handled = rows.filter((x) => x && x.name && routeStatusOf(sid, x)).map((x) => { const key = kind + "|challenges|" + rows.indexOf(x); DASH_ITEMS[key] = { sid, item: x, unit: unitOf.get(x) || "" }; return `<div data-action="dash-item" data-key="${esc(key)}" style="cursor:pointer;display:flex;justify-content:space-between;gap:8px;align-items:center;padding:7px 0;border-top:1px solid ${BORDER};font-size:12.5px;"><b>${esc(x.name)}</b>${routeBadgeHtml(sid, x)}</div>`; }).join("");
     const handledH = handled ? `<div style="margin-top:12px;"><div style="font-size:12px;font-weight:800;color:${ROSE};margin-bottom:2px;">مسار المعالجة</div>${handled}</div>` : "";
-    return dashCard(dashFieldSecLabel(sid), `${its.length} صعوبة قائمة · اضغطي على أي صعوبة لتفاصيلها`, (tw || `<div style="font-size:12.5px;color:${SUBTLE};padding:10px 0">لا توجد صعوبات قائمة موجهة لهذا الحساب في الفترة المختارة.</div>`) + handledH);
+    return dashCard(dashFieldSecLabel(sid), `${its.length} صعوبة قائمة · اضغطي على أي صعوبة لتفاصيلها`, (tw || `<div style="font-size:12.5px;color:${SUBTLE};padding:10px 0">لا توجد صعوبات قائمة موجهة لهذا الحساب في الفترة المختارة.</div>`) + handledH + dashItemModalHtml(sid));
   }
   const fld = (id) => sc.fields.find((f) => f.id === id);
   const txt = (x, id) => { const v = x[id]; return v == null ? "" : schemaFieldText(v).trim(); };
@@ -6887,7 +6887,6 @@ const DASH_GROUPS = [
   ["الأرقام والبطاقات", ["stats", "exKpis", "opsCounts", "opsKpis", "achieve", "yearCompare", "recent"]],
   ["الرسوم والخرائط", ["bars", "trend", "exHeat", "exHeatGoal", "unitsCmp", "opsDeptCompliance"]],
   ["الجداول والإدارة", ["indBoard", "goals", "goalMatrix", "programs", "sharedInd", "opsSections", "opsAggReports", "opsRecent", "opsRoles"]],
-  ["حقول أقسام التقرير", ["fld_*"]],
   ["التحليل والمتابعة", ["*"]],
 ];
 function dashGroupOf(key) {
@@ -6907,16 +6906,17 @@ function dashMergesHtml(kind, units) {
   }).join("");
 }
 function dashFieldsMergeHtml(kid) {
-  const secs = dashFieldSecIds(), cfgK = (dashConfig() || {})[kid] || {}, open = S.ui.dashFldOpen;
+  const secs = dashFieldSecIds(true), cfgK = (dashConfig() || {})[kid] || {}, open = S.ui.dashFldOpen;
   const rows = secs.map((sid) => {
     const sc = SECTION_FIELD_SCHEMAS[sid], sel = (cfgK.fields || {})[sid], isOpen = open === kid + "|" + sid;
     const fl = (sc.fields || []).filter((f) => f && f.id && f.label);
     const cnt = Array.isArray(sel) ? fl.filter((f) => sel.indexOf(f.id) !== -1).length : fl.length;
-    return `<div style="border-top:1px solid ${BORDER};padding:8px 0;"><div style="display:flex;align-items:center;gap:8px;"><span style="flex:1;font-weight:700;font-size:13px;">${esc(dashFieldSecLabel(sid))}</span><span class="hint" style="margin:0;">${cnt} من ${fl.length} حقلًا</span><button type="button" class="pill-btn pill-ghost" style="padding:4px 10px;" data-action="dash-fld-open" data-kind="${esc(kid)}" data-sid="${esc(sid)}">${isOpen ? "إغلاق ▴" : "الحقول ▾"}</button></div>${isOpen ? `<div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:8px;">${fl.map((f) => { const on = !Array.isArray(sel) || sel.indexOf(f.id) !== -1; return `<button type="button" class="flt-chip${on ? " on" : ""}" aria-pressed="${on}" data-action="dash-fld" data-kind="${esc(kid)}" data-sid="${esc(sid)}" data-f="${esc(f.id)}">${esc(f.label)}</button>`; }).join("")}</div>` : ""}</div>`;
+    const swKey = sid === "kpiDeviation" ? "indBoard" : "fld_" + sid, onSw = !dashHidden(kid, swKey), swH = `<button type="button" class="sw-tg ${onSw ? "on" : ""}" data-action="dash-toggle" data-kind="${esc(kid)}" data-key="${esc(swKey)}" aria-pressed="${onSw}" title="${onSw ? "ظاهر — اضغطي للإخفاء" : "مخفي — اضغطي للإظهار"}" style="flex:none;"><i></i></button>`;
+    return `<div style="border-top:1px solid ${BORDER};padding:8px 0;"><div style="display:flex;align-items:center;gap:8px;">${swH}<span style="flex:1;font-weight:700;font-size:13px;">${esc(dashFieldSecLabel(sid))}</span><span class="hint" style="margin:0;">${cnt} من ${fl.length} حقلًا</span><button type="button" class="pill-btn pill-ghost" style="padding:4px 10px;" data-action="dash-fld-open" data-kind="${esc(kid)}" data-sid="${esc(sid)}">${isOpen ? "إغلاق ▴" : "الحقول ▾"}</button></div>${isOpen ? `<div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:8px;">${fl.map((f) => { const on = !Array.isArray(sel) || sel.indexOf(f.id) !== -1; return `<button type="button" class="flt-chip${on ? " on" : ""}" aria-pressed="${on}" data-action="dash-fld" data-kind="${esc(kid)}" data-sid="${esc(sid)}" data-f="${esc(f.id)}">${esc(f.label)}</button>`; }).join("")}</div>` : ""}</div>`;
   }).join("");
   const merges = dashMerges(kid);
   const mrows = merges.map((m) => `<div style="display:flex;align-items:center;gap:8px;border-top:1px solid ${BORDER};padding:8px 0;font-size:13px;"><span style="flex:1;"><b>${esc(m.title || "")}</b> — ${m.mode === "compare" ? "مقارنة" : "دمج"}: ${esc((m.secs || []).map(dashFieldSecLabel).join("، "))}</span><button type="button" class="pill-btn pill-ghost" style="padding:4px 10px;" data-action="dash-merge-del" data-kind="${esc(kid)}" data-id="${esc(m.id)}">حذف</button></div>`).join("");
-  return `<details class="card" style="margin-bottom:12px;" open><summary style="font-weight:800;cursor:pointer;">الحقول الظاهرة في كل قسم لهذه اللوحة</summary><div class="hint" style="margin:6px 0;">اضغطي «الحقول» لأي قسم واختاري ما يظهر منها. اسم القسم يظهر دائمًا. يُحفظ فورًا.</div>${rows}</details>
+  return `<details class="card" style="margin-bottom:12px;" open><summary style="font-weight:800;cursor:pointer;">الحقول الظاهرة في كل قسم لهذه اللوحة</summary><div class="hint" style="margin:6px 0;">المفتاح يُظهر القسم أو يخفيه في اللوحة، و«الحقول» تختارين بها ما يظهر منه. يُحفظ فورًا.</div>${rows}</details>
   <details class="card" style="margin-bottom:12px;" open><summary style="font-weight:800;cursor:pointer;">دمج أو مقارنة أقسام في هذه اللوحة</summary><div class="hint" style="margin:6px 0;">اختاري قسمين أو أكثر، ثم «دمج» (بطاقة واحدة) أو «مقارنة» (جنبًا إلى جنب). الأقسام المختارة تختفي من مكانها المنفصل وتظهر في البطاقة الجديدة.</div>
     <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px;">${secs.map((sid) => `<label style="display:inline-flex;align-items:center;gap:5px;border:1px solid ${BORDER};border-radius:10px;padding:5px 10px;font-size:12.5px;background:#fff;"><input type="checkbox" class="dm-sec" value="${esc(sid)}" /> ${esc(dashFieldSecLabel(sid))}</label>`).join("")}</div>
     <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;"><input type="text" class="input" id="dm-title" placeholder="عنوان البطاقة" style="flex:1 1 200px;" /><select class="input" id="dm-mode" style="width:auto;"><option value="merge">دمج في بطاقة واحدة</option><option value="compare">مقارنة جنبًا إلى جنب</option></select><button type="button" class="pill-btn" data-action="dash-merge-add" data-kind="${esc(kid)}">إضافة</button></div>${mrows ? `<div style="margin-top:10px;">${mrows}</div>` : ""}</details>`;
@@ -6924,7 +6924,7 @@ function dashFieldsMergeHtml(kid) {
 function dashKindPanelHtml() {
   const kid = (DASH_KINDS.some((k) => k.id === S.ui.dashKindTab) ? S.ui.dashKindTab : "unit");
   const tabs = DASH_KINDS.map((k) => `<button type="button" data-action="dash-kind-tab" data-kind="${esc(k.id)}" style="font-family:inherit;min-height:40px;padding:0 14px;border-radius:12px;border:1px solid ${k.id === kid ? ROSE : BORDER};background:${k.id === kid ? ROSE : "#fff"};color:${k.id === kid ? "#fff" : INK};font-size:13px;font-weight:800;cursor:pointer;">${esc(k.label)}</button>`).join("");
-  const items = dashCatalog(kid).filter((b) => !(b.not && b.not.indexOf(kid) !== -1));
+  const items = dashCatalog(kid).filter((b) => !(b.not && b.not.indexOf(kid) !== -1) && b.key.indexOf("fld_") !== 0 && b.key !== "indBoard"); // «حقول: …» و«مؤشرات الأداء» صارت في لوحة «الحقول الظاهرة في كل قسم»
   const groups = DASH_GROUPS.map(([name]) => [name, items.filter((b) => dashGroupOf(b.key) === name)]).filter(([, l]) => l.length);
   const sw = (on, key) => `<button type="button" class="sw-tg ${on ? "on" : ""}" data-action="dash-toggle" data-kind="${esc(kid)}" data-key="${esc(key)}" aria-pressed="${on}" title="${on ? "ظاهر — اضغطي للإخفاء" : "مخفي — اضغطي للإظهار"}" style="flex:none;"><i></i></button>`;
   const hiddenAll = items.filter((b) => dashHidden(kid, b.key));
