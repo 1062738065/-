@@ -7534,11 +7534,11 @@ function aggChapterBody(key, data, s) {
         ${statIconCardHtml("عدد الأقسام", data.deptCount, iconBuilding("var(--rpt-burgundy)", 18), "#f4ece4")}
         ${statIconCardHtml("عدد الوحدات", data.unitCount, iconLayers(18, "var(--rpt-burgundy)"), "#f4ece4")}
       </div>
-      ${data.total ? rptChart("a-status", [{ label: "مكتمل", value: data.completed, color: GREEN }, { label: "قيد الإعداد", value: data.total - data.completed, color: GOLD }], { size: 130, wrapDonut: "max-width:320px;margin:0 auto 12px;" }) : ""}
+      ${data.total ? v6ColsHtml([{ label: "مكتمل", value: data.completed }, { label: "قيد الإعداد", value: data.total - data.completed }]) : ""}
 `;
   }
   if (key === "perf") {
-    const chart = rptChart("a-deptPerf", data.deptPerf.map((d) => ({ label: d.name, value: d.avg, color: "var(--rpt-burgundy)" })), { height: 170 });
+    const chart = v6ColsHtml(data.deptPerf.map((d) => ({ label: d.name, value: d.avg })));
     return chart + reportTable(["القسم", "عدد الوحدات", "متوسط الإنجاز"], data.deptPerf.map((d) => [esc(d.name), d.count, d.avg + "٪"])) + reportTable(["الوحدة", "القسم", "نسبة الإنجاز"], data.unitRows);
   }
   if (key === "indicators") return data.indicators.length ? reportTable(["الوحدة", "المؤشر", "المستهدف", "خط الأساس", "المتحقق"], data.indicators.map((r) => { let def = null, rs = r, bs = null; try { def = findIndicatorDef(r.name); rs = resolveIndicatorRow(r, def); const pb = r.unitId && r._rep ? indicatorPrevBaseline(r.unitId, r._rep, r.name) : null; bs = pb ? pb.value : (r.baseline !== "" && r.baseline != null ? r.baseline : null); } catch (e) {} return [esc(r.unitName), esc(r.name) + indMetaSpan(rs, indExtra(r, rs, (() => { try { return computeIndicatorStatus(rs); } catch (e) { return null; } })())), esc(def && def.target !== "" && def.target != null ? def.target : "—"), esc(bs != null ? bs : "—"), esc(r.actual !== "" && r.actual != null ? r.actual : "—")]; }), { mergeFirst: true }) : emptyHint("لا توجد مؤشرات مُدخلة بعد.");
@@ -7570,7 +7570,7 @@ function aggUnitStylePages(data) {
       const html = rptWithCtx({ ...rptChartCtx(us), hiddenCols: rptHiddenColsForViewer(us), colsShow: us.colsShow, capture: null, unitId: unit.id }, () => {
         const title = rptChapterTitle(c, us), extra = rptCustomChartsFor(us, c.key, [{ unit, report }], false);
         const h = c.group ? rptGroupChapterHtml(c, rptIcon(c.icon), title, report, extra) : reportChapterHtml(rptIcon(c.icon), title, secs, report, extra);
-        return tvApply(h, "ur:" + c.key, rptShapeOf(secs));
+        return rvApply(tvApply(h, "ur:" + c.key, rptShapeOf(secs)), us, c.key);
       });
       if (html) parts.push({ unit, html });
     });
@@ -7601,7 +7601,7 @@ function aggReportDocHtml(s, data) {
       if (c.key === "closing") closingPage = pages.length - 1;
       RPT_CTX.section = c.key;
       const extra = rptCustomChartsFor(s, c.key, data.flat || [], true);
-      pages[pages.length - 1] += tvApply(execChapterHtml(i + 1, rptIcon(c.icon), rptChapterTitle(c, s), extra + (c.custom ? aggCustomChapterBody(c.custom, data) : aggChapterBody(c.key, data, s))), "fr:" + c.key, rptShapeOf(c.sections || (c.section ? [c.section] : [AGG_SEC_MAP[c.key] || c.key])));
+      pages[pages.length - 1] += rvApply(tvApply(execChapterHtml(i + 1, rptIcon(c.icon), rptChapterTitle(c, s), extra + (c.custom ? aggCustomChapterBody(c.custom, data) : aggChapterBody(c.key, data, s))), "fr:" + c.key, rptShapeOf(c.sections || (c.section ? [c.section] : [AGG_SEC_MAP[c.key] || c.key]))), s, c.key);
       RPT_CTX.section = null;
       if (uStyle && !uDone && c.key === "summary") { uDone = true; try { aggUnitStylePages(data).forEach((h) => pages.push(h)); forceNew = true; } catch (e) { console.error(e); } }
     });
@@ -8035,6 +8035,7 @@ function renderReportsManage() {
     ? fullReportOrPreviewBody(RPT_FAKE_UNIT, rptFakeUnitReport(), null, { settings: d })
     : aggReportDocHtml(d, aggFakeData(d));
   const selName = (items.find((x) => x.id === st.sel) || {}).name || "";
+  const pgChips = (() => { const parts = String(doc).split('class="a4-page').slice(1); if (parts.length < 2) return ""; return `<div class="rm-pgchips">${parts.map((h, i) => { const m = h.match(/rpt-chapter-title[^>]*>([^<]{1,40})</); const lab = (m ? m[1].trim() : (i === 0 ? "الغلاف" : "صفحة " + (i + 1))); return `<button type="button" class="rm-pgchip" data-action="rm-pg" data-i="${i}" title="${esc(lab)}">${arabicDigits(i + 1)}<small>${esc(lab.length > 14 ? lab.slice(0, 13) + "…" : lab)}</small></button>`; }).join("")}</div>`; })();
   return `
   <div class="page-wrap"><div class="page-inner">
     ${topBarHtml({ title: "تصميم التقارير", subtitle: "شكل كل تقرير وما يظهر فيه · المعاينة ببيانات وهمية" })}
@@ -8055,6 +8056,7 @@ function renderReportsManage() {
       </div>
       <div class="rm-preview${dock ? " rm-docked" : ""}">
         <div class="rm-row" style="justify-content:space-between;margin-bottom:8px;"><span class="rm-label" style="margin:0;">معاينة حية — تتغير فور أي تعديل</span>${dock ? pillBtn("إغلاق", { variant: "ghost", action: "rm-dock" }) : ""}<span class="rm-badge">بيانات وهمية — لا تُعرض تقارير حقيقية</span></div>
+        ${pgChips}
         <div class="rm-preview-scroll"><div style="zoom:${zoom};">${rptWrap(d, doc, true)}</div></div>
       </div>
     </div>
@@ -8083,6 +8085,7 @@ function handleReportsManageAction(action, ds) {
     case "st-sec": d.statsCards = (d.statsCards || []).map((x) => { if (x.id !== ds.id) return x; const l = [...(x.secs || [])]; const i = l.indexOf(ds.sec); let fl = [...(x.flds || [])]; const has = fl.some((f) => String(f).startsWith(ds.sec + ".")); if (i === -1) l.push(ds.sec); else if (has) fl = fl.filter((f) => !String(f).startsWith(ds.sec + ".")); else { l.splice(i, 1); } return { ...x, secs: l, flds: fl }; }); break;
     case "st-fld": d.statsCards = (d.statsCards || []).map((x) => { if (x.id !== ds.id) return x; const l = [...(x.flds || [])]; const i = l.indexOf(ds.fld); if (i === -1) l.push(ds.fld); else l.splice(i, 1); const sc = String(ds.fld).split(".")[0], sl = [...(x.secs || [])]; if (i === -1 && !sl.includes(sc)) sl.push(sc); return { ...x, flds: l, secs: sl }; }); break;
     case "st-cmp": d.statsCards = (d.statsCards || []).map((x) => (x.id === ds.id ? { ...x, cmp: !x.cmp } : x)); break;
+    case "rm-pg": { const i = Number(ds.i) || 0; setTimeout(() => { const sc = document.querySelector(".rm-preview-scroll"); const pgs = sc && sc.querySelectorAll(".a4-page"); if (pgs && pgs[i]) sc.scrollTo({ top: pgs[i].offsetTop * 1 - 6, behavior: "smooth" }); }, 80); break; }
     case "rm-dock": st.dock = !(st.dock == null ? window.innerWidth >= 900 : st.dock); break;
     case "rm-pick": st.pick = st.pick === ds.key ? null : ds.key; break;
     case "rm-sv": { d.secView = { ...(d.secView || {}) }; if (ds.val) d.secView[ds.key] = ds.val; else delete d.secView[ds.key]; break; }
@@ -11191,12 +11194,13 @@ function renderFieldSchemasManage() {
     ${topBarHtml({ title: "إدارة حقول الأقسام", subtitle: "أضف أو عدّل أي من حقول الأقسام التالية، مع إمكانية تحديد الترتيب.", icon: iconPencil(18, ROSE), backAction: "nav-back-admin" })}
 
     <div class="hint" style="margin:0 0 12px;">اختاري القسم ثم عدّلي حقوله. «إلزامي» = لا يُرسل التقرير إلا بتعبئته. للترتيب استخدمي أسهم ▲▼ بجانب كل حقل.</div>
-    <div style="display:flex;gap:16px;align-items:flex-start;flex-wrap:wrap;">
-      <div class="card" style="flex:1 1 240px;max-width:320px;display:flex;flex-direction:column;gap:6px;">
-        <div style="font-size:12px;font-weight:800;color:${ROSE};margin-bottom:4px;">أقسام التقرير</div>
-        ${sections.map((sec) => { const on = sec.id === activeSectionId; const cnt = ((SECTION_FIELD_SCHEMAS[sec.id] || {}).fields || []).length; return `<button type="button" data-action="select-field-schema-section" data-section="${esc(sec.id)}" style="font-family:inherit;display:flex;align-items:center;gap:8px;padding:11px 12px;min-height:44px;border-radius:12px;cursor:pointer;text-align:right;border:1px solid ${on ? "#d9b8c2" : "transparent"};background:${on ? "#f6edf0" : "transparent"};"><span style="flex:1;font-weight:${on ? 800 : 600};font-size:13.5px;color:${INK};">${esc(sec.label)}</span><span class="badge" style="background:${GRAY_BG};color:${ROSE};">${cnt} حقل</span></button>`; }).join("")}
-      </div>
-      <div style="flex:3 1 460px;min-width:0;">
+    <div style="display:flex;gap:14px;overflow-x:auto;padding:16px 8px 22px;margin-bottom:6px;">
+      ${sections.map((sec, n) => { const PAL = bsPalette(); const c = PAL[n % PAL.length]; const on = sec.id === activeSectionId; const cnt = ((SECTION_FIELD_SCHEMAS[sec.id] || {}).fields || []).length; return `<button type="button" data-action="select-field-schema-section" data-section="${esc(sec.id)}" style="flex-shrink:0;width:170px;min-height:150px;border-radius:22px;border:none;cursor:pointer;text-align:right;padding:16px;display:flex;flex-direction:column;justify-content:space-between;background:${c.bg};box-shadow:${on ? "0 14px 26px rgba(80,40,60,0.20)" : "0 6px 14px rgba(80,40,60,0.08)"};outline:${on ? "3px solid " + ROSE : "none"};outline-offset:2px;transform:${on ? "translateY(-4px)" : "none"};transition:transform .15s ease, box-shadow .15s ease;font-family:inherit;">
+        ${fieldIconTileHtml(["text", "target", "chart", "users", "bulb", "trophy"][n % 6], 32, n)}
+        <span style="font-size:14.5px;font-weight:800;color:${INK};line-height:1.4;">${esc(sec.label)}<span style="display:block;font-size:11.5px;font-weight:600;color:${SUBTLE};margin-top:2px;">${cnt} حقل</span></span></button>`; }).join("")}
+    </div>
+    <div>
+      <div style="min-width:0;">
         ${editingId === "__new__" ? fieldEditFormHtml(draft, true) : ""}
         <div style="font-size:15px;font-weight:800;margin-bottom:10px;display:flex;align-items:center;gap:8px;flex-wrap:wrap;">${iconLayers(18, ROSE)} <span style="flex:1;">حقول «${esc((sections.find((s) => s.id === activeSectionId) || {}).label || activeSectionId)}»</span><span class="badge" style="background:${GRAY_BG};color:${ROSE};">${fields.length} حقل</span><span class="badge" style="background:${DANGER_BG};color:${DANGER};">${fields.filter((f) => f.required).length} إلزامي</span>${editingId === "__new__" ? "" : pillBtn("إضافة حقل", { icon: iconPlus(14, "#fff"), action: "start-add-field", data: { section: activeSectionId } })}</div>
         <div style="display:flex;flex-direction:column;gap:10px;margin-bottom:16px;">
