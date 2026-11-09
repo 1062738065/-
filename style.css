@@ -458,7 +458,12 @@ table.prs-table td { padding: 8px 10px; border-top: 1px solid var(--border); }
   }
   .a4-page.has-spine { padding-right: calc(var(--rpt-mr, 14mm) + 2mm) !important; }
   .a4-page:last-child { break-after: auto; }
-  .rpt-chapter { break-inside: avoid; }
+  .rpt-chapter { break-inside: auto; }
+  .rpt-chapter-head, .rpt-subheading, .rpt-chapter-title { break-after: avoid; page-break-after: avoid; }
+  .rpt-chapter table.prs-table { break-inside: auto; }
+  .rpt-chapter table.prs-table thead { display: table-header-group; }
+  .rpt-chapter table.prs-table tr, .rpt-chapter .card, .rpt-chapter .repeat-item, .rpt-chapter .shp, .rpt-chapter .ct-wrap, .rpt-chapter .cm-t, .rpt-chapter .rpt-approval-box, .rpt-chapter .doc-kv { break-inside: avoid; page-break-inside: avoid; }
+  p, li, .hint { orphans: 3; widows: 3; }
   .rpt-cover { break-after: page; }
   .rpt-cover-v4 { break-after: page; }
   * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
@@ -1280,3 +1285,54 @@ html body table.prs-table:not(#z) tbody tr:last-child td,html body table.rpt-gta
 .ig-i{border-color:#8c3b42}.ig-tag{font-size:10.5px;font-weight:800;color:#8c3b42;margin-bottom:2px}
 .ig-cap{font-size:11.5px;color:#7a6a6e;margin-bottom:4px}
 .ig-c,.ig-h{-webkit-print-color-adjust:exact;print-color-adjust:exact}
+
+/* ===== تصميم التقرير الجديد (v6): إطار مزدوج + عناوين أميري + أرقام معيّنة + بطاقات بشريط ملوّن ===== */
+.rpt-v6 .a4-page { position: relative; }
+.rpt-v6 .a4-page::before { content: ""; position: absolute; inset: 5mm; border: 1.4px solid var(--rpt-burgundy); opacity: .38; pointer-events: none; z-index: 0; }
+.rpt-v6 .a4-page::after { content: ""; position: absolute; inset: 6.4mm; border: .5px solid var(--rpt-burgundy); opacity: .28; pointer-events: none; z-index: 0; }
+.rpt-v6 .rpt-chapter-head { align-items: center; gap: 12px; margin: 0 0 12px; }
+.rpt-v6 .rpt-chapter-icon { width: 34px; height: 34px; border-radius: 9px; transform: rotate(45deg); box-shadow: none; flex: none; }
+.rpt-v6 .rpt-chapter-icon svg { width: 17px; height: 17px; transform: rotate(-45deg); }
+.rpt-v6 .rpt-chapter-title { font-family: 'Amiri', var(--rpt-font-title), serif; font-size: 27px; font-weight: 700; flex: none; }
+.rpt-v6 .rpt-chapter-head::after { content: ""; display: block; flex: 1; height: 1px; background: repeating-linear-gradient(90deg, #d8b8c1 0 4px, transparent 4px 8px); }
+.rpt-v6 .rpt-chapter-sub { color: #a9855a; }
+.rpt-v6 .rpt-subheading { font-family: 'Amiri', var(--rpt-font-heading), serif; font-size: 17px; color: var(--rpt-burgundy); }
+.rpt-v6 .stat-card, .rpt-v6 .rpt-chapter-body .card { border-radius: 14px; border: 1px solid #f0e2e6; box-shadow: 0 2px 8px rgba(140,47,74,.06); }
+.rpt-v6 .stat-grid .stat-card { position: relative; overflow: hidden; background: #fff; text-align: right; padding: 10px 16px 10px 12px; }
+.rpt-v6 .stat-grid .stat-card::before { content: ""; position: absolute; right: 0; top: 0; bottom: 0; width: 5px; background: var(--rpt-burgundy); }
+.rpt-v6 .stat-grid .stat-card:nth-child(2)::before { background: #c4577a; }
+.rpt-v6 .stat-grid .stat-card:nth-child(3)::before { background: #c9a06e; }
+.rpt-v6 .stat-grid .stat-card:nth-child(4n)::before { background: #a9afb6; }
+.rpt-v6 .stat-grid .stat-card:first-child { background: #fff; }
+.rpt-v6 .stat-grid .stat-card:first-child .value { color: var(--rpt-burgundy); }
+.rpt-v6 .stat-grid .stat-card:first-child .label { color: inherit; }
+.rpt-v6 .stat-grid .stat-card .value { font-family: 'Amiri', serif; font-size: 30px; }
+.rpt-v6 .rpt-chapter-body table.prs-table { border: 1px solid #efdfe3; border-radius: 12px; border-collapse: separate; border-spacing: 0; }
+.rpt-v6 .rpt-chapter-body table.prs-table th { background: #f3e4e8 !important; color: #6a1a25; }
+.rpt-v6 .rpt-chapter > div[style*="grid-template-columns"] > div, .rpt-v6 .rpt-chapter-body > div[style*="grid-template-columns"] > div { border-radius: 14px; border: 1px solid #f0e2e6; box-shadow: 0 2px 8px rgba(140,47,74,.06); }
+.rpt-v6 .rpt-chapter-body table th, .rpt-v6 .rpt-chapter table thead th { background: #f3e4e8 !important; color: #6a1a25 !important; background-image: none !important; }
+/* v6: عنوان الفصل في الوسط مثل التصميم المعتمد + أشرطة المؤشرات + ترقيم العناوين الفرعية */
+.v6-kbars { display: grid; grid-template-columns: 1fr 1fr; gap: 9px 26px; background: #fff; border: 1px solid #f0e2e6; border-radius: 14px; padding: 12px 16px; margin-bottom: 12px; }
+.v6-kb { display: grid; grid-template-columns: 1fr auto; gap: 3px 8px; font-size: 12px; break-inside: avoid; }
+.v6-kb b { font-weight: 800; }
+.v6-kbar { grid-column: 1 / -1; height: 7px; border-radius: 9px; background: #f3e8eb; overflow: hidden; }
+.v6-kbar i { display: block; height: 100%; border-radius: 9px; }
+.rpt-v6 .v6-kbars { display: grid; grid-template-columns: 1fr 1fr; gap: 9px 26px; background: #fff; border: 1px solid #f0e2e6; border-radius: 14px; padding: 12px 16px; margin-bottom: 12px; box-shadow: 0 2px 8px rgba(140,47,74,.06); }
+.rpt-v6 .v6-kb { display: grid; grid-template-columns: 1fr auto; gap: 3px 8px; font-size: 12px; break-inside: avoid; }
+.rpt-v6 .v6-kb b { font-weight: 800; }
+.rpt-v6 .v6-kbar { grid-column: 1 / -1; height: 7px; border-radius: 9px; background: #f3e8eb; overflow: hidden; }
+.rpt-v6 .v6-kbar i { display: block; height: 100%; border-radius: 9px; }
+.rpt-v6 .rpt-chapter-head { flex-direction: column; text-align: center; gap: 2px; margin-bottom: 10px; counter-increment: chap; counter-reset: sub; }
+.rpt-v6 .rpt-chapter-head::before { content: "الفصل " counter(chap, arabic-indic); font-size: 12px; color: #a9855a; font-weight: 700; order: -1; }
+.rpt-v6 .rpt-chapter-icon { display: none; }
+.rpt-v6 .rpt-chapter-title { font-size: 31px; text-align: center; width: 100%; }
+.rpt-v6 .rpt-chapter-head::after { flex: none; width: 100%; height: auto; background: none; content: "❖  ـــــــــــ  ❖  ـــــــــــ  ❖"; color: #c4577a; font-size: 13px; text-align: center; letter-spacing: 1px; }
+.rpt-v6 .rpt-chapter-sub { text-align: center; margin: 0 0 12px; }
+.rpt-v6 .rpt-subheading { display: flex; align-items: center; gap: 9px; counter-increment: sub; }
+.rpt-v6 .rpt-subheading::before { content: counter(sub, arabic-indic); flex: none; width: 24px; height: 24px; border-radius: 7px; background: var(--rpt-burgundy); color: #fff; font-size: 12px; font-family: 'Reem Kufi', sans-serif; display: inline-flex; align-items: center; justify-content: center; transform: rotate(45deg); line-height: 1; }
+.rpt-v6 .rpt-subheading::after { content: ""; flex: 1; height: 1px; background: repeating-linear-gradient(90deg, #d8b8c1 0 4px, transparent 4px 8px); }
+.rpt-v6 .a4-page table th, .rpt-v6 .a4-page table thead td { background: #f3e4e8 !important; background-image: none !important; color: #6a1a25 !important; }
+/* اختيار عرض الفصل في التقرير: الكل / جدول / أرقام / رسم */
+[data-rv="table"] .rv-chart, [data-rv="table"] .rv-nums, [data-rv="table"] .stat-grid { display: none !important; }
+[data-rv="chart"]:has(.rv-chart) .rpt-chapter-body > :not(.rv-chart):not(.rpt-gcard), [data-rv="chart"]:has(.rv-chart) .rpt-ggrid, [data-rv="chart"]:has(.rv-chart) .rpt-subheading { display: none !important; }
+[data-rv="nums"]:has(.rv-nums, .stat-grid) .rpt-chapter-body > :not(.rv-nums):not(.stat-grid) { display: none !important; }
