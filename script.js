@@ -4343,7 +4343,7 @@ function tvApply(html, id, mode) {
     try {
       const box = document.createElement("div"); box.innerHTML = html; let n = 0;
       box.querySelectorAll("table").forEach((tb) => {
-        if (tb.closest(".tv-wrap") || tb.querySelector("table")) return;
+        if (tb.closest(".tv-wrap") || tb.closest(".gb-board") || tb.querySelector("table")) return;
         const items = tvShapeItems(tb); if (items.length < 1) return;
         let ttl = ""; try { let p = (tb.closest(".table-wrap") || tb).previousElementSibling; while (p && !ttl) { if (/rpt-subheading|^H[1-6]$|rpt-ch-title/.test((p.className || "") + " " + p.tagName)) ttl = p.textContent.trim(); p = p.previousElementSibling; } } catch (e) {}
         const sh = shapeRender(sid, { auto: true }, { sectionId: "tbl", items, label: ttl, dash: true }); if (!sh) { const hn = document.createElement("div"); hn.className = "hint no-print"; hn.style.marginBottom = "6px"; hn.textContent = "هذا الشكل لا يناسب بيانات هذا الجدول، فعُرض الجدول كما هو."; (tb.closest(".table-wrap") || tb).before(hn); return; }
@@ -4360,7 +4360,7 @@ function tvApply(html, id, mode) {
     const box = document.createElement("div"); box.innerHTML = html;
     let n = 0;
     box.querySelectorAll("table").forEach((tb) => {
-      if (tb.closest(".tv-wrap") || tb.querySelector("table")) return;
+      if (tb.closest(".tv-wrap") || tb.closest(".gb-board") || tb.querySelector("table")) return;
       const ch = tvChartFromTable(tb); if (!ch) return;
       const host = tb.closest(".table-wrap") || tb; const tid = id + "#" + (n++);
       const showTbl = (S.ui.tv || {})[tid] || mode === "both";
@@ -4656,7 +4656,8 @@ function gbBuild(series) {
     return { name: r.name, def: r.def, units: r.units, avg, target: tavg, group, shared: r.units.length > 1 };
   }).filter((r) => r.units.length);
 }
-const GB_COLOR = { achieved: "#2f8f6b", partial: "#d9a04a", not: "#c0392b", empty: "#b9aeb2" };
+const GB_COLOR = { achieved: "#c4577a", partial: "#c9965a", not: "#8a919c", empty: "#cfc6ca" };
+const GB_GRAD = { achieved: "linear-gradient(180deg,#e8a3bb,#c4577a)", partial: "linear-gradient(180deg,#ecd5b0,#d1a56b)", not: "linear-gradient(180deg,#d4d8dd,#9aa1ab)", empty: "#e6dfe2" };
 function gbEvidenceHtml(x) {
   const links = (x.og && x.og.evidenceLinks) || [], legacy = x.og && (x.og.evidenceType || x.og.evidenceAnswer);
   const rows = links.map((ln) => { const r = ogResolveLink(x.report, ln); return `<div style="font-size:11.5px;padding:3px 0;"><span class="hint" style="margin:0;">${esc(r.kindLabel)}:</span> <b>${esc(r.title)}</b>${ogUrlHtml(r.url)}${r.sub ? ` · ${esc(r.sub)}` : ""}${r.badge ? ` · <span style="color:${r.color || SUBTLE};font-weight:800;">${esc(r.badge)}</span>` : ""}${r.gone ? " · مرجع محذوف" : ""}</div>`; }).join("");
@@ -4671,7 +4672,7 @@ function gbUnitsDetailHtml(r) {
 }
 function gbBarHtml(r) {
   const a = r.avg == null ? 0 : Math.min(100, r.avg), c = GB_COLOR[r.group];
-  return `<div style="position:relative;height:14px;background:#f1e9eb;border-radius:8px;overflow:visible;"><div style="width:${a}%;height:100%;background:${c};border-radius:8px;"></div>${r.target != null ? `<div title="المستهدف ${r.target}٪" style="position:absolute;top:-3px;bottom:-3px;inset-inline-start:${Math.min(100, r.target)}%;width:2px;background:#2c2c2a;"></div>` : ""}</div>`;
+  return `<div style="position:relative;height:14px;background:#f1e9eb;border-radius:8px;overflow:visible;"><div style="width:${a}%;height:100%;background:${GB_GRAD[r.group]};border-radius:8px;"></div>${r.target != null ? `<div title="المستهدف ${r.target}٪" style="position:absolute;top:-3px;bottom:-3px;inset-inline-start:${Math.min(100, r.target)}%;width:2px;background:#2c2c2a;"></div>` : ""}</div>`;
 }
 function gbCmpHtml(series, rows) {
   const gs = gbState(); if (gs.cmp === "none") return "";
@@ -4691,9 +4692,10 @@ function dashGoalsBoardHtml(kind, series) {
   const cnt = { achieved: 0, partial: 0, not: 0, empty: 0 }; rows.forEach((r) => { cnt[r.group]++; });
   if (gs.status) rows = rows.filter((r) => r.group === gs.status);
   const chip = (act, k, v, label, on, extra) => `<button type="button" class="pill-btn ${on ? "pill-primary" : "pill-ghost"}" style="padding:4px 12px;font-size:11.5px;" data-action="${act}" data-k="${k}" data-v="${v}">${label}${extra || ""}</button>`;
-  const statusChips = chip("gb-set", "status", "", "الكل", !gs.status, ` (${cnt.achieved + cnt.partial + cnt.not + cnt.empty})`) + ["achieved", "partial", "not", "empty"].map((k) => chip("gb-set", "status", k, GOAL_GROUP_LABEL[k], gs.status === k, ` (${cnt[k]})`)).join("");
-  const viewChips = [["chart", "رسم بياني"], ["table", "جدول"], ["cards", "بطاقات"]].map(([v, l]) => chip("gb-set", "view", v, l, gs.view === v)).join("");
-  const cmpChips = [["none", "بدون مقارنة"], ["cols", "مقارنة الفترات"], ["units", "مقارنة الوحدات"]].map(([v, l]) => chip("gb-set", "cmp", v, l, gs.cmp === v)).join("");
+  const sel = (k, opts, cur) => `<select class="input" style="width:auto;padding:4px 10px;font-size:12px;" data-action="gb-sel" data-k="${k}">${opts.map(([v, l]) => `<option value="${esc(v)}" ${String(cur) === String(v) ? "selected" : ""}>${l}</option>`).join("")}</select>`;
+  const statusChips = sel("status", [["", `كل الحالات (${cnt.achieved + cnt.partial + cnt.not + cnt.empty})`]].concat(["achieved", "partial", "not", "empty"].map((k) => [k, `${GOAL_GROUP_LABEL[k]} (${cnt[k]})`])), gs.status || "");
+  const viewChips = sel("vd", [["chart:col", "رسم · أعمدة طولية"], ["chart:bar", "رسم · أشرطة أفقية"], ["table", "جدول"], ["cards", "بطاقات"]], gs.view === "chart" ? "chart:" + (gs.dir === "bar" ? "bar" : "col") : gs.view);
+  const cmpChips = sel("cmp", [["none", "بدون مقارنة"], ["cols", "مقارنة الفترات"], ["units", "مقارنة الوحدات"]], gs.cmp);
   const unitSel = `<select class="input" style="width:auto;padding:4px 10px;font-size:12px;" data-action="gb-sel" data-k="unit"><option value="">كل الوحدات</option>${(series.units || []).map((u) => `<option value="${esc(u.id)}" ${gs.unit === u.id ? "selected" : ""}>${esc(u.name)}</option>`).join("")}</select>`;
   const terms = [...new Set((series.cols || []).map(gbTermOf).filter(Boolean))];
   const termSel = terms.length ? `<select class="input" style="width:auto;padding:4px 10px;font-size:12px;" data-action="gb-sel" data-k="term"><option value="">كل الفصول</option>${terms.map((t) => `<option value="${esc(t)}" ${gs.term === t ? "selected" : ""}>${esc(t)}</option>`).join("")}</select>` : "";
@@ -4704,14 +4706,17 @@ function dashGoalsBoardHtml(kind, series) {
     body = `<div class="table-wrap" style="overflow-x:auto;"><table class="prs-table" style="min-width:640px;"><thead><tr><th>الهدف</th><th style="text-align:center">الوحدات</th><th style="text-align:center">المستهدف</th><th style="text-align:center">المتحقق</th><th style="text-align:center">الحالة</th></tr></thead><tbody>${rows.map((r) => `<tr style="cursor:pointer" ${tog(r)}><td style="font-weight:700">${esc(r.name)}${r.shared ? ` <span class="hint" style="margin:0;">(مشترك)</span>` : ""}</td><td style="text-align:center">${r.units.length}</td><td style="text-align:center">${r.target != null ? r.target + "٪" : "—"}</td><td style="text-align:center">${dashPctCell(r.avg)}</td><td style="text-align:center">${badgeHtml(GOAL_GROUP_LABEL[r.group], GB_COLOR[r.group], "#f6f2f3")}</td></tr>${open[r.name] ? `<tr><td colspan="5">${gbUnitsDetailHtml(r)}</td></tr>` : ""}`).join("")}</tbody></table></div>`;
   } else if (gs.view === "cards") {
     body = `<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:10px;">${rows.map((r) => `<div class="card" style="padding:12px;border-inline-start:4px solid ${GB_COLOR[r.group]};cursor:pointer;" ${tog(r)}><div style="font-weight:800;font-size:13px;margin-bottom:6px;">${esc(r.name)}</div>${badgeHtml(GOAL_GROUP_LABEL[r.group], GB_COLOR[r.group], "#f6f2f3")} ${r.shared ? `<span class="hint" style="margin:0;">مشترك · ${r.units.length} وحدات</span>` : `<span class="hint" style="margin:0;">${esc(r.units[0].unit.name)}</span>`}<div style="margin:10px 0 4px;">${gbBarHtml(r)}</div><div class="hint" style="margin:0;">المستهدف ${r.target != null ? r.target + "٪" : "—"} · المتحقق ${r.avg != null ? r.avg + "٪" : "—"}</div>${open[r.name] ? gbUnitsDetailHtml(r) : ""}</div>`).join("")}</div>`;
+  } else if (gs.dir !== "bar") {
+    const cw = Math.max(64, Math.min(120, Math.floor(100 / Math.max(rows.length, 1)) * 8));
+    body = `<div style="overflow-x:auto;"><div style="display:flex;align-items:flex-end;gap:12px;height:230px;border-bottom:2px solid ${BORDER};padding:18px 6px 0;min-width:${rows.length * (cw + 12)}px;">${rows.map((r) => { const a = r.avg == null ? 0 : Math.min(100, r.avg); return `<div style="flex:1;min-width:${cw}px;height:100%;display:flex;flex-direction:column;justify-content:flex-end;align-items:center;cursor:pointer;" ${tog(r)}><div style="font-weight:800;font-size:12px;margin-bottom:3px;color:${GB_COLOR[r.group]}">${r.avg != null ? r.avg + "٪" : "—"}</div><div style="position:relative;width:100%;max-width:90px;height:${a * 1.8}px;min-height:3px;background:${GB_GRAD[r.group]};border-radius:6px 6px 0 0;">${r.target != null ? `<div title="المستهدف ${r.target}٪" style="position:absolute;inset-inline:-4px;bottom:${Math.min(100, r.target) * 1.8}px;height:2px;background:${INK};"></div>` : ""}</div></div>`; }).join("")}</div><div style="display:flex;gap:12px;padding:6px 6px 0;min-width:${rows.length * (cw + 12)}px;">${rows.map((r) => `<div style="flex:1;min-width:${cw}px;font-size:11px;text-align:center;line-height:1.5;cursor:pointer;" ${tog(r)}>${esc(r.name)}${r.shared ? `<div class="hint" style="margin:0;">مشترك · ${r.units.length}</div>` : ""}</div>`).join("")}</div></div><div class="hint" style="margin-top:8px;">الخط الأسود = المستهدف · اضغطي على العمود لتفاصيل الوحدات وأدلتها.</div>${rows.filter((r) => open[r.name]).map((r) => `<div class="card" style="padding:12px;margin-top:10px;"><b style="font-size:12.5px;">${esc(r.name)}</b>${gbUnitsDetailHtml(r)}</div>`).join("")}`;
   } else {
     body = `<div style="display:flex;flex-direction:column;gap:12px;">${rows.map((r) => `<div><div style="display:flex;justify-content:space-between;gap:8px;align-items:center;cursor:pointer;margin-bottom:4px;" ${tog(r)}><span style="font-size:12.5px;font-weight:700;">${esc(r.name)}${r.shared ? ` <span class="hint" style="margin:0;">(مشترك · ${r.units.length})</span>` : ""}</span><span style="white-space:nowrap;">${badgeHtml(GOAL_GROUP_LABEL[r.group], GB_COLOR[r.group], "#f6f2f3")} <span style="font-size:11.5px;color:${SUBTLE};">${r.avg != null ? r.avg + "٪" : "—"} / ${r.target != null ? r.target + "٪" : "—"}</span></span></div>${gbBarHtml(r)}${open[r.name] ? gbUnitsDetailHtml(r) : ""}</div>`).join("")}</div><div class="hint" style="margin-top:8px;">الخط الأسود = المستهدف · اضغطي على الهدف لتفاصيل الوحدات وأدلتها.</div>`;
   }
-  return dashCard("لوحة الأهداف التشغيلية", "كل الأهداف: المتحقق وغير المتحقق، مع نتيجة كل وحدة بصورة مستقلة · اختاري «الفصل» لمقارنة نفس الفصل عبر السنوات", `<div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-bottom:8px;">${viewChips}<span style="flex:1"></span>${unitSel}${termSel}${colSel}</div><div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px;">${statusChips}</div>${body}<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:12px;">${cmpChips}</div>${gbCmpHtml(series, rows)}`);
+  return dashCard("لوحة الأهداف التشغيلية", "كل الأهداف: المتحقق وغير المتحقق، مع نتيجة كل وحدة بصورة مستقلة · اختاري «الفصل» لمقارنة نفس الفصل عبر السنوات", `<div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-bottom:8px;">${viewChips}<span style="flex:1"></span>${statusChips}${unitSel}${termSel}${colSel}${cmpChips}</div><div style="margin-bottom:12px;"></div><div class="gb-board">${body}${gbCmpHtml(series, rows)}</div>`);
 }
 // الأجزاء المشتركة الجديدة بالترتيب (لوحة الوحدة/القسم/المكتب)
 function dashPeriodBlocksHtml(kind, series) {
-  return dashB(kind, "goalsBoard", dashGoalsBoardHtml(kind, series)) + dashB(kind, "trend", dashTrendHtml(kind, series)) + dashB(kind, "unitsCmp", dashUnitsCmpHtml(kind, series)) + dashB(kind, "indMatrix", dashIndMatrixHtml(kind, series)) + dashB(kind, "goalMatrix", dashGoalMatrixHtml(kind, series))
+  return (kind === "admin" ? dashB(kind, "goalsBoard", dashGoalsBoardHtml(kind, series)) : "") + dashB(kind, "trend", dashTrendHtml(kind, series)) + dashB(kind, "unitsCmp", dashUnitsCmpHtml(kind, series)) + dashB(kind, "indMatrix", dashIndMatrixHtml(kind, series)) + dashB(kind, "goalMatrix", dashGoalMatrixHtml(kind, series))
     + dashB(kind, "followUp", dashFollowUpHtml(kind, series)) + dashB(kind, "highlights", dashHighlightsHtml(kind, series));
 }
 
@@ -15134,7 +15139,7 @@ function attachFormListeners() {
       if (!S.isAdmin) return; const [gid_, uid2] = el.dataset.ogUtarget.split("|"); const v = el.value === "" ? "" : Math.max(0, Math.min(100, Number(el.value) || 0));
       saveSiteTheme((th) => { const all = { ...((th || {}).ogUnitTargets || {}) }; const m = { ...(all[gid_] || {}) }; if (v === "") delete m[uid2]; else m[uid2] = v; if (Object.keys(m).length) all[gid_] = m; else delete all[gid_]; return { ogUnitTargets: all }; }); return;
     }
-    if (el.dataset && el.dataset.action === "gb-sel") { const g_ = gbState(); g_[el.dataset.k] = el.value; if (el.dataset.k === "term") g_.col = ""; render(); return; }
+    if (el.dataset && el.dataset.action === "gb-sel") { const g_ = gbState(); if (el.dataset.k === "vd") { const [v_, d_] = el.value.split(":"); g_.view = v_; g_.dir = d_ || "col"; } else g_[el.dataset.k] = el.value; if (el.dataset.k === "term") g_.col = ""; render(); return; }
     if (el.dataset && el.dataset.action === "og-evd-add") {
       const g = findById(getItemList("goals"), el.dataset.gid), og = g && (g.operationalGoals || []).find((x) => x.id === el.dataset.ogid);
       if (og && el.value) { const [k, id] = el.value.split(":"); if (k === "custom") og.evidenceLinks = [...(og.evidenceLinks || []), { id: uid("ev"), kind: "custom", text: "", url: "" }]; else { const r = ogResolveLink(getCurrentReportEntry(), { kind: k, refId: id }); og.evidenceLinks = [...(og.evidenceLinks || []), { id: uid("ev"), kind: k, refId: id, refName: r.title || "" }]; } }
