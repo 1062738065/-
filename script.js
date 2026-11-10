@@ -4423,8 +4423,8 @@ function dashPeriodFor(units) {
   const best = Object.keys(n).sort((a, b) => n[b] - n[a])[0];
   return n["فصلي"] && n["فصلي"] >= (n[best] || 0) ? "فصلي" : best || "فصلي";
 }
-function dashSeries(units) {
-  const pt = dashPeriodFor(units), yr = S.ui.dashYear || "all";
+function dashSeries(units, yrOv) {
+  const pt = dashPeriodFor(units), yr = yrOv || S.ui.dashYear || "all";
   const cols = new Map(), byUnit = {};
   units.forEach((u) => ensureUnitReportsLoaded(u.id).forEach((r) => {
     if (!reportHasContent(r) || reportPeriodType(r) !== pt) return;
@@ -4674,18 +4674,78 @@ function gbBarHtml(r) {
   const a = r.avg == null ? 0 : Math.min(100, r.avg), c = GB_COLOR[r.group];
   return `<div style="position:relative;height:14px;background:#f1e9eb;border-radius:8px;overflow:visible;"><div style="width:${a}%;height:100%;background:${GB_GRAD[r.group]};border-radius:8px;"></div>${r.target != null ? `<div title="المستهدف ${r.target}٪" style="position:absolute;top:-3px;bottom:-3px;inset-inline-start:${Math.min(100, r.target)}%;width:2px;background:#2c2c2a;"></div>` : ""}</div>`;
 }
-function gbCmpHtml(series, rows) {
-  const gs = gbState(); if (gs.cmp === "none") return "";
-  if (gs.cmp === "units") {
-    const us = (series.units || []).filter((u) => !gs.unit || u.id === gs.unit);
-    const body = rows.map((r) => `<tr><td style="font-weight:700">${esc(r.name)}</td>${us.map((u) => { const x = r.units.find((y) => y.unit.id === u.id); return `<td style="text-align:center">${x ? dashPctCell(x.pct) : `<span style="color:${SUBTLE}">—</span>`}</td>`; }).join("")}</tr>`).join("");
-    return `<div class="table-wrap" style="overflow-x:auto;margin-top:12px;"><div class="hint" style="margin:0 0 6px;">مقارنة الوحدات في تحقيق كل هدف (آخر تقرير في الفترة المختارة)</div><table class="prs-table" style="min-width:520px;"><thead><tr><th>الهدف</th>${us.map((u) => `<th style="text-align:center">${esc(u.name)}</th>`).join("")}</tr></thead><tbody>${body}</tbody></table></div>`;
-  }
-  const cols = series.cols.filter((c) => !gs.term || gbTermOf(c) === gs.term), us = (series.units || []).filter((u) => !gs.unit || u.id === gs.unit), per = {};
-  cols.forEach((c) => us.forEach((u) => { const rp = (series.byUnit[u.id] || {})[c.key]; if (!rp) return; dashOpGoals(rp).forEach((g) => { const k = String(g.name).trim(); ((per[k] = per[k] || {})[c.key] = per[k][c.key] || []).push(numOrNull(g.percentage)); }); }));
-  const body = rows.map((r) => { const pcts = cols.map((c) => dashAvg((per[r.name] || {})[c.key] || [])); return `<tr><td style="font-weight:700">${esc(r.name)}</td>${pcts.map((v) => `<td style="text-align:center">${dashPctCell(v)}</td>`).join("")}<td style="text-align:center">${dashTrend(pcts)}</td></tr>`; }).join("");
-  return `<div class="table-wrap" style="overflow-x:auto;margin-top:12px;"><div class="hint" style="margin:0 0 6px;">مقارنة الفترات (الفصول والسنوات المحددة في فلتر الفترة أعلاه)</div><table class="prs-table" style="min-width:520px;"><thead><tr><th>الهدف</th>${cols.map((c) => `<th style="text-align:center">${esc(c.label)}</th>`).join("")}<th style="text-align:center">الاتجاه</th></tr></thead><tbody>${body}</tbody></table></div>`;
+const GB_SER = ["#d9c9ce", "#d1a56b", "#c4577a", "#6b2337", "#3b1020"];
+const GB_PM = [["years", "بين الأعوام"], ["terms", "الفصول داخل عام"], ["sameterm", "الفصل نفسه عبر الأعوام"], ["yvy", "عام كامل بعام سابق"]];
+// أعمدة المقارنة الزمنية: كل عمود {label, keys[]}؛ العام الكامل = متوسط فصوله المتوفرة
+function gbCmpCols(sa, gs) {
+  const yrs = [...new Set(sa.cols.map((c) => c.year).filter((y) => y > 0))].sort((a, b) => a - b);
+  const terms = [...new Set(sa.cols.map(gbTermOf).filter(Boolean))];
+  const keysOf = (y, t) => sa.cols.filter((c) => c.year === y && (!t || gbTermOf(c) === t)).map((c) => c.key);
+  const pick = gs.yrs && gs.yrs.length ? yrs.filter((y) => gs.yrs.indexOf(String(y)) !== -1) : yrs;
+  const pm = gs.pm || "years";
+  let cols = [];
+  if (pm === "years") cols = pick.map((y) => ({ label: y + "هـ" + (gs.term ? " · " + gs.term : ""), keys: keysOf(y, gs.term) }));
+  else if (pm === "terms") { const y = Number(gs.yr) || yrs[yrs.length - 1]; cols = sa.cols.filter((c) => c.year === y).map((c) => ({ label: gbTermOf(c) || c.label, keys: [c.key] })); }
+  else if (pm === "sameterm") { const t = gs.term || terms[0]; cols = pick.map((y) => ({ label: (t || "") + " " + y + "هـ", keys: keysOf(y, t) })); }
+  else { const yA = Number(gs.yA) || yrs[yrs.length - 1], yB = Number(gs.yB) || yrs[yrs.length - 2]; cols = [yB, yA].filter(Boolean).map((y) => ({ label: y + "هـ (عام كامل)", keys: keysOf(y) })); }
+  return { cols, yrs, terms };
 }
+// قيمة هدف في عمود: متوسط وحدات الهدف المرشّحة، لكل وحدة متوسط تقاريرها في مفاتيح العمود
+function gbColVal(sa, gs, name, keys) {
+  const vals = [];
+  (sa.units || []).filter((u) => !gs.unit || u.id === gs.unit).forEach((u) => {
+    const per = []; keys.forEach((k) => { const rp = (sa.byUnit[u.id] || {})[k]; if (!rp) return; const x = dashOpGoals(rp).find((g) => String(g.name).trim() === name); if (x && x.level) { const v = numOrNull(x.percentage); if (v != null) per.push(v); } });
+    const a = dashAvg(per); if (a != null) vals.push(a);
+  });
+  return dashAvg(vals);
+}
+const gbSerCol = (i, n) => GB_SER[n <= GB_SER.length ? GB_SER.length - n + i : i % GB_SER.length];
+function gbGroupedHtml(groups, legend, tog) {
+  const legendCols = legend.map((l, i) => gbSerCol(i, legend.length));
+  const n = Math.max(1, groups.length), gw = Math.max(70, Math.min(150, 900 / n));
+  const bar = (b, i) => { const a = b.pct == null ? 0 : Math.min(100, b.pct); return `<div style="flex:1;max-width:44px;height:100%;display:flex;flex-direction:column;justify-content:flex-end;align-items:center;"><div style="font-size:10px;font-weight:800;margin-bottom:2px;">${b.pct == null ? "—" : b.pct + "٪"}</div><div title="${esc(b.label)}" style="position:relative;width:100%;height:${a * 1.6}px;min-height:2px;background:${b.c};border-radius:5px 5px 0 0;">${b.target != null ? `<div style="position:absolute;inset-inline:-3px;bottom:${Math.min(100, b.target) * 1.6}px;height:2px;background:${INK};"></div>` : ""}</div></div>`; };
+  return `<div style="overflow-x:auto;margin-top:6px;"><div style="display:flex;gap:14px;align-items:flex-end;height:210px;border-bottom:2px solid ${BORDER};padding:16px 6px 0;min-width:${n * (gw + 14)}px;">${groups.map((g) => `<div style="flex:1;min-width:${gw}px;height:100%;display:flex;gap:4px;align-items:flex-end;justify-content:center;cursor:pointer;" ${tog(g)}>${g.bars.map(bar).join("")}</div>`).join("")}</div><div style="display:flex;gap:14px;padding:6px 6px 0;min-width:${n * (gw + 14)}px;">${groups.map((g) => `<div style="flex:1;min-width:${gw}px;font-size:11px;text-align:center;line-height:1.5;">${esc(g.name)}</div>`).join("")}</div></div><div style="display:flex;gap:12px;flex-wrap:wrap;margin-top:8px;font-size:11.5px;">${legend.map((l, i) => `<span style="display:inline-flex;align-items:center;gap:5px;"><i style="width:12px;height:12px;border-radius:3px;background:${legendCols[i]};display:inline-block;"></i>${esc(l)}</span>`).join("")}<span class="hint" style="margin:0;">الخط الأسود = المستهدف</span></div>`;
+}
+// يُرجع {controls, html, grouped}؛ لا يعرض مقارنة بلا بيانات
+function gbCmpBuild(series, rows, tog) {
+  const gs = gbState(); if (gs.cmp === "none") return { controls: "", html: "", grouped: null };
+  const us = (series.units || []).filter((u) => !gs.unit || u.id === gs.unit);
+  const sel = (k, opts, cur) => `<select class="input" style="width:auto;padding:4px 10px;font-size:12px;" data-action="gb-sel" data-k="${k}">${opts.map(([v, l]) => `<option value="${esc(v)}" ${String(cur) === String(v) ? "selected" : ""}>${esc(l)}</option>`).join("")}</select>`;
+  const none = (m) => `<div class="hint" style="margin-top:12px;">${esc(m)}</div>`;
+  const stat = (n, l, c) => `<div style="flex:1;min-width:110px;background:#faf5f3;border-radius:14px;padding:10px 12px;"><div style="font-size:22px;font-weight:800;color:${c || ROSE};line-height:1.2;">${n}</div><div style="font-size:11.5px;color:${SUBTLE};margin-top:2px;">${l}</div></div>`;
+  if (gs.cmp === "units") {
+    const rs = rows.filter((r) => r.units.length > 1 || us.length > 1);
+    const withData = rs.filter((r) => r.units.filter((x) => x.pct != null).length >= 2);
+    if (us.length < 2 || !withData.length) return { controls: "", html: none("لا تتوفر بيانات كافية لمقارنة الوحدات (يلزم هدف مشترك بنتيجتين على الأقل)."), grouped: null };
+    const cell = (x) => !x ? `<span style="color:${SUBTLE}">—</span>` : `${dashPctCell(x.pct)}<div class="hint" style="margin:0;">${x.target != null ? "من " + x.target + "٪" : "بلا مستهدف"}</div>`;
+    const body = withData.map((r) => `<tr><td style="font-weight:700">${esc(r.name)}</td>${us.map((u) => `<td style="text-align:center">${cell(r.units.find((y) => y.unit.id === u.id))}</td>`).join("")}</tr>`).join("");
+    const uni = us.filter((u) => withData.some((r) => r.units.some((x) => x.unit.id === u.id && x.pct != null)));
+    const groups = withData.map((r) => ({ name: r.name, bars: uni.map((u, i) => { const x = r.units.find((y) => y.unit.id === u.id); return { label: u.name, pct: x ? x.pct : null, target: x ? x.target : null, c: gbSerCol(i, uni.length) }; }) }));
+    return { controls: "", html: `<div class="hint" style="margin:12px 0 6px;">مقارنة الوحدات: مستهدف ومتحقق كل وحدة بصورة مستقلة (دون دمج)</div><div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px;">${stat(withData.length, "هدف مشترك")}${stat(uni.length, "وحدة")}</div><div class="table-wrap" style="overflow-x:auto;"><table class="prs-table" style="min-width:520px;"><thead><tr><th>الهدف</th>${us.map((u) => `<th style="text-align:center">${esc(u.name)}</th>`).join("")}</tr></thead><tbody>${body}</tbody></table></div>`, grouped: { groups, legend: uni.map((u) => u.name) } };
+  }
+  const sa = gbCmpAll(series), { cols, yrs, terms } = gbCmpCols(sa, gs), pm = gs.pm || "years";
+  const yrBtn = (y) => { const on = !gs.yrs || !gs.yrs.length || gs.yrs.indexOf(String(y)) !== -1; return `<button type="button" class="pill-btn ${on ? "pill-primary" : "pill-ghost"}" style="padding:4px 12px;font-size:11.5px;" data-action="gb-yr" data-v="${y}">${y}هـ</button>`; };
+  const ctl = [sel("pm", GB_PM, pm)];
+  if (pm === "terms") ctl.push(sel("yr", yrs.map((y) => [y, y + "هـ"]), Number(gs.yr) || yrs[yrs.length - 1]));
+  if (pm === "sameterm" && terms.length) ctl.push(sel("term", terms.map((t) => [t, t]), gs.term || terms[0]));
+  if (pm === "years" && terms.length) ctl.push(sel("term", [["", "كل الفصول"]].concat(terms.map((t) => [t, t])), gs.term || ""));
+  if (pm === "yvy") { const yA = Number(gs.yA) || yrs[yrs.length - 1], yB = Number(gs.yB) || yrs[yrs.length - 2]; ctl.push(sel("yB", yrs.map((y) => [y, y + "هـ"]), yB), `<span class="hint" style="margin:0;">مقابل</span>`, sel("yA", yrs.map((y) => [y, y + "هـ"]), yA)); }
+  if (pm === "years" || pm === "sameterm") ctl.push(...yrs.map(yrBtn));
+  const controls = `<div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-bottom:8px;"><span class="hint" style="margin:0;">نوع المقارنة:</span>${ctl.join("")}</div>`;
+  const live = cols.map((c) => ({ ...c, vals: rows.map((r) => gbColVal(sa, gs, r.name, c.keys)) })).filter((c) => c.vals.some((v) => v != null));
+  if (live.length < 2) return { controls, html: none(live.length ? "لا تتوفر إلا فترة واحدة بها بيانات، فلا تُعرض مقارنة." : "لا تتوفر بيانات لهذه المقارنة في الفترات المختارة."), grouped: null };
+  const rs = rows.map((r, i) => ({ r, vs: live.map((c) => c.vals[i]) })).filter((x) => x.vs.some((v) => v != null));
+  const first = (a) => a.find((v) => v != null), last = (a) => { for (let i = a.length - 1; i >= 0; i--) if (a[i] != null) return a[i]; return null; };
+  let up = 0, down = 0, same = 0; rs.forEach((x) => { const a = first(x.vs), b = last(x.vs); if (a == null || b == null || x.vs.filter((v) => v != null).length < 2) return; if (b > a) up++; else if (b < a) down++; else same++; });
+  const diff = (a) => { const f = first(a), l = last(a); if (f == null || l == null || a.filter((v) => v != null).length < 2) return `<span style="color:${SUBTLE}">—</span>`; const d = l - f; return `<b style="color:${d > 0 ? GREEN : d < 0 ? DANGER : SUBTLE}">${d > 0 ? "▲ +" : d < 0 ? "▼ " : "= "}${d}</b>`; };
+  const body = rs.map((x) => `<tr><td style="font-weight:700">${esc(x.r.name)}</td>${x.vs.map((v) => `<td style="text-align:center">${dashPctCell(v)}</td>`).join("")}<td style="text-align:center">${x.r.target != null ? x.r.target + "٪" : "—"}</td><td style="text-align:center">${diff(x.vs)}</td></tr>`).join("");
+  const groups = rs.map((x) => ({ name: x.r.name, bars: x.vs.map((v, i) => ({ label: live[i].label, pct: v, target: x.r.target, c: gbSerCol(i, live.length) })) }));
+  const html = `<div style="display:flex;gap:8px;flex-wrap:wrap;margin:12px 0 10px;">${stat(rs.length, "هدف في المقارنة")}${stat(up, "تحسّن", GREEN)}${stat(down, "تراجع", DANGER)}${stat(same, "ثابت", SUBTLE)}</div><div class="table-wrap" style="overflow-x:auto;"><table class="prs-table" style="min-width:520px;"><thead><tr><th>الهدف</th>${live.map((c) => `<th style="text-align:center">${esc(c.label)}</th>`).join("")}<th style="text-align:center">المستهدف</th><th style="text-align:center">الفرق</th></tr></thead><tbody>${body}</tbody></table></div>`;
+  return { controls, html, grouped: { groups, legend: live.map((c) => c.label) } };
+}
+// سلسلة موسّعة لكل الأعوام (مستقلة عن فلتر السنة العام)، تُحسب مرة لكل رسم
+function gbCmpAll(series) { return dashSeries(series.units || [], "all"); }
+function gbCmpHtml(series, rows) { const b = gbCmpBuild(series, rows, () => ""); return b.controls + b.html; }
 function dashGoalsBoardHtml(kind, series) {
   const gs = gbState(); let rows = gbBuild(series);
   if (!rows.length) return dashCard("الأهداف التشغيلية", "", emptyHint("لا توجد أهداف في الفترة المختارة."));
@@ -4701,8 +4761,12 @@ function dashGoalsBoardHtml(kind, series) {
   const termSel = terms.length ? `<select class="input" style="width:auto;padding:4px 10px;font-size:12px;" data-action="gb-sel" data-k="term"><option value="">كل الفصول</option>${terms.map((t) => `<option value="${esc(t)}" ${gs.term === t ? "selected" : ""}>${esc(t)}</option>`).join("")}</select>` : "";
   const colSel = `<select class="input" style="width:auto;padding:4px 10px;font-size:12px;" data-action="gb-sel" data-k="col"><option value="">${gs.term ? "آخر " + esc(gs.term) + " لكل وحدة" : "آخر فترة لكل وحدة"}</option>${(series.cols || []).filter((c) => !gs.term || gbTermOf(c) === gs.term).map((c) => `<option value="${esc(c.key)}" ${gs.col === c.key ? "selected" : ""}>${esc(c.label)}</option>`).join("")}</select>`;
   const open = S.ui.gbOpen || {}; const tog = (r) => `data-action="gb-open" data-v="${esc(r.name)}"`;
+  S.ui._gbUnits = series.units || [];
+  const cb = gbCmpBuild(series, rows, tog);
   let body = "";
-  if (gs.view === "table") {
+  if (cb.grouped && gs.view === "chart" && gs.dir !== "bar") {
+    body = gbGroupedHtml(cb.grouped.groups, cb.grouped.legend, tog) + rows.filter((r) => open[r.name]).map((r) => `<div class="card" style="padding:12px;margin-top:10px;"><b style="font-size:12.5px;">${esc(r.name)}</b>${gbUnitsDetailHtml(r)}</div>`).join("");
+  } else if (gs.view === "table") {
     body = `<div class="table-wrap" style="overflow-x:auto;"><table class="prs-table" style="min-width:640px;"><thead><tr><th>الهدف</th><th style="text-align:center">الوحدات</th><th style="text-align:center">المستهدف</th><th style="text-align:center">المتحقق</th><th style="text-align:center">الحالة</th></tr></thead><tbody>${rows.map((r) => `<tr style="cursor:pointer" ${tog(r)}><td style="font-weight:700">${esc(r.name)}${r.shared ? ` <span class="hint" style="margin:0;">(مشترك)</span>` : ""}</td><td style="text-align:center">${r.units.length}</td><td style="text-align:center">${r.target != null ? r.target + "٪" : "—"}</td><td style="text-align:center">${dashPctCell(r.avg)}</td><td style="text-align:center">${badgeHtml(GOAL_GROUP_LABEL[r.group], GB_COLOR[r.group], "#f6f2f3")}</td></tr>${open[r.name] ? `<tr><td colspan="5">${gbUnitsDetailHtml(r)}</td></tr>` : ""}`).join("")}</tbody></table></div>`;
   } else if (gs.view === "cards") {
     body = `<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:10px;">${rows.map((r) => `<div class="card" style="padding:12px;border-inline-start:4px solid ${GB_COLOR[r.group]};cursor:pointer;" ${tog(r)}><div style="font-weight:800;font-size:13px;margin-bottom:6px;">${esc(r.name)}</div>${badgeHtml(GOAL_GROUP_LABEL[r.group], GB_COLOR[r.group], "#f6f2f3")} ${r.shared ? `<span class="hint" style="margin:0;">مشترك · ${r.units.length} وحدات</span>` : `<span class="hint" style="margin:0;">${esc(r.units[0].unit.name)}</span>`}<div style="margin:10px 0 4px;">${gbBarHtml(r)}</div><div class="hint" style="margin:0;">المستهدف ${r.target != null ? r.target + "٪" : "—"} · المتحقق ${r.avg != null ? r.avg + "٪" : "—"}</div>${open[r.name] ? gbUnitsDetailHtml(r) : ""}</div>`).join("")}</div>`;
@@ -4712,7 +4776,7 @@ function dashGoalsBoardHtml(kind, series) {
   } else {
     body = `<div style="display:flex;flex-direction:column;gap:12px;">${rows.map((r) => `<div><div style="display:flex;justify-content:space-between;gap:8px;align-items:center;cursor:pointer;margin-bottom:4px;" ${tog(r)}><span style="font-size:12.5px;font-weight:700;">${esc(r.name)}${r.shared ? ` <span class="hint" style="margin:0;">(مشترك · ${r.units.length})</span>` : ""}</span><span style="white-space:nowrap;">${badgeHtml(GOAL_GROUP_LABEL[r.group], GB_COLOR[r.group], "#f6f2f3")} <span style="font-size:11.5px;color:${SUBTLE};">${r.avg != null ? r.avg + "٪" : "—"} / ${r.target != null ? r.target + "٪" : "—"}</span></span></div>${gbBarHtml(r)}${open[r.name] ? gbUnitsDetailHtml(r) : ""}</div>`).join("")}</div><div class="hint" style="margin-top:8px;">الخط الأسود = المستهدف · اضغطي على الهدف لتفاصيل الوحدات وأدلتها.</div>`;
   }
-  return dashCard("لوحة الأهداف التشغيلية", "كل الأهداف: المتحقق وغير المتحقق، مع نتيجة كل وحدة بصورة مستقلة · اختاري «الفصل» لمقارنة نفس الفصل عبر السنوات", `<div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-bottom:8px;">${viewChips}<span style="flex:1"></span>${statusChips}${unitSel}${termSel}${colSel}${cmpChips}</div><div style="margin-bottom:12px;"></div><div class="gb-board">${body}${gbCmpHtml(series, rows)}</div>`);
+  return dashCard("لوحة الأهداف التشغيلية", "كل الأهداف: المتحقق وغير المتحقق، مع نتيجة كل وحدة بصورة مستقلة · اختاري «الفصل» لمقارنة نفس الفصل عبر السنوات", `<div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-bottom:8px;">${viewChips}<span style="flex:1"></span>${statusChips}${unitSel}${termSel}${colSel}${cmpChips}</div><div style="margin-bottom:12px;"></div>${cb.controls}<div class="gb-board">${body}${cb.html}</div>`);
 }
 // الأجزاء المشتركة الجديدة بالترتيب (لوحة الوحدة/القسم/المكتب)
 function dashPeriodBlocksHtml(kind, series) {
@@ -15933,6 +15997,7 @@ function attachClickListener() {
       case "dash-year": S.ui.dashYear = ds.v; render(); break;
       case "dash-pie-scope": S.ui.dashPieScope = ds.v; render(); break;
       case "gb-set": gbState()[ds.k] = ds.v; render(); break;
+      case "gb-yr": { const g_ = gbState(), all_ = [...new Set(gbCmpAll({ units: S.ui._gbUnits || [] }).cols.map((c) => String(c.year)).filter((y) => y !== "0"))]; let cur_ = g_.yrs && g_.yrs.length ? g_.yrs.slice() : all_.slice(); const i_ = cur_.indexOf(ds.v); if (i_ >= 0) cur_.splice(i_, 1); else cur_.push(ds.v); g_.yrs = cur_.length === all_.length ? [] : cur_; render(); break; }
       case "gb-open": { const o = S.ui.gbOpen || (S.ui.gbOpen = {}); o[ds.v] = !o[ds.v]; render(); break; }
       case "heat-open": { const ho = S.ui.heatOpen; S.ui.heatOpen = ho && ho.hk === ds.hk && ho.u === ds.u ? null : { hk: ds.hk, u: ds.u }; render(); break; }
       case "ex-drill": S.ui.exDrill = { path: ds.path ? ds.path.split(",") : [] }; render(); break;
