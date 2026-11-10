@@ -3265,6 +3265,7 @@ const DASH_STD_BLOCKS = [
   { key: "yearCompare", label: "مقارنة آخر 3 سنوات (المستهدف والمتحقق)" },
   { key: "bars", label: "نسبة الإنجاز حسب الوحدة", not: ["unit"] },
   { key: "indBoard", label: "مؤشرات الأداء" },
+  { key: "goalsBoard", label: "لوحة الأهداف التشغيلية (رسم / جدول / بطاقات)" },
   { key: "goals", label: "جدول الأهداف التشغيلية" },
   { key: "trend", label: "رسم تطور التحقق فترة بعد فترة" },
   { key: "unitsCmp", label: "مقارنة الوحدات", not: ["unit"] },
@@ -3305,6 +3306,7 @@ const DASH_EX_BLOCKS = [
   { key: "exKpis", label: "بطاقات الأرقام مع خط التطور" },
   { key: "exHeat", label: "خريطة الأداء (المؤشرات)" },
   { key: "exHeatGoal", label: "خريطة تحقق الأهداف" },
+  { key: "goalsBoard", label: "لوحة الأهداف التشغيلية (رسم / جدول / بطاقات)" },
   { key: "indBoard", label: "مؤشرات الأداء" },
   { key: "trend", label: "رسم تطور التحقق فترة بعد فترة" },
   { key: "exBenef", label: "المستفيدون حسب نوع العمل" },
@@ -4621,9 +4623,95 @@ function dashUnitsCmpHtml(kind, series) {
       return gh + `<tr><td style="font-weight:700">${esc(x.unit.name)}</td><td style="text-align:center;color:${SUBTLE};white-space:nowrap">${x.latest ? esc(x.latest.col.label) : "—"}</td><td style="text-align:center">${dashPctCell(x.ind)}</td><td style="text-align:center">${dashPctCell(x.goal)}</td><td style="text-align:center">${x.works == null ? "—" : x.works + "٪"}</td><td style="text-align:center">${x.latest ? x.openCh : "—"}</td><td style="text-align:center">${m ? badgeHtml(m.label, m.color, m.bg) : `<span style="color:${SUBTLE}">لم يرفع</span>`}</td></tr>`;
     }).join("")}</tbody></table></div>`);
 }
+
+/* ===== لوحة الأهداف التشغيلية: كل الأهداف (متحقق وغير متحقق) · رسم/جدول/بطاقات · تصفية ومقارنة ===== */
+function gbTermOf(c) { return String((c && c.key) || "").split("|")[2] || ""; }
+function gbState() { const g = S.ui.gb || (S.ui.gb = { view: "chart", unit: "", status: "", cmp: "none", col: "" }); return g; }
+function gbDefByName(name) { const n = String(name || "").trim(); return (S.goalsDefinitions.operational || []).find((x) => String(x.name || "").trim() === n) || null; }
+// يبني صفوف الأهداف: لكل هدف مجموعة وحدات، لكل وحدة مستهدفها ومتحققها وأدلتها (مستقلة)
+function gbBuild(series) {
+  const gs = gbState(), colKey = gs.col, byGoal = {}, order = [];
+  const units = (series.units || []).filter((u) => !gs.unit || u.id === gs.unit);
+  const defs = S.goalsDefinitions.operational || [];
+  const touch = (name, def) => byGoal[name] || (order.push(name), (byGoal[name] = { name, def, units: [] }));
+  units.forEach((u) => {
+    let report = null, col = null;
+    if (colKey) { report = (series.byUnit[u.id] || {})[colKey]; col = series.cols.find((c) => c.key === colKey); }
+    else if (gs.term) { for (let i = series.cols.length - 1; i >= 0; i--) { const c = series.cols[i]; if (gbTermOf(c) === gs.term && (series.byUnit[u.id] || {})[c.key]) { report = series.byUnit[u.id][c.key]; col = c; break; } } }
+    else { const l = dashUnitLatest(series, u.id); if (l) { report = l.report; col = l.col; } }
+    const og = {}; if (report) dashOpGoals(report).forEach((x) => { og[String(x.name).trim()] = x; });
+    defs.forEach((d) => { if (scopeAllows("og", d.id, u.id) || og[d.name]) { touch(d.name, d); } });
+    Object.keys(og).forEach((n) => { if (!gbDefByName(n)) touch(n, null); });
+    Object.keys(byGoal).forEach((n) => {
+      const row = byGoal[n], x = og[n];
+      if (!x && !(row.def && scopeAllows("og", row.def.id, u.id))) return;
+      const key = goalStatusKey(x ? x.level : ""), pct = x && x.level ? numOrNull(x.percentage) : null;
+      row.units.push({ unit: u, report, col, og: x || null, key, group: goalStatusGroup(key), pct, target: row.def ? numOrNull(ogTargetFor(row.def.id, u.id)) : null });
+    });
+  });
+  return order.map((n) => {
+    const r = byGoal[n], seen = r.units.filter((x) => x.pct != null), avg = seen.length ? Math.round(seen.reduce((t, x) => t + x.pct, 0) / seen.length) : null;
+    const tg = r.units.map((x) => x.target).filter((v) => v != null), tavg = tg.length ? Math.round(tg.reduce((t, v) => t + v, 0) / tg.length) : null;
+    const group = avg == null ? "empty" : r.units.length === 1 ? r.units[0].group : (avg >= 75 ? "achieved" : avg >= 40 ? "partial" : "not");
+    return { name: r.name, def: r.def, units: r.units, avg, target: tavg, group, shared: r.units.length > 1 };
+  }).filter((r) => r.units.length);
+}
+const GB_COLOR = { achieved: "#2f8f6b", partial: "#d9a04a", not: "#c0392b", empty: "#b9aeb2" };
+function gbEvidenceHtml(x) {
+  const links = (x.og && x.og.evidenceLinks) || [], legacy = x.og && (x.og.evidenceType || x.og.evidenceAnswer);
+  const rows = links.map((ln) => { const r = ogResolveLink(x.report, ln); return `<div style="font-size:11.5px;padding:3px 0;"><span class="hint" style="margin:0;">${esc(r.kindLabel)}:</span> <b>${esc(r.title)}</b>${r.sub ? ` · ${esc(r.sub)}` : ""}${r.badge ? ` · <span style="color:${r.color || SUBTLE};font-weight:800;">${esc(r.badge)}</span>` : ""}${r.gone ? " · مرجع محذوف" : ""}</div>`; }).join("");
+  const lg = legacy ? `<div style="font-size:11.5px;padding:3px 0;"><span class="hint" style="margin:0;">${esc(x.og.evidenceType || "دليل")}:</span> ${esc(x.og.evidenceAnswer || "")}</div>` : "";
+  return rows + lg || `<div class="hint" style="margin:0;">بلا أدلة مسجلة</div>`;
+}
+function gbUnitsDetailHtml(r) {
+  return `<div style="margin-top:8px;border-top:1px dashed ${BORDER};padding-top:8px;">${r.units.map((x) => `<div style="padding:7px 0;border-bottom:1px solid #f1e9eb;">
+    <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;"><b style="font-size:12.5px;">${esc(x.unit.name)}</b>${badgeHtml(GOAL_STATUS_LABEL[x.key], GB_COLOR[x.group], "#f6f2f3")}
+      <span class="hint" style="margin:0;">المستهدف ${x.target != null ? x.target + "٪" : "—"} · المتحقق ${x.pct != null ? x.pct + "٪" : "—"}${x.col ? " · " + esc(x.col.label) : ""}</span></div>
+    <div style="margin-top:4px;padding-inline-start:10px;">${gbEvidenceHtml(x)}</div></div>`).join("")}</div>`;
+}
+function gbBarHtml(r) {
+  const a = r.avg == null ? 0 : Math.min(100, r.avg), c = GB_COLOR[r.group];
+  return `<div style="position:relative;height:14px;background:#f1e9eb;border-radius:8px;overflow:visible;"><div style="width:${a}%;height:100%;background:${c};border-radius:8px;"></div>${r.target != null ? `<div title="المستهدف ${r.target}٪" style="position:absolute;top:-3px;bottom:-3px;inset-inline-start:${Math.min(100, r.target)}%;width:2px;background:#2c2c2a;"></div>` : ""}</div>`;
+}
+function gbCmpHtml(series, rows) {
+  const gs = gbState(); if (gs.cmp === "none") return "";
+  if (gs.cmp === "units") {
+    const us = (series.units || []).filter((u) => !gs.unit || u.id === gs.unit);
+    const body = rows.map((r) => `<tr><td style="font-weight:700">${esc(r.name)}</td>${us.map((u) => { const x = r.units.find((y) => y.unit.id === u.id); return `<td style="text-align:center">${x ? dashPctCell(x.pct) : `<span style="color:${SUBTLE}">—</span>`}</td>`; }).join("")}</tr>`).join("");
+    return `<div class="table-wrap" style="overflow-x:auto;margin-top:12px;"><div class="hint" style="margin:0 0 6px;">مقارنة الوحدات في تحقيق كل هدف (آخر تقرير في الفترة المختارة)</div><table class="prs-table" style="min-width:520px;"><thead><tr><th>الهدف</th>${us.map((u) => `<th style="text-align:center">${esc(u.name)}</th>`).join("")}</tr></thead><tbody>${body}</tbody></table></div>`;
+  }
+  const cols = series.cols.filter((c) => !gs.term || gbTermOf(c) === gs.term), us = (series.units || []).filter((u) => !gs.unit || u.id === gs.unit), per = {};
+  cols.forEach((c) => us.forEach((u) => { const rp = (series.byUnit[u.id] || {})[c.key]; if (!rp) return; dashOpGoals(rp).forEach((g) => { const k = String(g.name).trim(); ((per[k] = per[k] || {})[c.key] = per[k][c.key] || []).push(numOrNull(g.percentage)); }); }));
+  const body = rows.map((r) => { const pcts = cols.map((c) => dashAvg((per[r.name] || {})[c.key] || [])); return `<tr><td style="font-weight:700">${esc(r.name)}</td>${pcts.map((v) => `<td style="text-align:center">${dashPctCell(v)}</td>`).join("")}<td style="text-align:center">${dashTrend(pcts)}</td></tr>`; }).join("");
+  return `<div class="table-wrap" style="overflow-x:auto;margin-top:12px;"><div class="hint" style="margin:0 0 6px;">مقارنة الفترات (الفصول والسنوات المحددة في فلتر الفترة أعلاه)</div><table class="prs-table" style="min-width:520px;"><thead><tr><th>الهدف</th>${cols.map((c) => `<th style="text-align:center">${esc(c.label)}</th>`).join("")}<th style="text-align:center">الاتجاه</th></tr></thead><tbody>${body}</tbody></table></div>`;
+}
+function dashGoalsBoardHtml(kind, series) {
+  const gs = gbState(); let rows = gbBuild(series);
+  if (!rows.length) return dashCard("الأهداف التشغيلية", "", emptyHint("لا توجد أهداف في الفترة المختارة."));
+  const cnt = { achieved: 0, partial: 0, not: 0, empty: 0 }; rows.forEach((r) => { cnt[r.group]++; });
+  if (gs.status) rows = rows.filter((r) => r.group === gs.status);
+  const chip = (act, k, v, label, on, extra) => `<button type="button" class="pill-btn ${on ? "pill-primary" : "pill-ghost"}" style="padding:4px 12px;font-size:11.5px;" data-action="${act}" data-k="${k}" data-v="${v}">${label}${extra || ""}</button>`;
+  const statusChips = chip("gb-set", "status", "", "الكل", !gs.status, ` (${cnt.achieved + cnt.partial + cnt.not + cnt.empty})`) + ["achieved", "partial", "not", "empty"].map((k) => chip("gb-set", "status", k, GOAL_GROUP_LABEL[k], gs.status === k, ` (${cnt[k]})`)).join("");
+  const viewChips = [["chart", "رسم بياني"], ["table", "جدول"], ["cards", "بطاقات"]].map(([v, l]) => chip("gb-set", "view", v, l, gs.view === v)).join("");
+  const cmpChips = [["none", "بدون مقارنة"], ["cols", "مقارنة الفترات"], ["units", "مقارنة الوحدات"]].map(([v, l]) => chip("gb-set", "cmp", v, l, gs.cmp === v)).join("");
+  const unitSel = `<select class="input" style="width:auto;padding:4px 10px;font-size:12px;" data-action="gb-sel" data-k="unit"><option value="">كل الوحدات</option>${(series.units || []).map((u) => `<option value="${esc(u.id)}" ${gs.unit === u.id ? "selected" : ""}>${esc(u.name)}</option>`).join("")}</select>`;
+  const terms = [...new Set((series.cols || []).map(gbTermOf).filter(Boolean))];
+  const termSel = terms.length ? `<select class="input" style="width:auto;padding:4px 10px;font-size:12px;" data-action="gb-sel" data-k="term"><option value="">كل الفصول</option>${terms.map((t) => `<option value="${esc(t)}" ${gs.term === t ? "selected" : ""}>${esc(t)}</option>`).join("")}</select>` : "";
+  const colSel = `<select class="input" style="width:auto;padding:4px 10px;font-size:12px;" data-action="gb-sel" data-k="col"><option value="">${gs.term ? "آخر " + esc(gs.term) + " لكل وحدة" : "آخر فترة لكل وحدة"}</option>${(series.cols || []).filter((c) => !gs.term || gbTermOf(c) === gs.term).map((c) => `<option value="${esc(c.key)}" ${gs.col === c.key ? "selected" : ""}>${esc(c.label)}</option>`).join("")}</select>`;
+  const open = S.ui.gbOpen || {}; const tog = (r) => `data-action="gb-open" data-v="${esc(r.name)}"`;
+  let body = "";
+  if (gs.view === "table") {
+    body = `<div class="table-wrap" style="overflow-x:auto;"><table class="prs-table" style="min-width:640px;"><thead><tr><th>الهدف</th><th style="text-align:center">الوحدات</th><th style="text-align:center">المستهدف</th><th style="text-align:center">المتحقق</th><th style="text-align:center">الحالة</th></tr></thead><tbody>${rows.map((r) => `<tr style="cursor:pointer" ${tog(r)}><td style="font-weight:700">${esc(r.name)}${r.shared ? ` <span class="hint" style="margin:0;">(مشترك)</span>` : ""}</td><td style="text-align:center">${r.units.length}</td><td style="text-align:center">${r.target != null ? r.target + "٪" : "—"}</td><td style="text-align:center">${dashPctCell(r.avg)}</td><td style="text-align:center">${badgeHtml(GOAL_GROUP_LABEL[r.group], GB_COLOR[r.group], "#f6f2f3")}</td></tr>${open[r.name] ? `<tr><td colspan="5">${gbUnitsDetailHtml(r)}</td></tr>` : ""}`).join("")}</tbody></table></div>`;
+  } else if (gs.view === "cards") {
+    body = `<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:10px;">${rows.map((r) => `<div class="card" style="padding:12px;border-inline-start:4px solid ${GB_COLOR[r.group]};cursor:pointer;" ${tog(r)}><div style="font-weight:800;font-size:13px;margin-bottom:6px;">${esc(r.name)}</div>${badgeHtml(GOAL_GROUP_LABEL[r.group], GB_COLOR[r.group], "#f6f2f3")} ${r.shared ? `<span class="hint" style="margin:0;">مشترك · ${r.units.length} وحدات</span>` : `<span class="hint" style="margin:0;">${esc(r.units[0].unit.name)}</span>`}<div style="margin:10px 0 4px;">${gbBarHtml(r)}</div><div class="hint" style="margin:0;">المستهدف ${r.target != null ? r.target + "٪" : "—"} · المتحقق ${r.avg != null ? r.avg + "٪" : "—"}</div>${open[r.name] ? gbUnitsDetailHtml(r) : ""}</div>`).join("")}</div>`;
+  } else {
+    body = `<div style="display:flex;flex-direction:column;gap:12px;">${rows.map((r) => `<div><div style="display:flex;justify-content:space-between;gap:8px;align-items:center;cursor:pointer;margin-bottom:4px;" ${tog(r)}><span style="font-size:12.5px;font-weight:700;">${esc(r.name)}${r.shared ? ` <span class="hint" style="margin:0;">(مشترك · ${r.units.length})</span>` : ""}</span><span style="white-space:nowrap;">${badgeHtml(GOAL_GROUP_LABEL[r.group], GB_COLOR[r.group], "#f6f2f3")} <span style="font-size:11.5px;color:${SUBTLE};">${r.avg != null ? r.avg + "٪" : "—"} / ${r.target != null ? r.target + "٪" : "—"}</span></span></div>${gbBarHtml(r)}${open[r.name] ? gbUnitsDetailHtml(r) : ""}</div>`).join("")}</div><div class="hint" style="margin-top:8px;">الخط الأسود = المستهدف · اضغطي على الهدف لتفاصيل الوحدات وأدلتها.</div>`;
+  }
+  return dashCard("لوحة الأهداف التشغيلية", "كل الأهداف: المتحقق وغير المتحقق، مع نتيجة كل وحدة بصورة مستقلة · اختاري «الفصل» لمقارنة نفس الفصل عبر السنوات", `<div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-bottom:8px;">${viewChips}<span style="flex:1"></span>${unitSel}${termSel}${colSel}</div><div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px;">${statusChips}</div>${body}<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:12px;">${cmpChips}</div>${gbCmpHtml(series, rows)}`);
+}
 // الأجزاء المشتركة الجديدة بالترتيب (لوحة الوحدة/القسم/المكتب)
 function dashPeriodBlocksHtml(kind, series) {
-  return dashB(kind, "trend", dashTrendHtml(kind, series)) + dashB(kind, "unitsCmp", dashUnitsCmpHtml(kind, series)) + dashB(kind, "indMatrix", dashIndMatrixHtml(kind, series)) + dashB(kind, "goalMatrix", dashGoalMatrixHtml(kind, series))
+  return dashB(kind, "goalsBoard", dashGoalsBoardHtml(kind, series)) + dashB(kind, "trend", dashTrendHtml(kind, series)) + dashB(kind, "unitsCmp", dashUnitsCmpHtml(kind, series)) + dashB(kind, "indMatrix", dashIndMatrixHtml(kind, series)) + dashB(kind, "goalMatrix", dashGoalMatrixHtml(kind, series))
     + dashB(kind, "followUp", dashFollowUpHtml(kind, series)) + dashB(kind, "highlights", dashHighlightsHtml(kind, series));
 }
 
@@ -4720,6 +4808,7 @@ function exBlocksInner(kind, units, extra) {
       `<div style="display:flex;gap:10px;font-size:11.5px;flex-wrap:wrap;margin-bottom:10px;">${legend}</div><div style="display:flex;gap:12px;flex-wrap:wrap;">${box || emptyHint("لا توجد وحدات.")}</div>${dashHeatDetailHtml(kind, hk, series)}`);
     html += "\u0003";
   }
+  html += dashB(kind, "goalsBoard", dashGoalsBoardHtml(kind, series));
   // مقارنة الأبناء + التطور
   const childStats = sc.children.map((c) => ({ ...c,
     ind: dashAvg(c.list.map((u) => latestPct(u, dashReportIndAvg))), goal: dashAvg(c.list.map((u) => latestPct(u, dashReportGoalAvg))) }));
@@ -7098,6 +7187,7 @@ const AGG_CHAPTERS = [
   { key: "summary", title: "ملخص الإدارة", icon: "sparkles" },
   { key: "perf", title: "مستوى أداء الأقسام والوحدات", icon: "building" },
   { key: "indicators", title: "المؤشرات والأرقام", icon: "gauge" },
+  { key: "goalsChapter", title: "الأهداف التشغيلية — المستهدف والمتحقق والأدلة", icon: "check" },
   { key: "yearCompare", title: "مقارنة آخر 3 سنوات — المستهدف والمتحقق", icon: "gauge" },
   { key: "programs", title: "الأعمال والبرامج وإحصائية الإنجاز", icon: "layers" },
   { key: "achievements", title: "أعلى الإنجازات ذات الأثر", icon: "sparkles" },
@@ -7499,6 +7589,7 @@ function aggReportData(s) {
     recs: [...recs].sort((a, b) => (b.curated ? 1 : 0) - (a.curated ? 1 : 0) || (priorityRank[b.priority] || 0) - (priorityRank[a.priority] || 0)).slice(0, lim),
     initiatives: initiatives.filter((it) => it.scalability).slice(0, lim),
     nextTasks: nextTasks.slice(0, lim * 2),
+    goalsHtml: () => aggGoalsChapterBody(flat), hasGoals: () => aggGoalsRows(flat).length > 0,
     yearCompareHtml: () => yearCompareReportChapterBody(finalUnits),
     programsHtml: () => programsReportChapterBody(finalUnits, year),
     hasYearCompare: () => { const yc = yearlyComparisonData(finalUnits); return !!(yc.indicators.length || yc.goals.length); },
@@ -7524,13 +7615,47 @@ function aggFakeData(s) {
     nextTasks: rows(Math.min(lim * 2, 6), (i, u) => ({ unitName: u, name: "عمل قادم " + arabicDigits(i + 1), expectedDate: "١٤٤٨/٠٩/٠١" })),
     yearCompareHtml: () => reportTable(["البند", "1448هـ", "1449هـ", "1450هـ"], [["متوسط تحقق المؤشرات", "71٪", "78٪", "84٪"], ["متوسط تحقق الأهداف التشغيلية", "65٪", "72٪", "80٪"], ["عدد الوحدات المُبلِّغة", 6, 7, 8]]),
     hasYearCompare: () => true, hasPrograms: () => true,
+    goalsHtml: () => aggGoalsChapterBody(U.slice(0, 3).map((name, i) => ({ unit: { id: "fake-" + i, name }, report: { ...rptFakeUnitReport(), createdAt: i } }))), hasGoals: () => true,
     flat: U.slice(0, 3).map((name, i) => ({ unit: { id: "fake-" + i, name }, report: { ...rptFakeUnitReport(), createdAt: i } })),
     programsHtml: () => `<div class="rpt-subheading">إحصائية الإنجاز</div>` + reportTable(["نوع العمل", "عدد الأعمال", "المكتمل", "وحدة العدّ", "المستهدف", "المنجز", "النسبة"], [["زيارة إشرافية", 12, 10, "مركز", 45, 39, "87٪"], ["برنامج تدريبي", 6, 5, "برنامج", 8, 6, "75٪"]]),
   };
 }
 // هل للفصل بيانات؟ (الفصول الفارغة لا تظهر إلا بخيار «إظهار الأقسام الفارغة»)
+
+/* ===== فصل «الأهداف التشغيلية» في التقرير النهائي: الهدف المشترك مرة واحدة، وتفاصيل الوحدات عند فتحه ===== */
+function aggGoalsRows(flat) {
+  const by = {}, order = [], last = {};
+  (flat || []).forEach((x) => { if (x && x.unit && x.report) last[x.unit.id] = x; });
+  Object.keys(last).forEach((uid_) => {
+    const x = last[uid_];
+    dashOpGoals(x.report).forEach((og) => {
+      const n = String(og.name).trim(); if (!n) return;
+      const def = gbDefByName(n);
+      const r = by[n] || (order.push(n), (by[n] = { name: n, def, units: [] }));
+      const key = goalStatusKey(og.level);
+      r.units.push({ unit: x.unit, report: x.report, og, key, group: goalStatusGroup(key), pct: og.level ? numOrNull(og.percentage) : null, target: def ? numOrNull(ogTargetFor(def.id, x.unit.id)) : null });
+    });
+  });
+  return order.map((n) => {
+    const r = by[n], seen = r.units.filter((u) => u.pct != null), avg = seen.length ? Math.round(seen.reduce((t, u) => t + u.pct, 0) / seen.length) : null;
+    const tg = r.units.map((u) => u.target).filter((v) => v != null), tavg = tg.length ? Math.round(tg.reduce((t, v) => t + v, 0) / tg.length) : null;
+    const group = avg == null ? "empty" : r.units.length === 1 ? r.units[0].group : (avg >= 75 ? "achieved" : avg >= 40 ? "partial" : "not");
+    return { name: n, def: r.def, units: r.units, avg, target: tavg, group, shared: r.units.length > 1 };
+  });
+}
+function aggGoalsChapterBody(flat) {
+  const rows = aggGoalsRows(flat); if (!rows.length) return "";
+  const cnt = { achieved: 0, partial: 0, not: 0, empty: 0 }; rows.forEach((r) => { cnt[r.group]++; });
+  const sum = `<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px;">${["achieved", "partial", "not", "empty"].map((k) => cnt[k] ? badgeHtml(GOAL_GROUP_LABEL[k] + ": " + cnt[k], GB_COLOR[k], "#f6f2f3") : "").join("")}</div>`;
+  const det = (r) => `<details style="margin-top:4px;"><summary style="cursor:pointer;font-size:11px;color:${SUBTLE};">تفاصيل ${r.units.length} وحدات</summary>${r.units.map((x) => `<div style="padding:6px 0;border-bottom:1px solid #f1e9eb;font-size:11.5px;"><b>${esc(x.unit.name)}</b> · ${esc(GOAL_STATUS_LABEL[x.key])} · المستهدف ${x.target != null ? x.target + "٪" : "—"} · المتحقق ${x.pct != null ? x.pct + "٪" : "—"}<div style="padding-inline-start:10px;">${gbEvidenceHtml(x)}</div></div>`).join("")}</details>`;
+  const bar = (r) => r.avg == null ? "—" : `<div style="display:flex;align-items:center;gap:6px;"><div style="width:70px;">${progressBarHtml(r.avg, GB_COLOR[r.group])}</div><b style="color:${GB_COLOR[r.group]}">${r.avg}٪</b></div>`;
+  return sum + reportTable(["الهدف التشغيلي", "المستهدف", "المتحقق", "الحالة", "الأدلة"], rows.map((r) => [
+    esc(r.name) + (r.shared ? ` <span style="font-size:10.5px;color:${SUBTLE};">(مشترك)</span>` : "") + (r.shared ? det(r) : ""),
+    r.target != null ? r.target + "٪" : "—", bar(r), badgeHtml(GOAL_GROUP_LABEL[r.group], GB_COLOR[r.group], "#f6f2f3"),
+    r.shared ? r.units.reduce((t, x) => t + ((x.og.evidenceLinks || []).length + (x.og.evidenceType ? 1 : 0)), 0) + " دليل" : gbEvidenceHtml(r.units[0])]));
+}
 function aggChapterHasData(key, data) {
-  const m = { perf: data.deptPerf.length || data.unitRows.length, indicators: data.indicators.length, yearCompare: data.hasYearCompare(), programs: data.hasPrograms(),
+  const m = { goalsChapter: data.hasGoals ? data.hasGoals() : false, perf: data.deptPerf.length || data.unitRows.length, indicators: data.indicators.length, yearCompare: data.hasYearCompare(), programs: data.hasPrograms(),
     achievements: data.achievements.length, strengths: data.strengths.length, challenges: data.challenges.length, recs: data.recs.length, initiatives: data.initiatives.length, nextTasks: data.nextTasks.length };
   return key in m ? !!m[key] : true;
 }
@@ -7550,6 +7675,7 @@ function aggChapterBody(key, data, s) {
     return chart + reportTable(["القسم", "عدد الوحدات", "متوسط الإنجاز"], data.deptPerf.map((d) => [esc(d.name), d.count, d.avg + "٪"])) + reportTable(["الوحدة", "القسم", "نسبة الإنجاز"], data.unitRows);
   }
   if (key === "indicators") return data.indicators.length ? reportTable(["الوحدة", "المؤشر", "المستهدف", "خط الأساس", "المتحقق"], data.indicators.map((r) => { let def = null, rs = r, bs = null; try { def = findIndicatorDef(r.name); rs = resolveIndicatorRow(r, def); const pb = r.unitId && r._rep ? indicatorPrevBaseline(r.unitId, r._rep, r.name) : null; bs = pb ? pb.value : (r.baseline !== "" && r.baseline != null ? r.baseline : null); } catch (e) {} return [esc(r.unitName), esc(r.name) + indMetaSpan(rs, indExtra(r, rs, (() => { try { return computeIndicatorStatus(rs); } catch (e) { return null; } })())), esc(def && def.target !== "" && def.target != null ? def.target : "—"), esc(bs != null ? bs : "—"), esc(r.actual !== "" && r.actual != null ? r.actual : "—")]; }), { mergeFirst: true }) : emptyHint("لا توجد مؤشرات مُدخلة بعد.");
+  if (key === "goalsChapter") return data.goalsHtml ? data.goalsHtml() : "";
   if (key === "yearCompare") return data.yearCompareHtml();
   if (key === "challengesChart") { const tw = challTowersHtml((data.challenges || []).map((c) => ({ name: c.name, area: c.area, severity: c.severity }))); return tw || emptyHint("لا توجد صعوبات قائمة موجهة للإدارة."); }
   if (key === "programs") return data.programsHtml();
@@ -10599,6 +10725,85 @@ function goalDelNote(kind, name) {
   return `<div class="hint" style="flex-basis:100%;margin:0;">${n ? `مستخدم في <b>${n}</b> تقرير — الحذف لا يمس التقارير المكتوبة، لكنه يختفي من القائمة للتقارير الجديدة.` : "غير مستخدم في أي تقرير."}</div>`;
 }
 /* ===== «الجهة» لكل مؤشر وهدف تشغيلي: للجميع أو وحدات محددة (محفوظة في إعدادات الموقع) ===== */
+
+/* ===== الأهداف المشتركة: كشف التطابق/التشابه، مستهدف لكل وحدة، أدلة مرتبطة ===== */
+function goalNorm(x) {
+  return String(x || "").toLowerCase().replace(/[ً-ْـ]/g, "").replace(/[أإآٱ]/g, "ا").replace(/ى/g, "ي").replace(/ة/g, "ه")
+    .replace(/[^؀-ۿa-z0-9\s]/g, " ").split(/\s+/).filter(Boolean).map((w) => (w.length > 3 && w.indexOf("ال") === 0 ? w.slice(2) : w)).join(" ");
+}
+function goalTokens(x) { return new Set(goalNorm(x).split(" ").filter((w) => w.length > 1)); }
+function goalSim(a, b) {
+  const A = goalTokens(a), B = goalTokens(b); if (!A.size || !B.size) return 0;
+  let n = 0; A.forEach((w) => { if (B.has(w)) n++; });
+  return n / (A.size + B.size - n);
+}
+function goalSimilarList(name, exceptId, min) {
+  const nn = goalNorm(name), out = []; if (!nn) return out;
+  (S.goalsDefinitions.operational || []).forEach((g) => {
+    if (g.id === exceptId) return;
+    const gn = goalNorm(g.name);
+    if (gn === nn) out.push({ g, exact: true, sim: 1 });
+    else { const sm = goalSim(name, g.name); if (sm >= (min || 0.6)) out.push({ g, exact: false, sim: sm }); }
+  });
+  return out.sort((a, b) => b.sim - a.sim);
+}
+function ogTargetFor(goalId, unitId) {
+  const m = ((((S.siteSettings || {}).theme || {}).ogUnitTargets) || {})[goalId] || {};
+  if (unitId && m[unitId] != null && m[unitId] !== "") return m[unitId];
+  return ogTarget(goalId);
+}
+function goalStatusKey(level) {
+  if (level === "تحقق بالكامل") return "full"; if (level === "تحقق بدرجة مرتفعة") return "high"; if (level === "تحقق جزئيًا") return "part";
+  if (level === "لم يتحقق") return "not"; if (level === "أجل بقرار") return "defer"; if (level === "لم يبدأ") return "none"; return "empty";
+}
+const GOAL_STATUS_LABEL = { full: "متحقق بالكامل", high: "متحقق بدرجة مرتفعة", part: "متحقق جزئيًا", not: "لم يتحقق", none: "لم يبدأ", defer: "مؤجل بقرار", empty: "لم يُقيَّم" };
+function goalStatusGroup(k) { return k === "full" || k === "high" ? "achieved" : k === "part" ? "partial" : k === "empty" ? "empty" : "not"; }
+const GOAL_GROUP_LABEL = { achieved: "متحقق", partial: "متحقق جزئيًا", not: "غير متحقق", empty: "لم يُقيَّم" };
+function ogResolveLink(report, ln) {
+  const sec = (k) => (report && report.sections && report.sections[k] && report.sections[k].data) || {};
+  const draft = (k, arr) => (S.sectionDraft && S.activeSectionId === k && S.sectionDraft[arr]) || null;
+  if (ln.kind === "ind") {
+    const row = (draft("kpi", "indicators") || sec("kpi").indicators || []).find((x) => x.id === ln.refId);
+    if (!row) return { gone: true, title: ln.refName || "مؤشر", kindLabel: "مؤشر أداء" };
+    const def = findIndicatorDef(row.name), rs = resolveIndicatorRow(row, def), st = computeIndicatorStatus(rs);
+    return { title: row.name, kindLabel: "مؤشر أداء", sub: `المتحقق ${row.actual !== "" && row.actual != null ? row.actual : "—"} من المستهدف ${rs.target !== "" && rs.target != null ? rs.target : "—"}`, badge: st.label, color: st.color };
+  }
+  if (ln.kind === "tool") {
+    const t = (draft("tools", "tools") || sec("tools").tools || []).find((x) => x.id === ln.refId);
+    if (!t) return { gone: true, title: ln.refName || "أداة", kindLabel: "أداة قياس" };
+    const rr = computeResponseRate(t.sampleSize, t.respondentsCount);
+    return { title: t.name, kindLabel: "أداة قياس", sub: [t.toolType, rr != null ? "نسبة الاستجابة " + rr + "٪" : ""].filter(Boolean).join(" · "), badge: t.resultQuality || "", color: SUBTLE };
+  }
+  const e = (draft("evidence", "evidenceItems") || sec("evidence").evidenceItems || []).find((x) => x.id === ln.refId);
+  if (!e) return { gone: true, title: ln.refName || "شاهد", kindLabel: "شاهد" };
+  return { title: e.name, kindLabel: e.evidenceType || "شاهد", sub: e.description || "", badge: e.fileLink ? "برابط" : "", color: SUBTLE };
+}
+function ogLinkOptionsHtml(report, og) {
+  const sec = (k) => (report && report.sections && report.sections[k] && report.sections[k].data) || {};
+  const used = new Set((og.evidenceLinks || []).map((l) => l.kind + ":" + l.refId));
+  const grp = (label, kind, list) => { const o = (list || []).filter((x) => x && x.name && !used.has(kind + ":" + x.id)); return o.length ? `<optgroup label="${label}">${o.map((x) => `<option value="${kind}:${esc(x.id)}">${esc(x.name)}</option>`).join("")}</optgroup>` : ""; };
+  return grp("مؤشرات الأداء", "ind", sec("kpi").indicators) + grp("أدوات القياس", "tool", sec("tools").tools) + grp("الشواهد والمرفقات", "evd", sec("evidence").evidenceItems);
+}
+function ogLinksHtml(gid, og) {
+  const rep = getCurrentReportEntry(); const links = og.evidenceLinks || [];
+  const rows = links.map((ln) => { const r = ogResolveLink(rep, ln); return `<div style="display:flex;align-items:center;gap:8px;padding:8px 10px;border:1px solid ${BORDER};border-radius:10px;background:#fbf9f8;margin-top:6px;${r.gone ? "opacity:.65;" : ""}">
+    <span style="font-size:10.5px;background:${GRAY_BG};border-radius:999px;padding:2px 9px;white-space:nowrap;">${esc(r.kindLabel)}</span>
+    <div style="flex:1;min-width:0;"><div style="font-size:12.5px;font-weight:700;">${esc(r.title)}${r.gone ? " — مرجع محذوف" : ""}</div>${r.sub ? `<div style="font-size:11px;color:${SUBTLE};">${esc(r.sub)}</div>` : ""}</div>
+    ${r.badge ? `<span style="font-size:11px;font-weight:800;color:${r.color || SUBTLE};">${esc(r.badge)}</span>` : ""}
+    <button type="button" class="icon-btn" style="width:28px;height:28px;" data-action="og-evd-del" data-gid="${esc(gid)}" data-ogid="${esc(og.id)}" data-lid="${esc(ln.id)}" title="إزالة الربط">${iconX(13, DANGER)}</button></div>`; }).join("");
+  const opts = ogLinkOptionsHtml(rep, og);
+  return `<div style="margin-top:10px;"><div style="font-size:12px;font-weight:800;margin-bottom:4px;">أدلة مرتبطة من أقسام التقرير <span style="font-weight:600;color:${SUBTLE};">(تُسحب نتائجها من مصدرها دون إعادة إدخال، ولا تدخل في نسبة التحقق)</span></div>${rows}
+    ${opts ? `<select class="input" style="margin-top:8px;" data-action="og-evd-add" data-gid="${esc(gid)}" data-ogid="${esc(og.id)}"><option value="">＋ ربط دليل: مؤشر أو أداة قياس أو شاهد…</option>${opts}</select>` : (links.length ? "" : `<div class="hint">لا توجد مؤشرات أو أدوات أو شواهد في التقرير بعد — أضيفيها في أقسامها ثم اربطيها هنا (اختياري).</div>`)}</div>`;
+}
+function goalSimHintHtml(g) {
+  const sm = goalSimilarList(g.name, g.id).slice(0, 2); if (!sm.length) return "";
+  return `<div style="flex-basis:100%;font-size:11.5px;color:#a1302f;background:#fdeee0;border-radius:8px;padding:6px 10px;">⚠ ${sm.map((x) => (x.exact ? "مطابق لـ " : "يشبه ") + "«" + esc(x.g.name) + "»").join(" · ")} — إن كان نفس الهدف فاحذفي المكرر واربطي الباقي بالوحدات المعنية.</div>`;
+}
+function goalUnitTargetsHtml(g) {
+  const ids = scopeOf("og", g.id); if (!ids.length) return "";
+  const m = (((((S.siteSettings || {}).theme || {}).ogUnitTargets) || {})[g.id]) || {};
+  return `<div style="flex-basis:100%;font-size:12px;"><div class="hint" style="margin:0 0 4px;">مستهدف مستقل لكل وحدة (اتركيه فارغًا ليأخذ النسبة العامة أعلاه):</div><div style="display:flex;gap:8px;flex-wrap:wrap;">${ids.map((u_) => { const u = (S.units || []).find((x) => x.id === u_); return `<label style="display:flex;align-items:center;gap:6px;border:1px solid ${BORDER};border-radius:10px;padding:4px 8px;"><span>${esc(u ? u.name : u_)}</span><input type="number" class="input" min="0" max="100" inputmode="numeric" data-og-utarget="${esc(g.id)}|${esc(u_)}" value="${esc(m[u_] != null ? m[u_] : "")}" placeholder="—" style="width:70px;padding:3px 6px;" /></label>`; }).join("")}</div></div>`;
+}
 function ogTarget(id) { const m = (((S.siteSettings || {}).theme || {}).ogTargets) || {}; return m[id] != null && m[id] !== "" ? m[id] : ""; }
 function scopeMap() { return (((S.siteSettings || {}).theme || {}).itemScopes) || { ind: {}, og: {} }; }
 function scopeOf(kind, id) { const m = scopeMap()[kind] || {}; return Array.isArray(m[id]) ? m[id] : []; }
@@ -10838,7 +11043,8 @@ function goalsListRowHtml(kind, g) {
       <button class="icon-btn" style="width:32px;height:32px;border:1px solid ${BORDER}" data-action="confirm-delete-${kind}-goal" data-id="${esc(g.id)}" title="حذف">${iconTrash(14, DANGER)}</button>
     </div>
     ${kind === "Operational" ? scopeChipBtn("og", g.id) : ""}
-    ${kind === "Operational" ? `<div style="flex-basis:100%;display:flex;align-items:center;gap:8px;font-size:12px;"><span>نسبة المستهدف %</span><input type="number" class="input" min="0" max="100" inputmode="numeric" data-og-target="${esc(g.id)}" value="${esc(ogTarget(g.id))}" placeholder="—" style="width:90px;padding:4px 8px;" /></div>` + scopeControlHtml("og", g.id) : ""}
+    ${kind === "Operational" ? goalSimHintHtml(g) : ""}
+    ${kind === "Operational" ? `<div style="flex-basis:100%;display:flex;align-items:center;gap:8px;font-size:12px;"><span>نسبة المستهدف %</span><input type="number" class="input" min="0" max="100" inputmode="numeric" data-og-target="${esc(g.id)}" value="${esc(ogTarget(g.id))}" placeholder="—" style="width:90px;padding:4px 8px;" /></div>` + scopeControlHtml("og", g.id) + goalUnitTargetsHtml(g) : ""}
   </div>`;
 }
 
@@ -10884,9 +11090,9 @@ function renderGoalsManage() {
     ${S.ui.goalImp ? goalImpPanelHtml() : uiCard(`<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;"><div><div style="font-size:16px;font-weight:800;">إدخال من نص ${uiBadge("جديد", "green")}</div><div class="hint" style="margin:4px 0 0;">أهداف تشغيلية، سطر لكل هدف، وعنوان [الوحدة] قبلها لربطها.</div></div>${uiSoftBtn("فتح الإدخال من نص", "goal-imp-open", {}, true)}</div>`)}
     <div style="font-size:13px;font-weight:800;color:${ROSE};margin:6px 0 10px;">الأهداف التشغيلية</div>
     <div class="card" style="margin-bottom:14px;"><div style="display:flex;gap:8px;flex-wrap:wrap;">
-      <input class="input" id="new-operational-goal" style="flex:2;min-width:200px;" placeholder="نص الهدف التشغيلي" />
+      <input class="input" id="new-operational-goal" style="flex:2;min-width:200px;" placeholder="نص الهدف التشغيلي" value="${esc(S.ui.newOpText || "")}" />
       ${pillBtn("إضافة", { icon: iconPlus(15, "#fff"), action: "add-operational-goal" })}
-    </div></div>
+    </div>${S.ui.goalDupMsg ? `<div style="margin-top:8px;font-size:12px;color:#a1302f;background:#fdeee0;border-radius:8px;padding:8px 10px;">${esc(S.ui.goalDupMsg)}</div>` : ""}</div>
     <div style="display:flex;flex-direction:column;gap:14px;">
       ${operational.length === 0 ? `<div style="font-size:12px;color:${SUBTLE}">لا توجد أهداف تشغيلية بعد.</div>` : goalsFlatHtml(operational)}
     </div>
@@ -12071,12 +12277,13 @@ function goalsSectionHtml(d) {
     if (!isOpen) return `<div class="repeat-item">${head}</div>`;
     const ogHtml = (g.operationalGoals || []).map((og) => `
       <div class="og-block">
-        <div style="font-size:12.5px;font-weight:800;margin-bottom:10px;">${esc(og.name)}${(() => { const dd = (S.goalsDefinitions.operational || []).find((x) => x.name === og.name); const t = dd ? ogTarget(dd.id) : ""; return t !== "" ? ` <span style="font-weight:600;color:${SUBTLE};">— المستهدف ${esc(t)}%</span>` : ""; })()}</div>
+        <div style="font-size:12.5px;font-weight:800;margin-bottom:10px;">${esc(og.name)}${(() => { const dd = (S.goalsDefinitions.operational || []).find((x) => x.name === og.name); const t = dd ? ogTargetFor(dd.id, S.currentUnitId) : ""; return t !== "" ? ` <span style="font-weight:600;color:${SUBTLE};">— المستهدف ${esc(t)}%</span>` : ""; })()}</div>
         ${fieldWrap("مستوى تحقق الهدف", true, selSub("goals", g.id, "operationalGoals", og.id, "level", og.level, GOAL_LEVELS, "اختاري مستوى التحقق"))}
         ${fieldWrap("نسبة تحقق الهدف", og.level ? `<div style="display:flex;align-items:center;gap:10px;"><div style="flex:1;">${progressBarHtml(og.percentage || 0, goalLevelMeta(og.level).color)}</div><span style="font-size:13px;font-weight:800;color:${goalLevelMeta(og.level).color};min-width:34px;text-align:left;">${og.percentage}٪</span></div>` : `<div class="hint">تُحسب تلقائيًا بعد اختيار مستوى التحقق</div>`)}
         ${renderSchemaFieldHtml(evidenceTypeField, "goals", g.id, og.evidenceType || "", d.customEvidenceTypes || [], og, "operationalGoals", og.id)}
         ${og.evidenceType ? renderSchemaFieldHtml({ ...evidenceAnswerField, placeholder: evidenceAnswerPlaceholder(og.evidenceType) }, "goals", g.id, og.evidenceAnswer, undefined, og, "operationalGoals", og.id) : ""}
         ${renderSchemaFieldHtml(explanationField, "goals", g.id, og.explanation, undefined, og, "operationalGoals", og.id) + `<div class="char-count">${(og.explanation || "").length} / 300</div>`}
+        ${ogLinksHtml(g.id, og)}
       </div>`).join("");
     return `<div class="repeat-item">
       ${head}
@@ -12106,11 +12313,11 @@ function goalAddInlineHtml(goalId, kind) {
   const label = kind === "strategic" ? "هدف استراتيجي" : "هدف تشغيلي";
   if (S.ui.goalAddOpen !== key) return `<button type="button" data-action="goal-add-open" data-key="${esc(key)}" style="background:none;border:none;cursor:pointer;color:${ROSE};font-size:12px;font-weight:700;padding:6px 0 0;font-family:inherit;">＋ ${label} غير موجود في القائمة</button>`;
   return `<div style="display:flex;gap:6px;margin-top:8px;flex-wrap:wrap;">
-    <input class="input" id="goal-add-input" style="flex:1;min-width:200px;" placeholder="اكتبي نص ${label} الجديد" />
+    <input class="input" id="goal-add-input" style="flex:1;min-width:200px;" placeholder="اكتبي نص ${label} الجديد" value="${esc(S.ui.goalAddText || "")}" />
     ${pillBtn("إضافة", { icon: iconPlus(14, "#fff"), action: "goal-add-save", data: { gid: goalId, kind } })}
     ${pillBtn("إلغاء", { variant: "ghost", action: "goal-add-cancel" })}
   </div>
-  ${S.ui.goalAddErr ? `<div style="color:${DANGER};font-size:11.5px;font-weight:700;margin-top:4px;">${esc(S.ui.goalAddErr)}</div>` : `<div style="font-size:11px;color:${SUBTLE};margin-top:4px;">يُضاف للقائمة العامة ويظهر لكل الوحدات.</div>`}`;
+  ${S.ui.goalAddErr ? `<div style="color:${DANGER};font-size:11.5px;font-weight:700;margin-top:4px;">${esc(S.ui.goalAddErr)}</div>` : `<div style="font-size:11px;color:${SUBTLE};margin-top:4px;">يُضاف للقائمة العامة ويُربط بوحدتك، وتقدر مديرة النظام تربطه بوحدات أخرى.</div>`}`;
 }
 
 /* ---- الأعمال والبرامج ---- */
@@ -13900,10 +14107,10 @@ function sectionBodyOnly(section, saved, report) {
     (d.goals || []).forEach((g) => (g.operationalGoals || []).forEach((og) => flat.push({ ...og })));
     if (!flat.length) { body = emptyHint("لا توجد أهداف مُدخلة."); }
     else {
-      body = reportTable(["الهدف التشغيلي", "المستوى", "النسبة"], flat.map((og) => {
-        const gm = goalLevelMeta(og.level);
+      body = reportTable(["الهدف التشغيلي", "المستهدف", "المستوى", "النسبة", "الأدلة"], flat.map((og) => {
+        const gm = goalLevelMeta(og.level), dd = gbDefByName(og.name), tg = dd ? ogTargetFor(dd.id, S.currentUnitId) : "";
         const bar = og.percentage !== "" ? `<div style="display:flex;align-items:center;gap:6px;"><div style="width:70px;">${progressBarHtml(og.percentage || 0, gm.color)}</div><b style="color:${gm.color}">${og.percentage}٪</b></div>` : "—";
-        return [esc(og.name), og.level ? badgeHtml(og.level, gm.color, gm.bg) : "—", bar];
+        return [esc(og.name), tg !== "" ? tg + "٪" : "—", og.level ? badgeHtml(og.level, gm.color, gm.bg) : "—", bar, ((og.evidenceLinks || []).length || og.evidenceType || og.evidenceAnswer) ? gbEvidenceHtml({ og, report }) : "—"];
       }));
     }
 
@@ -14914,6 +15121,16 @@ function attachFormListeners() {
       if (el.value === "__new") b.dataset.action = "rm-new"; else { b.dataset.action = "rm-select"; b.dataset.id = el.value; }
       appEl.appendChild(b); b.click(); b.remove(); return;
     }
+    if (el.dataset && el.dataset.ogUtarget) {
+      if (!S.isAdmin) return; const [gid_, uid2] = el.dataset.ogUtarget.split("|"); const v = el.value === "" ? "" : Math.max(0, Math.min(100, Number(el.value) || 0));
+      saveSiteTheme((th) => { const all = { ...((th || {}).ogUnitTargets || {}) }; const m = { ...(all[gid_] || {}) }; if (v === "") delete m[uid2]; else m[uid2] = v; if (Object.keys(m).length) all[gid_] = m; else delete all[gid_]; return { ogUnitTargets: all }; }); return;
+    }
+    if (el.dataset && el.dataset.action === "gb-sel") { const g_ = gbState(); g_[el.dataset.k] = el.value; if (el.dataset.k === "term") g_.col = ""; render(); return; }
+    if (el.dataset && el.dataset.action === "og-evd-add") {
+      const g = findById(getItemList("goals"), el.dataset.gid), og = g && (g.operationalGoals || []).find((x) => x.id === el.dataset.ogid);
+      if (og && el.value) { const [k, id] = el.value.split(":"); const r = ogResolveLink(getCurrentReportEntry(), { kind: k, refId: id }); og.evidenceLinks = [...(og.evidenceLinks || []), { id: uid("ev"), kind: k, refId: id, refName: r.title || "" }]; }
+      render(); return;
+    }
     if (el.dataset && el.dataset.ogTarget) {
       if (!S.isAdmin) return; const v = el.value === "" ? "" : Math.max(0, Math.min(100, Number(el.value) || 0)); const id = el.dataset.ogTarget;
       saveSiteTheme((th) => { const m = { ...((th || {}).ogTargets || {}) }; if (v === "") delete m[id]; else m[id] = v; return { ogTargets: m }; }); return;
@@ -15695,6 +15912,8 @@ function attachClickListener() {
       case "dash-period": S.ui.dashPeriod = ds.v; render(); break;
       case "dash-year": S.ui.dashYear = ds.v; render(); break;
       case "dash-pie-scope": S.ui.dashPieScope = ds.v; render(); break;
+      case "gb-set": gbState()[ds.k] = ds.v; render(); break;
+      case "gb-open": { const o = S.ui.gbOpen || (S.ui.gbOpen = {}); o[ds.v] = !o[ds.v]; render(); break; }
       case "heat-open": { const ho = S.ui.heatOpen; S.ui.heatOpen = ho && ho.hk === ds.hk && ho.u === ds.u ? null : { hk: ds.hk, u: ds.u }; render(); break; }
       case "ex-drill": S.ui.exDrill = { path: ds.path ? ds.path.split(",") : [] }; render(); break;
       case "us-period": S.ui.usPeriod = ds.pt; S.ui.usMsg = ""; render(); break;
@@ -16389,9 +16608,13 @@ function attachClickListener() {
       case "add-strategic-goal": case "add-operational-goal": {
         const kind = action === "add-strategic-goal" ? "strategic" : "operational";
         const inputEl = document.getElementById(`new-${kind}-goal`);
-        const name = (inputEl.value || "").trim();
+        const name = (inputEl.value || "").trim().replace(/\s+/g, " ");
         if (!name) break;
         const list = S.goalsDefinitions[kind] || [];
+        const dups = kind === "operational" ? goalSimilarList(name) : [];
+        if (dups.some((x) => x.exact)) { S.ui.goalDupMsg = "هذا الهدف موجود مسبقًا: «" + dups.find((x) => x.exact).g.name + "». لا حاجة لتكراره — اربطيه بوحدات إضافية من زر الجهة بجانبه."; S.ui.newOpText = name; render(); break; }
+        if (dups.length && S.ui.goalDupConfirm !== name) { S.ui.goalDupMsg = "يوجد هدف مشابه: «" + dups[0].g.name + "». إن كان نفس الهدف فاربطيه بالوحدات بدل تكراره، وإن كان مختلفًا اضغطي «إضافة» مرة أخرى."; S.ui.goalDupConfirm = name; S.ui.newOpText = name; render(); break; }
+        S.ui.goalDupMsg = ""; S.ui.goalDupConfirm = ""; S.ui.newOpText = "";
         if (!list.some((g) => g.name === name)) {
           const ng = { id: uid(kind[0] + "g"), name };
           
@@ -16402,11 +16625,11 @@ function attachClickListener() {
         break;
       }
       case "goal-add-toggle": saveSiteTheme({ goalAddFromReport: !goalAddFromReportOn() }); render(); break;
-      case "goal-add-open": S.ui.goalAddOpen = ds.key; S.ui.goalAddErr = ""; render(); setTimeout(() => { const el = document.getElementById("goal-add-input"); if (el) el.focus(); }, 30); break;
+      case "goal-add-open": S.ui.goalAddOpen = ds.key; S.ui.goalAddErr = ""; S.ui.goalAddText = ""; S.ui.goalAddConfirm = ""; render(); setTimeout(() => { const el = document.getElementById("goal-add-input"); if (el) el.focus(); }, 30); break;
       case "goal-add-cancel": S.ui.goalAddOpen = null; S.ui.goalAddErr = ""; render(); break;
       case "goal-add-save": {
         const el = document.getElementById("goal-add-input");
-        const name = String((el && el.value) || "").trim().replace(/\s+/g, " ");
+        let name = String((el && el.value) || "").trim().replace(/\s+/g, " ");
         if (!name) { S.ui.goalAddErr = "اكتبي نص الهدف"; render(); break; }
         if (!goalAddFromReportOn()) break;
         const kind = ds.kind === "strategic" ? "strategic" : "operational", gid = ds.gid;
@@ -16415,12 +16638,19 @@ function attachClickListener() {
         // نجيب آخر قائمة من القاعدة قبل الإضافة عشان ما نرجّع تعديلات مديرة النظام
         refreshGoalsDefinitionsFromDb().catch(() => {}).then(() => {
           const list = S.goalsDefinitions[kind] || [];
-          const found = list.find((g) => g.name.trim() === name);
+          const sims = kind === "operational" ? goalSimilarList(name) : [];
+          const found = list.find((g) => g.name.trim() === name) || (sims.find((x) => x.exact) || {}).g;
+          if (!found && sims.length && S.ui.goalAddConfirm !== name) {
+            S.ui.goalAddErr = "يوجد هدف مشابه: «" + sims[0].g.name + "». اختاريه من القائمة إن كان نفس الهدف، أو اضغطي «إضافة» مرة أخرى إن كان مختلفًا."; S.ui.goalAddConfirm = name; S.ui.goalAddText = name; render(); return;
+          }
+          S.ui.goalAddConfirm = ""; S.ui.goalAddText = "";
+          if (found && kind === "operational") { name = found.name; const sc = scopeOf("og", found.id); if (sc.length && S.currentUnitId && !sc.includes(S.currentUnitId)) scopeSet("og", found.id, [...sc, S.currentUnitId]); }
           if (!found) {
             const ng = { id: uid(kind[0] + "g"), name };
             if (kind === "operational") ng.parentId = strategicGoalIdByName(parentName);
             S.goalsDefinitions = { ...S.goalsDefinitions, [kind]: [...list, ng] };
             dataStore.saveGoalsDefinitions(S.goalsDefinitions);
+            if (kind === "operational" && S.currentUnitId) scopeSet("og", ng.id, [S.currentUnitId]);
           }
           const goal = findById(getItemList("goals"), gid);
           if (goal) {
@@ -16782,6 +17012,11 @@ function handleReportEditorAction(action, ds) {
       if (sh.live) list.push({ id: uid("shp"), shapeId: ds.shape, ...JSON.parse(JSON.stringify(sh.sample || {})) });
       else list.push({ id: uid("shp"), shapeId: ds.shape, auto: sh.cat !== "photo", sectionId: S.activeSectionId });
       S.ui.shpOpen = false; autoSaveSchedule(); render(); return true;
+    }
+    case "og-evd-del": {
+      const g = findById(getItemList("goals"), ds.gid), og = g && (g.operationalGoals || []).find((x) => x.id === ds.ogid);
+      if (og) og.evidenceLinks = (og.evidenceLinks || []).filter((l) => l.id !== ds.lid);
+      render(); return true;
     }
     case "remove-item": {
       const list = S.sectionDraft[ds.arr];
