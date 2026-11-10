@@ -4659,7 +4659,7 @@ function gbBuild(series) {
 const GB_COLOR = { achieved: "#2f8f6b", partial: "#d9a04a", not: "#c0392b", empty: "#b9aeb2" };
 function gbEvidenceHtml(x) {
   const links = (x.og && x.og.evidenceLinks) || [], legacy = x.og && (x.og.evidenceType || x.og.evidenceAnswer);
-  const rows = links.map((ln) => { const r = ogResolveLink(x.report, ln); return `<div style="font-size:11.5px;padding:3px 0;"><span class="hint" style="margin:0;">${esc(r.kindLabel)}:</span> <b>${esc(r.title)}</b>${r.sub ? ` · ${esc(r.sub)}` : ""}${r.badge ? ` · <span style="color:${r.color || SUBTLE};font-weight:800;">${esc(r.badge)}</span>` : ""}${r.gone ? " · مرجع محذوف" : ""}</div>`; }).join("");
+  const rows = links.map((ln) => { const r = ogResolveLink(x.report, ln); return `<div style="font-size:11.5px;padding:3px 0;"><span class="hint" style="margin:0;">${esc(r.kindLabel)}:</span> <b>${esc(r.title)}</b>${ogUrlHtml(r.url)}${r.sub ? ` · ${esc(r.sub)}` : ""}${r.badge ? ` · <span style="color:${r.color || SUBTLE};font-weight:800;">${esc(r.badge)}</span>` : ""}${r.gone ? " · مرجع محذوف" : ""}</div>`; }).join("");
   const lg = legacy ? `<div style="font-size:11.5px;padding:3px 0;"><span class="hint" style="margin:0;">${esc(x.og.evidenceType || "دليل")}:</span> ${esc(x.og.evidenceAnswer || "")}</div>` : "";
   return rows + lg || `<div class="hint" style="margin:0;">بلا أدلة مسجلة</div>`;
 }
@@ -10772,28 +10772,37 @@ function ogResolveLink(report, ln) {
     const t = (draft("tools", "tools") || sec("tools").tools || []).find((x) => x.id === ln.refId);
     if (!t) return { gone: true, title: ln.refName || "أداة", kindLabel: "أداة قياس" };
     const rr = computeResponseRate(t.sampleSize, t.respondentsCount);
-    return { title: t.name, kindLabel: "أداة قياس", sub: [t.toolType, rr != null ? "نسبة الاستجابة " + rr + "٪" : ""].filter(Boolean).join(" · "), badge: t.resultQuality || "", color: SUBTLE };
+    return { title: t.name, kindLabel: "أداة قياس", sub: [t.toolType, rr != null ? "نسبة الاستجابة " + rr + "٪" : ""].filter(Boolean).join(" · "), badge: t.resultQuality || "", color: SUBTLE, url: t.resultsLink || t.toolLink || "" };
   }
+  if (ln.kind === "custom") return { title: ln.text || "دليل آخر", kindLabel: "دليل آخر", sub: "", badge: "", color: SUBTLE, url: ln.url || "", custom: true };
   const e = (draft("evidence", "evidenceItems") || sec("evidence").evidenceItems || []).find((x) => x.id === ln.refId);
   if (!e) return { gone: true, title: ln.refName || "شاهد", kindLabel: "شاهد" };
-  return { title: e.name, kindLabel: e.evidenceType || "شاهد", sub: e.description || "", badge: e.fileLink ? "برابط" : "", color: SUBTLE };
+  return { title: e.name, kindLabel: e.evidenceType || "شاهد", sub: e.description || "", badge: "", color: SUBTLE, url: e.fileLink || "" };
 }
 function ogLinkOptionsHtml(report, og) {
   const sec = (k) => (report && report.sections && report.sections[k] && report.sections[k].data) || {};
   const used = new Set((og.evidenceLinks || []).map((l) => l.kind + ":" + l.refId));
   const grp = (label, kind, list) => { const o = (list || []).filter((x) => x && x.name && !used.has(kind + ":" + x.id)); return o.length ? `<optgroup label="${label}">${o.map((x) => `<option value="${kind}:${esc(x.id)}">${esc(x.name)}</option>`).join("")}</optgroup>` : ""; };
-  return grp("مؤشرات الأداء", "ind", sec("kpi").indicators) + grp("أدوات القياس", "tool", sec("tools").tools) + grp("الشواهد والمرفقات", "evd", sec("evidence").evidenceItems);
+  return grp("مؤشرات الأداء", "ind", sec("kpi").indicators) + grp("أدوات القياس", "tool", sec("tools").tools) + grp("الشواهد والتقارير والسجلات الرسمية والمرفقات", "evd", sec("evidence").evidenceItems);
 }
+function ogUrlHtml(u) { const x = String(u || "").trim(); return /^https?:\/\//i.test(x) ? ` <a href="${esc(x)}" target="_blank" rel="noopener" style="color:${ROSE};font-weight:700;font-size:11.5px;">فتح الرابط ↗</a>` : (x ? ` <span style="font-size:11.5px;color:${SUBTLE};">${esc(x)}</span>` : ""); }
 function ogLinksHtml(gid, og) {
   const rep = getCurrentReportEntry(); const links = og.evidenceLinks || [];
-  const rows = links.map((ln) => { const r = ogResolveLink(rep, ln); return `<div style="display:flex;align-items:center;gap:8px;padding:8px 10px;border:1px solid ${BORDER};border-radius:10px;background:#fbf9f8;margin-top:6px;${r.gone ? "opacity:.65;" : ""}">
-    <span style="font-size:10.5px;background:${GRAY_BG};border-radius:999px;padding:2px 9px;white-space:nowrap;">${esc(r.kindLabel)}</span>
-    <div style="flex:1;min-width:0;"><div style="font-size:12.5px;font-weight:700;">${esc(r.title)}${r.gone ? " — مرجع محذوف" : ""}</div>${r.sub ? `<div style="font-size:11px;color:${SUBTLE};">${esc(r.sub)}</div>` : ""}</div>
-    ${r.badge ? `<span style="font-size:11px;font-weight:800;color:${r.color || SUBTLE};">${esc(r.badge)}</span>` : ""}
-    <button type="button" class="icon-btn" style="width:28px;height:28px;" data-action="og-evd-del" data-gid="${esc(gid)}" data-ogid="${esc(og.id)}" data-lid="${esc(ln.id)}" title="إزالة الربط">${iconX(13, DANGER)}</button></div>`; }).join("");
+  const att = `data-gid="${esc(gid)}" data-ogid="${esc(og.id)}"`;
+  const rows = links.map((ln) => {
+    const r = ogResolveLink(rep, ln), lat = `${att} data-lid="${esc(ln.id)}"`;
+    const del = `<button type="button" class="icon-btn" style="width:28px;height:28px;" data-action="og-evd-del" ${lat} title="إلغاء الربط (لا يحذف العنصر من قسمه)">${iconX(13, DANGER)}</button>`;
+    if (ln.kind === "custom") return `<div style="padding:8px 10px;border:1px solid ${BORDER};border-radius:10px;background:#fbf9f8;margin-top:6px;"><div style="display:flex;gap:8px;align-items:center;"><span style="font-size:10.5px;background:${GRAY_BG};border-radius:999px;padding:2px 9px;white-space:nowrap;">دليل آخر</span><input class="input" style="flex:1;padding:5px 8px;" placeholder="وصف الدليل" value="${esc(ln.text || "")}" data-action="og-evd-field" data-f="text" ${lat} /></div><div style="display:flex;gap:8px;align-items:center;margin-top:6px;"><input class="input" style="flex:1;padding:5px 8px;direction:ltr;" placeholder="رابط الدليل أو مرفقه (https://…)" value="${esc(ln.url || "")}" data-action="og-evd-field" data-f="url" ${lat} />${ogUrlHtml(ln.url)}${del}</div></div>`;
+    const opts = ogLinkOptionsHtml(rep, og);
+    return `<div style="padding:8px 10px;border:1px solid ${BORDER};border-radius:10px;background:#fbf9f8;margin-top:6px;${r.gone ? "opacity:.7;" : ""}"><div style="display:flex;align-items:center;gap:8px;">
+      <span style="font-size:10.5px;background:${GRAY_BG};border-radius:999px;padding:2px 9px;white-space:nowrap;">${esc(r.kindLabel)}</span>
+      <div style="flex:1;min-width:0;"><div style="font-size:12.5px;font-weight:700;">${esc(r.title)}${r.gone ? " — مرجع محذوف من قسمه" : ""}${ogUrlHtml(r.url)}</div>${r.sub ? `<div style="font-size:11px;color:${SUBTLE};">${esc(r.sub)}</div>` : ""}</div>
+      ${r.badge ? `<span style="font-size:11px;font-weight:800;color:${r.color || SUBTLE};">${esc(r.badge)}</span>` : ""}${del}</div>
+      ${opts ? `<select class="input" style="margin-top:6px;padding:4px 8px;font-size:11.5px;" data-action="og-evd-chg" ${lat}><option value="">تغيير الدليل المرتبط…</option>${opts}</select>` : ""}</div>`; }).join("");
   const opts = ogLinkOptionsHtml(rep, og);
-  return `<div style="margin-top:10px;"><div style="font-size:12px;font-weight:800;margin-bottom:4px;">أدلة مرتبطة من أقسام التقرير <span style="font-weight:600;color:${SUBTLE};">(تُسحب نتائجها من مصدرها دون إعادة إدخال، ولا تدخل في نسبة التحقق)</span></div>${rows}
-    ${opts ? `<select class="input" style="margin-top:8px;" data-action="og-evd-add" data-gid="${esc(gid)}" data-ogid="${esc(og.id)}"><option value="">＋ ربط دليل: مؤشر أو أداة قياس أو شاهد…</option>${opts}</select>` : (links.length ? "" : `<div class="hint">لا توجد مؤشرات أو أدوات أو شواهد في التقرير بعد — أضيفيها في أقسامها ثم اربطيها هنا (اختياري).</div>`)}</div>`;
+  return `<div style="margin-top:10px;"><div style="font-size:12px;font-weight:800;margin-bottom:4px;">أدلة التحقق المرتبطة (اختيارية) <span style="font-weight:600;color:${SUBTLE};">— تُسحب بياناتها ورابطها من قسمها دون إعادة إدخال، ولا تدخل في نسبة التحقق</span></div>${rows}
+    <select class="input" style="margin-top:8px;" data-action="og-evd-add" ${att}><option value="">＋ ربط دليل: مؤشر أو أداة قياس أو شاهد أو سجل…</option>${opts}<option value="custom:new">＋ دليل آخر (وصف أو رابط أو مرفق)</option></select>
+    ${links.length ? "" : `<div class="hint">اختياري — لا يلزم ربط جميع الأنواع.</div>`}</div>`;
 }
 function goalSimHintHtml(g) {
   const sm = goalSimilarList(g.name, g.id).slice(0, 2); if (!sm.length) return "";
@@ -15128,7 +15137,13 @@ function attachFormListeners() {
     if (el.dataset && el.dataset.action === "gb-sel") { const g_ = gbState(); g_[el.dataset.k] = el.value; if (el.dataset.k === "term") g_.col = ""; render(); return; }
     if (el.dataset && el.dataset.action === "og-evd-add") {
       const g = findById(getItemList("goals"), el.dataset.gid), og = g && (g.operationalGoals || []).find((x) => x.id === el.dataset.ogid);
-      if (og && el.value) { const [k, id] = el.value.split(":"); const r = ogResolveLink(getCurrentReportEntry(), { kind: k, refId: id }); og.evidenceLinks = [...(og.evidenceLinks || []), { id: uid("ev"), kind: k, refId: id, refName: r.title || "" }]; }
+      if (og && el.value) { const [k, id] = el.value.split(":"); if (k === "custom") og.evidenceLinks = [...(og.evidenceLinks || []), { id: uid("ev"), kind: "custom", text: "", url: "" }]; else { const r = ogResolveLink(getCurrentReportEntry(), { kind: k, refId: id }); og.evidenceLinks = [...(og.evidenceLinks || []), { id: uid("ev"), kind: k, refId: id, refName: r.title || "" }]; } }
+      render(); return;
+    }
+    if (el.dataset && (el.dataset.action === "og-evd-chg" || el.dataset.action === "og-evd-field")) {
+      const g = findById(getItemList("goals"), el.dataset.gid), og = g && (g.operationalGoals || []).find((x) => x.id === el.dataset.ogid), ln = og && (og.evidenceLinks || []).find((l) => l.id === el.dataset.lid);
+      if (ln && el.dataset.action === "og-evd-field") { ln[el.dataset.f] = el.value.trim(); render(); return; }
+      if (ln && el.value) { const [k, id] = el.value.split(":"); const r = ogResolveLink(getCurrentReportEntry(), { kind: k, refId: id }); ln.kind = k; ln.refId = id; ln.refName = r.title || ""; delete ln.text; delete ln.url; }
       render(); return;
     }
     if (el.dataset && el.dataset.ogTarget) {
