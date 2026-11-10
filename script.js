@@ -162,9 +162,31 @@ function indicatorPrevBaseline(unitId, report, name) {
   });
   return best;
 }
+// مستهدف المؤشر لكل وحدة: theme.indUnitTargets[defId][unitId] = {d: افتراضي, y: {عام}, t: {"عام|فترة"}}؛ يبقى منفصلًا تمامًا عن مستهدف الهدف التشغيلي
+function indUT(defId, unitId) {
+  const raw = ((((S.siteSettings || {}).theme || {}).indUnitTargets) || {})[defId]; const v = raw && raw[unitId];
+  if (v == null || v === "") return { d: null, y: {}, t: {} };
+  return typeof v === "object" ? { d: v.d != null && v.d !== "" ? v.d : null, y: v.y || {}, t: v.t || {} } : { d: v, y: {}, t: {} };
+}
+function indTargetFor(def, unitId, year, term) {
+  if (!def) return ""; const u = indUT(def.id, unitId), y = year ? String(year) : "";
+  if (y && term && u.t[y + "|" + term] != null && u.t[y + "|" + term] !== "") return u.t[y + "|" + term];
+  if (y && u.y[y] != null && u.y[y] !== "") return u.y[y];
+  if (u.d != null) return u.d;
+  return def.target != null ? def.target : "";
+}
+// يربط صف المؤشر بسياق تقريره (وحدة/عام/فترة) دون إدخاله في البيانات المحفوظة (خاصية غير قابلة للعدّ)
+function indStampRows(report, unitId) {
+  const rows = report && report.sections && report.sections.kpi && report.sections.kpi.data && report.sections.kpi.data.indicators; if (!rows || !rows.length) return;
+  if (report.__stk === rows && report.__stn === rows.length) return;
+  const t = reportTermInfo(report), parts = String(t.key).split("|"), cx = { unitId, year: t.year || "", term: parts[2] || "" };
+  rows.forEach((r) => { if (r && typeof r === "object") try { Object.defineProperty(r, "__ctx", { value: cx, enumerable: false, configurable: true, writable: true }); } catch (e) {} });
+  try { Object.defineProperty(report, "__stk", { value: rows, enumerable: false, configurable: true, writable: true }); Object.defineProperty(report, "__stn", { value: rows.length, enumerable: false, configurable: true, writable: true }); } catch (e) {}
+}
 function resolveIndicatorRow(row, def) {
+  const cx = row && row.__ctx;
   return { ...row, category: def?.category || "", direction: def?.direction || "", nature: def?.nature || "",
-    frequency: def?.frequency || "", unit: def?.unit || "", target: def?.target ?? "",
+    frequency: def?.frequency || "", unit: def?.unit || "", target: cx && def ? indTargetFor(def, cx.unitId, cx.year, cx.term) : (def?.target ?? ""),
     dataSource: def?.dataSource || "", calculationMethod: def?.calculationMethod || "" };
 }
 function computeResponseRate(sampleSize, respondentsCount) {
@@ -1229,7 +1251,8 @@ const dataStore = {
 /* ---- Multi-report helpers (operate on S.reports[unitId] = array) ---------- */
 function ensureUnitReportsLoaded(unitId) {
   if (!S.reports[unitId]) S.reports[unitId] = dataStore.getReports(unitId);
-  return S.reports[unitId];
+  const L = S.reports[unitId]; for (let i = 0; i < L.length; i++) indStampRows(L[i], unitId);
+  return L;
 }
 function latestReportForUnit(unitId) {
   const list = ensureUnitReportsLoaded(unitId).slice().sort((a, b) => (a.createdAt || 0) - (b.createdAt || 0));
@@ -3266,6 +3289,7 @@ const DASH_STD_BLOCKS = [
   { key: "bars", label: "نسبة الإنجاز حسب الوحدة", not: ["unit"] },
   { key: "indBoard", label: "مؤشرات الأداء" },
   { key: "goalsBoard", label: "لوحة الأهداف التشغيلية (رسم / جدول / بطاقات)" },
+  { key: "indBoard", label: "مؤشرات الأداء (تفصيلي ومقارنة)" },
   { key: "goals", label: "جدول الأهداف التشغيلية" },
   { key: "trend", label: "رسم تطور التحقق فترة بعد فترة" },
   { key: "unitsCmp", label: "مقارنة الوحدات", not: ["unit"] },
@@ -3307,6 +3331,7 @@ const DASH_EX_BLOCKS = [
   { key: "exHeat", label: "خريطة الأداء (المؤشرات)" },
   { key: "exHeatGoal", label: "خريطة تحقق الأهداف" },
   { key: "goalsBoard", label: "لوحة الأهداف التشغيلية (رسم / جدول / بطاقات)" },
+  { key: "indBoard", label: "مؤشرات الأداء (تفصيلي ومقارنة)" },
   { key: "indBoard", label: "مؤشرات الأداء" },
   { key: "trend", label: "رسم تطور التحقق فترة بعد فترة" },
   { key: "exBenef", label: "المستفيدون حسب نوع العمل" },
@@ -4270,7 +4295,7 @@ function indicatorBoardItems(entries, multi) {
   const out = [], num = (v) => { const n = Number(String(v == null ? "" : v).replace(/[٠-٩]/g, (c) => "٠١٢٣٤٥٦٧٨٩".indexOf(c)).replace(/[٪%,٬\s]/g, "")); return isFinite(n) && String(v == null ? "" : v).trim() !== "" ? n : null; };
   (entries || []).forEach(({ unit, report }) => { const rows = (report && report.sections && report.sections.kpi && report.sections.kpi.data && report.sections.kpi.data.indicators) || [];
     rows.forEach((r) => { if (!r || !r.name) return; let def = null, rs = r, bs = null; try { def = findIndicatorDef(r.name); rs = resolveIndicatorRow(r, def); const pb = unit && unit.id ? indicatorPrevBaseline(unit.id, report, r.name) : null; bs = pb ? pb.value : (r.baseline !== "" && r.baseline != null ? r.baseline : null); } catch (e) {}
-      const tg = num(def && def.target), ac = num(r.actual); if (ac == null) return;
+      const tg = num(rs && rs.target !== "" && rs.target != null ? rs.target : (def && def.target)), ac = num(r.actual); if (ac == null) return;
       if (out.some((q) => q.unitName === (unit && unit.name) && q.rawName === r.name)) return; out.push({ rawName: r.name, unitName: unit && unit.name, title: r.name + (multi && unit ? " · " + unit.name : ""), num: ac, target: tg, base: num(bs), unit: /%|٪|نسبة/.test(String((def && (def.unit || def.name)) || r.name)) ? "%" : "", better: indBetter(def && def.direction), cum: !!(def && def.nature === "تراكمي"), dev: r.deviationReason, ct: Array.isArray(r.causeType) ? r.causeType.join("، ") : r.causeType, act: r.correctiveAction, who: r.responsiblePerson }); }); });
   return out;
 }
@@ -4668,7 +4693,12 @@ function gbUnitsDetailHtml(r) {
   return `<div style="margin-top:8px;border-top:1px dashed ${BORDER};padding-top:8px;">${r.units.map((x) => `<div style="padding:7px 0;border-bottom:1px solid #f1e9eb;">
     <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;"><b style="font-size:12.5px;">${esc(x.unit.name)}</b>${badgeHtml(GOAL_STATUS_LABEL[x.key], GB_COLOR[x.group], "#f6f2f3")}
       <span class="hint" style="margin:0;">المستهدف ${x.target != null ? x.target + "٪" : "—"} · المتحقق ${x.pct != null ? x.pct + "٪" : "—"}${x.col ? " · " + esc(x.col.label) : ""}</span></div>
-    <div style="margin-top:4px;padding-inline-start:10px;">${gbEvidenceHtml(x)}</div></div>`).join("")}</div>`;
+    <div style="margin-top:4px;padding-inline-start:10px;">${gbEvidenceHtml(x)}</div>${gbLinkedIndHtml(r, x)}</div>`).join("")}</div>`;
+}
+function gbLinkedIndHtml(r, x) {
+  if (!r.def || !x.report) return "";
+  const its = dashIndRows(x.report).filter((i) => (i.goalIds || []).indexOf(r.def.id) !== -1).map((i) => ibItem(x.unit, x.report, i)); if (!its.length) return "";
+  return `<div style="margin-top:6px;padding-inline-start:10px;"><div class="hint" style="margin:0 0 3px;">مؤشرات الأداء المرتبطة بالهدف (مستهدفها مستقل عن مستهدف الهدف):</div>${its.map((i) => { const ratio = i.st.ratio != null && isFinite(i.st.ratio) ? Math.round(i.st.ratio * 100) + "٪" : "—"; return `<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;font-size:12px;padding:2px 0;"><b>${esc(i.row.name)}</b><span class="hint" style="margin:0;">المستهدف ${i.rs.target !== "" && i.rs.target != null ? esc(i.rs.target) : "—"} · المتحقق ${i.row.actual !== "" && i.row.actual != null ? esc(i.row.actual) : "—"} · ${ratio}</span>${badgeHtml(i.st.label, i.st.color, i.st.bg)}</div>`; }).join("")}</div>`;
 }
 function gbBarHtml(r) {
   const a = r.avg == null ? 0 : Math.min(100, r.avg), c = GB_COLOR[r.group];
@@ -4771,6 +4801,63 @@ function gbColTarget(sa, gs, row, keys) {
   return dashAvg(vals);
 }
 // سلسلة موسّعة لكل الأعوام (مستقلة عن فلتر السنة العام)، تُحسب مرة لكل رسم
+const IB_CMP = [["none", "بدون مقارنة"], ["terms", "الفترات داخل العام"], ["sameterm", "الفترة نفسها عبر الأعوام"], ["years", "الأعوام"], ["pair", "فترتان محددتان"]];
+function ibState() { return S.ui.ib || (S.ui.ib = { unit: "", cmp: "none" }); }
+function ibItem(u, report, row) {
+  const def = findIndicatorDef(row.name), rs = resolveIndicatorRow(row, def), st = computeIndicatorStatus(rs), dev = computeDeviationAmount(rs);
+  return { unit: u, report, row, def, rs, st, dev, progs: indLinkedPrograms(rptProgramList(report), row).map((p) => String(p.name).trim()), goals: indLinkedGoalDefs(row).map((g) => g.name) };
+}
+// لوحة مؤشرات الأداء التفصيلية: مستقلة عن لوحة الأهداف (لا تدمج مستهدف المؤشر بمستهدف الهدف)
+function dashIndDetailHtml(kind, series) {
+  if (dashHidden(kind, "indBoard")) return "";
+  S.ui._gbUnits = series.units || [];
+  const ib = ibState(), units = (series.units || []).filter((u) => !ib.unit || u.id === ib.unit);
+  const sel = (k, opts, cur) => `<select class="input" style="width:auto;padding:4px 10px;font-size:12px;" data-action="ib-sel" data-k="${k}">${opts.map(([v, l]) => `<option value="${esc(v)}" ${String(cur) === String(v) ? "selected" : ""}>${esc(l)}</option>`).join("")}</select>`;
+  const lbl = (t) => `<span class="hint" style="margin:0;">${t}</span>`;
+  const sa = dashSeries(series.units || [], "all"), cc = gbCmpCols(sa, ib), { yrs, terms } = cc, pm = ib.cmp;
+  const ctl = [sel("unit", [["", "كل الوحدات"]].concat((series.units || []).map((u) => [u.id, u.name])), ib.unit), sel("cmp", IB_CMP, ib.cmp)];
+  const yrBtn = (y) => { const on = !ib.yrs || !ib.yrs.length || ib.yrs.indexOf(String(y)) !== -1; return `<button type="button" class="pill-btn ${on ? "pill-primary" : "pill-ghost"}" style="padding:4px 12px;font-size:11.5px;" data-action="ib-yr" data-v="${y}">${y}هـ</button>`; };
+  if (pm === "terms") ctl.push(lbl("العام:"), sel("yr", yrs.map((y) => [y, y + "هـ"]), Number(ib.yr) || yrs[yrs.length - 1]));
+  if (pm === "sameterm" && terms.length) ctl.push(lbl("الفترة:"), sel("term", terms.map((t) => [t, t]), ib.term || terms[0]), lbl("الأعوام:"), ...yrs.map(yrBtn));
+  if (pm === "years") { if (terms.length) ctl.push(lbl("الفترة:"), sel("term", [["", "كل الفترات (متوسط العام)"]].concat(terms.map((t) => [t, t])), ib.term || "")); ctl.push(lbl("الأعوام:"), ...yrs.map(yrBtn)); }
+  if (pm === "pair") { const po = cc.periodOpts.map((o) => [o.v, o.label]); ctl.push(lbl("الأولى:"), sel("pA", po, cc.pA), lbl("الثانية:"), sel("pB", po, cc.pB)); }
+  const controls = `<div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-bottom:10px;">${ctl.join("")}</div>`;
+  const none = (m) => `<div class="hint" style="margin-top:10px;">${esc(m)}</div>`;
+  const num = (v) => { const n = Number(v); return v === "" || v == null || isNaN(n) ? null : n; };
+  // ---------- المقارنة ----------
+  if (pm !== "none") {
+    if (cc.reason) return dashCard("مؤشرات الأداء (تفصيلي)", "", controls + none(cc.reason));
+    if (cc.cols.length < 2) return dashCard("مؤشرات الأداء (تفصيلي)", "", controls + none("لا تتوفر فترات كافية لهذه المقارنة."));
+    const map = {};
+    units.forEach((u) => cc.cols.forEach((c, ci) => {
+      const per = {}; c.keys.forEach((k) => { const rp = (sa.byUnit[u.id] || {})[k]; if (rp) dashIndRows(rp).forEach((r) => { const it = ibItem(u, rp, r), id = String(r.name).trim(); (per[id] || (per[id] = [])).push(it); }); });
+      Object.keys(per).forEach((n) => { const its = per[n], key = n + "|" + u.id, e = map[key] || (map[key] = { name: n, unit: u, def: its[0].def, cells: cc.cols.map(() => null), cum: its[0].rs.nature === "تراكمي" });
+        const tg = its.map((i) => num(i.rs.target)).filter((v) => v != null), ac = its.map((i) => num(i.row.actual)).filter((v) => v != null);
+        const avg = (a) => a.length ? Math.round(a.reduce((t, v) => t + v, 0) / a.length * 100) / 100 : null;
+        const target = avg(tg), actual = e.cum && ac.length ? ac[ac.length - 1] : avg(ac);
+        const st = computeIndicatorStatus({ ...its[0].rs, target: target == null ? "" : target, actual: actual == null ? "" : actual });
+        e.cells[ci] = { target, actual, ratio: st.ratio, st }; });
+    }));
+    const rows = Object.values(map).filter((e) => e.cells.filter((c) => c && c.actual != null).length);
+    const live = cc.cols.map((c, ci) => ({ c, ci })).filter((x) => rows.some((e) => e.cells[x.ci] && e.cells[x.ci].actual != null));
+    if (live.length < 2) return dashCard("مؤشرات الأداء (تفصيلي)", "", controls + none("لا تتوفر بيانات متحقق كافية للمقارنة في الفترات المختارة."));
+    const cnt = { up: 0, down: 0, same: 0, none: 0 };
+    const body = rows.map((e) => { const rs_ = live.map((x) => e.cells[x.ci]), have = rs_.filter((c) => c && c.ratio != null && isFinite(c.ratio)); let d = "none"; if (have.length >= 2) { const f = have[0].ratio, l = have[have.length - 1].ratio; d = l > f + 1e-9 ? "up" : l < f - 1e-9 ? "down" : "same"; } cnt[d]++;
+      const DL = { up: ["▲ تحسّن", GREEN], down: ["▼ تراجع", DANGER], same: ["= ثبات", SUBTLE], none: ["بيانات غير كافية", SUBTLE] };
+      const lastC = [...rs_].reverse().find((c) => c && c.actual != null);
+      return `<tr><td style="font-weight:700">${esc(e.name)}</td><td>${esc(e.unit.name)}</td>${rs_.map((c) => `<td style="text-align:center">${c && c.actual != null ? `<span style="color:${SUBTLE};font-size:11.5px;">${c.target != null ? c.target : "بلا مستهدف"}</span> · <b>${c.actual}</b>` : "—"}</td>`).join("")}<td style="text-align:center">${lastC && lastC.ratio != null && isFinite(lastC.ratio) ? Math.round(lastC.ratio * 100) + "٪" : "—"}</td><td style="text-align:center"><b style="color:${DL[d][1]};font-size:11.5px;">${DL[d][0]}</b></td></tr>`; }).join("");
+    const stat = (n, l, c) => `<div style="flex:1;min-width:100px;background:#faf5f3;border-radius:14px;padding:10px 12px;"><div style="font-size:22px;font-weight:800;color:${c || ROSE};line-height:1.2;">${n}</div><div style="font-size:11.5px;color:${SUBTLE};margin-top:2px;">${l}</div></div>`;
+    return dashCard("مؤشرات الأداء (تفصيلي)", "مقارنة المستهدف والمتحقق لكل مؤشر في كل فترة · مستهدف كل فترة بجانب المتحقق", controls + `<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px;">${stat(rows.length, "مؤشر")}${stat(cnt.up, "تحسّن", GREEN)}${stat(cnt.down, "تراجع", DANGER)}${stat(cnt.same, "ثبات", SUBTLE)}${cnt.none ? stat(cnt.none, "بيانات غير كافية", SUBTLE) : ""}</div><div class="table-wrap" style="overflow-x:auto;"><table class="prs-table" style="min-width:620px;"><thead><tr><th>المؤشر</th><th>الوحدة</th>${live.map((x) => `<th style="text-align:center">${esc(x.c.label)}<div class="hint" style="margin:0;color:inherit;opacity:.85;">المستهدف · المتحقق</div></th>`).join("")}<th style="text-align:center">نسبة الإنجاز (آخر فترة)</th><th style="text-align:center">الاتجاه</th></tr></thead><tbody>${body}</tbody></table></div><div class="hint" style="margin-top:6px;">الاتجاه يراعي اتجاه المؤشر (تصاعدي/تنازلي) · المؤشر التراكمي يؤخذ آخر متحقق في العام · الفراغ لا يُحسب صفرًا.</div>`);
+  }
+  // ---------- آخر فترة لكل وحدة ----------
+  const items = [];
+  units.forEach((u) => { const l = dashUnitLatest(series, u.id); if (l) dashIndRows(l.report).forEach((r) => items.push({ ...ibItem(u, l.report, r), col: l.col })); });
+  if (!items.length) return dashCard("مؤشرات الأداء (تفصيلي)", "", controls + none("لا توجد مؤشرات مُدخلة في التقارير المختارة."));
+  const cnt = {}; items.forEach((i) => { cnt[i.st.key] = (cnt[i.st.key] || 0) + 1; });
+  const body = items.map((i) => { const ratio = i.st.ratio != null && isFinite(i.st.ratio) ? Math.round(i.st.ratio * 100) : null, tg = i.rs.target;
+    return `<tr><td style="font-weight:700">${esc(i.row.name)}<div class="hint" style="margin:0;">${esc(i.col.label)}</div></td><td>${esc(i.unit.name)}</td><td>${i.progs.length ? i.progs.map((n) => badgeHtml(n, "#5a4a8a", "#efeaf8")).join(" ") : `<span style="color:${SUBTLE}">—</span>`}</td><td>${i.goals.length ? i.goals.map((n) => badgeHtml(n, GREEN, GREEN_BG)).join(" ") : `<span style="color:${SUBTLE}">—</span>`}</td><td style="text-align:center">${tg !== "" && tg != null ? esc(tg) : "—"}</td><td style="text-align:center"><b>${i.row.actual !== "" && i.row.actual != null ? esc(i.row.actual) : "—"}</b></td><td style="text-align:center">${ratio == null ? "—" : `<b style="color:${i.st.color}">${ratio}٪</b>`}</td><td style="text-align:center">${i.dev != null && i.st.key !== "achieved" ? esc(Math.round(i.dev * 100) / 100) : "—"}</td><td style="text-align:center">${badgeHtml(i.st.label, i.st.color, i.st.bg)}</td></tr>`; }).join("");
+  return dashCard("مؤشرات الأداء (تفصيلي)", "آخر فترة لكل وحدة · المستهدف الخاص بالوحدة والفترة", controls + `<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px;">${["achieved", "close", "needsAction", "struggling", "noData"].filter((k) => cnt[k]).map((k) => `<span style="font-size:12px;">${computeIndicatorStatus(k === "noData" ? {} : { target: 1, actual: k === "achieved" ? 1 : k === "close" ? 0.95 : k === "needsAction" ? 0.8 : 0.2 }).emoji} ${({ achieved: "متحقق", close: "قريب", needsAction: "يحتاج تدخلاً", struggling: "متعثر", noData: "بلا بيانات" })[k]}: <b>${cnt[k]}</b></span>`).join("")}</div><div class="table-wrap" style="overflow-x:auto;"><table class="prs-table" style="min-width:760px;"><thead><tr><th>المؤشر</th><th>الوحدة</th><th>البرنامج</th><th>الهدف التشغيلي</th><th style="text-align:center">المستهدف</th><th style="text-align:center">المتحقق</th><th style="text-align:center">نسبة الإنجاز</th><th style="text-align:center">الانحراف</th><th style="text-align:center">الحالة</th></tr></thead><tbody>${body}</tbody></table></div>`);
+}
 function gbCmpAll(series) { return dashSeries(series.units || [], "all"); }
 function gbCmpHtml(series, rows) { const b = gbCmpBuild(series, rows, () => ""); return b.controls + b.html; }
 function dashGoalsBoardHtml(kind, series) {
@@ -4807,7 +4894,7 @@ function dashGoalsBoardHtml(kind, series) {
 }
 // الأجزاء المشتركة الجديدة بالترتيب (لوحة الوحدة/القسم/المكتب)
 function dashPeriodBlocksHtml(kind, series) {
-  return (kind === "admin" ? dashB(kind, "goalsBoard", dashGoalsBoardHtml(kind, series)) : "") + dashB(kind, "trend", dashTrendHtml(kind, series)) + dashB(kind, "unitsCmp", dashUnitsCmpHtml(kind, series)) + dashB(kind, "indMatrix", dashIndMatrixHtml(kind, series)) + dashB(kind, "goalMatrix", dashGoalMatrixHtml(kind, series))
+  return (kind === "admin" ? dashB(kind, "goalsBoard", dashGoalsBoardHtml(kind, series)) + dashB(kind, "indBoard", dashIndDetailHtml(kind, series)) : "") + dashB(kind, "trend", dashTrendHtml(kind, series)) + dashB(kind, "unitsCmp", dashUnitsCmpHtml(kind, series)) + dashB(kind, "indMatrix", dashIndMatrixHtml(kind, series)) + dashB(kind, "goalMatrix", dashGoalMatrixHtml(kind, series))
     + dashB(kind, "followUp", dashFollowUpHtml(kind, series)) + dashB(kind, "highlights", dashHighlightsHtml(kind, series));
 }
 
@@ -4905,6 +4992,7 @@ function exBlocksInner(kind, units, extra) {
     html += "\u0003";
   }
   html += dashB(kind, "goalsBoard", dashGoalsBoardHtml(kind, series));
+  html += dashB(kind, "indBoard", dashIndDetailHtml(kind, series));
   // مقارنة الأبناء + التطور
   const childStats = sc.children.map((c) => ({ ...c,
     ind: dashAvg(c.list.map((u) => latestPct(u, dashReportIndAvg))), goal: dashAvg(c.list.map((u) => latestPct(u, dashReportGoalAvg))) }));
@@ -11135,6 +11223,35 @@ function sharedIndManageHtml() {
       <div style="margin-top:10px;">${pillBtn("إضافة المؤشر المشترك", { action: "shind-add", disabled: !f.indName || f.units.length < 2 })}</div>
     </div>`);
 }
+function indPtSet(defId, uid, y, t, v) {
+  saveSiteTheme((th) => { const all = { ...((th || {}).indUnitTargets || {}) }; const m = { ...(all[defId] || {}) }; const cur = indUT(defId, uid); const o = { d: cur.d, y: { ...cur.y }, t: { ...cur.t } };
+    if (t) { if (v === "") delete o.t[y + "|" + t]; else o.t[y + "|" + t] = v; } else { if (v === "") delete o.y[y]; else o.y[y] = v; }
+    if (o.d == null && !Object.keys(o.y).length && !Object.keys(o.t).length) delete m[uid]; else m[uid] = o;
+    if (Object.keys(m).length) all[defId] = m; else delete all[defId]; return { indUnitTargets: all }; });
+}
+// قبل تغيير الافتراضي/العام: تثبيت المستهدف الفعلي لأعوام الوحدة التي لها تقارير، فلا يتغير التاريخ
+function indFreeze(all, defId, unitIds) {
+  const def = (S.indicatorDefinitions || []).find((x) => x.id === defId); if (!def) return all;
+  const cur = { ...(all[defId] || {}) };
+  unitIds.forEach((uid) => { const u = indUT(defId, uid), years = new Set(); ensureUnitReportsLoaded(uid).forEach((r) => { const y = reportHijriYearNum(r); if (y) years.add(String(y)); });
+    const ny = { ...u.y }; let ch = false;
+    years.forEach((y) => { if (ny[y] == null || ny[y] === "") { const hasT = Object.keys(u.t).some((k) => k.indexOf(y + "|") === 0); const e = indTargetFor(def, uid, y, ""); if (e != null && e !== "" && !hasT) { ny[y] = e; ch = true; } } });
+    if (ch) cur[uid] = { d: u.d, y: ny, t: u.t }; });
+  if (Object.keys(cur).length) all[defId] = cur; return all;
+}
+function indTermOptions(def) { const f = String(def.frequency || ""); if (f === "شهري") return MONTHS; if (f === "فصلي" || f === "ربع سنوي" || f === "نصف سنوي") return TERM_OPTIONS_BASE; return []; }
+function indUnitTargetsHtml(def) {
+  const sc = scopeOf("ind", def.id), ids = sc.length ? sc : (S.units || []).filter((u) => u.status === "active" && u.role !== "admin" && u.role !== "executive").map((u) => u.id);
+  if (!ids.length) return "";
+  const ys = ogKnownYears(ids), open = S.ui.indTgOpen || (S.ui.indTgOpen = {}), nw = S.ui.indTgNew || (S.ui.indTgNew = {}), tops = indTermOptions(def), sm = "padding:3px 6px;font-size:12px;";
+  const card = (u_) => {
+    const u = (S.units || []).find((x) => x.id === u_), ut = indUT(def.id, u_), k = def.id + "|" + u_;
+    const per = [...Object.keys(ut.y).map((y) => ({ y, t: "", v: ut.y[y] })), ...Object.keys(ut.t).map((kk) => { const i = kk.indexOf("|"); return { y: kk.slice(0, i), t: kk.slice(i + 1), v: ut.t[kk] }; })].sort((a, b) => Number(b.y) - Number(a.y) || String(a.t).localeCompare(String(b.t)));
+    const n = nw[k] || (nw[k] = { y: String(ys[0] || ""), t: "", v: "" });
+    return `<div style="border:1px solid ${BORDER};border-radius:12px;padding:6px 8px;min-width:230px;"><label style="display:flex;align-items:center;gap:6px;"><b>${esc(u ? u.name : u_)}</b><span class="hint" style="margin:0;">الافتراضي</span><input type="number" class="input" inputmode="decimal" data-ind-utarget="${esc(k)}" value="${esc(ut.d != null ? ut.d : "")}" placeholder="${esc(def.target !== "" && def.target != null ? def.target : "—")}" style="width:72px;${sm}" /></label><div style="margin-top:4px;"><button type="button" class="pill-btn pill-ghost" style="padding:2px 10px;font-size:11px;" data-action="ind-pt-toggle" data-v="${esc(k)}">${open[k] ? "إخفاء" : "مستهدفات الأعوام" + (tops.length ? " والفترات" : "")}${per.length ? " (" + per.length + ")" : ""}</button></div>${open[k] ? `<div style="margin-top:6px;display:flex;flex-direction:column;gap:4px;">${per.map((x) => `<div style="display:flex;align-items:center;gap:6px;"><span style="min-width:110px;">${esc(x.y)}هـ${x.t ? " · " + esc(x.t) : " · كل العام"}</span><input type="number" class="input" inputmode="decimal" data-ind-ptarget="${esc(k)}|${esc(x.y)}|${esc(x.t)}" value="${esc(x.v)}" style="width:72px;${sm}" /><button type="button" class="pill-btn pill-ghost" style="padding:2px 8px;font-size:11px;" data-action="ind-pt-del" data-v="${esc(k)}|${esc(x.y)}|${esc(x.t)}">حذف</button></div>`).join("")}<div style="display:flex;align-items:center;gap:4px;flex-wrap:wrap;border-top:1px dashed ${BORDER};padding-top:6px;"><select class="input" style="width:auto;${sm}" data-ind-pnew="${esc(k)}|y">${ys.map((y) => `<option value="${y}" ${String(y) === n.y ? "selected" : ""}>${y}هـ</option>`).join("")}</select>${tops.length ? `<select class="input" style="width:auto;${sm}" data-ind-pnew="${esc(k)}|t"><option value="">كل العام</option>${tops.map((t) => `<option value="${esc(t)}" ${t === n.t ? "selected" : ""}>${esc(t)}</option>`).join("")}</select>` : ""}<input type="number" class="input" inputmode="decimal" placeholder="المستهدف" data-ind-pnew="${esc(k)}|v" value="${esc(n.v)}" style="width:84px;${sm}" /><button type="button" class="pill-btn pill-primary" style="padding:3px 12px;font-size:11.5px;" data-action="ind-pt-add" data-v="${esc(k)}">إضافة</button></div><div class="hint" style="margin:0;">${tops.length ? "الدورية: " + esc(def.frequency) + " — يمكن مستهدف فترة أو عام كامل. " : "الدورية: " + esc(def.frequency || "غير محددة") + " — مستهدف عام كامل فقط. "}لا يغيّر التقارير السابقة.</div></div>` : ""}</div>`;
+  };
+  return `<div style="flex-basis:100%;font-size:12px;margin-top:6px;"><div class="hint" style="margin:0 0 4px;">مستهدف المؤشر لكل وحدة (منفصل عن مستهدف الأهداف). الافتراضي يسري على الفترات التي ليس لها مستهدف خاص؛ فارغ = مستهدف التعريف${def.target !== "" && def.target != null ? " (" + esc(def.target) + ")" : ""}:</div><div style="display:flex;gap:8px;flex-wrap:wrap;">${ids.map(card).join("")}</div></div>`;
+}
 function indicatorDefRowHtml(def) {
   const editing = S.ui.editingIndicatorId === def.id;
   const confirming = S.ui.confirmDeleteIndicatorId === def.id;
@@ -11158,6 +11275,7 @@ function indicatorDefRowHtml(def) {
     <button type="button" data-action="start-indicator-edit" data-id="${esc(def.id)}" style="font-family:inherit;min-height:38px;padding:0 18px;border-radius:999px;border:none;cursor:pointer;font-weight:800;background:#f4e2e5;color:#7a2a3a;">تعديل</button>
     <button type="button" data-action="confirm-delete-indicator" data-id="${esc(def.id)}" title="حذف" aria-label="حذف" style="width:38px;height:38px;border-radius:50%;border:none;cursor:pointer;background:#f4e2e5;display:flex;align-items:center;justify-content:center;">${iconTrash(15, "#b04060")}</button>
     ${scopePanelHtml("ind", def.id)}
+    ${S.isAdmin ? indUnitTargetsHtml(def) : ""}
   </div>`;
 }
 
@@ -12315,12 +12433,14 @@ function indicatorCardHtml(row, index, def, report, isOpen, d) {
           ${def.category ? badgeHtml(def.category, ROSE, DANGER_BG) : ""}
           ${def.direction ? badgeHtml(def.direction, BLUE, BLUE_BG) : ""}
           ${def.frequency ? badgeHtml(def.frequency, "#8a6a2f", GOLD_BG) : ""}
+          ${indLinkedPrograms(rptProgramList(report), row).map((p) => badgeHtml("برنامج: " + String(p.name).trim(), "#5a4a8a", "#efeaf8")).join("")}
+          ${indLinkedGoalDefs(row).map((g) => badgeHtml("هدف: " + g.name, GREEN, GREEN_BG)).join("")}
         </div>
       </div>
     </div>
     <div style="display:flex;gap:8px;margin-bottom:12px;">
       <div class="num-box"><div class="num-label">خط الأساس</div><div class="num-value">${baseline != null ? esc(baseline) : "—"}</div></div>
-      <div class="num-box highlight"><div class="num-label">المستهدف</div><div class="num-value">${def.target !== "" && def.target != null ? esc(def.target) : "—"}</div></div>
+      <div class="num-box highlight"><div class="num-label">المستهدف</div><div class="num-value">${resolved.target !== "" && resolved.target != null ? esc(resolved.target) : "—"}</div></div>
       <div class="num-box"><div class="num-label">المتحقق</div><div class="num-value">${row.actual !== "" && row.actual != null ? esc(row.actual) : "—"}</div></div>
     </div>
     <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:14px;flex-wrap:wrap;">
@@ -12339,7 +12459,7 @@ function indicatorCardHtml(row, index, def, report, isOpen, d) {
       ${row.name ? fieldWrap("خط الأساس", false, prevBase
         ? `<div class="readonly-box">${esc(prevBase.value)}</div><div class="hint">من المتحقق في تقرير «${esc(prevBase.report.label || "سابق")}» المعتمد للوحدة.</div>`
         : inp("indicators", row.id, "baseline", row.baseline, "اختياري — اتركيه فارغًا إذا ما فيه قيمة سابقة", "number")) : ""}
-      ${fieldWrap("البرنامج المرتبط (اختياري)", false, sel("indicators", row.id, "relatedProgram", row.relatedProgram, rptProgramNames(report), "بدون ربط") + `<div class="hint">يظهر هذا المؤشر داخل بطاقة البرنامج في التقرير.</div>`)}
+      ${indLinksFieldsHtml(row, report)}
       ${fieldWrap("المتحقق", true, inp("indicators", row.id, "actual", row.actual, "0", "number") + `<div style="font-size:10px;color:#c9863a;margin-top:4px;">🔧 لا يوجد مصدر بيانات مربوط — يحتاج إدخالًا يدويًا</div>`)}
     </div>` : ""}
     ${showDetails ? `<div style="margin-top:14px;padding-top:14px;border-top:1px dashed ${BORDER}">
@@ -12379,6 +12499,7 @@ function newIndicatorInlineFormHtml(rowId) {
 }
 function kpiSectionHtml(d, report) {
   const indicators = d.indicators || [];
+  { const t_ = reportTermInfo(report || getCurrentReportEntry() || {}), cx_ = { unitId: S.currentUnitId, year: t_.year || "", term: String(t_.key).split("|")[2] || "" }; indicators.forEach((r_) => { if (r_ && typeof r_ === "object") try { Object.defineProperty(r_, "__ctx", { value: cx_, enumerable: false, configurable: true, writable: true }); } catch (e) {} }); }
   // نفس الطيّ التلقائي: مؤشر واحد يبقى مفتوح دائمًا، وأي مؤشر بلا اسم بعد (لسا ما
   // اختير) يبقى مفتوح إجباريًا بغض النظر عن حالة الطيّ (ما فيه شيء يُطوى له أصلًا).
   const expandedId = schemaExpandedItemId("indicators", indicators);
@@ -14131,6 +14252,33 @@ function shapeBlocksEditorInner(d, sectionId) {
   return `<div class="subhead" style="margin-top:14px;">الأشكال والرسوم</div>${rows}`;
 }
 
+// ربط المؤشر بالبرامج والأهداف بالمعرّفات: row.programIds[] (معرّفات عناصر قسم البرامج) و row.goalIds[] (معرّفات الأهداف التشغيلية)
+// relatedProgram (اسم أول برنامج) يبقى متزامنًا للتوافق مع التقارير السابقة وأي عرض قديم.
+function rptProgramList(report) {
+  const r = report || (typeof getCurrentReportEntry === "function" ? getCurrentReportEntry() : null);
+  const list = ((S.sectionDraft && S.activeSectionId === "programs" && S.sectionDraft.programs) || (r && r.sections && r.sections.programs && r.sections.programs.data && r.sections.programs.data.programs) || []);
+  return list.filter((p) => p && (p.name || "").trim());
+}
+function indLinkedPrograms(progs, row) {
+  if (row && Array.isArray(row.programIds) && row.programIds.length) return progs.filter((p) => row.programIds.indexOf(p.id) !== -1);
+  const n = String((row && row.relatedProgram) || "").trim();
+  return n ? progs.filter((p) => String(p.name || "").trim() === n) : [];
+}
+function indLinkedGoalDefs(row) { const ids = (row && row.goalIds) || []; return ids.map((id) => (S.goalsDefinitions.operational || []).find((g) => g.id === id)).filter(Boolean); }
+function indLinkToggle(row, kind, id, progs) {
+  if (kind === "goal") { const a = (row.goalIds || []).slice(); const i = a.indexOf(id); if (i >= 0) a.splice(i, 1); else a.push(id); row.goalIds = a; return; }
+  let a = Array.isArray(row.programIds) && row.programIds.length ? row.programIds.slice() : indLinkedPrograms(progs, row).map((p) => p.id);
+  const i = a.indexOf(id); if (i >= 0) a.splice(i, 1); else a.push(id);
+  row.programIds = a; const first = progs.find((p) => p.id === a[0]); row.relatedProgram = first ? String(first.name).trim() : "";
+}
+function indLinksFieldsHtml(row, report) {
+  const progs = rptProgramList(report), lp = indLinkedPrograms(progs, row).map((p) => p.id), lg = (row.goalIds || []);
+  const chip = (kind, id, label, on) => `<button type="button" class="pill-btn ${on ? "pill-primary" : "pill-ghost"}" style="padding:4px 12px;font-size:12px;" data-action="ind-link-toggle" data-id="${esc(row.id)}" data-kind="${kind}" data-v="${esc(id)}">${on ? "✓ " : ""}${esc(label)}</button>`;
+  const goals = (S.goalsDefinitions.operational || []).filter((o) => scopeAllows("og", o.id, S.currentUnitId) || lg.indexOf(o.id) !== -1);
+  const missing = lg.filter((id) => !(S.goalsDefinitions.operational || []).some((g) => g.id === id)).length;
+  return fieldWrap("البرنامج المرتبط (اختياري)", false, progs.length ? `<div style="display:flex;gap:6px;flex-wrap:wrap;">${progs.map((p) => chip("prog", p.id, String(p.name).trim(), lp.indexOf(p.id) !== -1)).join("")}</div><div class="hint">اختاري برنامجًا أو أكثر، أو اتركيه بلا ربط. يظهر المؤشر داخل بطاقة كل برنامج مختار.</div>` : `<div class="hint">لا توجد برامج في قسم الأعمال والبرامج بعد.</div>`)
+    + fieldWrap("الهدف التشغيلي المرتبط (اختياري)", false, goals.length ? `<div style="display:flex;gap:6px;flex-wrap:wrap;">${goals.map((g) => chip("goal", g.id, g.name, lg.indexOf(g.id) !== -1)).join("")}</div><div class="hint">اختاري هدفًا أو أكثر، أو اتركيه بلا ربط. الربط لا يغيّر مستهدف الهدف ولا نسبة تحقق الهدف${missing ? ` · ${missing} هدف مربوط لم يعد في القائمة` : ""}.</div>` : `<div class="hint">لا توجد أهداف تشغيلية متاحة لوحدتك.</div>`);
+}
 function rptProgramNames(report) {
   const r = report || (typeof getCurrentReportEntry === "function" ? getCurrentReportEntry() : null);
   const list = ((S.sectionDraft && S.activeSectionId === "programs" && S.sectionDraft.programs) || (r && r.sections && r.sections.programs && r.sections.programs.data && r.sections.programs.data.programs) || []);
@@ -14158,14 +14306,14 @@ function rptMeasureHtml(report) {
   const g = (id) => (sec[id] && sec[id].data) || {};
   const progs = (g("programs").programs || []).filter((p) => (p.name || "").trim());
   const names = progs.map((p) => p.name.trim());
-  const inds = (g("kpi").indicators || []).filter((r) => r.name && r.relatedProgram);
+  const inds = (g("kpi").indicators || []).filter((r) => r.name && (r.relatedProgram || (r.programIds && r.programIds.length)));
   const tools = (g("tools").tools || []).filter((t) => t && (t.name || t.toolType || t.analysis));
   const evs = (g("evidence").evidenceItems || []).filter((it) => it && (it.name || it.fileLink || it.imageData));
   const an = g("analysis");
   const isLinked = (x) => names.includes(String(x.relatedProgram || "").trim());
   const cards = progs.map((p) => {
     const nm = p.name.trim();
-    const pi = inds.filter((r) => String(r.relatedProgram).trim() === nm);
+    const pi = inds.filter((r) => indLinkedPrograms([p], r).length);
     const pt = tools.filter((t) => String(t.relatedProgram || "").trim() === nm);
     const pe = evs.filter((it) => String(it.relatedProgram || "").trim() === nm);
     if (!pi.length && !pt.length && !pe.length) return "";
@@ -14190,11 +14338,11 @@ function svEvdProgramHtml(item) {
 }
 function rptProgramCardsHtml(report) {
   const progs = (report.sections?.programs?.data?.programs || []).filter((p) => (p.name || "").trim());
-  const inds = (report.sections?.kpi?.data?.indicators || []).filter((r) => r.name && r.relatedProgram);
+  const inds = (report.sections?.kpi?.data?.indicators || []).filter((r) => r.name && (r.relatedProgram || (r.programIds && r.programIds.length)));
   const tools = (report.sections?.tools?.data?.tools || []).filter((t) => t.relatedProgram);
   const cards = progs.map((p) => {
     const nm = p.name.trim();
-    const pi = inds.filter((r) => String(r.relatedProgram).trim() === nm), pt = tools.filter((t) => String(t.relatedProgram).trim() === nm);
+    const pi = inds.filter((r) => indLinkedPrograms([p], r).length), pt = tools.filter((t) => String(t.relatedProgram).trim() === nm);
     if (!pi.length && !pt.length) return "";
     const indHtml = pi.map((r) => { const st = computeIndicatorStatus(resolveIndicatorRow(r, findIndicatorDef(r.name))); const pc = dashIndPct(r); return `<div class="rpt-pc-row"><span>${esc(r.name)}</span><b style="color:${st.color}">${pc == null ? esc(st.label) : pc + "٪ — " + esc(st.label)}</b></div>`; }).join("");
     const toolHtml = pt.map((t) => { const rr = svResponseRate(t); return `<div class="rpt-pc-row"><span>${esc(t.name || t.toolType || "أداة")}</span><b>${rr != null && rr !== "" ? "استجابة " + esc(String(rr)) + (String(rr).includes("%") ? "" : "٪") : esc(t.resultQuality || "")}</b></div>`; }).join("");
@@ -15267,6 +15415,15 @@ function attachFormListeners() {
       if (el.value === "__new") b.dataset.action = "rm-new"; else { b.dataset.action = "rm-select"; b.dataset.id = el.value; }
       appEl.appendChild(b); b.click(); b.remove(); return;
     }
+    if (el.dataset && el.dataset.indUtarget) {
+      if (!S.isAdmin) return; const [did_, uid2] = el.dataset.indUtarget.split("|"); const v = el.value === "" ? "" : Number(el.value); if (v !== "" && isNaN(v)) return;
+      saveSiteTheme((th) => { const all = indFreeze({ ...((th || {}).indUnitTargets || {}) }, did_, [uid2]); const m = { ...(all[did_] || {}) }; const cur = indUT(did_, uid2); const o = { d: v === "" ? null : v, y: cur.y, t: cur.t }; if (o.d == null && !Object.keys(o.y).length && !Object.keys(o.t).length) delete m[uid2]; else m[uid2] = o; if (Object.keys(m).length) all[did_] = m; else delete all[did_]; return { indUnitTargets: all }; }); return;
+    }
+    if (el.dataset && el.dataset.indPtarget) {
+      if (!S.isAdmin) return; const a_ = el.dataset.indPtarget.split("|"); const v = el.value === "" ? "" : Number(el.value); if (v !== "" && isNaN(v)) return;
+      indPtSet(a_[0], a_[1], a_[2], a_[3] || "", v); return;
+    }
+    if (el.dataset && el.dataset.indPnew) { const [did_, uid2, f] = el.dataset.indPnew.split("|"), kk = did_ + "|" + uid2; (S.ui.indTgNew || (S.ui.indTgNew = {}))[kk] = { ...((S.ui.indTgNew || {})[kk] || {}), [f]: el.value }; return; }
     if (el.dataset && el.dataset.ogUtarget) {
       if (!S.isAdmin) return; const [gid_, uid2] = el.dataset.ogUtarget.split("|"); const v = el.value === "" ? "" : Math.max(0, Math.min(100, Number(el.value) || 0));
       saveSiteTheme((th) => { const all = ogFreeze({ ...((th || {}).ogUnitTargets || {}) }, gid_, [uid2]); const m = { ...(all[gid_] || {}) }; const cur = ogUT(gid_, uid2); const o = { d: v === "" ? null : v, y: (m[uid2] && m[uid2].y) || cur.y, t: (m[uid2] && m[uid2].t) || cur.t }; if (o.d == null && !Object.keys(o.y).length && !Object.keys(o.t).length) delete m[uid2]; else m[uid2] = (o.d != null && !Object.keys(o.y).length && !Object.keys(o.t).length) ? o.d : o; if (Object.keys(m).length) all[gid_] = m; else delete all[gid_]; return { ogUnitTargets: all }; }); return;
@@ -15277,6 +15434,7 @@ function attachFormListeners() {
     }
     if (el.dataset && el.dataset.ogPnew) { const [gid_, uid2, f] = el.dataset.ogPnew.split("|"), kk = gid_ + "|" + uid2; (S.ui.ogTgNew || (S.ui.ogTgNew = {}))[kk] = { ...((S.ui.ogTgNew || {})[kk] || {}), [f]: el.value }; return;
     }
+    if (el.dataset && el.dataset.action === "ib-sel") { const g_ = ibState(); g_[el.dataset.k] = el.value; render(); return; }
     if (el.dataset && el.dataset.action === "gb-sel") { const g_ = gbState(); if (el.dataset.k === "vd") { const [v_, d_] = el.value.split(":"); g_.view = v_; g_.dir = d_ || "col"; } else g_[el.dataset.k] = el.value; if (el.dataset.k === "term") g_.col = ""; render(); return; }
     if (el.dataset && el.dataset.action === "og-evd-add") {
       const g = findById(getItemList("goals"), el.dataset.gid), og = g && (g.operationalGoals || []).find((x) => x.id === el.dataset.ogid);
@@ -16071,9 +16229,13 @@ function attachClickListener() {
       case "dash-year": S.ui.dashYear = ds.v; render(); break;
       case "dash-pie-scope": S.ui.dashPieScope = ds.v; render(); break;
       case "gb-set": gbState()[ds.k] = ds.v; render(); break;
+      case "ind-pt-toggle": { const o = S.ui.indTgOpen || (S.ui.indTgOpen = {}); o[ds.v] = !o[ds.v]; render(); break; }
+      case "ind-pt-del": { if (!S.isAdmin) break; const a_ = ds.v.split("|"); indPtSet(a_[0], a_[1], a_[2], a_[3] || "", ""); break; }
+      case "ind-pt-add": { if (!S.isAdmin) break; const [d_, u_] = ds.v.split("|"), n_ = (S.ui.indTgNew || {})[ds.v] || {}; if (!n_.y || n_.v === "" || n_.v == null || isNaN(Number(n_.v))) break; indPtSet(d_, u_, String(n_.y), n_.t || "", Number(n_.v)); S.ui.indTgNew[ds.v] = { y: n_.y, t: "", v: "" }; break; }
       case "og-pt-toggle": { const o = S.ui.ogTgOpen || (S.ui.ogTgOpen = {}); o[ds.v] = !o[ds.v]; render(); break; }
       case "og-pt-del": { if (!S.isAdmin) break; const [g_, u_, y_, t_] = ds.v.split("|"); ogPtSet(g_, u_, y_, t_ || "", ""); break; }
       case "og-pt-add": { if (!S.isAdmin) break; const [g_, u_] = ds.v.split("|"), n_ = (S.ui.ogTgNew || {})[ds.v] || {}; if (!n_.y || n_.v === "" || n_.v == null) break; ogPtSet(g_, u_, String(n_.y), n_.t || "", Math.max(0, Math.min(100, Number(n_.v) || 0))); S.ui.ogTgNew[ds.v] = { y: n_.y, t: "", v: "" }; break; }
+      case "ib-yr": { const g_ = ibState(), all_ = [...new Set(dashSeries(S.ui._gbUnits || [], "all").cols.map((c) => String(c.year)).filter((y) => y !== "0"))]; let cur_ = g_.yrs && g_.yrs.length ? g_.yrs.slice() : all_.slice(); const i_ = cur_.indexOf(ds.v); if (i_ >= 0) cur_.splice(i_, 1); else cur_.push(ds.v); g_.yrs = cur_.length === all_.length ? [] : cur_; render(); break; }
       case "gb-yr": { const g_ = gbState(), all_ = [...new Set(gbCmpAll({ units: S.ui._gbUnits || [] }).cols.map((c) => String(c.year)).filter((y) => y !== "0"))]; let cur_ = g_.yrs && g_.yrs.length ? g_.yrs.slice() : all_.slice(); const i_ = cur_.indexOf(ds.v); if (i_ >= 0) cur_.splice(i_, 1); else cur_.push(ds.v); g_.yrs = cur_.length === all_.length ? [] : cur_; render(); break; }
       case "gb-open": { const o = S.ui.gbOpen || (S.ui.gbOpen = {}); o[ds.v] = !o[ds.v]; render(); break; }
       case "heat-open": { const ho = S.ui.heatOpen; S.ui.heatOpen = ho && ho.hk === ds.hk && ho.u === ds.u ? null : { hk: ds.hk, u: ds.u }; render(); break; }
@@ -16752,6 +16914,7 @@ function attachClickListener() {
       case "save-indicator-edit": {
         const form = readIndicatorDefForm("edit-ind");
         if (!form.name.trim()) break;
+        { const old_ = S.indicatorDefinitions.find((d) => d.id === ds.id); if (old_ && String(old_.target ?? "") !== String(form.target ?? "")) { const sc_ = scopeOf("ind", ds.id), ids_ = sc_.length ? sc_ : (S.units || []).filter((u) => u.status === "active" && u.role !== "admin" && u.role !== "executive").map((u) => u.id); saveSiteTheme((th) => ({ indUnitTargets: indFreeze({ ...((th || {}).indUnitTargets || {}) }, ds.id, ids_) })); } }
         S.indicatorDefinitions = S.indicatorDefinitions.map((d) => d.id === ds.id ? { ...d, ...form, name: form.name.trim() } : d);
         dataStore.saveIndicatorDefinitions(S.indicatorDefinitions);
         S.ui.editingIndicatorId = null; S.ui["newIndicatorForm_edit-ind"] = {}; render();
@@ -17174,6 +17337,10 @@ function handleReportEditorAction(action, ds) {
       if (sh.live) list.push({ id: uid("shp"), shapeId: ds.shape, ...JSON.parse(JSON.stringify(sh.sample || {})) });
       else list.push({ id: uid("shp"), shapeId: ds.shape, auto: sh.cat !== "photo", sectionId: S.activeSectionId });
       S.ui.shpOpen = false; autoSaveSchedule(); render(); return true;
+    }
+    case "ind-link-toggle": {
+      const row = findById(getItemList("indicators"), ds.id); if (!row) return true;
+      indLinkToggle(row, ds.kind, ds.v, rptProgramList(getCurrentReportEntry())); render(); return true;
     }
     case "og-evd-del": {
       const g = findById(getItemList("goals"), ds.gid), og = g && (g.operationalGoals || []).find((x) => x.id === ds.ogid);
