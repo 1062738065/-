@@ -10811,19 +10811,9 @@ function indicatorDefRowHtml(def) {
 }
 
 /* =============================== Goals management ============================= */
-function goalParentOptionsHtml(cur) {
-  return `<option value="">— يتبع للهدف الاستراتيجي —</option>${(S.goalsDefinitions.strategic || []).map((x) => `<option value="${esc(x.id)}" ${cur === x.id ? "selected" : ""}>${esc(x.name)}</option>`).join("")}`;
-}
-// الأهداف التشغيلية مجمّعة تحت أهدافها الاستراتيجية؛ غير المربوطة آخرًا (تظهر عند التعبئة تحت كل الأهداف)
-function goalsGroupedHtml(strategic, operational) {
-  const valid = new Set(strategic.map((x) => x.id));
-  const groups = strategic.map((sg) => [sg.name, operational.filter((o) => o.parentId === sg.id)]).filter(([, l]) => l.length);
-  const loose = operational.filter((o) => !o.parentId || !valid.has(o.parentId));
-  if (loose.length) groups.push(["غير مربوطة بهدف استراتيجي (تظهر تحت كل الأهداف)", loose]);
-  return groups.map(([title, list]) => `<div>
-    <div style="font-size:12px;font-weight:800;color:${INK};margin-bottom:6px;">${esc(title)}</div>
-    <div style="display:flex;flex-direction:column;gap:8px;padding-inline-start:12px;border-inline-start:2px solid ${BORDER};">${list.map((g) => goalsListRowHtml("Operational", g)).join("")}</div>
-  </div>`).join("");
+// الأهداف التشغيلية قائمة مستقلة (لا تصنيف تحت أهداف استراتيجية). حقل parentId القديم يبقى محفوظًا بالقاعدة ولا يُعرض ولا يُستخدم.
+function goalsFlatHtml(operational) {
+  return `<div style="display:flex;flex-direction:column;gap:10px;">${operational.map((g) => goalsListRowHtml("Operational", g)).join("")}</div>`;
 }
 function goalsListRowHtml(kind, g) {
   const editing = S.ui[`editing${kind}Id`] === g.id;
@@ -10843,7 +10833,6 @@ function goalsListRowHtml(kind, g) {
   }
   return `<div class="card" style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;">
     <div style="font-size:13.5px;font-weight:700;flex:1;min-width:160px;">${esc(g.name)}</div>
-    ${kind === "Operational" ? `<select class="input" data-action="goal-parent-set" data-id="${esc(g.id)}" style="width:auto;min-width:170px;max-width:260px;padding:6px 10px;font-size:12px;">${goalParentOptionsHtml(g.parentId || "")}</select>` : ""}
     <div style="display:flex;gap:6px;">
       <button class="icon-btn" style="width:32px;height:32px;border:1px solid ${BORDER}" data-action="start-${kind}-goal-edit" data-id="${esc(g.id)}" data-name="${esc(g.name)}" title="تعديل">${iconPencil(14, INK)}</button>
       <button class="icon-btn" style="width:32px;height:32px;border:1px solid ${BORDER}" data-action="confirm-delete-${kind}-goal" data-id="${esc(g.id)}" title="حذف">${iconTrash(14, DANGER)}</button>
@@ -10854,25 +10843,23 @@ function goalsListRowHtml(kind, g) {
 }
 
 
-/* ===== إدخال الأهداف الاستراتيجية والتشغيلية من نص ===== */
+/* ===== إدخال الأهداف التشغيلية من نص ===== */
 function goalImpParse(text) {
   const st = (S.goalsDefinitions.strategic || []), op = (S.goalsDefinitions.operational || []);
   let scope = { ids: [], err: "", label: "" }, curStrat = null; const seenS = {}, out = [];
   String(text || "").split(/\r?\n/).map((l) => l.trim()).filter(Boolean).forEach((line) => {
     const hm = line.match(/^\[(.*)\]$/);
     if (hm) { const sp = scopeParseHeading(hm[1]); scope = { ...sp, label: hm[1].trim() || "للجميع" }; out.push({ line, heading: true, errs: sp.err ? [sp.err] : [] }); return; }
-    const m = line.match(/^[-–—]+\s*(.+)$/);
-    if (!m) { const name = line.replace(/\s+/g, " "); const ex = st.find((g) => String(g.name).trim() === name); curStrat = { name, id: ex ? ex.id : seenS[name] || (seenS[name] = uid("sg")) }; out.push({ line, kind: "strategic", name, id: curStrat.id, isNew: !ex, errs: [] }); return; }
+    const m = line.match(/^[-–—]*\s*(.+)$/);
     const bits = m[1].split("|").map((x) => x.trim()); const name = bits[0].replace(/\s+/g, " "); const errs = []; let target = "";
     if (bits[1]) { const t = bkNum(bits[1].replace("%", "")); if (t === "" || isNaN(Number(t)) || Number(t) < 0 || Number(t) > 100) errs.push("نسبة المستهدف لازم رقم من 0 إلى 100"); else target = t; }
-    if (!curStrat) errs.push("اكتبي الهدف الاستراتيجي قبل أهدافه التشغيلية");
     if (scope.err) errs.push("الجهة غير صحيحة: " + scope.err);
     const ex = op.find((g) => String(g.name).trim() === name);
-    out.push({ line, kind: "operational", name, target, parentId: curStrat && curStrat.id, id: ex && ex.id, isNew: !ex, scope, errs });
+    out.push({ line, kind: "operational", name, target, id: ex && ex.id, isNew: !ex, scope, errs });
   });
   return out;
 }
-const GOAL_IMP_EXAMPLE = "الإسهام في بناء بيئة تطوعية منظمة\n- تنفيذ البرامج المخطط لها | 100\n- استقطاب المتطوعات | 85\nرفع جودة الخدمة\n- رفع رضا المستفيدات | 90";
+const GOAL_IMP_EXAMPLE = "[وحدة التطوع]\nتنفيذ البرامج المخطط لها | 100\nاستقطاب المتطوعات | 85\n[للجميع]\nرفع رضا المستفيدات | 90";
 function goalImpPanelHtml() {
   const b = S.ui.goalImp; if (!b) return "";
   const pv = b.preview; const ok = pv ? pv.filter((r) => !r.heading && !r.errs.length).length : 0;
@@ -10881,37 +10868,27 @@ function goalImpPanelHtml() {
     : `<div style="display:flex;align-items:center;gap:10px;padding:12px 4px;border-top:1px solid #efe6e6;${r.kind === "operational" ? "padding-right:24px;" : ""}"><div style="flex:1;font-weight:${r.kind === "strategic" ? 800 : 600};">${esc(r.name)}${r.kind === "operational" && r.target ? ` <span class="hint">· المستهدف ${esc(r.target)}%</span>` : ""}${r.errs.length ? `<div style="color:#b04060;font-size:12px;font-weight:700;">${esc(r.errs.join("، "))}</div>` : ""}</div><span style="font-size:12px;color:#8b7e82;">${r.kind === "strategic" ? "استراتيجي" : "تشغيلي"}</span>${r.errs.length ? `<span style="color:#b04060;font-weight:800;">يحتاج تصحيحه</span>` : r.isNew ? uiBadge("جديد", "green") : uiBadge("موجود", "grey")}</div>`).join("") : "";
   return uiCard(`
     <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px;"><span style="font-size:16px;font-weight:800;">إدخال من نص</span>${uiBadge("جديد", "green")}</div>
-    <div class="hint" style="margin-bottom:12px;font-size:12.5px;">الهدف الاستراتيجي بدون شرطة، وتحته أهدافه التشغيلية بـ «-» (وبعدها | نسبة المستهدف اختياري).<br>للجهة: سطر عنوان بين قوسين مثل [وحدة الجودة] أو [للجميع]، وكل ما تحته يتبعه حتى عنوان آخر.</div>
+    <div class="hint" style="margin-bottom:12px;font-size:12.5px;">اكتبي كل هدف تشغيلي في سطر (والشرطة «-» في أوله اختيارية، وبعده | نسبة المستهدف اختياري).<br>للوحدة: سطر عنوان بين قوسين مثل [وحدة الجودة] أو [للجميع]، وكل ما تحته يتبعه حتى عنوان آخر.</div>
     <textarea class="input" id="goal-imp-text" rows="8" placeholder="${esc(GOAL_IMP_EXAMPLE)}" style="font-family:inherit;line-height:2.1;min-height:180px;border:1.5px dashed #d9cfcf;border-radius:14px;background:#fbf9f8;padding:16px;">${esc(b.text || "")}</textarea>
     <div style="margin-top:14px;display:flex;gap:10px;flex-wrap:wrap;">${uiSoftBtn(pv ? "معاينة" : "معاينة ثم إضافة", "goal-imp-preview", {}, !pv)}${pv && ok ? uiSoftBtn(`إضافة ${ok}`, "goal-imp-apply", {}, true) : ""}${uiSoftBtn("إغلاق", "goal-imp-close")}</div>
     ${rows ? `<div style="margin-top:12px;">${rows}</div>` : ""}
     <div class="hint" style="margin-top:12px;">يضيف الجديد فقط ولا يحذف ولا يغيّر هدفًا موجودًا. السطر اللي يحتاج تصحيح ما يُطبّق.</div>`);
 }
 function renderGoalsManage() {
-  const strategic = S.goalsDefinitions.strategic || [], operational = S.goalsDefinitions.operational || [];
+  const operational = S.goalsDefinitions.operational || [];
   return `
   <div class="page-wrap"><div class="page-inner narrow">
-    ${topBarHtml({ title: "إدارة الأهداف والمستهدفات", subtitle: "عرّفي الأهداف الاستراتيجية والتشغيلية المعتمدة", backAction: "nav-back-admin" })}
+    ${topBarHtml({ title: "إدارة الأهداف والمستهدفات", subtitle: "قائمة الأهداف التشغيلية المعتمدة وربط كل هدف بوحدة أو أكثر", backAction: "nav-back-admin" })}
 
     ${uiCard(`<div style="display:flex;align-items:center;gap:14px;flex-wrap:wrap;"><div style="flex:1;min-width:220px;"><div style="font-size:16px;font-weight:800;">إضافة أهداف من صفحة تعبئة التقرير</div><div class="hint" style="margin:4px 0 0;">${goalAddFromReportOn() ? "مفعّلة: الموظفة تقدر تضيف هدفًا غير موجود وهي تعبّي التقرير، ويُضاف هنا للقائمة العامة." : "مقفلة: الوحدة تختار من الأهداف المعتمدة فقط."}</div></div>${uiSoftBtn(goalAddFromReportOn() ? "إيقاف" : "تفعيل", "goal-add-toggle", {}, true)}</div>`)}
-    ${S.ui.goalImp ? goalImpPanelHtml() : uiCard(`<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;"><div><div style="font-size:16px;font-weight:800;">إدخال من نص ${uiBadge("جديد", "green")}</div><div class="hint" style="margin:4px 0 0;">الهدف الاستراتيجي بدون شرطة، وتحته أهدافه التشغيلية بـ «-».</div></div>${uiSoftBtn("فتح الإدخال من نص", "goal-imp-open", {}, true)}</div>`)}
-    <div style="font-size:13px;font-weight:800;color:${ROSE};margin:6px 0 10px;">الأهداف الاستراتيجية</div>
-    <div class="card" style="margin-bottom:14px;"><div style="display:flex;gap:8px;">
-      <input class="input" id="new-strategic-goal" style="flex:1;" placeholder="نص الهدف الاستراتيجي" />
-      ${pillBtn("إضافة", { icon: iconPlus(15, "#fff"), action: "add-strategic-goal" })}
-    </div></div>
-    <div style="display:flex;flex-direction:column;gap:8px;margin-bottom:24px;">
-      ${strategic.length === 0 ? `<div style="font-size:12px;color:${SUBTLE}">لا توجد أهداف استراتيجية بعد.</div>` : strategic.map((g) => goalsListRowHtml("Strategic", g)).join("")}
-    </div>
-
+    ${S.ui.goalImp ? goalImpPanelHtml() : uiCard(`<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;"><div><div style="font-size:16px;font-weight:800;">إدخال من نص ${uiBadge("جديد", "green")}</div><div class="hint" style="margin:4px 0 0;">أهداف تشغيلية، سطر لكل هدف، وعنوان [الوحدة] قبلها لربطها.</div></div>${uiSoftBtn("فتح الإدخال من نص", "goal-imp-open", {}, true)}</div>`)}
     <div style="font-size:13px;font-weight:800;color:${ROSE};margin:6px 0 10px;">الأهداف التشغيلية</div>
     <div class="card" style="margin-bottom:14px;"><div style="display:flex;gap:8px;flex-wrap:wrap;">
       <input class="input" id="new-operational-goal" style="flex:2;min-width:200px;" placeholder="نص الهدف التشغيلي" />
-      <select class="input" id="new-operational-parent" style="flex:1;min-width:180px;">${goalParentOptionsHtml(S.ui.newOpParent || "")}</select>
       ${pillBtn("إضافة", { icon: iconPlus(15, "#fff"), action: "add-operational-goal" })}
     </div></div>
     <div style="display:flex;flex-direction:column;gap:14px;">
-      ${operational.length === 0 ? `<div style="font-size:12px;color:${SUBTLE}">لا توجد أهداف تشغيلية بعد.</div>` : goalsGroupedHtml(strategic, operational)}
+      ${operational.length === 0 ? `<div style="font-size:12px;color:${SUBTLE}">لا توجد أهداف تشغيلية بعد.</div>` : goalsFlatHtml(operational)}
     </div>
   </div></div>`;
 }
@@ -16321,7 +16298,7 @@ function attachClickListener() {
       case "goal-imp-apply": {
         const el = document.getElementById("goal-imp-text"); const b = S.ui.goalImp || {}; if (el) b.text = el.value;
         const rows = goalImpParse(b.text); const bad = new Set(); const tgt = [];
-        // الهدف التشغيلي الخاطئ ما يمنع إضافة الاستراتيجي، لكن لا يُضاف تشغيلي بلا أب
+        // كل سطر صحيح يُضاف كهدف تشغيلي مستقل
         let strat = [...(S.goalsDefinitions.strategic || [])], op = [...(S.goalsDefinitions.operational || [])]; const jobs = [];
         rows.forEach((r) => {
           if (r.heading || r.errs.length) { if (!r.heading) bad.add(r.line); return; }
@@ -16417,7 +16394,7 @@ function attachClickListener() {
         const list = S.goalsDefinitions[kind] || [];
         if (!list.some((g) => g.name === name)) {
           const ng = { id: uid(kind[0] + "g"), name };
-          if (kind === "operational") { const pe = document.getElementById("new-operational-parent"); ng.parentId = (pe && pe.value) || ""; S.ui.newOpParent = ng.parentId; }
+          
           S.goalsDefinitions = { ...S.goalsDefinitions, [kind]: [...list, ng] };
           dataStore.saveGoalsDefinitions(S.goalsDefinitions);
         }
