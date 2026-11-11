@@ -732,7 +732,7 @@ function renderSchemaRepeaterHtml(schema, d) {
     const isOpen = (items.length === 1 && schema.arrayKey !== "programs") || item.id === expandedId;
     const head = `<div class="repeat-item-head" style="cursor:pointer;" data-action="toggle-repeat-item" data-arr="${esc(schema.arrayKey)}" data-id="${esc(item.id)}"><span class="repeat-item-title">${esc(schema.itemLabel)} ${i + 1}${isOpen ? "" : ` — ${esc(item[schema.fields.find((f) => f.id)?.id] || "")}`}</span>${removeBtn(schema.arrayKey, item.id)}</div>`;
     if (!isOpen) return `<div class="repeat-item">${head}</div>`;
-    return `<div class="repeat-item">${head}${renderSchemaFieldsHtml(schema.fields, schema.arrayKey, item.id, item, d)}${schema.arrayKey === "tools" ? svToolBlockHtml(item) : ""}${schema.arrayKey === "programs" ? paBlockHtml(item) : ""}${schema.arrayKey === "evidenceItems" ? svEvdProgramHtml(item) : ""}</div>`;
+    return `<div class="repeat-item">${head}${renderSchemaFieldsHtml(schema.fields, schema.arrayKey, item.id, item, d)}${schema.arrayKey === "tools" ? svToolBlockHtml(item) + sbBlockHtml(item) : ""}${schema.arrayKey === "programs" ? paBlockHtml(item) : ""}${schema.arrayKey === "evidenceItems" ? svEvdProgramHtml(item) : ""}</div>`;
   }).join("");
   // hint اختياري أعلى القسم (نفس أسلوب التنبيهات المكتوبة يدويًا بأقسام مثل "الشواهد"
   // و"خطة الفترة القادمة")، وحد أقصى/أدنى اختياري لعدد العناصر (maxItems/minItems).
@@ -14368,6 +14368,210 @@ function indLinksFieldsHtml(row, report) {
   return fieldWrap("البرنامج المرتبط (اختياري)", false, progs.length ? `<div style="display:flex;gap:6px;flex-wrap:wrap;">${progs.map((p) => chip("prog", p.id, String(p.name).trim(), lp.indexOf(p.id) !== -1)).join("")}</div><div class="hint">اختاري برنامجًا أو أكثر، أو اتركيه بلا ربط. يظهر المؤشر داخل بطاقة كل برنامج مختار.</div>` : `<div class="hint">لا توجد برامج في قسم الأعمال والبرامج بعد.</div>`)
     + fieldWrap("الهدف التشغيلي المرتبط (اختياري)", false, goals.length ? `<div style="display:flex;gap:6px;flex-wrap:wrap;">${goals.map((g) => chip("goal", g.id, g.name, lg.indexOf(g.id) !== -1)).join("")}</div><div class="hint">اختاري هدفًا أو أكثر، أو اتركيه بلا ربط. الربط لا يغيّر مستهدف الهدف ولا نسبة تحقق الهدف${missing ? ` · ${missing} هدف مربوط لم يعد في القائمة` : ""}.</div>` : `<div class="hint">لا توجد أهداف تشغيلية متاحة لوحدتك.</div>`);
 }
+/* =============================================================================
+   المرحلة ٤: منشئ الاستبانات داخل المنصة (ميزة مستقلة يمكن إيقافها: theme.surveyBuilder=false)
+   - الاستبانة مرتبطة بسجل أداة القياس نفسه (tool_id + report_id) بلا سجل مكرر.
+   - رابطان: نسخة الأداة (?s=<id>) والنتائج والتحليل (?r=<id>&k=<رمز>).
+   - الإجابات بلا أسماء في جدول survey_responses، والنتائج تُعبّأ في الأداة تلقائيًا.
+   ============================================================================= */
+const SB_AVAILABLE = true; // يُضبط false في بناء الحقيقي والشيت حتى تُعتمد الميزة هناك
+const SB_TYPES = [["rating", "تقييم (١–٥)"], ["single", "اختيار واحد"], ["multi", "اختيارات متعددة"], ["yesno", "نعم / لا"], ["text", "نص قصير"], ["long", "نص طويل"]];
+function sbOn() { if (!SB_AVAILABLE) return false; try { const th = themeOf(S.siteSettings || {}); return dbConnected() && th.surveyBuilder !== false; } catch (e) { return false; } }
+function sbSt(tid) { S.ui.sb = S.ui.sb || {}; return S.ui.sb[tid] || (S.ui.sb[tid] = { form: null, loaded: false, busy: "", msg: null, dirty: false, resp: null }); }
+function sbBase() { return location.href.split("#")[0].split("?")[0]; }
+function sbLinkTool(f) { return `${sbBase()}?s=${encodeURIComponent(f.id)}`; }
+function sbLinkResults(f) { return `${sbBase()}?r=${encodeURIComponent(f.id)}&k=${encodeURIComponent(f.results_token || "")}`; }
+function sbRowToForm(r) { return { id: r.id, unit_id: r.unit_id || "", tool_id: r.tool_id || "", report_id: r.report_id || "", program_id: r.program_id || "", title: r.title || "", intro: r.intro || "", questions: Array.isArray(r.questions) ? r.questions : [], status: r.status || "open", results_token: r.results_token || "", created_at: r.created_at || Date.now(), updated_at: r.updated_at || Date.now() }; }
+function sbRand(n) { const c = "abcdefghjkmnpqrstuvwxyz23456789"; let o = ""; for (let i = 0; i < n; i++) o += c[Math.floor(Math.random() * c.length)]; return o; }
+function sbNewQ(type) { return { id: "q" + sbRand(6), t: type, q: "", opts: type === "single" || type === "multi" ? ["", ""] : [], req: false, max: 5 }; }
+async function sbLoad(tid) {
+  const st = sbSt(tid); if (st.loaded || st.busy === "load") return;
+  st.busy = "load";
+  const r = await supabaseRequest(`survey_forms?tool_id=eq.${encodeURIComponent(tid)}&report_id=eq.${encodeURIComponent(S.currentReportId || "")}&select=*&limit=1`);
+  st.busy = ""; st.loaded = true;
+  if (r.ok && r.data && r.data[0]) { st.form = sbRowToForm(r.data[0]); sbRefresh(tid, true); }
+  else if (!r.ok) st.msg = { kind: "err", text: "تعذّر تحميل الاستبانة. هل شُغّل ملف SQL الإضافات؟ (" + r.error + ")" };
+  render();
+}
+async function sbSave(tid) {
+  const st = sbSt(tid), f = st.form; if (!f) return;
+  st.busy = "save"; st.msg = null; render();
+  f.updated_at = Date.now();
+  const r = await supabaseRequest("survey_forms?on_conflict=id", { method: "POST", prefer: "return=minimal,resolution=merge-duplicates", body: JSON.stringify([f]) });
+  st.busy = "";
+  if (r.ok) { st.dirty = false; st.msg = { kind: "ok", text: "حُفظت الاستبانة." }; const t = findById(getItemList("tools"), tid); if (t) { t.toolLink = sbLinkTool(f); t.resultsLink = t.resultsLink && !/\?r=/.test(t.resultsLink) && String(t.resultsLink).trim() ? t.resultsLink : sbLinkResults(f); t.surveyFormId = f.id; autoSaveSchedule(); } }
+  else st.msg = { kind: "err", text: "تعذّر الحفظ: " + r.error };
+  render();
+}
+function sbRows(form, resp) {
+  const qs = form.questions, d2 = (iso) => { const d = new Date(iso); const z = (n) => String(n).padStart(2, "0"); return `${d.getFullYear()}/${z(d.getMonth() + 1)}/${z(d.getDate())} ${z(d.getHours())}:${z(d.getMinutes())}:${z(d.getSeconds())}`; };
+  const head = ["الطابع الزمني"].concat(qs.map((q) => q.q || "سؤال"));
+  const rows = (resp || []).map((r) => [d2(r.created_at)].concat(qs.map((q) => { const v = (r.answers || {})[q.id]; return v == null ? "" : Array.isArray(v) ? v.join("، ") : String(v); })));
+  return [head].concat(rows);
+}
+async function sbRefresh(tid, silent) {
+  const st = sbSt(tid), f = st.form; if (!f) return;
+  if (!silent) { st.busy = "refresh"; render(); }
+  const r = await supabaseRequest(`survey_responses?form_id=eq.${encodeURIComponent(f.id)}&select=answers,created_at&order=created_at.asc&limit=5000`);
+  st.busy = "";
+  if (r.ok) {
+    st.resp = r.data || [];
+    const t = findById(getItemList("tools"), tid);
+    if (t && st.resp.length) {
+      const an = svAnalyze(sbRows(f, st.resp));
+      if (an && (String(t.respondentsCount) !== String(an.n) || !t.analysis)) { svApplyToTool(t, an); t.toolLink = sbLinkTool(f); autoSaveSchedule(); }
+    }
+    if (!silent) st.msg = { kind: "ok", text: `تحدّثت النتائج: ${st.resp.length} إجابة.` };
+  } else if (!silent) st.msg = { kind: "err", text: "تعذّر قراءة الإجابات: " + r.error };
+  render();
+}
+/* إحصاءات الإجابات حسب نوع السؤال — تُستعمل في لوحة المنشئ وصفحة النتائج العامة */
+function sbBar(label, n, total, color) { const p = total ? Math.round((n / total) * 100) : 0; return `<div class="sb-bar"><span class="sb-bl">${esc(label)}</span><span class="sb-bt"><i style="width:${p}%;background:${color || "var(--rose,#7a3340)"}"></i></span><b>${n} (${p}٪)</b></div>`; }
+function sbStatsHtml(form, resp) {
+  const n = (resp || []).length; if (!n) return `<div class="hint">لا توجد إجابات بعد.</div>`;
+  const cols = ["#7a3340", "#b4636f", "#c9965a", "#8a919c", "#5f8d7a", "#9c7ab0"];
+  return form.questions.map((q) => {
+    const vals = resp.map((r) => (r.answers || {})[q.id]).filter((v) => v != null && v !== "" && !(Array.isArray(v) && !v.length));
+    let body = "";
+    if (q.t === "rating") {
+      const mx = q.max || 5, nums = vals.map(Number).filter((x) => !isNaN(x)), avg = nums.length ? nums.reduce((a, b) => a + b, 0) / nums.length : 0;
+      body = `<div class="sb-avg">المتوسط <b>${svAr(Math.round(avg * 100) / 100)}</b> من ${svAr(mx)} (${svAr(Math.round((avg / mx) * 100))}٪)</div>` + Array.from({ length: mx }, (_, i) => mx - i).map((k) => sbBar(String(k), nums.filter((x) => Math.round(x) === k).length, nums.length, cols[0])).join("");
+    } else if (q.t === "single" || q.t === "yesno") {
+      const opts = q.t === "yesno" ? ["نعم", "لا"] : q.opts.filter(Boolean); body = opts.map((o, i) => sbBar(o, vals.filter((v) => v === o).length, vals.length, cols[i % cols.length])).join("");
+    } else if (q.t === "multi") {
+      body = q.opts.filter(Boolean).map((o, i) => sbBar(o, vals.filter((v) => Array.isArray(v) && v.indexOf(o) !== -1).length, vals.length, cols[i % cols.length])).join("");
+    } else {
+      body = `<ul class="sb-notes">${vals.slice(-12).reverse().map((v) => `<li>${esc(String(v))}</li>`).join("")}</ul>${vals.length > 12 ? `<div class="hint">أحدث 12 من ${vals.length} إجابة</div>` : ""}`;
+    }
+    return `<div class="sb-qs"><div class="sb-qt">${esc(q.q || "سؤال")} <span class="hint">— ${vals.length} من ${n}</span></div>${body}</div>`;
+  }).join("");
+}
+function sbBlockHtml(t) {
+  if (!SB_AVAILABLE || !dbConnected()) return "";
+  if (!sbOn()) return S.isAdmin ? `<div style="margin:8px 0;"><button type="button" class="pill-btn pill-ghost" data-action="sb-feature" data-v="1">تفعيل ميزة إنشاء الاستبانات داخل المنصة</button></div>` : "";
+  const st = sbSt(t.id); if (!st.loaded && st.busy !== "load") setTimeout(() => sbLoad(t.id), 0);
+  const f = st.form, busy = st.busy;
+  const msg = st.msg ? `<div class="hint" style="margin-top:8px;color:${st.msg.kind === "err" ? DANGER : GREEN};font-weight:700;">${esc(st.msg.text)}</div>` : "";
+  if (!f) return `<div class="sb-box"><div class="subhead" style="margin:0 0 6px;">إنشاء استبانة تفاعلية داخل المنصة</div>
+    <div class="hint">تُنشئين أسئلة الاستبانة هنا ويُولَّد رابط خاص تشاركينه مع المستفيدات. تُحفظ الإجابات في القاعدة وتُعبَّأ نتائجها في هذه الأداة نفسها بلا سجل مكرر.</div>
+    <button type="button" class="pill-btn pill-primary" data-action="sb-create" data-id="${esc(t.id)}" ${busy ? "disabled" : ""}>${busy === "load" ? "جارٍ التحميل…" : "إنشاء استبانة لهذه الأداة"}</button>${msg}
+    ${S.isAdmin ? `<div style="margin-top:8px;"><button type="button" class="pill-btn pill-ghost" data-action="sb-feature" data-v="0" style="font-size:11px;">إيقاف هذه الميزة</button></div>` : ""}</div>`;
+  const qh = f.questions.map((q, i) => `<div class="sb-q">
+      <div class="sb-qh"><span class="sb-n">${i + 1}</span>
+        <select class="input" data-sb-k="t" data-id="${esc(t.id)}" data-qid="${esc(q.id)}">${SB_TYPES.map(([v, l]) => `<option value="${v}" ${q.t === v ? "selected" : ""}>${l}</option>`).join("")}</select>
+        <button type="button" class="pill-btn pill-ghost" data-action="sb-q-up" data-id="${esc(t.id)}" data-qid="${esc(q.id)}" ${i === 0 ? "disabled" : ""}>▲</button>
+        <button type="button" class="pill-btn pill-ghost" data-action="sb-q-down" data-id="${esc(t.id)}" data-qid="${esc(q.id)}" ${i === f.questions.length - 1 ? "disabled" : ""}>▼</button>
+        <button type="button" class="pill-btn pill-ghost" data-action="sb-q-del" data-id="${esc(t.id)}" data-qid="${esc(q.id)}" style="color:${DANGER};">✕</button></div>
+      <input class="input" data-sb-k="q" data-id="${esc(t.id)}" data-qid="${esc(q.id)}" value="${esc(q.q)}" placeholder="نص السؤال" />
+      ${q.t === "single" || q.t === "multi" ? `<textarea class="input" rows="3" data-sb-k="opts" data-id="${esc(t.id)}" data-qid="${esc(q.id)}" placeholder="خيار في كل سطر">${esc((q.opts || []).join("\n"))}</textarea>` : ""}
+      <label class="sb-req"><input type="checkbox" data-sb-k="req" data-id="${esc(t.id)}" data-qid="${esc(q.id)}" ${q.req ? "checked" : ""} /> إجابة إلزامية</label></div>`).join("");
+  const resp = st.resp;
+  return `<div class="sb-box"><div class="subhead" style="margin:0 0 6px;">الاستبانة التفاعلية${st.dirty ? ` <span style="color:${DANGER};font-size:11px;">— غير محفوظة</span>` : ""}</div>
+    <div class="field"><label class="field-label">عنوان الاستبانة</label><input class="input" data-sb-f="title" data-id="${esc(t.id)}" value="${esc(f.title)}" /></div>
+    <div class="field"><label class="field-label">تعريف قصير للمستفيدة (اختياري)</label><textarea class="input" rows="2" data-sb-f="intro" data-id="${esc(t.id)}">${esc(f.intro)}</textarea></div>
+    <div class="subhead" style="margin:10px 0 6px;">الأسئلة (${f.questions.length})</div>${qh}
+    <div style="display:flex;gap:6px;flex-wrap:wrap;margin:8px 0;">${SB_TYPES.map(([v, l]) => `<button type="button" class="pill-btn pill-ghost" style="font-size:12px;" data-action="sb-q-add" data-id="${esc(t.id)}" data-v="${v}">+ ${l}</button>`).join("")}</div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin:10px 0;"><button type="button" class="pill-btn pill-primary" data-action="sb-save" data-id="${esc(t.id)}" ${busy ? "disabled" : ""}>${busy === "save" ? "جارٍ الحفظ…" : "حفظ الاستبانة"}</button>
+      <button type="button" class="pill-btn ${f.status === "open" ? "pill-ghost" : "pill-primary"}" data-action="sb-status" data-id="${esc(t.id)}">${f.status === "open" ? "إغلاق استقبال الإجابات" : "فتح استقبال الإجابات"}</button>
+      <span class="hint">الحالة: <b>${f.status === "open" ? "مفتوحة" : "مغلقة"}</b></span></div>
+    <div class="sb-links"><div><b>رابط نسخة الأداة (للمستفيدات)</b><div class="sb-url">${esc(sbLinkTool(f))}</div><button type="button" class="pill-btn pill-ghost" data-action="sb-copy" data-v="${esc(sbLinkTool(f))}">نسخ الرابط</button> <a class="pill-btn pill-ghost" href="${esc(sbLinkTool(f))}" target="_blank" rel="noopener">عرض النسخة</a></div>
+      <div style="margin-top:8px;"><b>رابط النتائج والتحليل</b><div class="sb-url">${esc(sbLinkResults(f))}</div><button type="button" class="pill-btn pill-ghost" data-action="sb-copy" data-v="${esc(sbLinkResults(f))}">نسخ الرابط</button> <a class="pill-btn pill-ghost" href="${esc(sbLinkResults(f))}" target="_blank" rel="noopener">عرض النتائج</a></div></div>
+    <div style="margin-top:10px;"><button type="button" class="pill-btn pill-ghost" data-action="sb-refresh" data-id="${esc(t.id)}" ${busy ? "disabled" : ""}>${busy === "refresh" ? "جارٍ التحديث…" : "تحديث النتائج في الأداة"}</button> <span class="hint">${resp ? svAr(resp.length) + " إجابة" : ""}</span></div>
+    ${msg}${resp && resp.length ? `<div style="margin-top:10px;">${sbStatsHtml(f, resp)}</div>` : ""}
+    ${S.isAdmin ? `<div style="margin-top:8px;"><button type="button" class="pill-btn pill-ghost" data-action="sb-feature" data-v="0" style="font-size:11px;">إيقاف ميزة الاستبانات التفاعلية</button></div>` : ""}</div>`;
+}
+function sbAction(action, ds) {
+  const st = ds.id ? sbSt(ds.id) : null, f = st && st.form;
+  if (action === "sb-feature") { saveSiteTheme(() => ({ surveyBuilder: ds.v === "1" })); render(); return true; }
+  if (action === "sb-copy") { try { navigator.clipboard.writeText(ds.v); if (st) { } S.ui.sbCopied = ds.v; } catch (e) { window.prompt("انسخي الرابط:", ds.v); } return true; }
+  if (action === "sb-create") {
+    const tool = findById(getItemList("tools"), ds.id); if (!tool) return true;
+    const prog = toolLinkState(tool).kind === "work" ? toolLinkState(tool).ids[0] || "" : "";
+    st.form = { id: uid("sf"), unit_id: S.currentUnitId || "", tool_id: tool.id, report_id: S.currentReportId || "", program_id: prog, title: tool.name || "استبانة", intro: "", questions: [{ ...sbNewQ("rating"), q: "ما مستوى رضاك العام؟", req: true }, { ...sbNewQ("long"), q: "ما مقترحاتك للتحسين؟" }], status: "open", results_token: sbRand(16), created_at: Date.now(), updated_at: Date.now() };
+    st.dirty = true; st.loaded = true; render(); return true;
+  }
+  if (!f) return false;
+  if (action === "sb-q-add") { f.questions.push(sbNewQ(ds.v)); st.dirty = true; render(); return true; }
+  const i = f.questions.findIndex((q) => q.id === ds.qid);
+  if (action === "sb-q-del") { if (i >= 0 && confirm("حذف هذا السؤال؟ إجاباته السابقة تبقى محفوظة.")) { f.questions.splice(i, 1); st.dirty = true; render(); } return true; }
+  if (action === "sb-q-up" && i > 0) { [f.questions[i - 1], f.questions[i]] = [f.questions[i], f.questions[i - 1]]; st.dirty = true; render(); return true; }
+  if (action === "sb-q-down" && i >= 0 && i < f.questions.length - 1) { [f.questions[i + 1], f.questions[i]] = [f.questions[i], f.questions[i + 1]]; st.dirty = true; render(); return true; }
+  if (action === "sb-status") { f.status = f.status === "open" ? "closed" : "open"; st.dirty = true; sbSave(ds.id); return true; }
+  if (action === "sb-save") { sbSave(ds.id); return true; }
+  if (action === "sb-refresh") { sbRefresh(ds.id, false); return true; }
+  return false;
+}
+function sbInput(el, isChange) {
+  const d = el.dataset, st = sbSt(d.id), f = st.form; if (!f) return false;
+  if (d.sbF) { f[d.sbF] = el.value; st.dirty = true; return true; }
+  const q = f.questions.find((x) => x.id === d.qid); if (!q) return false;
+  if (d.sbK === "q") q.q = el.value;
+  else if (d.sbK === "opts") q.opts = el.value.split("\n").map((x) => x.trim());
+  else if (d.sbK === "req") q.req = el.checked;
+  else if (d.sbK === "t") { q.t = el.value; if ((q.t === "single" || q.t === "multi") && !(q.opts || []).length) q.opts = ["", ""]; render(); }
+  st.dirty = true; return true;
+}
+
+/* ---- الصفحتان العامتان: تعبئة الاستبانة (?s=) والنتائج (?r=&k=) — بلا دخول ولا واجهة المنصة ---- */
+function sbPubShell(inner) { return `<div class="sp-wrap"><div class="sp-card">${inner}</div><div class="sp-foot">${esc((S.siteSettings && S.siteSettings.platformName) || "منصة التقارير")}</div></div>`; }
+async function sbFetchForm(fid, withToken) {
+  const r = await supabaseRequest(`survey_forms?id=eq.${encodeURIComponent(fid)}&select=id,title,intro,questions,status${withToken ? ",results_token" : ""}&limit=1`);
+  return r.ok && r.data && r.data[0] ? sbRowToForm(r.data[0]) : null;
+}
+function sbPubFormHtml(f, ans, err) {
+  const qh = f.questions.map((q, i) => {
+    let inp = "";
+    const cur = ans[q.id];
+    const btn = (v, label, on, multi) => `<button type="button" class="sp-opt${on ? " on" : ""}" data-sp-opt="${esc(q.id)}" data-v="${esc(v)}" data-m="${multi ? 1 : 0}">${multi ? (on ? "☑ " : "☐ ") : ""}${esc(label)}</button>`;
+    if (q.t === "rating") inp = `<div class="sp-row">${Array.from({ length: q.max || 5 }, (_, k) => k + 1).map((k) => btn(String(k), String(k), String(cur) === String(k))).join("")}</div><div class="sp-hint">١ = ضعيف … ${svAr(q.max || 5)} = ممتاز</div>`;
+    else if (q.t === "single") inp = `<div class="sp-col">${q.opts.filter(Boolean).map((o) => btn(o, o, cur === o)).join("")}</div>`;
+    else if (q.t === "multi") inp = `<div class="sp-col">${q.opts.filter(Boolean).map((o) => btn(o, o, Array.isArray(cur) && cur.indexOf(o) !== -1, true)).join("")}</div>`;
+    else if (q.t === "yesno") inp = `<div class="sp-row">${["نعم", "لا"].map((o) => btn(o, o, cur === o)).join("")}</div>`;
+    else if (q.t === "long") inp = `<textarea class="sp-in" rows="4" data-sp-text="${esc(q.id)}">${esc(cur || "")}</textarea>`;
+    else inp = `<input class="sp-in" data-sp-text="${esc(q.id)}" value="${esc(cur || "")}" />`;
+    return `<div class="sp-q${err && err.indexOf(q.id) !== -1 ? " bad" : ""}"><div class="sp-qt">${i + 1}. ${esc(q.q)}${q.req ? ' <span class="sp-star">*</span>' : ""}</div>${inp}</div>`;
+  }).join("");
+  return `<h1 class="sp-h">${esc(f.title)}</h1>${f.intro ? `<p class="sp-p">${esc(f.intro)}</p>` : ""}${qh}${err && err.length ? `<div class="sp-err">أكملي الأسئلة الإلزامية المحددة بالأحمر.</div>` : ""}<button type="button" class="sp-btn" data-sp-submit="1">إرسال</button><p class="sp-note">إجابتك بلا اسم ولا بيانات شخصية.</p>`;
+}
+async function sbPublicBoot(fid) {
+  S.siteSettings = dataStore.getSiteSettings(); applySiteColors(S.siteSettings);
+  const app = document.getElementById("app"); document.body.classList.add("sp-body");
+  app.innerHTML = sbPubShell(`<p class="sp-p">جارٍ التحميل…</p>`);
+  const f = await sbFetchForm(fid, false);
+  if (!f) { app.innerHTML = sbPubShell(`<h1 class="sp-h">الاستبانة غير متاحة</h1><p class="sp-p">تأكدي من الرابط.</p>`); return; }
+  document.title = f.title;
+  if (f.status !== "open") { app.innerHTML = sbPubShell(`<h1 class="sp-h">${esc(f.title)}</h1><p class="sp-p">هذه الاستبانة مغلقة ولا تستقبل إجابات الآن.</p>`); return; }
+  const key = "sb-done-" + fid; let done = false; try { done = !!localStorage.getItem(key); } catch (e) { }
+  const ans = {}; let bad = [];
+  const draw = () => { app.innerHTML = sbPubShell(done ? `<h1 class="sp-h">شكرًا لك</h1><p class="sp-p">تم استلام إجابتك.</p><button type="button" class="sp-btn" data-sp-again="1">إرسال إجابة أخرى</button>` : sbPubFormHtml(f, ans, bad)); };
+  draw();
+  app.addEventListener("input", (e) => { const el = e.target; if (el.dataset && el.dataset.spText) ans[el.dataset.spText] = el.value; });
+  app.addEventListener("click", async (e) => {
+    const b = e.target.closest("button"); if (!b) return;
+    if (b.dataset.spOpt) { const id = b.dataset.spOpt, v = b.dataset.v; if (b.dataset.m === "1") { const a = Array.isArray(ans[id]) ? ans[id].slice() : []; const i = a.indexOf(v); if (i >= 0) a.splice(i, 1); else a.push(v); ans[id] = a; } else ans[id] = v; draw(); return; }
+    if (b.dataset.spAgain) { done = false; Object.keys(ans).forEach((k) => delete ans[k]); bad = []; draw(); return; }
+    if (b.dataset.spSubmit) {
+      bad = f.questions.filter((q) => q.req && (ans[q.id] == null || ans[q.id] === "" || (Array.isArray(ans[q.id]) && !ans[q.id].length))).map((q) => q.id);
+      if (bad.length) { draw(); return; }
+      b.disabled = true; b.textContent = "جارٍ الإرسال…";
+      const clean = {}; f.questions.forEach((q) => { const v = ans[q.id]; if (v != null && v !== "" && !(Array.isArray(v) && !v.length)) clean[q.id] = v; });
+      const r = await supabaseRequest("survey_responses", { method: "POST", prefer: "return=minimal", body: JSON.stringify({ form_id: f.id, answers: clean }) });
+      if (r.ok) { done = true; try { localStorage.setItem(key, "1"); } catch (e2) { } Object.keys(ans).forEach((k) => delete ans[k]); draw(); }
+      else { b.disabled = false; b.textContent = "إرسال"; alert("تعذّر الإرسال. جرّبي مرة ثانية."); }
+    }
+  });
+}
+async function sbResultsBoot(fid, k) {
+  S.siteSettings = dataStore.getSiteSettings(); applySiteColors(S.siteSettings);
+  const app = document.getElementById("app"); document.body.classList.add("sp-body");
+  app.innerHTML = sbPubShell(`<p class="sp-p">جارٍ التحميل…</p>`);
+  const f = await sbFetchForm(fid, true);
+  if (!f || !f.results_token || f.results_token !== k) { app.innerHTML = sbPubShell(`<h1 class="sp-h">النتائج غير متاحة</h1><p class="sp-p">الرابط غير صحيح.</p>`); return; }
+  document.title = "نتائج: " + f.title;
+  const r = await supabaseRequest(`survey_responses?form_id=eq.${encodeURIComponent(f.id)}&select=answers,created_at&order=created_at.asc&limit=5000`);
+  const resp = (r.ok && r.data) || [];
+  app.innerHTML = sbPubShell(`<h1 class="sp-h">نتائج: ${esc(f.title)}</h1><p class="sp-p">عدد الإجابات: <b>${svAr(resp.length)}</b> · الحالة: ${f.status === "open" ? "مفتوحة" : "مغلقة"}</p>${sbStatsHtml(f, resp)}`);
+}
 /* ---- المرحلة ٣: استيراد الحضور (ملف Excel/CSV، رابط Google Sheets أو Forms، أو لصق) مع كشف تكرار المستفيدات ----
    تُقارَن الهوية (هوية/جوال/اسم) أثناء الاستيراد فقط؛ لا تُحفظ أسماء ولا أرقام، وتُحفظ الأعداد وملخص الاستيراد بلا هويات. */
 const PA_PRESENT = ["حاضر", "حاضره", "حضور", "نعم", "yes", "y", "1", "✓", "✔", "present", "p", "true"];
@@ -15394,6 +15598,7 @@ function attachFormListeners() {
       const ab = findById(getItemList("shapeBlocks"), el.dataset.id);
       if (ab && ab.auto) { Object.assign(ab, shapeAutoData(ab.shapeId, { sectionId: ab.sectionId || S.activeSectionId, data: S.sectionDraft })); ab.auto = false; }
     }
+    if (el.dataset && (el.dataset.sbF || el.dataset.sbK) && el.dataset.sbK !== "t" && el.dataset.sbK !== "req") { sbInput(el); return; }
     if (el.dataset && el.dataset.paPaste) { paState(el.dataset.paPaste).text = el.value; return; }
     if (el.dataset && el.dataset.paLink) { paState(el.dataset.paLink).link = el.value; return; }
     if (el.dataset && el.dataset.svPaste) { S.ui.svPaste = S.ui.svPaste || {}; S.ui.svPaste[el.dataset.svPaste] = el.value; return; }
@@ -15614,6 +15819,7 @@ function attachFormListeners() {
     const el = e.target;
     if (el.id === "imp-file" && el.files && el.files[0]) { impReadFile(el.files[0]); return; }
     if (el.dataset && el.dataset.impMap) { const st = impState(); st.map[el.dataset.impMap] = el.value === "" ? undefined : +el.value; render(); return; }
+    if (el.dataset && (el.dataset.sbK === "t" || el.dataset.sbK === "req")) { sbInput(el, true); return; }
     if (el.dataset && el.dataset.paFile && el.files && el.files[0]) { paRun(el.dataset.paFile, "file", el.files[0]); el.value = ""; return; }
     if (el.dataset && el.dataset.paIdcol) { const st = paState(el.dataset.paIdcol); if (st.pend) { st.pend.idCol = +el.value; st.msg = null; render(); } return; }
     if (el.dataset && el.dataset.toolLinkKind) { const t = findById(getItemList("tools"), el.dataset.toolLinkKind); if (t) { toolLinkSetKind(t, el.value); render(); } return; }
@@ -17583,6 +17789,7 @@ function handleReportEditorAction(action, ds) {
       toolLinkToggle(t, ds.v); render(); return true;
     }
     case "sv-confirm": case "sv-cancel": return svAction(action, ds);
+    case "sb-feature": case "sb-copy": case "sb-create": case "sb-q-add": case "sb-q-del": case "sb-q-up": case "sb-q-down": case "sb-status": case "sb-save": case "sb-refresh": return sbAction(action, ds);
     case "pa-toggle": case "pa-read-link": case "pa-read-paste": case "pa-cancel": case "pa-confirm": return paAction(action, ds);
     case "ind-link-toggle": {
       const row = findById(getItemList("indicators"), ds.id); if (!row) return true;
@@ -17906,6 +18113,7 @@ function startLiveSync() {
   document.addEventListener("focusout", () => setTimeout(() => { if (S.ui && S.ui.livePending && !liveTyping()) { S.ui.livePending = false; render(); } }, 200));
 }
 function boot() {
+  { const qp = new URLSearchParams(location.search); if (SB_AVAILABLE && dbConnected() && qp.get("s")) { sbPublicBoot(qp.get("s")); return; } if (SB_AVAILABLE && dbConnected() && qp.get("r")) { sbResultsBoot(qp.get("r"), qp.get("k") || ""); return; } }
   S.siteSettings = dataStore.getSiteSettings();
   applySiteColors(S.siteSettings);
   attachFormListeners();
