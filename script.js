@@ -732,7 +732,7 @@ function renderSchemaRepeaterHtml(schema, d) {
     const isOpen = (items.length === 1 && schema.arrayKey !== "programs") || item.id === expandedId;
     const head = `<div class="repeat-item-head" style="cursor:pointer;" data-action="toggle-repeat-item" data-arr="${esc(schema.arrayKey)}" data-id="${esc(item.id)}"><span class="repeat-item-title">${esc(schema.itemLabel)} ${i + 1}${isOpen ? "" : ` — ${esc(item[schema.fields.find((f) => f.id)?.id] || "")}`}</span>${removeBtn(schema.arrayKey, item.id)}</div>`;
     if (!isOpen) return `<div class="repeat-item">${head}</div>`;
-    return `<div class="repeat-item">${head}${renderSchemaFieldsHtml(schema.fields, schema.arrayKey, item.id, item, d)}${schema.arrayKey === "tools" ? svToolBlockHtml(item) : ""}${schema.arrayKey === "evidenceItems" ? svEvdProgramHtml(item) : ""}</div>`;
+    return `<div class="repeat-item">${head}${renderSchemaFieldsHtml(schema.fields, schema.arrayKey, item.id, item, d)}${schema.arrayKey === "tools" ? svToolBlockHtml(item) : ""}${schema.arrayKey === "programs" ? paBlockHtml(item) : ""}${schema.arrayKey === "evidenceItems" ? svEvdProgramHtml(item) : ""}</div>`;
   }).join("");
   // hint اختياري أعلى القسم (نفس أسلوب التنبيهات المكتوبة يدويًا بأقسام مثل "الشواهد"
   // و"خطة الفترة القادمة")، وحد أقصى/أدنى اختياري لعدد العناصر (maxItems/minItems).
@@ -14368,6 +14368,112 @@ function indLinksFieldsHtml(row, report) {
   return fieldWrap("البرنامج المرتبط (اختياري)", false, progs.length ? `<div style="display:flex;gap:6px;flex-wrap:wrap;">${progs.map((p) => chip("prog", p.id, String(p.name).trim(), lp.indexOf(p.id) !== -1)).join("")}</div><div class="hint">اختاري برنامجًا أو أكثر، أو اتركيه بلا ربط. يظهر المؤشر داخل بطاقة كل برنامج مختار.</div>` : `<div class="hint">لا توجد برامج في قسم الأعمال والبرامج بعد.</div>`)
     + fieldWrap("الهدف التشغيلي المرتبط (اختياري)", false, goals.length ? `<div style="display:flex;gap:6px;flex-wrap:wrap;">${goals.map((g) => chip("goal", g.id, g.name, lg.indexOf(g.id) !== -1)).join("")}</div><div class="hint">اختاري هدفًا أو أكثر، أو اتركيه بلا ربط. الربط لا يغيّر مستهدف الهدف ولا نسبة تحقق الهدف${missing ? ` · ${missing} هدف مربوط لم يعد في القائمة` : ""}.</div>` : `<div class="hint">لا توجد أهداف تشغيلية متاحة لوحدتك.</div>`);
 }
+/* ---- المرحلة ٣: استيراد الحضور (ملف Excel/CSV، رابط Google Sheets أو Forms، أو لصق) مع كشف تكرار المستفيدات ----
+   تُقارَن الهوية (هوية/جوال/اسم) أثناء الاستيراد فقط؛ لا تُحفظ أسماء ولا أرقام، وتُحفظ الأعداد وملخص الاستيراد بلا هويات. */
+const PA_PRESENT = ["حاضر", "حاضره", "حضور", "نعم", "yes", "y", "1", "✓", "✔", "present", "p", "true"];
+const PA_ABSENT = ["غائب", "غائبه", "غياب", "لا", "no", "n", "0", "✗", "✘", "x", "absent", "a", "false", "معتذره", "معتذر"];
+function paState(id) { S.ui.pa = S.ui.pa || {}; return S.ui.pa[id] || (S.ui.pa[id] = { open: false, text: "", link: "", busy: "", msg: null, pend: null }); }
+function paIdentity(v) {
+  const x = svLatin(String(v == null ? "" : v)).trim(); if (!x) return "";
+  const dg = x.replace(/\D/g, ""); if (dg.length >= 7) return "d" + dg.slice(-9);
+  return "n" + svNorm(x);
+}
+function paMark(v) { const k = svNorm(svLatin(String(v == null ? "" : v))); if (!k) return null; if (PA_PRESENT.indexOf(k) !== -1) return true; if (PA_ABSENT.indexOf(k) !== -1) return false; return null; }
+function paGuessIdCol(head) {
+  const pri = [/هويه|هوية|سجل مدني|id/i, /جوال|هاتف|موبايل|mobile|phone/i, /اسم|name/i];
+  for (const re of pri) { const j = head.findIndex((h) => re.test(svNorm(h))); if (j >= 0) return j; }
+  return -1;
+}
+/* يحسب من الجدول: المسجلات (هويات مميزة)، الحاضرات، البداية، المستمرات. أعمدة الحضور = أعمدة أغلب قيمها علامات حضور/غياب */
+function paCompute(rows, idCol) {
+  const head = rows[0].map((h) => String(h || "").trim()), data = rows.slice(1).filter((r) => r.some((x) => String(x).trim() !== ""));
+  const markCols = [];
+  head.forEach((h, j) => { if (j === idCol) return; const vals = data.map((r) => String(r[j] == null ? "" : r[j]).trim()).filter((x) => x !== ""); if (vals.length && vals.filter((v) => paMark(v) != null).length >= vals.length * 0.8) markCols.push(j); });
+  const people = new Map(); let noId = 0;
+  data.forEach((r) => {
+    const k = paIdentity(r[idCol]); if (!k) { noId++; return; }
+    const o = people.get(k) || { rows: 0, marks: markCols.map(() => null) };
+    o.rows++; markCols.forEach((j, i) => { const m = paMark(r[j]); if (m === true) o.marks[i] = true; else if (m === false && o.marks[i] == null) o.marks[i] = false; });
+    people.set(k, o);
+  });
+  const unique = people.size, dup = data.length - noId - unique;
+  let registered = null, attended, start = null, cont = null;
+  if (markCols.length) {
+    registered = unique; attended = 0; start = 0; cont = 0;
+    people.forEach((o) => { if (o.marks.some((m) => m === true)) attended++; if (markCols.length >= 2) { if (o.marks[0] === true) { start++; if (o.marks[o.marks.length - 1] === true) cont++; } } });
+    if (markCols.length < 2) { start = null; cont = null; }
+  } else attended = unique;
+  return { head, rows: data.length, unique, dup, noId, registered, attended, start, cont, markCols: markCols.map((j) => head[j]) };
+}
+function paBlockHtml(p) {
+  const st = paState(p.id), pd = st.pend, sum = p.attendImport;
+  const lastTxt = sum ? `<div class="hint">آخر استيراد: ${svAr(sum.unique)} مستفيدة مميزة${sum.dup ? ` (حُذف ${svAr(sum.dup)} تكرار)` : ""} — ${esc(sum.srcLabel || "")}</div>` : "";
+  if (!st.open) return `<div style="margin:6px 0 12px;"><button type="button" class="pill-btn pill-ghost" data-action="pa-toggle" data-id="${esc(p.id)}">استيراد الحضور من ملف أو جدول</button>${lastTxt}</div>`;
+  const msg = st.msg ? `<div class="hint" style="margin-top:8px;color:${st.msg.kind === "err" ? DANGER : GREEN};font-weight:700;">${esc(st.msg.text)}</div>` : "";
+  let pend = "";
+  if (pd) {
+    const c = paCompute(pd.rows, pd.idCol);
+    const idOpts = pd.rows[0].map((h, j) => `<option value="${j}" ${j === pd.idCol ? "selected" : ""}>${esc(String(h || "عمود " + (j + 1)))}</option>`).join("");
+    const line = (l, v) => v == null ? "" : `<div>${l}: <b>${svAr(v)}</b></div>`;
+    pend = `<div style="margin-top:12px;padding:12px;border-radius:12px;border:1.5px dashed ${ROSE};background:${GRAY_BG};">
+      <div style="font-size:13px;font-weight:800;margin-bottom:6px;">معاينة قبل الحفظ <span class="hint" style="font-weight:600;">— لم يُكتب شيء في العمل بعد</span></div>
+      <div class="field"><label class="field-label">عمود تمييز المستفيدة (هوية أو جوال أو اسم)</label><select class="input" data-pa-idcol="${esc(p.id)}">${idOpts}</select></div>
+      <div style="font-size:12.5px;line-height:1.9;">${line("عدد الصفوف", c.rows)}${line("مستفيدات مميزات", c.unique)}${c.dup ? `<div style="color:${DANGER};font-weight:700;">صفوف مكررة (نفس المستفيدة): ${svAr(c.dup)} — تُحسب مرة واحدة</div>` : `<div style="color:${GREEN};font-weight:700;">لا تكرار</div>`}${c.noId ? `<div style="color:${DANGER};font-weight:700;">صفوف بلا هوية في هذا العمود: ${svAr(c.noId)} — لم تُحسب</div>` : ""}</div>
+      <div style="font-size:12.5px;font-weight:800;margin-top:8px;">ما سيُكتب في العمل:</div>
+      <div style="font-size:12.5px;line-height:1.9;">${c.registered != null ? line("عدد المسجلات", c.registered) : `<div class="hint">عدد المسجلات: لن يتغير (لا يوجد عمود حضور/غياب)</div>`}${line("عدد الحاضرات", c.attended)}${line("المشاركات عند البداية (حضور الجلسة الأولى)", c.start)}${line("عدد المستمرات (حضور الأولى والأخيرة)", c.cont)}</div>
+      ${c.markCols.length ? `<div class="hint">أعمدة الحضور المتعرف عليها: ${c.markCols.map(esc).join("، ")}</div>` : `<div class="hint">لم يُتعرَّف على أعمدة حضور/غياب، فكل مستفيدة مميزة تُعدّ حاضرة.</div>`}
+      <div class="hint">تُحفظ الأعداد فقط، ولا تُحفظ الأسماء ولا الأرقام.</div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px;"><button type="button" class="pill-btn pill-primary" data-action="pa-confirm" data-id="${esc(p.id)}">اعتماد وحفظ الأعداد</button><button type="button" class="pill-btn pill-ghost" data-action="pa-cancel" data-id="${esc(p.id)}">إلغاء</button></div>
+    </div>`;
+  }
+  const busy = st.busy;
+  return `<div style="margin:10px 0 14px;padding:12px;border-radius:12px;background:${GRAY_BG};">
+    <div style="display:flex;justify-content:space-between;align-items:center;"><div class="subhead" style="margin:0;">استيراد الحضور</div><button type="button" class="pill-btn pill-ghost" data-action="pa-toggle" data-id="${esc(p.id)}">إغلاق</button></div>
+    <div class="hint" style="margin:6px 0 8px;">من كشف حضور Excel أو CSV، أو من جدول Google Sheets أو إجابات Google Forms (برابط)، أو بلصق الجدول. صف أول عناوين، وعمود يميّز المستفيدة (هوية/جوال/اسم)، وأعمدة حضور اختيارية (حاضرة/غائبة). تظهر معاينة قبل الحفظ.</div>
+    <div class="field"><label class="field-label">ملف Excel أو CSV</label><input type="file" class="input" accept=".xlsx,.xls,.csv,.tsv,.txt" data-pa-file="${esc(p.id)}" ${busy ? "disabled" : ""} /></div>
+    <div class="field"><label class="field-label">أو رابط Google Sheets / Forms</label><div style="display:flex;gap:6px;"><input class="input" dir="ltr" style="flex:1;min-width:0;" placeholder="https://docs.google.com/spreadsheets/..." data-pa-link="${esc(p.id)}" value="${esc(st.link)}" /><button type="button" class="pill-btn pill-primary" data-action="pa-read-link" data-id="${esc(p.id)}" ${busy ? "disabled" : ""}>${busy === "link" ? "جارٍ القراءة…" : "قراءة"}</button></div></div>
+    <div class="field"><label class="field-label">أو الصقي الجدول هنا</label><textarea class="input" rows="4" dir="auto" data-pa-paste="${esc(p.id)}" placeholder="انسخي الجدول كاملًا مع صف العناوين">${esc(st.text)}</textarea></div>
+    <button type="button" class="pill-btn pill-ghost" data-action="pa-read-paste" data-id="${esc(p.id)}" ${busy ? "disabled" : ""}>معاينة الجدول الملصق</button>
+    ${msg}${pend}</div>`;
+}
+async function paRun(id, mode, file) {
+  const st = paState(id); st.busy = mode; st.msg = null; st.pend = null; render();
+  try {
+    let rows, label;
+    if (mode === "file") { rows = await svFileRows(file); label = "ملف " + file.name; }
+    else if (mode === "link") {
+      const url = String(st.link || "").trim();
+      if (!/^https:\/\/docs\.google\.com\/spreadsheets\//.test(url)) throw new Error("ضعي رابط جدول Google (Sheets أو جدول إجابات Forms)");
+      rows = await svReadSheetUrl(url); label = "رابط Google";
+    } else { rows = svParseTable(st.text || ""); label = "جدول ملصق"; if (!rows.length) throw new Error("الصقي الجدول أولًا"); }
+    if (!rows || rows.length < 2) throw new Error("الجدول فارغ أو بدون صف عناوين");
+    const idCol = paGuessIdCol(rows[0].map((h) => String(h || "")));
+    st.pend = { rows, idCol: idCol >= 0 ? idCol : 0, label, guessed: idCol >= 0 };
+    if (idCol < 0) st.msg = { kind: "err", text: "لم أجد عمود هوية أو جوال أو اسم؛ اختاري العمود المناسب من القائمة." };
+  } catch (e) { st.msg = { kind: "err", text: (e && e.message) || String(e) }; }
+  st.busy = ""; render();
+}
+function paAction(action, ds) {
+  const st = paState(ds.id);
+  if (action === "pa-toggle") { st.open = !st.open; if (!st.open) { st.pend = null; st.msg = null; } render(); return true; }
+  if (action === "pa-read-link") { paRun(ds.id, "link"); return true; }
+  if (action === "pa-read-paste") { paRun(ds.id, "paste"); return true; }
+  if (action === "pa-cancel") { st.pend = null; st.msg = null; render(); return true; }
+  if (action === "pa-confirm") {
+    const p = findById(getItemList("programs"), ds.id);
+    if (p && st.pend) {
+      const c = paCompute(st.pend.rows, st.pend.idCol);
+      if (c.registered != null) p.registeredCount = String(c.registered);
+      p.attendeesCount = String(c.attended);
+      if (c.start != null) p.startCount = String(c.start);
+      if (c.cont != null) p.continuingCount = String(c.cont);
+      p.attendImport = { at: Date.now(), unique: c.unique, dup: c.dup, rows: c.rows, srcLabel: st.pend.label };
+      st.msg = { kind: "ok", text: "اعتُمدت الأعداد وحُدّثت نسبتا الحضور والاستمرار تلقائيًا." }; st.pend = null; autoSaveSchedule();
+    }
+    render(); return true;
+  }
+  return false;
+}
 /* ---- المرحلة ٢: ربط أداة القياس بعمل/برنامج أو هدف أو مؤشر أداء أو تقييم عام — اختيار من المسجّل بالمعرّف (اختياري) ---- */
 const TOOL_LINK_KINDS = [["work", "عمل أو برنامج"], ["goal", "هدف تشغيلي"], ["indicator", "مؤشر أداء"], ["general", "تقييم عام"]];
 const TOOL_NO_RESPONSE = ["بطاقة ملاحظة", "قائمة تحقق", "تحليل سجلات", "تقييم أداء"]; // أدوات لا تعتمد على جمع ردود: لا تُفرض عليها نسبة الاستجابة
@@ -15288,6 +15394,8 @@ function attachFormListeners() {
       const ab = findById(getItemList("shapeBlocks"), el.dataset.id);
       if (ab && ab.auto) { Object.assign(ab, shapeAutoData(ab.shapeId, { sectionId: ab.sectionId || S.activeSectionId, data: S.sectionDraft })); ab.auto = false; }
     }
+    if (el.dataset && el.dataset.paPaste) { paState(el.dataset.paPaste).text = el.value; return; }
+    if (el.dataset && el.dataset.paLink) { paState(el.dataset.paLink).link = el.value; return; }
     if (el.dataset && el.dataset.svPaste) { S.ui.svPaste = S.ui.svPaste || {}; S.ui.svPaste[el.dataset.svPaste] = el.value; return; }
     if (el.id === "ops-recent-q") {
       S.ui.opsRecentQ = el.value; const pos = el.selectionStart; render();
@@ -15506,6 +15614,8 @@ function attachFormListeners() {
     const el = e.target;
     if (el.id === "imp-file" && el.files && el.files[0]) { impReadFile(el.files[0]); return; }
     if (el.dataset && el.dataset.impMap) { const st = impState(); st.map[el.dataset.impMap] = el.value === "" ? undefined : +el.value; render(); return; }
+    if (el.dataset && el.dataset.paFile && el.files && el.files[0]) { paRun(el.dataset.paFile, "file", el.files[0]); el.value = ""; return; }
+    if (el.dataset && el.dataset.paIdcol) { const st = paState(el.dataset.paIdcol); if (st.pend) { st.pend.idCol = +el.value; st.msg = null; render(); } return; }
     if (el.dataset && el.dataset.toolLinkKind) { const t = findById(getItemList("tools"), el.dataset.toolLinkKind); if (t) { toolLinkSetKind(t, el.value); render(); } return; }
     if (el.dataset && el.dataset.svFile && el.files && el.files[0]) { svRunRead(el.dataset.svFile, "file", el.files[0]); el.value = ""; return; }
     if (el.dataset && el.dataset.svMain) { const t = svFindTool(el.dataset.svMain); if (t) { t.mainSource = el.value; autoSaveSchedule(); render(); } return; }
@@ -17473,6 +17583,7 @@ function handleReportEditorAction(action, ds) {
       toolLinkToggle(t, ds.v); render(); return true;
     }
     case "sv-confirm": case "sv-cancel": return svAction(action, ds);
+    case "pa-toggle": case "pa-read-link": case "pa-read-paste": case "pa-cancel": case "pa-confirm": return paAction(action, ds);
     case "ind-link-toggle": {
       const row = findById(getItemList("indicators"), ds.id); if (!row) return true;
       indLinkToggle(row, ds.kind, ds.v, rptProgramList(getCurrentReportEntry())); render(); return true;
