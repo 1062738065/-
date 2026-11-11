@@ -241,6 +241,15 @@ const RECOMMENDATION_PRIORITIES = ["عاجلة", "عالية", "متوسطة", "
  * أنواع الحقول المدعومة الآن: text, textarea, number, date, select, radio.
  * (الحقول المحسوبة تلقائيًا، والقوائم القابلة للتوسعة بـ"أخرى"، والحدود
  * الدنيا/القصوى لعدد العناصر — غير مدعومة بعد في هذا المحرك العام). */
+/* المرحلة ١: عدد المسجلات والمشاركات عند البداية (اختياريان) + فرق التكلفة المحسوب — حقول إضافية فقط ولا يُمس أي حقل قائم */
+const PROGRAM_ATTEND_FIELDS = [
+  { id: "registeredCount", type: "number", label: "عدد المسجلات (اختياري)", placeholder: "0", rowGroup: "att2" },
+  { id: "startCount", type: "number", label: "المشاركات عند البداية (اختياري)", placeholder: "0", rowGroup: "att2" },
+  { id: "continuingCount", type: "number", label: "عدد المستمرات (اختياري)", placeholder: "0" },
+];
+const PROGRAM_COSTDIFF_FIELDS = [
+  { id: "costDiff", type: "computed", compute: "costDiff", label: "الفرق بين التكلفتين" },
+];
 const SECTION_FIELD_SCHEMAS = {
   recommendations: {
     arrayKey: "recommendations",
@@ -280,10 +289,12 @@ const SECTION_FIELD_SCHEMAS = {
       { id: "executionStatus", type: "select", label: "حالة التنفيذ", hideLabel: true, options: EXECUTION_STATUSES, placeholder: "اختاري حالة التنفيذ", subheadBefore: "حالة التنفيذ" },
       { id: "completionPercent", type: "number", label: "نسبة الإنجاز", placeholder: "0", subheadBefore: "مستوى الإنجاز", rowGroup: "completion" },
       { id: "attendeesCount", type: "number", label: "عدد الحاضرات", placeholder: "0", rowGroup: "completion" },
+      ...PROGRAM_ATTEND_FIELDS,
       { id: "attendanceRate", type: "number", label: "نسبة الحضور", placeholder: "0", rowGroup: "rates" },
       { id: "continuationRate", type: "number", label: "نسبة الاستمرار", placeholder: "0", rowGroup: "rates" },
       { id: "approvedCost", type: "number", label: "التكلفة المعتمدة", placeholder: "0", rowGroup: "costs" },
       { id: "actualCost", type: "number", label: "التكلفة الفعلية", placeholder: "0", rowGroup: "costs" },
+      ...PROGRAM_COSTDIFF_FIELDS,
       { id: "highlightResult", type: "textarea", label: "أبرز نتيجة", required: true, placeholder: "أبرز نتيجة تحققت من هذا العمل" },
     ],
   },
@@ -549,7 +560,22 @@ const SECTION_FIELD_SCHEMAS = {
 // العينة) — دالة الحساب نفسها كود ثابت مربوط باسم (f.compute)، فهذا النوع غير
 // متاح للإضافة الذاتية من صفحة "إدارة حقول الأقسام" (لا معنى لحقل محسوب بدون
 // دالة حساب مكتوبة له)، لكنه يبقى يشتغل عاديًا للحقول المعرّفة بالكود مسبقًا.
+/* نسبتا الحضور والاستمرار: تُحسبان تلقائيًا عند توفر مدخلاتهما، وإلا تبقى القيمة المُدخلة يدويًا كما هي */
+function progPct(a, b) { const x = numOrNull(a), y = numOrNull(b); return x == null || y == null || y <= 0 ? null : Math.round((x / y) * 1000) / 10; }
+function programAttendanceAuto(p) { return progPct(p && p.attendeesCount, p && p.registeredCount); }
+function programContinuationAuto(p) { return progPct(p && p.continuingCount != null && p.continuingCount !== "" ? p.continuingCount : null, p && p.startCount); }
+function programCostDiff(p) {
+  const a = numOrNull(p && p.approvedCost), c = numOrNull(p && p.actualCost);
+  if (a == null || c == null) return null;
+  return { diff: Math.round((a - c) * 100) / 100, pct: a > 0 ? Math.round(((a - c) / a) * 1000) / 10 : null };
+}
 const SCHEMA_COMPUTED_FIELDS = {
+  costDiff: (item) => {
+    const r = programCostDiff(item);
+    if (!r) return "يُحسب تلقائيًا بعد إدخال التكلفة المعتمدة والفعلية";
+    const n = Math.abs(r.diff).toLocaleString("en-US");
+    return r.diff === 0 ? "لا فرق (مطابقة للمعتمد)" : r.diff > 0 ? `وفر ${n}${r.pct != null ? " (" + Math.abs(r.pct) + "٪ من المعتمد)" : ""}` : `زيادة ${n}${r.pct != null ? " (" + Math.abs(r.pct) + "٪ فوق المعتمد)" : ""}`;
+  },
   responseRate: (item) => {
     const rate = svResponseRate(item);
     return rate != null ? `${rate}٪` : "تُحسب تلقائيًا بعد إدخال حجم العينة وعدد المستجيبات";
@@ -577,7 +603,9 @@ function renderSchemaFieldHtml(f, arrKey, itemId, value, customOptionsList, item
     return `<div class="subhead">${esc(f.label)}</div><div style="margin-bottom:18px;">${checklistFieldHtml(f.id, f.options || [], value)}</div>`;
   }
   const inputType = f.type === "number" ? "number" : f.type === "date" ? "date" : "text";
+  const autoRate = arrKey === "programs" && !subArrKey ? (f.id === "attendanceRate" ? programAttendanceAuto(item) : f.id === "continuationRate" ? programContinuationAuto(item) : null) : null;
   const html =
+    autoRate != null ? readonlyBox(autoRate + "٪ — تُحسب تلقائيًا" + (f.id === "attendanceRate" ? " (الحاضرات ÷ المسجلات)" : " (المستمرات ÷ المشاركات عند البداية)")) :
     f.type === "computed" ? readonlyBox((SCHEMA_COMPUTED_FIELDS[f.compute] || (() => ""))(item || {})) :
     f.type === "textarea" ? (subArrKey ? txtSub(arrKey, itemId, subArrKey, subItemId, f.id, value, f.placeholder) : txt(arrKey, itemId, f.id, value, f.placeholder)) :
     f.type === "select" ? (() => { const o_ = (f.options || []).includes(value) || !value ? (f.options || []) : [...(f.options || []), value]; return subArrKey ? selSub(arrKey, itemId, subArrKey, subItemId, f.id, value, o_, f.placeholder) : sel(arrKey, itemId, f.id, value, o_, f.placeholder); })() :
@@ -2945,6 +2973,9 @@ function applyFieldSchemaOverrides(map) {
     let fields = map[sectionId];
     if (!Array.isArray(fields) || !fields.length) return;
     if (sectionId === "programs") {
+      const injectAfter = (arr, anchorId, add) => { const miss = add.filter((nf) => !arr.some((f) => f.id === nf.id)); if (!miss.length) return arr; const at = arr.findIndex((f) => f.id === anchorId); return at === -1 ? [...arr, ...miss] : [...arr.slice(0, at + 1), ...miss, ...arr.slice(at + 1)]; };
+      fields = injectAfter(fields, "attendeesCount", PROGRAM_ATTEND_FIELDS);
+      fields = injectAfter(fields, "actualCost", PROGRAM_COSTDIFF_FIELDS);
       const missing = PROGRAM_ACHIEVEMENT_FIELDS.filter((nf) => !fields.some((f) => f.id === nf.id));
       if (missing.length) {
         const at = fields.findIndex((f) => f.id === "actualBeneficiaries");
@@ -4780,15 +4811,16 @@ function gbCmpBuild(series, rows, tog) {
   const rs = rows.map((r) => ({ r, vs: live.map((c) => gbColVal(sa, gs, r.name, c.keys)), tg: live.map((c) => gbColTarget(sa, gs, r, c.keys)) }));
   const nv = (a) => a.filter((v) => v != null).length;
   const first = (a) => a.find((v) => v != null), last = (a) => { for (let i = a.length - 1; i >= 0; i--) if (a[i] != null) return a[i]; return null; };
-  const dir = (x) => { if (nv(x.vs) < 2) return null; const d = last(x.vs) - first(x.vs); return d > 0 ? "up" : d < 0 ? "down" : "same"; };
+  const rat = (x) => x.vs.map((v, i) => (v != null && x.tg[i] ? Math.round(v / x.tg[i] * 100) : null));
+  const dir = (x) => { if (nv(x.vs) < 2) return null; const rr = rat(x), hr = rr.filter((v) => v != null); const d = hr.length >= 2 ? hr[hr.length - 1] - hr[0] : last(x.vs) - first(x.vs); return d > 0 ? "up" : d < 0 ? "down" : "same"; };
   const cnt = { up: 0, down: 0, same: 0, none: 0 }; rs.forEach((x) => { cnt[dir(x) || "none"]++; });
   const DL = { up: ["▲ تحسّن", GREEN], down: ["▼ تراجع", DANGER], same: ["= ثبات", SUBTLE], none: ["بيانات غير كافية", SUBTLE] };
   const tgs = (x) => x.tg.filter((v) => v != null), tgLast = (x) => last(x.tg);
   const tgVaries = (x) => new Set(tgs(x)).size > 1;
-  const body = rs.map((x) => { const d = dir(x), l = last(x.vs), t = tgLast(x), ratio = l != null && t ? Math.round(l / t * 100) : null, df = d ? last(x.vs) - first(x.vs) : null;
-    return `<tr><td style="font-weight:700">${esc(x.r.name)}${nv(x.vs) < 2 ? `<div class="hint" style="margin:0;">${nv(x.vs) ? "نتيجة في فترة واحدة فقط" : "لا توجد نتائج في الفترات المختارة"}</div>` : ""}</td>${x.vs.map((v, i) => `<td style="text-align:center"><span style="color:${SUBTLE};font-size:11.5px;">${x.tg[i] != null ? x.tg[i] + "٪" : "بلا مستهدف"}</span> · ${dashPctCell(v)}</td>`).join("")}<td style="text-align:center">${df == null ? "—" : `<b style="color:${DL[d][1]}">${df > 0 ? "+" : ""}${df}</b>`}</td><td style="text-align:center">${ratio == null ? "—" : ratio + "٪"}</td><td style="text-align:center"><b style="color:${DL[d || "none"][1]};font-size:11.5px;">${DL[d || "none"][0]}</b></td></tr>`; }).join("");
+  const body = rs.map((x) => { const d = dir(x), rr = rat(x), df = d ? last(x.vs) - first(x.vs) : null;
+    return `<tr><td style="font-weight:700">${esc(x.r.name)}${nv(x.vs) < 2 ? `<div class="hint" style="margin:0;">${nv(x.vs) ? "نتيجة في فترة واحدة فقط" : "لا توجد نتائج في الفترات المختارة"}</div>` : ""}</td>${x.vs.map((v, i) => `<td style="text-align:center"><span style="color:${SUBTLE};font-size:11.5px;">${x.tg[i] != null ? x.tg[i] + "٪" : "بلا مستهدف"}</span> · ${dashPctCell(v)}<div style="font-size:11px;margin-top:2px;color:${rr[i] == null ? SUBTLE : rr[i] >= 100 ? GREEN : DANGER};">${rr[i] == null ? "نسبة التحقق: —" : "نسبة التحقق: <b>" + rr[i] + "٪</b>"}${v != null && x.tg[i] ? `<span style="color:${SUBTLE};"> (${v}÷${x.tg[i]})</span>` : ""}</div></td>`).join("")}<td style="text-align:center">${df == null ? "—" : `<b style="color:${DL[d][1]}">${df > 0 ? "+" : ""}${df}</b>`}</td><td style="text-align:center"><b style="color:${DL[d || "none"][1]};font-size:11.5px;">${DL[d || "none"][0]}</b></td></tr>`; }).join("");
   const groups = rs.map((x) => ({ name: x.r.name, bars: x.vs.map((v, i) => ({ label: live[i].label, pct: v, target: x.tg[i], c: gbSerCol(i, live.length) })) }));
-  const html = `<div style="display:flex;gap:8px;flex-wrap:wrap;margin:12px 0 10px;">${stat(rs.length, "إجمالي الأهداف")}${stat(cnt.up, "تحسّنت", GREEN)}${stat(cnt.down, "تراجعت", DANGER)}${stat(cnt.same, "ثبتت", SUBTLE)}${cnt.none ? stat(cnt.none, "بلا بيانات كافية", SUBTLE) : ""}</div><div class="table-wrap" style="overflow-x:auto;"><table class="prs-table" style="min-width:640px;"><thead><tr><th>الهدف</th>${live.map((c) => `<th style="text-align:center">${esc(c.label)}<div class="hint" style="margin:0;color:inherit;opacity:.85;">المستهدف · المتحقق</div></th>`).join("")}<th style="text-align:center">الفرق</th><th style="text-align:center">نسبة التحقق من المستهدف</th><th style="text-align:center">الاتجاه</th></tr></thead><tbody>${body}</tbody></table></div><div class="hint" style="margin-top:6px;">الفرق = آخر فترة − أول فترة (نقاط مئوية) · الفراغ لا يُحسب صفرًا · لكل فترة مستهدفها الخاص (يظهر بجانب المتحقق) · نسبة التحقق = آخر متحقق ÷ مستهدف آخر فترة.</div>`;
+  const html = `<div style="display:flex;gap:8px;flex-wrap:wrap;margin:12px 0 10px;">${stat(rs.length, "إجمالي الأهداف")}${stat(cnt.up, "تحسّنت", GREEN)}${stat(cnt.down, "تراجعت", DANGER)}${stat(cnt.same, "ثبتت", SUBTLE)}${cnt.none ? stat(cnt.none, "بلا بيانات كافية", SUBTLE) : ""}</div><div class="table-wrap" style="overflow-x:auto;"><table class="prs-table" style="min-width:640px;"><thead><tr><th>الهدف</th>${live.map((c) => `<th style="text-align:center">${esc(c.label)}<div class="hint" style="margin:0;color:inherit;opacity:.85;">المستهدف · المتحقق · نسبة التحقق</div></th>`).join("")}<th style="text-align:center">الفرق في المتحقق</th><th style="text-align:center">الاتجاه</th></tr></thead><tbody>${body}</tbody></table></div><div class="hint" style="margin-top:6px;">نسبة التحقق (لكل فترة) = المتحقق ÷ مستهدف تلك الفترة · الاتجاه يقارن نسبة التحقق في آخر فترة بأولها عند توفر مستهدفي الفترتين، وإلا يقارن المتحقق · الفرق = آخر متحقق − أول متحقق · الفراغ لا يُحسب صفرًا.</div>`;
   return { controls, html, grouped: { groups, legend: live.map((c) => c.label) } };
 }
 function gbColTarget(sa, gs, row, keys) {
@@ -9510,8 +9542,8 @@ function pcCountBlockHtml(item, d) {
   const open = S.ui && S.ui.pcOpen === item.id;
   const sum = cur.length ? cur.map((x) => esc(x.unit)).join("، ") : "اختاري وحدة أو أكثر";
   const menu = open ? `<div class="pc-menu">${all.map((u) => { const on = cur.some((x) => x.unit === u); return `<button type="button" class="pc-opt${on ? " on" : ""}" data-action="pc-toggle" data-id="${esc(item.id)}" data-unit="${esc(u)}"><span class="bx">${on ? "✓" : ""}</span>${esc(u)}</button>`; }).join("")}<div class="pc-add"><input class="input" id="pc-new-${esc(item.id)}" placeholder="وحدة أخرى، مثال: مدرسة" /><button type="button" class="pill-btn pill-ghost" data-action="pc-add-custom" data-id="${esc(item.id)}">＋ إضافة</button></div><button type="button" class="pill-btn pc-done" data-action="pc-menu" data-id="${esc(item.id)}">تم</button></div>` : "";
-  const rows = cur.map((x) => `<div class="pc-row"><div class="pc-u">${esc(x.unit)}</div>${inpSub("programs", item.id, "counts", x.id, "target", x.target, "0", "number")}${inpSub("programs", item.id, "counts", x.id, "done", x.done, "0", "number")}</div>`).join("");
-  const table = cur.length ? `<div class="pc-table"><div class="pc-row pc-head"><div>وحدة العد</div><div>العدد المستهدف</div><div>العدد المنجز الفعلي</div></div>${rows}</div>` : "";
+  const rows = cur.map((x) => `<div class="pc-row"><div class="pc-u">${esc(x.unit)}</div>${inpSub("programs", item.id, "counts", x.id, "target", x.target, "0", "number")}${inpSub("programs", item.id, "counts", x.id, "done", x.done, "0", "number")}<div class="pc-pct">${(() => { const r = progPct(x.done, x.target); return r == null ? "—" : r + "٪"; })()}</div></div>`).join("");
+  const table = cur.length ? `<div class="pc-table"><div class="pc-row pc-head"><div>وحدة العد</div><div>العدد المستهدف</div><div>العدد المنجز الفعلي</div><div>نسبة الإنجاز</div></div>${rows}</div>` : "";
   return `<div class="field"><label class="field-label">وحدة العدّ (يمكن اختيار أكثر من وحدة)</label><button type="button" class="pc-dd input" data-action="pc-menu" data-id="${esc(item.id)}"><span>${sum}</span><span>${open ? "▴" : "▾"}</span></button>${menu}</div>${table}`;
 }
 function programAchievedValue(p) {
@@ -13374,7 +13406,7 @@ function reviewSectionHtml(d, report) {
 
 /* =============================== Empty-item factories ========================= */
 const EMPTY_ITEM_FACTORY = {
-  programs: () => ({ id: uid("prog"), workType: "", name: "", goal: "", targetGroup: "", targetCount: "", actualBeneficiaries: "", countUnit: "", achievedCount: "", counts: [], startDate: "", endDate: "", location: "", deliveryMode: "", executingEntity: "", participatingEntities: "", responsiblePerson: "", executionStatus: "", completionPercent: "", attendeesCount: "", attendanceRate: "", continuationRate: "", approvedCost: "", actualCost: "", highlightResult: "" }),
+  programs: () => ({ id: uid("prog"), workType: "", name: "", goal: "", targetGroup: "", targetCount: "", actualBeneficiaries: "", countUnit: "", achievedCount: "", counts: [], startDate: "", endDate: "", location: "", deliveryMode: "", executingEntity: "", participatingEntities: "", responsiblePerson: "", executionStatus: "", completionPercent: "", attendeesCount: "", registeredCount: "", startCount: "", continuingCount: "", attendanceRate: "", continuationRate: "", approvedCost: "", actualCost: "", highlightResult: "" }),
   tools: () => ({ id: uid("tool"), toolType: "", name: "", purpose: "", relatedProgram: "", targetGroup: "", populationSize: "", sampleSize: "", respondentsCount: "", applicationDate: "", toolLink: "", resultsLink: "", resultQuality: "" }),
   comparisons: () => ({ id: uid("cmp"), topic: "", resultValue: "", judgment: "", changeReason: "" }),
   challenges: () => ({ id: uid("chl"), name: "", area: "", severity: "", scope: "", description: "", rootCause: "", performanceImpact: "", startedWhen: "", recurred: "", actionTaken: "", actionResult: "", stillOngoing: "", supportNeeded: "", proposedHandler: "", resolutionTime: "" }),
