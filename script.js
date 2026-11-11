@@ -562,6 +562,29 @@ const SECTION_FIELD_SCHEMAS = {
 // دالة حساب مكتوبة له)، لكنه يبقى يشتغل عاديًا للحقول المعرّفة بالكود مسبقًا.
 /* نسبتا الحضور والاستمرار: تُحسبان تلقائيًا عند توفر مدخلاتهما، وإلا تبقى القيمة المُدخلة يدويًا كما هي */
 function progPct(a, b) { const x = numOrNull(a), y = numOrNull(b); return x == null || y == null || y <= 0 ? null : Math.round((x / y) * 1000) / 10; }
+/* حقول محسوبة تتحدث أثناء الكتابة بلا إعادة رسم: بدل الحقل بين «مُدخل يدويًا» و«تلقائي» حسب توفر المدخلات */
+const PROG_LIVE_FIELDS = ["attendanceRate", "continuationRate", "costDiff"];
+function progLiveInner(fid, p) {
+  if (fid === "costDiff") return { mode: "auto", html: readonlyBox(SCHEMA_COMPUTED_FIELDS.costDiff(p)) };
+  const auto = fid === "attendanceRate" ? programAttendanceAuto(p) : programContinuationAuto(p);
+  if (auto != null) return { mode: "auto", html: readonlyBox(auto + "٪ — تُحسب تلقائيًا" + (fid === "attendanceRate" ? " (الحاضرات ÷ المسجلات)" : " (المستمرات ÷ المشاركات عند البداية)")) };
+  return { mode: "manual", html: inp("programs", p.id, fid, p[fid], "0", "number") };
+}
+function progLiveWrap(f, p) { const r = progLiveInner(f.id, p); return `<div data-live="${f.id}" data-mode="${r.mode}">${r.html}</div>`; }
+function progLivePatch(el) {
+  const box = el.closest(".repeat-item"); if (!box) return;
+  const p = findById(getItemList("programs"), el.dataset.id); if (!p) return;
+  PROG_LIVE_FIELDS.forEach((fid) => {
+    const w = box.querySelector(`[data-live="${fid}"]`); if (!w || (w.contains(el))) return;
+    const r = progLiveInner(fid, p);
+    if (r.mode === "manual" && w.dataset.mode === "manual") return;
+    if (w.innerHTML !== r.html) { w.innerHTML = r.html; w.dataset.mode = r.mode; }
+  });
+  box.querySelectorAll(".pc-table .pc-row:not(.pc-head)").forEach((row) => {
+    const ins = row.querySelectorAll("input"), c = row.querySelector(".pc-pct"); if (!c || ins.length < 2) return;
+    const r = progPct(ins[1].value, ins[0].value); c.textContent = r == null ? "—" : r + "٪";
+  });
+}
 function programAttendanceAuto(p) { return progPct(p && p.attendeesCount, p && p.registeredCount); }
 function programContinuationAuto(p) { return progPct(p && p.continuingCount != null && p.continuingCount !== "" ? p.continuingCount : null, p && p.startCount); }
 function programCostDiff(p) {
@@ -602,10 +625,12 @@ function renderSchemaFieldHtml(f, arrKey, itemId, value, customOptionsList, item
   if (f.type === "checklist") {
     return `<div class="subhead">${esc(f.label)}</div><div style="margin-bottom:18px;">${checklistFieldHtml(f.id, f.options || [], value)}</div>`;
   }
+  if (arrKey === "tools" && !subArrKey && f.id === "relatedProgram") return toolLinkHtml(item || {});
+  if (arrKey === "tools" && !subArrKey && f.id === "responseRate" && TOOL_NO_RESPONSE.indexOf(String((item || {}).toolType || "")) !== -1) return "";
   const inputType = f.type === "number" ? "number" : f.type === "date" ? "date" : "text";
-  const autoRate = arrKey === "programs" && !subArrKey ? (f.id === "attendanceRate" ? programAttendanceAuto(item) : f.id === "continuationRate" ? programContinuationAuto(item) : null) : null;
+  const progLive = arrKey === "programs" && !subArrKey && PROG_LIVE_FIELDS.indexOf(f.id) !== -1;
   const html =
-    autoRate != null ? readonlyBox(autoRate + "٪ — تُحسب تلقائيًا" + (f.id === "attendanceRate" ? " (الحاضرات ÷ المسجلات)" : " (المستمرات ÷ المشاركات عند البداية)")) :
+    progLive ? progLiveWrap(f, item || {}) :
     f.type === "computed" ? readonlyBox((SCHEMA_COMPUTED_FIELDS[f.compute] || (() => ""))(item || {})) :
     f.type === "textarea" ? (subArrKey ? txtSub(arrKey, itemId, subArrKey, subItemId, f.id, value, f.placeholder) : txt(arrKey, itemId, f.id, value, f.placeholder)) :
     f.type === "select" ? (() => { const o_ = (f.options || []).includes(value) || !value ? (f.options || []) : [...(f.options || []), value]; return subArrKey ? selSub(arrKey, itemId, subArrKey, subItemId, f.id, value, o_, f.placeholder) : sel(arrKey, itemId, f.id, value, o_, f.placeholder); })() :
@@ -12788,10 +12813,11 @@ function svAr(x, d) { const v = Number(x); if (!isFinite(v)) return ""; return v
 function svApplyToTool(t, a) {
   t.analysis = a;
   t.respondentsCount = String(a.n);
-  t.sampleSize = String(a.n);
+  const keepSample = Number(t.sampleSize) > 0 && !(t.autoFields && t.autoFields.sampleSize); // العينة المستهدفة المُدخلة يدويًا لا تُستبدل
+  if (!keepSample) t.sampleSize = String(a.n);
   if (a.from) t.applicationDate = a.from;
   t.resultQuality = svQuality(a.n, t.populationSize);
-  t.autoFields = { sampleSize: 1, respondentsCount: 1, applicationDate: !!a.from, resultQuality: 1 };
+  t.autoFields = { sampleSize: keepSample ? 0 : 1, respondentsCount: 1, applicationDate: !!a.from, resultQuality: 1 };
   if (!t.mainSource) t.mainSource = "all";
 }
 // نصوص التحليل التلقائي (تعبّي القسم ٦)
@@ -12984,8 +13010,10 @@ function svSettingsHtml(d) {
 
 /* ---- واجهة أداة القياس: رابط/لصق + قراءة وتحليل ---- */
 function svResponseRate(t) {
-  const pop = Number(t.populationSize), r = Number(t.respondentsCount);
-  if (t.analysis && pop > 0 && r >= 0) return Math.min(100, Math.round((r / pop) * 100));
+  const pop = Number(t.populationSize), r = Number(t.respondentsCount), smp = Number(t.sampleSize);
+  const autoS = !!(t.autoFields && t.autoFields.sampleSize);
+  // نسبة الاستجابة = المستجيبات الفعلي ÷ حجم العينة المستهدف؛ وإن كانت العينة معبّأة تلقائيًا من التحليل فالمقام حجم المجتمع كما كان
+  if (t.analysis && r >= 0) { const den = !autoS && smp > 0 ? smp : pop; if (den > 0) return Math.min(100, Math.round((r / den) * 100)); }
   return computeResponseRate(t.sampleSize, t.respondentsCount);
 }
 function svMsg(id) { return (S.ui.svMsg && S.ui.svMsg[id]) || null; }
@@ -13005,12 +13033,24 @@ function svToolBlockHtml(t) {
       <button type="button" class="pill-btn pill-ghost" data-action="sv-clear" data-id="${esc(t.id)}" style="margin-top:6px;">مسح التحليل</button>
     </div>`;
   }
-  return `<div class="subhead">تحليل الاستبانة تلقائيًا</div>
-    <div class="hint" style="margin-bottom:8px;">الطريقة ١: ضعي رابط جدول إجابات Google في «رابط نتائجها» ثم اضغطي «قراءة وتحليل». الطريقة ٢: انسخي الجدول والصقيه هنا.</div>
+  const pd = (S.ui.svPending || {})[t.id];
+  const KN = { s: "تقييم رقمي", c: "اختيارات", t: "نص" };
+  const pend = pd ? `<div style="margin-top:12px;padding:12px;border-radius:12px;border:1.5px dashed ${ROSE};background:${GRAY_BG};">
+      <div style="font-size:13px;font-weight:800;margin-bottom:6px;">معاينة قبل الحفظ <span class="hint" style="font-weight:600;">— لم يُكتب شيء في الأداة بعد</span></div>
+      <div style="font-size:12.5px;line-height:1.9;">عدد المستجيبات: <b>${svAr(pd.an.n)}</b>${pd.an.from ? ` · الفترة: ${svD(pd.an.from)}${pd.an.to && pd.an.to !== pd.an.from ? " ← " + svD(pd.an.to) : ""}` : " · لم يُتعرَّف على عمود التاريخ"}</div>
+      ${pd.blank || pd.dup ? `<div class="hint" style="color:${DANGER};font-weight:700;">تنظيف: حُذف ${pd.blank} صف فارغ و${pd.dup} صف مكرر بالكامل من أصل ${pd.total} صفًا.</div>` : `<div class="hint" style="color:${GREEN};font-weight:700;">لا صفوف فارغة أو مكررة.</div>`}
+      <div style="font-size:12px;margin-top:6px;font-weight:700;">الأعمدة المتعرف عليها (${pd.an.qs.length}):</div>
+      <ul style="margin:4px 18px 8px 0;padding:0;font-size:12px;line-height:1.8;">${pd.an.qs.slice(0, 12).map((q) => `<li>${esc(q.t)} <span class="hint">— ${KN[q.k] || ""}</span></li>`).join("")}${pd.an.qs.length > 12 ? `<li class="hint">… و${pd.an.qs.length - 12} أعمدة أخرى</li>` : ""}</ul>
+      ${Number(t.sampleSize) > 0 && !(t.autoFields && t.autoFields.sampleSize) ? `<div class="hint">حجم العينة المستهدف (${esc(t.sampleSize)}) سيبقى كما أدخلتِه، ونسبة الاستجابة ستُحسب منه.</div>` : ""}
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px;"><button type="button" class="pill-btn pill-primary" data-action="sv-confirm" data-id="${esc(t.id)}">اعتماد وحفظ في الأداة</button><button type="button" class="pill-btn pill-ghost" data-action="sv-cancel" data-id="${esc(t.id)}">إلغاء</button></div>
+    </div>` : "";
+  return `<div class="subhead">إدخال نتائج الأداة</div>
+    <div class="hint" style="margin-bottom:8px;">أربع طرق: ١) الإدخال اليدوي في الحقول أعلاه. ٢) رابط جدول Google في «رابط نتائجها» ثم «قراءة وتحليل». ٣) ملف Excel أو CSV. ٤) نسخ الجدول ولصقه هنا. في الطرق ٢ و٣ و٤ تظهر معاينة للأعمدة والتنظيف قبل الحفظ.</div>
+    <div class="field"><label class="field-label">ملف Excel أو CSV</label><input type="file" class="input" accept=".xlsx,.xls,.csv,.tsv,.txt" data-sv-file="${esc(t.id)}" ${busy ? "disabled" : ""} /></div>
     <button type="button" class="pill-btn pill-primary" data-action="sv-read-link" data-id="${esc(t.id)}" ${busy ? "disabled" : ""}>${busy === "link" ? "جارٍ القراءة…" : "قراءة وتحليل من الرابط"}</button>
     <div class="field" style="margin-top:10px;"><label class="field-label">أو الصقي الجدول هنا</label><textarea class="input" rows="4" dir="auto" data-sv-paste="${esc(t.id)}" placeholder="انسخي كل الجدول من Google Sheets (مع صف العناوين) والصقيه هنا">${esc(paste)}</textarea></div>
     <button type="button" class="pill-btn pill-ghost" data-action="sv-read-paste" data-id="${esc(t.id)}" ${busy ? "disabled" : ""}>${busy === "paste" ? "جارٍ التحليل…" : "تحليل الجدول الملصق"}</button>
-    ${msgHtml}${res}`;
+    ${pend}${msgHtml}${res}`;
 }
 function svFindTool(id) { return getItemList("tools").find((x) => x.id === id); }
 async function svReadSheetUrl(url) {
@@ -13020,12 +13060,28 @@ async function svReadSheetUrl(url) {
   if (!out.rows || !out.rows.length) throw new Error("ما وصلت بيانات من الجدول");
   return out.rows;
 }
-async function svRunRead(id, mode) {
+async function svFileRows(file) {
+  if (/\.(xlsx|xls)$/i.test(file.name)) { const X = await impLoadXlsx(); const wb = X.read(await file.arrayBuffer(), { type: "array" }); return X.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { header: 1, defval: "", raw: false }).filter((r) => r.some((x) => String(x).trim() !== "")); }
+  return svParseTable(await file.text());
+}
+/* تنظيف الصفوف قبل التحليل: حذف الصفوف الفارغة والصفوف المتطابقة تمامًا (لصق مكرر) مع إحصاء ما حُذف */
+function svCleanRows(rows) {
+  const head = rows[0], seen = new Set(); let blank = 0, dup = 0; const out = [head];
+  rows.slice(1).forEach((r) => {
+    if (!r.some((x) => String(x).trim() !== "")) { blank++; return; }
+    const k = r.map((x) => String(x).trim()).join("\u0001"); if (seen.has(k)) { dup++; return; } seen.add(k); out.push(r);
+  });
+  return { rows: out, blank, dup, total: rows.length - 1 };
+}
+async function svRunRead(id, mode, file) {
   const t = svFindTool(id); if (!t) return;
   S.ui.svBusy = S.ui.svBusy || {}; S.ui.svBusy[id] = mode; svSetMsg(id, ""); render();
   try {
     let rows;
-    if (mode === "link") {
+    if (mode === "file") {
+      rows = await svFileRows(file);
+      if (!rows || rows.length < 2) throw new Error("الملف فارغ أو بدون صف عناوين");
+    } else if (mode === "link") {
       const url = String(t.resultsLink || "").trim();
       if (!/^https:\/\/docs\.google\.com\/spreadsheets\//.test(url)) throw new Error("ضعي رابط جدول Google في «رابط نتائجها» أولًا");
       rows = await svReadSheetUrl(url);
@@ -13033,16 +13089,17 @@ async function svRunRead(id, mode) {
       rows = svParseTable((S.ui.svPaste || {})[id] || "");
       if (!rows.length) throw new Error("الصقي الجدول أولًا");
     }
-    const an = svAnalyze(rows);
+    const cl = svCleanRows(rows);
+    const an = svAnalyze(cl.rows);
     if (!an) throw new Error("ما قدرت أقرأ إجابات من الجدول. تأكدي أن الصف الأول عناوين الأسئلة");
-    const cur = svFindTool(id); if (!cur) return;
-    svApplyToTool(cur, an);
-    svSetMsg(id, `تمت قراءة ${an.n} إجابة وتعبئة العينة والتاريخ والجودة.`, "ok");
-    autoSaveSchedule();
+    // معاينة قبل الحفظ: لا يُكتب شيء في الأداة إلا بعد «اعتماد»
+    S.ui.svPending = S.ui.svPending || {}; S.ui.svPending[id] = { an, blank: cl.blank, dup: cl.dup, total: cl.total, src: mode };
   } catch (e) { svSetMsg(id, (e && e.message) || String(e), "err"); }
   S.ui.svBusy[id] = null; render();
 }
 function svAction(action, ds) {
+  if (action === "sv-confirm") { const pd = (S.ui.svPending || {})[ds.id], cur = svFindTool(ds.id); if (pd && cur) { svApplyToTool(cur, pd.an); svSetMsg(ds.id, `اعتُمدت ${pd.an.n} إجابة وعُبّئ عدد المستجيبات والتاريخ والجودة.`, "ok"); autoSaveSchedule(); } if (S.ui.svPending) S.ui.svPending[ds.id] = null; render(); return true; }
+  if (action === "sv-cancel") { if (S.ui.svPending) S.ui.svPending[ds.id] = null; render(); return true; }
   if (action === "sv-read-link") { svRunRead(ds.id, "link"); return true; }
   if (action === "sv-read-paste") { svRunRead(ds.id, "paste"); return true; }
   if (action === "sv-clear") { const t = svFindTool(ds.id); if (t) { t.analysis = null; t.autoFields = null; t.prevAnalysis = null; svSetMsg(ds.id, ""); autoSaveSchedule(); } render(); return true; }
@@ -14311,6 +14368,44 @@ function indLinksFieldsHtml(row, report) {
   return fieldWrap("البرنامج المرتبط (اختياري)", false, progs.length ? `<div style="display:flex;gap:6px;flex-wrap:wrap;">${progs.map((p) => chip("prog", p.id, String(p.name).trim(), lp.indexOf(p.id) !== -1)).join("")}</div><div class="hint">اختاري برنامجًا أو أكثر، أو اتركيه بلا ربط. يظهر المؤشر داخل بطاقة كل برنامج مختار.</div>` : `<div class="hint">لا توجد برامج في قسم الأعمال والبرامج بعد.</div>`)
     + fieldWrap("الهدف التشغيلي المرتبط (اختياري)", false, goals.length ? `<div style="display:flex;gap:6px;flex-wrap:wrap;">${goals.map((g) => chip("goal", g.id, g.name, lg.indexOf(g.id) !== -1)).join("")}</div><div class="hint">اختاري هدفًا أو أكثر، أو اتركيه بلا ربط. الربط لا يغيّر مستهدف الهدف ولا نسبة تحقق الهدف${missing ? ` · ${missing} هدف مربوط لم يعد في القائمة` : ""}.</div>` : `<div class="hint">لا توجد أهداف تشغيلية متاحة لوحدتك.</div>`);
 }
+/* ---- المرحلة ٢: ربط أداة القياس بعمل/برنامج أو هدف أو مؤشر أداء أو تقييم عام — اختيار من المسجّل بالمعرّف (اختياري) ---- */
+const TOOL_LINK_KINDS = [["work", "عمل أو برنامج"], ["goal", "هدف تشغيلي"], ["indicator", "مؤشر أداء"], ["general", "تقييم عام"]];
+const TOOL_NO_RESPONSE = ["بطاقة ملاحظة", "قائمة تحقق", "تحليل سجلات", "تقييم أداء"]; // أدوات لا تعتمد على جمع ردود: لا تُفرض عليها نسبة الاستجابة
+function toolLinkItems(kind, t) {
+  const ids = (t && t.linkIds) || [];
+  if (kind === "work") return rptProgramList().map((p) => ({ id: p.id, name: String(p.name).trim() }));
+  if (kind === "goal") return (S.goalsDefinitions.operational || []).filter((o) => scopeAllows("og", o.id, S.currentUnitId) || ids.indexOf(o.id) !== -1).map((o) => ({ id: o.id, name: o.name }));
+  if (kind === "indicator") return (S.indicatorDefinitions || []).filter((o) => scopeAllows("ind", o.id, S.currentUnitId) || ids.indexOf(o.id) !== -1).map((o) => ({ id: o.id, name: o.name }));
+  return [];
+}
+function toolLinkState(t) {
+  let kind = t.linkKind || "", ids = Array.isArray(t.linkIds) ? t.linkIds.slice() : [];
+  if (!kind && String(t.relatedProgram || "").trim()) { // أداة قديمة مرتبطة باسم مكتوب: تُقرأ كعمل/برنامج بنفس الاسم إن وُجد
+    kind = "work"; const n = String(t.relatedProgram).trim();
+    ids = rptProgramList().filter((p) => String(p.name).trim() === n).map((p) => p.id);
+  }
+  return { kind, ids };
+}
+function toolLinkToggle(t, id) {
+  const st = toolLinkState(t); const a = st.ids.slice(); const i = a.indexOf(id); if (i >= 0) a.splice(i, 1); else a.push(id);
+  t.linkKind = st.kind; t.linkIds = a;
+  if (st.kind === "work") { const first = rptProgramList().find((p) => p.id === a[0]); t.relatedProgram = first ? String(first.name).trim() : ""; }
+}
+function toolLinkSetKind(t, kind) {
+  const prev = toolLinkState(t).kind;
+  t.linkKind = kind; t.linkIds = [];
+  if (prev === "work" || kind === "work") t.relatedProgram = ""; // الربط الجديد يحلّ محل الاسم القديم عند تغيير النوع
+}
+function toolLinkHtml(t) {
+  const st = toolLinkState(t), items = toolLinkItems(st.kind, t);
+  const legacy = !t.linkKind && String(t.relatedProgram || "").trim() ? String(t.relatedProgram).trim() : "";
+  const opts = `<option value="">بلا ربط</option>` + TOOL_LINK_KINDS.map(([v, l]) => `<option value="${v}" ${st.kind === v ? "selected" : ""}>${l}</option>`).join("");
+  const chip = (it) => { const on = st.ids.indexOf(it.id) !== -1; return `<button type="button" class="pill-btn ${on ? "pill-primary" : "pill-ghost"}" style="padding:4px 12px;font-size:12px;" data-action="tool-link-toggle" data-id="${esc(t.id)}" data-v="${esc(it.id)}">${on ? "✓ " : ""}${esc(it.name)}</button>`; };
+  const body = st.kind === "general" ? `<div class="hint">تقييم عام للوحدة، لا يرتبط بعنصر محدد.</div>`
+    : st.kind ? (items.length ? `<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:8px;">${items.map(chip).join("")}</div><div class="hint">اختاري عنصرًا أو أكثر من المسجّل في النظام.</div>` : `<div class="hint" style="margin-top:6px;">لا توجد عناصر مسجّلة من هذا النوع لهذه الوحدة.</div>`) : "";
+  const note = legacy && !st.ids.length ? `<div class="hint" style="color:${SUBTLE};">الارتباط الحالي (نص مكتوب سابقًا): ${esc(legacy)}</div>` : "";
+  return fieldWrap("ربط الأداة (اختياري)", false, `<select class="input" data-tool-link-kind="${esc(t.id)}">${opts}</select>${note}${body}`);
+}
 function rptProgramNames(report) {
   const r = report || (typeof getCurrentReportEntry === "function" ? getCurrentReportEntry() : null);
   const list = ((S.sectionDraft && S.activeSectionId === "programs" && S.sectionDraft.programs) || (r && r.sections && r.sections.programs && r.sections.programs.data && r.sections.programs.data.programs) || []);
@@ -15169,6 +15264,7 @@ function renderReportPreview() {
 /* =============================== Live-computed field patches (no full render) = */
 function liveUpdateComputed(el) {
   const field = el.dataset.field;
+  if (el.dataset.arr === "programs") { progLivePatch(el); }
   if (field === "summary" || field === "explanation") {
     const wrap = el.closest(".field");
     const box = wrap && wrap.querySelector(".char-count");
@@ -15410,6 +15506,8 @@ function attachFormListeners() {
     const el = e.target;
     if (el.id === "imp-file" && el.files && el.files[0]) { impReadFile(el.files[0]); return; }
     if (el.dataset && el.dataset.impMap) { const st = impState(); st.map[el.dataset.impMap] = el.value === "" ? undefined : +el.value; render(); return; }
+    if (el.dataset && el.dataset.toolLinkKind) { const t = findById(getItemList("tools"), el.dataset.toolLinkKind); if (t) { toolLinkSetKind(t, el.value); render(); } return; }
+    if (el.dataset && el.dataset.svFile && el.files && el.files[0]) { svRunRead(el.dataset.svFile, "file", el.files[0]); el.value = ""; return; }
     if (el.dataset && el.dataset.svMain) { const t = svFindTool(el.dataset.svMain); if (t) { t.mainSource = el.value; autoSaveSchedule(); render(); } return; }
     if (el.dataset && el.dataset.svFilltool) { S.ui.svFillTool = el.value; render(); return; }
     if (el.dataset && el.dataset.svPrev) { S.ui.svPrevRep = el.value; render(); return; }
@@ -17362,7 +17460,7 @@ function handleReportEditorAction(action, ds) {
     case "shp-open": S.ui.shpOpen = true; render(); return true;
     case "shp-close": S.ui.shpOpen = false; render(); return true;
     case "shp-cat": S.ui.shpCat = ds.cat || ""; render(); return true;
-    case "sv-read-link": case "sv-read-paste": case "sv-clear": case "sv-fill": return svAction(action, ds);
+    case "sv-read-link": case "sv-read-paste": case "sv-clear": case "sv-fill": case "sv-confirm": case "sv-cancel": return svAction(action, ds);
     case "shp-add": {
       const sh = SHAPES_LIB[ds.shape]; if (!sh) return true;
       const list = getItemList("shapeBlocks");
@@ -17370,6 +17468,11 @@ function handleReportEditorAction(action, ds) {
       else list.push({ id: uid("shp"), shapeId: ds.shape, auto: sh.cat !== "photo", sectionId: S.activeSectionId });
       S.ui.shpOpen = false; autoSaveSchedule(); render(); return true;
     }
+    case "tool-link-toggle": {
+      const t = findById(getItemList("tools"), ds.id); if (!t) return true;
+      toolLinkToggle(t, ds.v); render(); return true;
+    }
+    case "sv-confirm": case "sv-cancel": return svAction(action, ds);
     case "ind-link-toggle": {
       const row = findById(getItemList("indicators"), ds.id); if (!row) return true;
       indLinkToggle(row, ds.kind, ds.v, rptProgramList(getCurrentReportEntry())); render(); return true;
