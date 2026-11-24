@@ -1398,3 +1398,9 @@ body.sp-body{background:#f7f3f1}
 .sp-hint{font-size:11.5px;color:#8d7e80;margin-top:6px}.sp-note{font-size:12px;color:#8d7e80;margin-top:12px}
 .sp-btn{font:inherit;font-size:15px;font-weight:800;padding:12px 26px;border-radius:12px;border:0;background:#7a3340;color:#fff;cursor:pointer;min-height:46px}
 .sp-err{color:#c0392b;font-weight:700;font-size:13px;margin:8px 0}.sp-foot{text-align:center;font-size:12px;color:#a59a9c;margin-top:14px}
+
+/* مستودع الشواهد: روابط التنقل داخل التقرير */
+.rpt-jump{color:var(--rose,#8a1f3d);font-weight:700;text-decoration:none;cursor:pointer;font-size:12px}
+.rpt-jump:hover{text-decoration:underline}
+.rpt-flash{animation:rptflash 1.8s ease}
+@keyframes rptflash{0%,60%{background:#fff3c4}100%{background:transparent}}
