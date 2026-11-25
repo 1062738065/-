@@ -1543,3 +1543,32 @@ body.sp-body{background:#f7f3f1}
 .rg-ph{aspect-ratio:4/3;border-radius:14px}
 .rg-ph .cap{padding:22px 10px 8px;font-size:12px}
 .rg-leg{font-size:12px;margin-bottom:6px}.rg-leg s{width:12px;height:12px;margin-inline-end:4px}
+
+/* ===== ملاءمة PDF/الطباعة لقسم الأهداف ===== */
+.rg-rtb{min-width:0}
+.rg-gh{display:flex;align-items:center;gap:5px}
+.rg-wi svg{display:block}
+.rg-rtb tr,.rg-eg,.rg-wc,.rg-rk div{break-inside:avoid;page-break-inside:avoid}
+.rg-rtb thead{display:table-header-group}
+.rpt-pdf .no-print{display:none!important}
+.rpt-pdf .rg-tw,.rg-tw.pdf{overflow:visible!important}
+.rpt-pdf .rg-rtb,.rpt-pdf .rg-rtb th,.rpt-pdf .rg-rtb td{font-size:9.5px!important}
+.rpt-pdf .rg-rtb{min-width:0!important;width:100%;table-layout:auto}
+.rpt-pdf .rg-rtb th,.rpt-pdf .rg-rtb td{padding:5px 3px}
+.rpt-pdf .rg-rtb td:nth-child(2){text-align:right;font-weight:700;min-width:120px}
+.rpt-pdf .rg-rtb th:first-child,.rpt-pdf .rg-rtb td:first-child{width:22px}
+.rpt-pdf .rg-rk{grid-template-columns:repeat(5,1fr);gap:6px}
+.rpt-pdf .rg-rk b{font-size:19px}
+.rpt-pdf .rg-eg-g{grid-template-columns:repeat(2,1fr)}
+.rpt-pdf .rg-gal{grid-template-columns:repeat(4,1fr)}
+.rpt-pdf .rg-rh{font-weight:700;border-inline-start:4px solid #c9a24b;padding-inline-start:8px;margin:14px 0 8px}
+.rpt-pdf .rg-eg-b,.rpt-pdf .rg-go{display:none}
+.rpt-pdf .rg-rtb a{text-decoration:none}
+.rpt-pdf svg{max-width:100%;height:auto}
+@media print{
+  .rg-tw{overflow:visible!important}
+  .rg-rtb,.rg-rtb th,.rg-rtb td{font-size:9.5px!important;min-width:0!important}
+  .rg-rtb{width:100%;table-layout:auto}
+  .rg-eg-b,.rg-go{display:none}
+  .rg-rtb th,.rg-rtb td,.rg-rk div,.rg-eg-h,.rg-wi,.rg-ph .cap{-webkit-print-color-adjust:exact;print-color-adjust:exact}
+}
