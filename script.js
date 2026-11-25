@@ -7487,6 +7487,7 @@ function unitChapterDefs(report, unitId) {
   return [
     { key: "summary", title: "ملخص التقرير", icon: "sparkles", special: "summary" },
     ...(report ? reportSections(report, unitId) : SECTIONS).map((sc) => ({ key: sc.id, title: sc.label, icon: UNIT_SECTION_ICONS[sc.id] || "document", sections: [sc.id] })),
+    ...(svMergeOn() ? [{ key: "evidenceReg", title: "الشواهد والمرفقات", icon: "document", sections: ["evidence"] }] : []),
     { key: "approval", title: "الإغلاق والاعتماد", icon: "check", special: "approval" },
   ];
 }
@@ -7673,7 +7674,7 @@ function syncCustomReportPages() {
 function rptOrdered(defs, s) {
   const keys = defs.map((d) => d.key);
   const ord = (s.order || []).filter((k) => keys.includes(k));
-  keys.forEach((k) => { if (!ord.includes(k)) { const ci = k === "challengesChart" ? ord.indexOf("closing") : -1; if (ci >= 0) ord.splice(ci, 0, k); else ord.push(k); } });
+  keys.forEach((k) => { if (!ord.includes(k)) { const ci = k === "challengesChart" ? ord.indexOf("closing") : -1; if (ci >= 0) ord.splice(ci, 0, k); else if (k === "evidenceReg" && ord.includes("impact")) ord.splice(ord.indexOf("impact") + 1, 0, k); else if (k === "evidenceReg" && ord.includes("approval")) ord.splice(ord.indexOf("approval"), 0, k); else ord.push(k); } });
   return ord.map((k) => defs.find((d) => d.key === k));
 }
 function rptChapterTitle(def, s) { return ((s.titles || {})[def.key] || "").trim() || def.title; }
@@ -7689,7 +7690,7 @@ function rptWrap(s, inner, isPreview) {
   const [w, h] = rptPageDims(s);
   const [t, b, r, l] = rptMargins(s);
   const main = /^#[0-9a-fA-F]{6}$/.test(s.mainColor) ? s.mainColor : "#6b2337";
-  let vars = `--rpt-burgundy:${main};--rpt-burgundy-dark:${mixHex(main, "#000000", 0.25)};--rpt-paper:${rptCssSafe(s.paper)};--rpt-chapter-bg:${rptCssSafe(s.chapterBg)};` +
+  let vars = `--rpt-burgundy:${main};--rpt-t0:${mixHex(main, "#ffffff", 0.96)};--rpt-t1:${mixHex(main, "#ffffff", 0.9)};--rpt-line:${mixHex(main, "#ffffff", 0.82)};--rpt-c1:${mixHex(main, "#ffffff", 0.7)};--rpt-c2:${mixHex(main, "#ffffff", 0.45)};--rpt-c3:${mixHex(main, "#ffffff", 0.2)};--rpt-gh-bg:${s.thBg && s.thBg !== "#f4ece4" ? rptCssSafe(s.thBg) : main};--rpt-gh-color:${s.thBg && s.thBg !== "#f4ece4" ? rptCssSafe(s.thColor || main) : "#ffffff"};--rpt-burgundy-dark:${mixHex(main, "#000000", 0.25)};--rpt-paper:${rptCssSafe(s.paper)};--rpt-chapter-bg:${rptCssSafe(s.chapterBg)};` +
     `--rpt-font-body:'${rptCssSafe(s.fontBody)}';--rpt-font-title:'${rptCssSafe(s.fontTitle)}';--rpt-font-heading:'${rptCssSafe(s.fontHeading)}';` +
     `--rpt-page-w:${w}mm;--rpt-page-h:${h}mm;--rpt-mt:${t}mm;--rpt-mb:${b}mm;--rpt-mr:${r}mm;--rpt-ml:${l}mm;` +
     `--rpt-th-align:${["right", "center", "left"].includes(s.thAlign) ? s.thAlign : "center"};--rpt-td-align:${["right", "center", "left"].includes(s.tdAlign) ? s.tdAlign : "center"};` +
@@ -13063,13 +13064,13 @@ function rptGoalsAnalysisHtml(report, flat) {
   // ---- الرسم ----
   const W = 700, H = 250, pl = 38, pr = 10, pt = 30, pb = 44, gw = (W - pl - pr) / rows.length, yy = (v) => pt + (H - pt - pb) * (1 - v / 100), cx = (i) => pl + gw * (i + 0.5);
   let svg = `<svg viewBox="0 0 ${W} ${H}" width="100%" style="direction:ltr;font-family:inherit;max-width:760px;display:block;margin:0 auto">`;
-  for (let v = 0; v <= 100; v += 25) svg += `<line x1="${pl}" x2="${W - pr}" y1="${yy(v)}" y2="${yy(v)}" stroke="#ecdfe3"/><text x="${pl - 6}" y="${yy(v) + 4}" font-size="8" text-anchor="end" fill="#8a7279">${v}%</text>`;
+  for (let v = 0; v <= 100; v += 25) svg += `<line x1="${pl}" x2="${W - pr}" y1="${yy(v)}" y2="${yy(v)}" style="stroke:var(--rpt-line,#ecdfe3)"/><text x="${pl - 6}" y="${yy(v) + 4}" font-size="8" text-anchor="end" fill="#8a7279">${v}%</text>`;
   const lab = (r, i) => { const w = String(r.og.name).split(" "), mid = Math.ceil(w.length / 2); [w.slice(0, mid).join(" "), w.slice(mid).join(" ")].forEach((ln, q) => { svg += `<text x="${cx(i)}" y="${H - pb + 16 + q * 13}" font-size="8" text-anchor="middle" fill="#2b1a20" font-weight="700">${esc(ln)}</text>`; }); };
-  if (pu.length > 2) { const k = pu.length, bw = Math.min(22, (gw - 14) / k), CC = ["#e3b6c5", "#c9708f", "#a73a5c", "#7a1f3d"]; rows.forEach((r, i) => { pu.forEach((p, j) => { const v = r.vs[j]; if (v == null) return; const x = cx(i) - (k * bw) / 2 + j * bw; svg += `<rect x="${x + 1}" y="${yy(v)}" width="${bw - 2}" height="${yy(0) - yy(v)}" rx="3" fill="${CC[j + (4 - k)]}"/><text x="${x + bw / 2}" y="${yy(v) - 3}" font-size="7" text-anchor="middle" fill="#2b1a20">${v}%</text>`; }); lab(r, i); }); }
-  else { rows.forEach((r, i) => { const bw = Math.min(28, gw / 3), v = lastV(r), t = r.ts[r.ts.length - 1] != null ? r.ts[r.ts.length - 1] : 100; svg += `<rect x="${cx(i) - bw - 2}" y="${yy(t)}" width="${bw}" height="${yy(0) - yy(t)}" rx="3" fill="#e3b6c5"/><text x="${cx(i) - bw / 2 - 2}" y="${yy(t) - 4}" font-size="8" text-anchor="middle" fill="#2b1a20">${t}%</text>`; if (v != null) svg += `<rect x="${cx(i) + 2}" y="${yy(v)}" width="${bw}" height="${yy(0) - yy(v)}" rx="3" fill="#7a1f3d"/><text x="${cx(i) + bw / 2 + 2}" y="${yy(v) - 4}" font-size="8" text-anchor="middle" fill="#2b1a20">${v}%</text>`; lab(r, i); });
-    const pts = rows.map((r, i) => [cx(i), lastV(r)]).filter((p) => p[1] != null); if (pts.length) svg += `<polyline fill="none" stroke="#a73a5c" stroke-width="2" points="${pts.map((p) => p[0] + "," + yy(p[1])).join(" ")}"/>` + pts.map((p) => `<circle cx="${p[0]}" cy="${yy(p[1])}" r="4" fill="#fff" stroke="#a73a5c" stroke-width="2"/>`).join(""); }
+  if (pu.length > 2) { const k = pu.length, bw = Math.min(22, (gw - 14) / k), CC = ["var(--rpt-c1,#e3b6c5)", "var(--rpt-c2,#c9708f)", "var(--rpt-c3,#a73a5c)", "var(--rpt-burgundy,#7a1f3d)"]; rows.forEach((r, i) => { pu.forEach((p, j) => { const v = r.vs[j]; if (v == null) return; const x = cx(i) - (k * bw) / 2 + j * bw; svg += `<rect x="${x + 1}" y="${yy(v)}" width="${bw - 2}" height="${yy(0) - yy(v)}" rx="3" style="fill:${CC[j + (4 - k)]}"/><text x="${x + bw / 2}" y="${yy(v) - 3}" font-size="7" text-anchor="middle" fill="#2b1a20">${v}%</text>`; }); lab(r, i); }); }
+  else { rows.forEach((r, i) => { const bw = Math.min(28, gw / 3), v = lastV(r), t = r.ts[r.ts.length - 1] != null ? r.ts[r.ts.length - 1] : 100; svg += `<rect x="${cx(i) - bw - 2}" y="${yy(t)}" width="${bw}" height="${yy(0) - yy(t)}" rx="3" style="fill:var(--rpt-c1,#e3b6c5)"/><text x="${cx(i) - bw / 2 - 2}" y="${yy(t) - 4}" font-size="8" text-anchor="middle" fill="#2b1a20">${t}%</text>`; if (v != null) svg += `<rect x="${cx(i) + 2}" y="${yy(v)}" width="${bw}" height="${yy(0) - yy(v)}" rx="3" style="fill:var(--rpt-burgundy,#7a1f3d)"/><text x="${cx(i) + bw / 2 + 2}" y="${yy(v) - 4}" font-size="8" text-anchor="middle" fill="#2b1a20">${v}%</text>`; lab(r, i); });
+    const pts = rows.map((r, i) => [cx(i), lastV(r)]).filter((p) => p[1] != null); if (pts.length) svg += `<polyline fill="none" style="stroke:var(--rpt-c3,#a73a5c)" stroke-width="2" points="${pts.map((p) => p[0] + "," + yy(p[1])).join(" ")}"/>` + pts.map((p) => `<circle cx="${p[0]}" cy="${yy(p[1])}" r="4" fill="#fff" style="stroke:var(--rpt-c3,#a73a5c)" stroke-width="2"/>`).join(""); }
   svg += "</svg>";
-  const legend = pu.length > 2 ? `<div class="rg-leg">${pu.map((p, j) => `<span><s style="background:${["#e3b6c5", "#c9708f", "#a73a5c", "#7a1f3d"][j + (4 - pu.length)]}"></s> ${esc(p.label)}</span>`).join("")}</div>` : `<div class="rg-leg"><span><s style="background:#e3b6c5"></s> المستهدف</span><span><s style="background:#7a1f3d"></s> المتحقق</span><span style="color:#a73a5c">● نسبة التحقق</span></div>`;
+  const legend = pu.length > 2 ? `<div class="rg-leg">${pu.map((p, j) => `<span><s style="background:${["var(--rpt-c1,#e3b6c5)", "var(--rpt-c2,#c9708f)", "var(--rpt-c3,#a73a5c)", "var(--rpt-burgundy,#7a1f3d)"][j + (4 - pu.length)]}"></s> ${esc(p.label)}</span>`).join("")}</div>` : `<div class="rg-leg"><span><s style="background:var(--rpt-c1,#e3b6c5)"></s> المستهدف</span><span><s style="background:var(--rpt-burgundy,#7a1f3d)"></s> المتحقق</span><span style="color:var(--rpt-c3,#a73a5c)">● نسبة التحقق</span></div>`;
   // ---- الجدول ----
   const pc = (v) => (v == null ? "<td>—</td>" : `<td class="rg-p-${L(v)}">${v}٪</td>`), sg = (d) => (d > 0 ? "+" : "") + d;
   const dirT = (d) => (d > 0 ? `<span class="rg-dtag up">تحسن ▲</span>` : d < 0 ? `<span class="rg-dtag dn">تراجع ▼</span>` : `<span class="rg-dtag eq">ثبات =</span>`);
@@ -15766,11 +15767,6 @@ function fullReportOrPreviewBody(unit, report, afterPage, opts) {
   const chapters = rptOrdered(unitChapterDefs(opts.capture ? null : report, unit.id), s).filter((c) => review || (!s.hidden[c.key] && !rptLevelHides(s, c.key) &&
     (s.showEmpty || opts.capture || c.special || c.sections.some((sid) => sectionHasData(report, sid) || (sid === "evidence" && rgEvHas(report))))));
   if (!(s.order || []).includes("evidence")) { const ei = chapters.findIndex((c) => c.key === "evidence"), ii = chapters.findIndex((c) => c.key === "impact"); if (ei >= 0 && ii >= 0 && ei !== ii + 1) { const ev = chapters.splice(ei, 1)[0]; chapters.splice(chapters.findIndex((c) => c.key === "impact") + 1, 0, ev); } }
-  if (!opts.capture && !chapters.some((c) => (c.sections || []).includes("evidence")) && !s.hidden.evidenceReg && !rptLevelHides(s, "evidenceReg") && rgEvHas(report)) {
-    // الأقسام مدموجة: «الشواهد والمرفقات» فصل مستقل يأتي بعد «الأثر وقصص النجاح»
-    let at = chapters.findIndex((c) => c.key === "impact"); if (at < 0) at = chapters.findIndex((c) => c.key === "initiatives"); if (at < 0) at = chapters.findIndex((c) => c.special === "approval") - 1;
-    chapters.splice(Math.max(at, -1) + 1, 0, { key: "evidenceReg", title: "الشواهد والمرفقات", icon: "document", sections: ["evidence"] });
-  }
   const mergeBasic = !review && !opts.capture && s.mergeBasic !== false && chapters.some((c) => c.special === "summary") && chapters.some((c) => c.key === "basic");
   const grouped = opts.capture ? chapters : rptGroupChapters(chapters.filter((c) => !(mergeBasic && c.key === "basic")), report);
   return rptWithCtx({ ...rptChartCtx(s), hiddenCols: review ? null : rptHiddenColsForViewer(s), colsShow: s.colsShow, capture: opts.capture || null, unitId: unit.id }, () => {
