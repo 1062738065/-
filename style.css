@@ -1638,3 +1638,6 @@ body.sp-body{background:#f7f3f1}
 .rg-scope .rg-rtb th,.rg-scope .rg-rtb td,.rg-flat table.prs-table th,.rg-flat table.prs-table td,.gb-board table.prs-table th,.gb-board table.prs-table td,.rpt-evx th,.rpt-evx td{font-size:10.5px!important;text-align:center!important;vertical-align:middle}
 .rg-scope .rg-rtb td:nth-child(2),.rg-scope .rg-rtb th:nth-child(2){text-align:center!important}
 .rpt-pdf .rg-rtb th,.rpt-pdf .rg-rtb td{font-size:9px!important}
+
+/* رأس جدول «تفاصيل الأهداف التشغيلية»: برغندي فاتح بنص أبيض */
+.rg-scope .rg-rtb th{background:var(--rpt-gl-bg,#a8395c)!important;color:#fff!important;border:1px solid rgba(255,255,255,.55)}
