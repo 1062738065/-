@@ -3571,6 +3571,7 @@ function dashItemModalHtml(sid) {
     </div></div>`;
 }
 function dashFieldBlockHtml(kind, sid, units) {
+  if (sid === "evidence") return ""; // الشواهد والمرفقات مكانها التقارير فقط
   const sc = SECTION_FIELD_SCHEMAS[sid]; if (!sc) return "";
   const owner = DASH_FLD_OWNER[sid] || sid;
   const rows = [], unitOf = new Map(); let reports = 0;
@@ -3973,6 +3974,7 @@ function dashKpiShapeHtml(units) {
   } catch (e) { return ""; }
 }
 function dashFieldShapeHtml(kind, sid, units) {
+  if (sid === "evidence") return ""; // الشواهد والمرفقات مكانها التقارير فقط
   // الشكل المختار لقسم في اللوحة يحلّ محل البطاقة القديمة (أرقام + توزيع + قائمة) بدل أن يُطبَّق على جدول غير موجود
   // الصعوبات: التصميم الخاص (الأبراج) هو الافتراضي، وأي شكل تختاره مديرة النظام من المكتبة يحلّ محله
   const dm = (dashConfig() || {})._dashShapes || {}; const v = dm[sid] || "";
@@ -4467,6 +4469,7 @@ function dashEff(kind) {
 }
 function dashB(kind, key, html) {
   if (key === "indicators" || key === "indMatrix") return ""; // دُمجتا في بطاقة «مؤشرات الأداء» (indBoard)
+  if (key === "yearCompare" || key === "fld_evidence") return ""; // حُذفتا من اللوحة: مقارنة 3 سنوات، والشواهد والمرفقات (مكانها التقارير)
   if (!html || dashHidden(kind, key)) return "";
   const eff = dashEff(kind), e = eff.findIndex((x) => x.k === key), o = (e === -1 ? 500 : e) + 1;
   let head = "";
@@ -4578,8 +4581,8 @@ function dashLineSvg(labels, a, b) {
   const dots = (arr, c) => arr.map((p, k) => (p == null ? "" : `<circle cx="${xs[k].toFixed(0)}" cy="${y(p).toFixed(0)}" r="5" fill="${c}"><title>${p}٪</title></circle>`)).join("");
   const grid = [0, 50, 100].map((g) => `<line x1="40" y1="${y(g)}" x2="${w - 30}" y2="${y(g)}" stroke="${BORDER}" stroke-dasharray="3,3"/><text x="8" y="${y(g) + 4}" font-size="12" fill="${SUBTLE}" direction="ltr">${g}%</text>`).join("");
   const lbl = labels.map((l, k) => `<text x="${xs[k].toFixed(0)}" y="${h - 12}" font-size="12.5" fill="${INK}" text-anchor="middle">${esc(l)}</text>`).join("");
-  return `<svg viewBox="0 0 ${w} ${h}" width="100%" style="height:auto;display:block;" role="img" aria-label="تطور متوسط التحقق">${grid}<path d="${path(a)}" fill="none" stroke="${ROSE}" stroke-width="3" stroke-linejoin="round"/><path d="${path(b)}" fill="none" stroke="${GOLD}" stroke-width="3" stroke-dasharray="7 5" stroke-linejoin="round"/>${dots(a, ROSE)}${dots(b, GOLD)}${lbl}</svg>
-  <div style="display:flex;gap:16px;flex-wrap:wrap;font-size:11.5px;margin-top:4px;"><span style="display:flex;align-items:center;gap:6px;"><span style="width:14px;height:3px;background:${ROSE}"></span>متوسط تحقق المؤشرات</span><span style="display:flex;align-items:center;gap:6px;"><span style="width:14px;height:3px;background:${GOLD}"></span>متوسط تحقق الأهداف التشغيلية</span></div>`;
+  return `<svg viewBox="0 0 ${w} ${h}" width="100%" style="height:auto;display:block;" role="img" aria-label="تطور نسبة التحقق">${grid}<path d="${path(a)}" fill="none" stroke="${ROSE}" stroke-width="3" stroke-linejoin="round"/><path d="${path(b)}" fill="none" stroke="${GOLD}" stroke-width="3" stroke-dasharray="7 5" stroke-linejoin="round"/>${dots(a, ROSE)}${dots(b, GOLD)}${lbl}</svg>
+  <div style="display:flex;gap:16px;flex-wrap:wrap;font-size:11.5px;margin-top:4px;"><span style="display:flex;align-items:center;gap:6px;"><span style="width:14px;height:3px;background:${ROSE}"></span>نسبة تحقق المؤشرات</span><span style="display:flex;align-items:center;gap:6px;"><span style="width:14px;height:3px;background:${GOLD}"></span>نسبة تحقق الأهداف التشغيلية</span></div>`;
 }
 function dashTrendHtml(kind, series, title) {
   if (dashHidden(kind, "trend")) return "";
@@ -5058,8 +5061,8 @@ function exBlocksInner(kind, units, extra) {
     const card = (label, value, color, sub, sp) => `<div class="card" style="padding:14px 16px 8px;"><div style="font-size:12px;color:${SUBTLE};">${label}</div><div style="display:flex;align-items:baseline;gap:8px;margin-top:2px;"><span style="font-size:26px;font-weight:900;color:${color};">${value}</span>${sub}</div>${sp || ""}</div>`;
     const indA = perCol.map((x) => x.ind), goalA = perCol.map((x) => x.goal);
     html += `<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(min(200px,100%),1fr));gap:12px;margin-bottom:18px;">
-      ${card("متوسط تحقق المؤشرات", lastV(indA) == null ? "—" : lastV(indA) + "٪", ROSE, delta(indA), spark(indA, ROSE))}
-      ${card("متوسط تحقق الأهداف", lastV(goalA) == null ? "—" : lastV(goalA) + "٪", "#a5581a", delta(goalA), spark(goalA, "#a5581a"))}
+      ${card("نسبة تحقق المؤشرات", lastV(indA) == null ? "—" : lastV(indA) + "٪", ROSE, delta(indA), spark(indA, ROSE))}
+      ${card("نسبة تحقق الأهداف", lastV(goalA) == null ? "—" : lastV(goalA) + "٪", "#a5581a", delta(goalA), spark(goalA, "#a5581a"))}
       ${card("إنجاز الأعمال والبرامج", progs.length ? Math.round(done / progs.length * 100) + "٪" : "—", BLUE, `<span style="font-size:11.5px;color:${SUBTLE}">${done} من ${progs.length}</span>`)}
       ${card("المستفيدون", fmtNum(ben), "#8B4A73", "")}
       ${card("تقارير معتمدة (آخر فترة)", series.units.length ? Math.round(appr / series.units.length * 100) + "٪" : "—", GREEN, `<span style="font-size:11.5px;color:${SUBTLE}">${appr} من ${series.units.length}</span>`)}
