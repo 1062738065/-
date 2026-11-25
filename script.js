@@ -11036,20 +11036,20 @@ function ogResolveLink(report, ln) {
     const row = (draft("kpi", "indicators") || sec("kpi").indicators || []).find((x) => x.id === ln.refId);
     if (!row) return { gone: true, title: ln.refName || "مؤشر", kindLabel: "رقم مؤشر" };
     const def = findIndicatorDef(row.name), rs = resolveIndicatorRow(row, def), st = computeIndicatorStatus(rs);
-    return { title: ogIndCode(def, ((draft("kpi", "indicators") || sec("kpi").indicators || []).indexOf(row))) + " | " + row.name, kindLabel: "رقم مؤشر", sub: `المتحقق ${row.actual !== "" && row.actual != null ? row.actual : "—"} من المستهدف ${rs.target !== "" && rs.target != null ? rs.target : "—"}${(() => { const pc = indicatorRowView(row).pct; return pc == null ? "" : " · التحقق " + pc + "٪"; })()}`, badge: st.label, color: st.color };
+    return { title: ogIndCode(def, ((draft("kpi", "indicators") || sec("kpi").indicators || []).indexOf(row))) + " | " + row.name, kindLabel: "رقم مؤشر", det: [["المستهدف", rs.target], ["المتحقق", row.actual], ["نسبة التحقق", (() => { const pc = indicatorRowView(row).pct; return pc == null ? "" : pc + "٪"; })()], ["الحالة", st.label], ["الوحدة", def && def.unit], ["الدورية", def && def.frequency], ["طريقة الحساب", def && def.calculationMethod], ["مصدر البيانات", def && def.dataSource]], sub: `المتحقق ${row.actual !== "" && row.actual != null ? row.actual : "—"} من المستهدف ${rs.target !== "" && rs.target != null ? rs.target : "—"}${(() => { const pc = indicatorRowView(row).pct; return pc == null ? "" : " · التحقق " + pc + "٪"; })()}`, badge: st.label, color: st.color };
   }
   if (ln.kind === "tool") {
     const t = (draft("tools", "tools") || sec("tools").tools || []).find((x) => x.id === ln.refId);
     if (!t) return { gone: true, title: ln.refName || "أداة", kindLabel: "أداة قياس" };
     const rr = computeResponseRate(t.sampleSize, t.respondentsCount);
-    return { title: t.name, kindLabel: "أداة قياس", sub: [t.toolType, rr != null ? "نسبة الاستجابة " + rr + "٪" : ""].filter(Boolean).join(" · "), badge: t.resultQuality || "", color: SUBTLE, url: t.resultsLink || t.toolLink || "" };
+    return { title: t.name, kindLabel: "أداة قياس", det: [["النوع", t.toolType], ["الغرض", t.purpose], ["الفئة المستهدفة", t.targetGroup], ["حجم العينة", t.sampleSize], ["عدد المستجيبات", t.respondentsCount], ["نسبة الاستجابة", rr != null ? rr + "٪" : ""], ["جودة النتائج", t.resultQuality], ["تاريخ التطبيق", t.applicationDate], ["رابط الأداة", t.toolLink], ["رابط النتائج", t.resultsLink]], sub: [t.toolType, rr != null ? "نسبة الاستجابة " + rr + "٪" : ""].filter(Boolean).join(" · "), badge: t.resultQuality || "", color: SUBTLE, url: t.resultsLink || t.toolLink || "" };
   }
   if (ln.kind === "inddef") {
     const d = (S.indicatorDefinitions || []).find((x) => x.id === ln.refId); if (!d) return { gone: true, title: ln.refName || "مؤشر", kindLabel: "رقم مؤشر" };
-    return { title: ogIndCode(d, 0) + " | " + d.name, kindLabel: "رقم مؤشر", sub: "لم يُدخل إنجازه في «مؤشرات الأداء» بعد، فلا يدخل في حساب النسبة.", badge: "", color: SUBTLE };
+    return { title: ogIndCode(d, 0) + " | " + d.name, kindLabel: "رقم مؤشر", det: [["المستهدف", d.target], ["الوحدة", d.unit], ["الدورية", d.frequency], ["طريقة الحساب", d.calculationMethod], ["مصدر البيانات", d.dataSource]], sub: "لم يُدخل إنجازه في «مؤشرات الأداء» بعد، فلا يدخل في حساب النسبة.", badge: "", color: SUBTLE };
   }
   if (ln.kind === "follow") {
-    if (ln.refId) { const r = (((S.reports || {})[S.currentUnitId]) || []).find((x) => x.id === ln.refId); return { title: r ? (r.label || r.id) : (ln.refName || "تقرير"), kindLabel: "تقرير متابعة", sub: r ? "تقرير في الموقع" : "", badge: "", color: SUBTLE, gone: !r }; }
+    if (ln.refId) { const r = (((S.reports || {})[S.currentUnitId]) || []).find((x) => x.id === ln.refId); return { title: r ? (r.label || r.id) : (ln.refName || "تقرير"), kindLabel: "تقرير متابعة", sub: r ? "تقرير في الموقع" : "", badge: "", color: SUBTLE, gone: !r, reportId: r ? r.id : "", det: r ? [["الحالة", r.status], ["الفترة", [r.shared && r.shared.hijriYear, r.shared && r.shared.term, r.shared && r.shared.periodType].filter(Boolean).join(" · ")]] : null }; }
     return { title: ln.text || "تقرير متابعة", kindLabel: "تقرير متابعة", sub: "", badge: "", color: SUBTLE, url: ln.url || "" };
   }
   if (ln.kind === "official") return { title: ln.text || "سجل رسمي", kindLabel: "سجل رسمي", sub: "", badge: "", color: SUBTLE, url: ln.url || "" };
@@ -11071,6 +11071,19 @@ function ogLinkOptionsHtml(report, og) {
   return grp("مؤشرات الأداء", "ind", sec("kpi").indicators) + grp("أدوات القياس", "tool", sec("tools").tools) + grp("الشواهد والتقارير والسجلات الرسمية والمرفقات", "evd", sec("evidence").evidenceItems) + grp("مستودع الشواهد", "repo", evdRepo().filter(evdCanSee));
 }
 function ogUrlHtml(u) { const x = String(u || "").trim(); return /^https?:\/\//i.test(x) ? ` <a href="${esc(x)}" target="_blank" rel="noopener" style="color:${ROSE};font-weight:700;font-size:11.5px;">فتح الرابط ↗</a>` : (x ? ` <span style="font-size:11.5px;color:${SUBTLE};">${esc(x)}</span>` : ""); }
+function ogTitleHtml(r, lat, ln) {
+  const st = `background:none;border:0;padding:0;cursor:pointer;color:${ROSE};font-weight:800;text-decoration:underline;font-family:inherit;font-size:inherit;text-align:right;`;
+  if (r.url && /^https?:\/\//i.test(String(r.url).trim())) return `<a href="${esc(String(r.url).trim())}" target="_blank" rel="noopener noreferrer" style="color:${ROSE};font-weight:800;text-decoration:underline;">${esc(r.title)} ↗</a>`;
+  if (r.repoId) return `<button type="button" data-action="evr-open" data-id="${esc(r.repoId)}" style="${st}">${esc(r.title)}</button>${evdOpenHtml(r.repoId)}`;
+  if (r.det && r.det.some((x) => x[1] !== "" && x[1] != null && x[1] !== undefined && x[1] !== false)) return `<button type="button" data-action="og-evd-tg" ${lat} style="${st}">${esc(r.title)} ${((S.ui.ogOpenLn || {})[ln.id]) ? "▴" : "▾"}</button>`;
+  return esc(r.title);
+}
+function ogDetHtml(r, ln) {
+  if (!r.det || !((S.ui.ogOpenLn || {})[ln.id])) return "";
+  const rows = r.det.filter((x) => x[1] !== "" && x[1] != null && x[1] !== false).map(([k, v]) => `<div style="display:flex;gap:8px;font-size:12px;padding:3px 0;border-bottom:1px dashed ${BORDER};"><span style="min-width:110px;color:${SUBTLE};">${esc(k)}</span><span style="flex:1;min-width:0;overflow-wrap:anywhere;">${/^https?:\/\//i.test(String(v)) ? `<a href="${esc(v)}" target="_blank" rel="noopener noreferrer" style="color:${ROSE};font-weight:700;">فتح الرابط ↗</a>` : esc(String(v))}</span></div>`).join("");
+  const open = r.reportId ? `<div style="margin-top:6px;">${pillBtn("فتح التقرير", { variant: "ghost", action: "og-follow-open", data: { rid: r.reportId } })}</div>` : "";
+  return `<div style="margin-top:8px;background:#fff;border-radius:8px;padding:6px 10px;">${rows}${open}</div>`;
+}
 function ogLinksHtml(gid, og) {
   const rep = getCurrentReportEntry(); const links = og.evidenceLinks || [];
   const att = `data-gid="${esc(gid)}" data-ogid="${esc(og.id)}"`;
@@ -11078,11 +11091,11 @@ function ogLinksHtml(gid, og) {
     const r = ogResolveLink(rep, ln), lat = `${att} data-lid="${esc(ln.id)}"`;
     const del = `<button type="button" class="icon-btn" style="width:28px;height:28px;" data-action="og-evd-del" ${lat} title="إلغاء الربط (لا يحذف العنصر من قسمه)">${iconX(13, DANGER)}</button>`;
     if (ln.kind === "custom") return `<div style="padding:8px 10px;border:1px solid ${BORDER};border-radius:10px;background:#fbf9f8;margin-top:6px;"><div style="display:flex;gap:8px;align-items:center;"><span style="font-size:10.5px;background:${GRAY_BG};border-radius:999px;padding:2px 9px;white-space:nowrap;">دليل آخر</span><input class="input" style="flex:1;padding:5px 8px;" placeholder="وصف الدليل" value="${esc(ln.text || "")}" data-action="og-evd-field" data-f="text" ${lat} /></div><div style="display:flex;gap:8px;align-items:center;margin-top:6px;"><input class="input" style="flex:1;padding:5px 8px;direction:ltr;" placeholder="رابط الدليل أو مرفقه (https://…)" value="${esc(ln.url || "")}" data-action="og-evd-field" data-f="url" ${lat} />${ogUrlHtml(ln.url)}${del}</div></div>`;
-    return `<div style="padding:8px 10px;border:1px solid ${BORDER};border-radius:10px;background:#fbf9f8;margin-top:6px;${r.gone ? "opacity:.7;" : ""}"><div style="display:flex;align-items:center;gap:8px;">
+    return `<div style="padding:8px 10px;border:1px solid ${BORDER};border-radius:10px;background:#fbf9f8;margin-top:6px;${r.gone ? "opacity:.7;" : ""}"><div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
       <span style="font-size:10.5px;background:${GRAY_BG};border-radius:999px;padding:2px 9px;white-space:nowrap;">${esc(r.kindLabel)}</span>
-      <div style="flex:1;min-width:0;"><div style="font-size:12.5px;font-weight:700;">${esc(r.title)}${r.gone ? " — مرجع محذوف من قسمه" : ""}${r.repoId ? evdOpenHtml(r.repoId) : ogUrlHtml(r.url)}</div>${r.sub ? `<div style="font-size:11px;color:${SUBTLE};">${esc(r.sub)}</div>` : ""}</div>
+      <div style="flex:1;min-width:170px;"><div style="font-size:12.5px;font-weight:700;">${ogTitleHtml(r, lat, ln)}${r.gone ? " — مرجع محذوف من قسمه" : ""}</div>${r.sub ? `<div style="font-size:11px;color:${SUBTLE};">${esc(r.sub)}</div>` : ""}</div>
       ${r.badge ? `<span style="font-size:11px;font-weight:800;color:${r.color || SUBTLE};">${esc(r.badge)}</span>` : ""}${del}</div>
-      </div>`; }).join("");
+      ${ogDetHtml(r, ln)}</div>`; }).join("");
   return rows ? `<div style="margin-top:6px;">${rows}</div>` : "";
 }
 function goalSimHintHtml(g) {
@@ -11924,8 +11937,18 @@ function expandableSelectHtml(name, value, baseOptions, customOptions, placehold
 function multiSelectDropdownHtml(fieldKey, options, values, placeholder, extra) {
   const open = S.ui.openMultiDropdown === fieldKey;
   const chips = values.map((v) => `<span class="multi-chip">${esc(v)}<button type="button" data-action="multi-toggle" data-key="${esc(fieldKey)}" data-value="${esc(v)}" style="background:none;border:none;cursor:pointer;color:${ROSE};padding:0;">${iconX(10, ROSE)}</button></span>`).join(" ");
+  if (extra) {
+    const inChips = values.map((v) => `<span class="multi-chip">${esc(v)}<span role="button" data-action="multi-toggle" data-key="${esc(fieldKey)}" data-value="${esc(v)}" style="cursor:pointer;color:${ROSE};display:inline-flex;padding:0 2px;">${iconX(10, ROSE)}</span></span>`).join("");
+    return `<div style="position:relative;">
+      <div class="input multi-box" role="button" tabindex="0" data-action="toggle-multi-dropdown" data-key="${esc(fieldKey)}">${inChips || `<span style="color:${SUBTLE};">${esc(placeholder || "اختاري")}</span>`}</div>
+      ${open ? `<div class="multi-dropdown-panel mdp-float">${options.map((o) => `
+        <div class="multi-dropdown-item" data-action="multi-toggle" data-key="${esc(fieldKey)}" data-value="${esc(o)}">
+          <input type="checkbox" ${values.includes(o) ? "checked" : ""} style="pointer-events:none;" /> ${esc(o)}
+        </div>`).join("")}${extra}</div>` : ""}
+    </div>`;
+  }
   return `
-    <div${extra ? ' style="position:relative;"' : ""}>
+    <div>
       <button type="button" class="input" style="text-align:right;cursor:pointer;" data-action="toggle-multi-dropdown" data-key="${esc(fieldKey)}">${values.length ? "" : esc(placeholder || "اختاري")}</button>
       ${chips ? `<div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:8px;">${chips}</div>` : ""}
       ${open ? `<div class="multi-dropdown-panel${extra ? " mdp-float" : ""}">${options.map((o) => `
@@ -12384,6 +12407,7 @@ function renderSectionFields(section, d, unit, report) {
   // النهائية") تُستثنى من هذا التحويل التلقائي وتمر عبر السويتش كالمعتاد، لأن
   // دالتها اليدوية (basicSectionHtml/reviewSectionHtml) هي اللي تستخدم الحقول
   // الآن عبر renderSchemaFixedHtml، مع الحفاظ على منطق عرض/زخرفة خاص بها.
+  if (section.id === "evidence") return evidenceSectionHtml(d); // مستودع الشواهد يحل محل المحرك العام
   const schema = SECTION_FIELD_SCHEMAS[section.id];
   if (schema && !schema.fixed && (schema.fields || []).length) return renderSchemaRepeaterHtml(schema, d);
   switch (section.id) {
@@ -12679,7 +12703,7 @@ function ogEvidenceAreaHtml(g, og) {
     body = `${opts.length ? sel(opts, "استيراد تقرير موجود في الموقع", "") : ""}<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px;"><input class="input" id="ogev-name-${esc(og.id)}" style="flex:1;min-width:160px;" placeholder="اسم التقرير" /><input class="input" id="ogev-url-${esc(og.id)}" style="flex:2;min-width:200px;direction:ltr;" placeholder="رابط التقرير أو رابط درايف (https://…)" />${add("follow-url")}</div>`;
   } else if (type === "سجل رسمي") body = `<div style="display:flex;gap:8px;flex-wrap:wrap;"><input class="input" id="ogev-name-${esc(og.id)}" style="flex:1;min-width:160px;" placeholder="اسم السجل" /><input class="input" id="ogev-url-${esc(og.id)}" style="flex:2;min-width:200px;direction:ltr;" placeholder="رابط السجل الرسمي (https://…)" />${add("official")}</div>`;
   else if (type === "أخرى") body = `<div style="display:flex;gap:8px;flex-wrap:wrap;"><input class="input" id="ogev-name-${esc(og.id)}" style="flex:1;min-width:200px;" placeholder="وصف الدليل" /><input class="input" id="ogev-url-${esc(og.id)}" style="flex:2;min-width:200px;direction:ltr;" placeholder="رابط الدليل أو ملفه على درايف (https://…)" />${add("custom")}</div>`;
-  const legacy = (og.evidenceAnswer && String(og.evidenceAnswer).trim() && !(og.evidenceLinks || []).some((l) => l.kind === "repo")) ? `<div style="padding:8px 10px;border:1px dashed ${BORDER};border-radius:10px;margin-top:6px;display:flex;align-items:center;gap:8px;"><span style="font-size:10.5px;background:${GRAY_BG};border-radius:999px;padding:2px 9px;">${esc(og.evidenceType || "دليل سابق")}</span><span style="flex:1;font-size:12.5px;">${esc(og.evidenceAnswer || "")}</span><button type="button" class="icon-btn" style="width:28px;height:28px;" data-action="og-evd-legacy-clear" ${att}>${iconX(13, DANGER)}</button></div>` : "";
+  const legacy = (og.evidenceAnswer && String(og.evidenceAnswer).trim() && !(og.evidenceLinks || []).some((l) => l.kind === "repo")) ? `<div style="padding:8px 10px;border:1px dashed ${BORDER};border-radius:10px;margin-top:6px;display:flex;align-items:center;gap:8px;"><span style="font-size:10.5px;background:${GRAY_BG};border-radius:999px;padding:2px 9px;">${esc(og.evidenceType || "دليل سابق")}</span><span style="flex:1;font-size:12.5px;">${/^https?:\/\//i.test(String(og.evidenceAnswer || "").trim()) ? `<a href="${esc(String(og.evidenceAnswer).trim())}" target="_blank" rel="noopener noreferrer" style="color:${ROSE};font-weight:800;text-decoration:underline;">${esc(og.evidenceAnswer)} ↗</a>` : esc(og.evidenceAnswer || "")}</span><button type="button" class="icon-btn" style="width:28px;height:28px;" data-action="og-evd-legacy-clear" ${att}>${iconX(13, DANGER)}</button></div>` : "";
   return `<div style="margin-bottom:10px;">${type ? fieldWrap("إجابة الدليل — " + type, body) : ""}${ogLinksHtml(g.id, og)}${legacy}${type ? "" : ((og.evidenceLinks || []).length || legacy ? "" : `<div class="hint">اختاري نوع الدليل لإضافة دليل. ويمكن إضافة أكثر من دليل.</div>`)}</div>`;
 }
 function ogLevelPctHtml(g, og) {
@@ -12751,11 +12775,18 @@ async function evdOpen(id) {
   if (!evdCanSee(it)) { alert("هذا الشاهد غير متاح لك."); return; }
   if (it.kind === "link") { if (/^https?:\/\//i.test(it.url || "")) window.open(it.url, "_blank", "noopener"); return; }
   if (it.kind === "text") { S.ui.evdShow = S.ui.evdShow === id ? null : id; render(); return; }
-  const w = window.open("about:blank", "_blank");
   let data = it.file_data;
   if (!data && dbConnected()) { const r = await supabaseRequest(`evidence_repo?id=eq.${encodeURIComponent(id)}&select=file_data&limit=1`); data = r.ok && r.data && r.data[0] && r.data[0].file_data; }
-  if (!data) { if (w) w.close(); alert("تعذّر فتح الملف."); return; }
-  try { const b = await (await fetch(data)).blob(), u = URL.createObjectURL(b); if (w) w.location = u; else window.open(u, "_blank"); } catch (e) { if (w) w.close(); alert("تعذّر فتح الملف."); }
+  if (!data) { alert("تعذّر فتح الملف."); return; }
+  try {
+    const b = await (await fetch(data)).blob(), u = URL.createObjectURL(b), isImg = /^image\//.test(b.type) || it.kind === "image";
+    const ov = document.createElement("div");
+    ov.style.cssText = "position:fixed;inset:0;z-index:9999;background:rgba(30,10,15,.78);display:flex;flex-direction:column;align-items:center;justify-content:center;padding:16px;gap:10px;";
+    ov.innerHTML = `<div style="display:flex;gap:10px;align-items:center;color:#fff;font-weight:700;direction:rtl;"><span>${esc(it.name || "")}</span><a href="${u}" target="_blank" rel="noopener" style="color:#fff;text-decoration:underline;">فتح في تبويب ↗</a><button type="button" style="background:#fff;border:0;border-radius:999px;padding:4px 14px;font-weight:800;cursor:pointer;">إغلاق ✕</button></div>${isImg ? `<img src="${u}" style="max-width:96vw;max-height:80vh;border-radius:10px;background:#fff;" />` : `<iframe src="${u}" style="width:96vw;height:80vh;border:0;border-radius:10px;background:#fff;"></iframe>`}`;
+    const close = () => { try { URL.revokeObjectURL(u); } catch (e) { /* تجاهل */ } ov.remove(); };
+    ov.addEventListener("click", (ev) => { if (ev.target === ov || ev.target.tagName === "BUTTON") close(); });
+    document.body.appendChild(ov);
+  } catch (e) { alert("تعذّر فتح الملف."); }
 }
 // رابط خارجي (درايف مثلًا): رابط حقيقي قابل للضغط (يبقى كذلك في ملف PDF المطبوع)؛ غيره: زر يفتحه من القاعدة
 function evdOpenHtml(id) {
@@ -12853,7 +12884,7 @@ function evdRepoPageHtml() {
   const rows = items.map((it) => {
     const kind = (EVD_KINDS.find((k) => k[0] === it.kind) || [, "شاهد"])[1], n = evdLinkedCount(it.id), sub = [it.department, it.program].filter(Boolean).join(" · ");
     return `<div class="repeat-item" style="padding:10px 12px;"><div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
-      <span class="rpt-ev-type">${esc(it.type || kind)}</span><b style="flex:1;min-width:140px;">${esc(it.name)}</b>
+      <span class="rpt-ev-type">${esc(it.type || kind)}</span><button type="button" data-action="evr-open" data-id="${esc(it.id)}" style="flex:1;min-width:140px;text-align:right;background:none;border:0;padding:0;cursor:pointer;color:${ROSE};font-weight:800;text-decoration:underline;font-family:inherit;font-size:inherit;">${esc(it.name)}</button>
       ${badgeHtml(it.confidentiality || CONFIDENTIALITY_LEVELS[0], SUBTLE, GRAY_BG)}
       ${evdOpenHtml(it.id)}${evdCanEdit(it) ? `<button type="button" class="pill-ghost" style="padding:2px 10px;" data-action="evr-edit" data-id="${esc(it.id)}">تعديل</button><button type="button" class="pill-ghost" style="padding:2px 10px;color:${DANGER};" data-action="evr-del" data-id="${esc(it.id)}">حذف</button>` : ""}</div>
       <div class="hint" style="margin:4px 0 0;">${esc(kind)}${sub ? " · " + esc(sub) : ""}${it.description ? " — " + esc(it.description) : ""}${n ? ` · مرتبط بـ ${n} ${n === 1 ? "هدف" : "أهداف"} في هذا التقرير` : ""}</div>
@@ -18209,6 +18240,11 @@ function handleReportEditorAction(action, ds) {
       const g = findById(getItemList("goals"), ds.gid), og = g && (g.operationalGoals || []).find((x) => x.id === ds.ogid);
       if (og) { og.evidenceLinks = (og.evidenceLinks || []).filter((l) => !(l.kind === "repo" && l.refId === og.evidenceRepoId)); og.evidenceRepoId = ""; og.evidenceAnswer = ""; autoSaveSchedule(); }
       render(); return true;
+    }
+    case "og-evd-tg": { S.ui.ogOpenLn = S.ui.ogOpenLn || {}; S.ui.ogOpenLn[ds.lid] = !S.ui.ogOpenLn[ds.lid]; render(); return true; }
+    case "og-follow-open": {
+      autoSaveFlush(); try { trySaveSectionWithStatus("draft"); } catch (e) { /* تجاهل */ }
+      S.currentReportId = ds.rid; S.view = "unit-report"; S.openPhaseId = null; S.activeSectionId = null; render(); window.scrollTo(0, 0); return true;
     }
     case "og-evd-del": {
       const g = findById(getItemList("goals"), ds.gid), og = g && (g.operationalGoals || []).find((x) => x.id === ds.ogid);

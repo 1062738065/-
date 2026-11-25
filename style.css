@@ -1407,3 +1407,4 @@ body.sp-body{background:#f7f3f1}
 .og-trio { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; align-items: start; }
 @media (max-width: 640px) { .og-trio { grid-template-columns: 1fr; } }
 .multi-dropdown-panel.mdp-float { position: absolute; inset-inline: 0; z-index: 30; box-shadow: 0 8px 24px rgba(60,20,30,.18); max-height: 260px; }
+.multi-box { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; min-height: 44px; cursor: pointer; }
