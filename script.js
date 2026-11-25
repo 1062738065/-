@@ -11034,9 +11034,9 @@ function ogResolveLink(report, ln) {
   const draft = (k, arr) => (S.sectionDraft && S.activeSectionId === k && S.sectionDraft[arr]) || null;
   if (ln.kind === "ind") {
     const row = (draft("kpi", "indicators") || sec("kpi").indicators || []).find((x) => x.id === ln.refId);
-    if (!row) return { gone: true, title: ln.refName || "مؤشر", kindLabel: "مؤشر أداء" };
+    if (!row) return { gone: true, title: ln.refName || "مؤشر", kindLabel: "رقم مؤشر" };
     const def = findIndicatorDef(row.name), rs = resolveIndicatorRow(row, def), st = computeIndicatorStatus(rs);
-    return { title: row.name, kindLabel: "مؤشر أداء", sub: `المتحقق ${row.actual !== "" && row.actual != null ? row.actual : "—"} من المستهدف ${rs.target !== "" && rs.target != null ? rs.target : "—"}${(() => { const pc = indicatorRowView(row).pct; return pc == null ? "" : " · التحقق " + pc + "٪"; })()}`, badge: st.label, color: st.color };
+    return { title: ogIndCode(def, ((draft("kpi", "indicators") || sec("kpi").indicators || []).indexOf(row))) + " | " + row.name, kindLabel: "رقم مؤشر", sub: `المتحقق ${row.actual !== "" && row.actual != null ? row.actual : "—"} من المستهدف ${rs.target !== "" && rs.target != null ? rs.target : "—"}${(() => { const pc = indicatorRowView(row).pct; return pc == null ? "" : " · التحقق " + pc + "٪"; })()}`, badge: st.label, color: st.color };
   }
   if (ln.kind === "tool") {
     const t = (draft("tools", "tools") || sec("tools").tools || []).find((x) => x.id === ln.refId);
@@ -11044,6 +11044,15 @@ function ogResolveLink(report, ln) {
     const rr = computeResponseRate(t.sampleSize, t.respondentsCount);
     return { title: t.name, kindLabel: "أداة قياس", sub: [t.toolType, rr != null ? "نسبة الاستجابة " + rr + "٪" : ""].filter(Boolean).join(" · "), badge: t.resultQuality || "", color: SUBTLE, url: t.resultsLink || t.toolLink || "" };
   }
+  if (ln.kind === "inddef") {
+    const d = (S.indicatorDefinitions || []).find((x) => x.id === ln.refId); if (!d) return { gone: true, title: ln.refName || "مؤشر", kindLabel: "رقم مؤشر" };
+    return { title: ogIndCode(d, 0) + " | " + d.name, kindLabel: "رقم مؤشر", sub: "لم يُدخل إنجازه في «مؤشرات الأداء» بعد، فلا يدخل في حساب النسبة.", badge: "", color: SUBTLE };
+  }
+  if (ln.kind === "follow") {
+    if (ln.refId) { const r = (((S.reports || {})[S.currentUnitId]) || []).find((x) => x.id === ln.refId); return { title: r ? (r.label || r.id) : (ln.refName || "تقرير"), kindLabel: "تقرير متابعة", sub: r ? "تقرير في الموقع" : "", badge: "", color: SUBTLE, gone: !r }; }
+    return { title: ln.text || "تقرير متابعة", kindLabel: "تقرير متابعة", sub: "", badge: "", color: SUBTLE, url: ln.url || "" };
+  }
+  if (ln.kind === "official") return { title: ln.text || "سجل رسمي", kindLabel: "سجل رسمي", sub: "", badge: "", color: SUBTLE, url: ln.url || "" };
   if (ln.kind === "custom") return { title: ln.text || "دليل آخر", kindLabel: "دليل آخر", sub: "", badge: "", color: SUBTLE, url: ln.url || "", custom: true };
   if (ln.kind === "repo") {
     const it = evdFind(ln.refId);
@@ -11069,16 +11078,12 @@ function ogLinksHtml(gid, og) {
     const r = ogResolveLink(rep, ln), lat = `${att} data-lid="${esc(ln.id)}"`;
     const del = `<button type="button" class="icon-btn" style="width:28px;height:28px;" data-action="og-evd-del" ${lat} title="إلغاء الربط (لا يحذف العنصر من قسمه)">${iconX(13, DANGER)}</button>`;
     if (ln.kind === "custom") return `<div style="padding:8px 10px;border:1px solid ${BORDER};border-radius:10px;background:#fbf9f8;margin-top:6px;"><div style="display:flex;gap:8px;align-items:center;"><span style="font-size:10.5px;background:${GRAY_BG};border-radius:999px;padding:2px 9px;white-space:nowrap;">دليل آخر</span><input class="input" style="flex:1;padding:5px 8px;" placeholder="وصف الدليل" value="${esc(ln.text || "")}" data-action="og-evd-field" data-f="text" ${lat} /></div><div style="display:flex;gap:8px;align-items:center;margin-top:6px;"><input class="input" style="flex:1;padding:5px 8px;direction:ltr;" placeholder="رابط الدليل أو مرفقه (https://…)" value="${esc(ln.url || "")}" data-action="og-evd-field" data-f="url" ${lat} />${ogUrlHtml(ln.url)}${del}</div></div>`;
-    const opts = ogLinkOptionsHtml(rep, og);
     return `<div style="padding:8px 10px;border:1px solid ${BORDER};border-radius:10px;background:#fbf9f8;margin-top:6px;${r.gone ? "opacity:.7;" : ""}"><div style="display:flex;align-items:center;gap:8px;">
       <span style="font-size:10.5px;background:${GRAY_BG};border-radius:999px;padding:2px 9px;white-space:nowrap;">${esc(r.kindLabel)}</span>
       <div style="flex:1;min-width:0;"><div style="font-size:12.5px;font-weight:700;">${esc(r.title)}${r.gone ? " — مرجع محذوف من قسمه" : ""}${r.repoId ? evdOpenHtml(r.repoId) : ogUrlHtml(r.url)}</div>${r.sub ? `<div style="font-size:11px;color:${SUBTLE};">${esc(r.sub)}</div>` : ""}</div>
       ${r.badge ? `<span style="font-size:11px;font-weight:800;color:${r.color || SUBTLE};">${esc(r.badge)}</span>` : ""}${del}</div>
-      ${opts ? `<select class="input" style="margin-top:6px;padding:4px 8px;font-size:11.5px;" data-action="og-evd-chg" ${lat}><option value="">تغيير الدليل المرتبط…</option>${opts}</select>` : ""}</div>`; }).join("");
-  const opts = ogLinkOptionsHtml(rep, og);
-  return `<div style="margin-top:10px;"><div style="font-size:12px;font-weight:800;margin-bottom:4px;">أدلة التحقق المرتبطة (اختيارية) <span style="font-weight:600;color:${SUBTLE};">— تُسحب بياناتها ورابطها من قسمها دون إعادة إدخال. والمؤشرات المرتبطة هنا يُحسب منها نسبة تحقق الهدف ومستواه تلقائيًا</span></div>${rows}
-    <select class="input" style="margin-top:8px;" data-action="og-evd-add" ${att}><option value="">＋ ربط دليل: مؤشر أو أداة قياس أو شاهد أو سجل…</option>${opts}<option value="custom:new">＋ دليل آخر (وصف أو رابط أو مرفق)</option></select>
-    ${links.length ? "" : `<div class="hint">اختياري — لا يلزم ربط جميع الأنواع.</div>`}</div>`;
+      </div>`; }).join("");
+  return rows ? `<div style="margin-top:6px;">${rows}</div>` : "";
 }
 function goalSimHintHtml(g) {
   const sm = goalSimilarList(g.name, g.id).slice(0, 2); if (!sm.length) return "";
@@ -11916,17 +11921,17 @@ function expandableSelectHtml(name, value, baseOptions, customOptions, placehold
     </div>` : "";
   return selectHtmlStr + otherRow;
 }
-function multiSelectDropdownHtml(fieldKey, options, values, placeholder) {
+function multiSelectDropdownHtml(fieldKey, options, values, placeholder, extra) {
   const open = S.ui.openMultiDropdown === fieldKey;
   const chips = values.map((v) => `<span class="multi-chip">${esc(v)}<button type="button" data-action="multi-toggle" data-key="${esc(fieldKey)}" data-value="${esc(v)}" style="background:none;border:none;cursor:pointer;color:${ROSE};padding:0;">${iconX(10, ROSE)}</button></span>`).join(" ");
   return `
-    <div>
+    <div${extra ? ' style="position:relative;"' : ""}>
       <button type="button" class="input" style="text-align:right;cursor:pointer;" data-action="toggle-multi-dropdown" data-key="${esc(fieldKey)}">${values.length ? "" : esc(placeholder || "اختاري")}</button>
       ${chips ? `<div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:8px;">${chips}</div>` : ""}
-      ${open ? `<div class="multi-dropdown-panel">${options.map((o) => `
+      ${open ? `<div class="multi-dropdown-panel${extra ? " mdp-float" : ""}">${options.map((o) => `
         <div class="multi-dropdown-item" data-action="multi-toggle" data-key="${esc(fieldKey)}" data-value="${esc(o)}">
           <input type="checkbox" ${values.includes(o) ? "checked" : ""} style="pointer-events:none;" /> ${esc(o)}
-        </div>`).join("")}</div>` : ""}
+        </div>`).join("")}${extra || ""}</div>` : ""}
     </div>`;
 }
 
@@ -12164,9 +12169,6 @@ function validateGoalsData(data) {
   const goals = data.goals || [];
   for (const g of goals) {
     for (const og of g.operationalGoals || []) {
-      if (og.evidenceType && !(og.evidenceAnswer && og.evidenceAnswer.trim())) {
-        return { valid: false, message: `أدخلي إجابة دليل التحقق لهدف "${og.name}" قبل الحفظ` };
-      }
     }
   }
   return { valid: true };
@@ -12628,6 +12630,58 @@ function ogRecomputeEntry(entry, unitId) {
   const ng = goals.map((g) => ({ ...g, operationalGoals: (g.operationalGoals || []).map((og) => { const c = { ...og }; ogApplyAuto(entry, c, unitId); if (c.level !== og.level || c.percentage !== og.percentage) changed = true; return c; }) }));
   return changed ? { ...entry, sections: { ...entry.sections, goals: { ...gs, data: { ...gs.data, goals: ng } } } } : entry;
 }
+
+function ogEvTypes() { return [...EVIDENCE_TYPES, "أخرى"]; }
+function ogIndCode(def, i) { return "KPI-" + String((def ? (S.indicatorDefinitions || []).indexOf(def) : i) + 1).padStart(2, "0"); }
+function ogIndOptions(rep, og) {
+  const rows = ((rep && rep.sections && rep.sections.kpi && rep.sections.kpi.data) || {}).indicators || [];
+  const used = new Set((og.evidenceLinks || []).map((l) => l.kind + ":" + l.refId));
+  const out = [], seenDef = new Set();
+  rows.forEach((r, i) => { if (!r || !r.name) return; const def = findIndicatorDef(r.name); if (def) seenDef.add(def.id); if (!used.has("ind:" + r.id)) out.push({ v: "ind:" + r.id, t: ogIndCode(def, i) + " | " + r.name }); });
+  (S.indicatorDefinitions || []).filter((d) => scopeAllows("ind", d.id, S.currentUnitId) && !seenDef.has(d.id)).forEach((d) => { if (!used.has("inddef:" + d.id)) out.push({ v: "inddef:" + d.id, t: ogIndCode(d, 0) + " | " + d.name }); });
+  return out;
+}
+function ogToolOptions(rep, og) {
+  const rows = ((rep && rep.sections && rep.sections.tools && rep.sections.tools.data) || {}).tools || [];
+  const used = new Set((og.evidenceLinks || []).map((l) => l.kind + ":" + l.refId));
+  return rows.filter((t) => t && t.name && !used.has("tool:" + t.id)).map((t) => ({ v: "tool:" + t.id, t: t.name + (t.toolType ? " — " + t.toolType : "") }));
+}
+function ogFollowOptions(og) {
+  const cur = S.currentReportId, used = new Set((og.evidenceLinks || []).map((l) => l.kind + ":" + l.refId));
+  return ((S.reports || {})[S.currentUnitId] || []).filter((r) => r && r.id !== cur && !used.has("follow:" + r.id)).map((r) => ({ v: "follow:" + r.id, t: r.label || r.id }));
+}
+function ogTopRowHtml(g, og) {
+  const rep = getCurrentReportEntry(), au = ogApplyAuto(rep, og, S.currentUnitId) || {}, gm = goalLevelMeta(og.level);
+  const barHtml = og.level ? `<div style="display:flex;align-items:center;gap:8px;min-height:38px;"><div style="flex:1;">${progressBarHtml(og.percentage || 0, gm.color)}</div><span style="font-size:13px;font-weight:800;color:${gm.color};">${og.percentage}٪</span></div>` : `<div class="hint" style="margin:0;min-height:38px;display:flex;align-items:center;">تُحسب تلقائيًا</div>`;
+  const levelCell = (au.auto || au.special)
+    ? fieldWrap("مستوى تحقق الهدف", `<div style="min-height:38px;display:flex;align-items:center;">${badgeHtml(og.level, gm.color, gm.bg)}</div>`)
+    : fieldWrap("مستوى تحقق الهدف", true, selSub("goals", g.id, "operationalGoals", og.id, "level", og.level, GOAL_LEVELS, "اختاري المستوى"));
+  const pctCell = fieldWrap("نسبة تحقق الهدف", barHtml);
+  const cur = (S.ui.ogEvT || {})[og.id] || "";
+  const typeCell = fieldWrap("دليل تحقق الهدف", `<select class="input" data-action="og-evt" data-ogid="${esc(og.id)}"><option value="">اختاري نوع الدليل</option>${ogEvTypes().map((o) => `<option value="${esc(o)}" ${o === cur ? "selected" : ""}>${esc(o)}</option>`).join("")}</select>`);
+  const note = au.special ? `<div class="hint" style="margin:0 0 8px;">حالة خاصة اخترتِها.</div>` : au.auto ? `<div class="hint" style="margin:0 0 8px;">النسبة والمستوى تُحسبان تلقائيًا من ${au.n} ${au.n === 1 ? "مؤشر مرتبط" : "مؤشرات مرتبطة"} بالهدف.</div>` : "";
+  const special = au.auto || au.special ? fieldWrap("حالة خاصة (اختياري)", selSub("goals", g.id, "operationalGoals", og.id, "special", og.special || "", GOAL_SPECIAL_LEVELS, "— لا يوجد (يُحسب تلقائيًا)")) : "";
+  return `<div class="og-trio">${levelCell}${pctCell}${typeCell}</div>${note}${special}`;
+}
+function ogEvidenceAreaHtml(g, og) {
+  const rep = getCurrentReportEntry(), type = (S.ui.ogEvT || {})[og.id] || "", att = `data-gid="${esc(g.id)}" data-ogid="${esc(og.id)}"`;
+  const sel = (opts, ph, kind) => opts.length ? `<select class="input" data-action="og-evd-pick" ${att}><option value="">${esc(ph)}</option>${opts.map((o) => `<option value="${esc(o.v)}">${esc(o.t)}</option>`).join("")}</select>` : `<div class="hint">${esc(kind)}</div>`;
+  const add = (k, label) => pillBtn(label || "إضافة", { icon: iconPlus(14, "#fff"), action: "og-evd-new", data: { gid: g.id, ogid: og.id, k } });
+  let body = "";
+  if (type === "رقم مؤشر") body = sel(ogIndOptions(rep, og), "اختاري المؤشر (رقمه | اسمه)", "لا توجد مؤشرات متاحة للوحدة. أضيفي مؤشرًا في قسم «مؤشرات الأداء» أولًا.");
+  else if (type === "نتيجة أداة قياس") body = sel(ogToolOptions(rep, og), "اختاري أداة القياس", "لا توجد أدوات قياس مسجلة في هذا التقرير.");
+  else if (type === "رابط شاهد") {
+    evdLoad();
+    const opts = evdRepo().filter(evdCanSee).filter((x) => !(og.evidenceLinks || []).some((l) => l.kind === "repo" && l.refId === x.id)).map((x) => ({ v: "repo:" + x.id, t: x.name + (x.type ? " — " + x.type : "") }));
+    body = `<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">${opts.length ? `<div style="flex:1;min-width:220px;">${sel(opts, "اختاري شاهدًا مضافًا مسبقًا", "")}</div>` : ""}${pillBtn("＋ إضافة شاهد جديد (ينقلك لصفحة الشواهد)", { variant: "ghost", action: "evr-goal-new", data: { gid: g.id, ogid: og.id } })}</div>`;
+  } else if (type === "تقرير متابعة") {
+    const opts = ogFollowOptions(og);
+    body = `${opts.length ? sel(opts, "استيراد تقرير موجود في الموقع", "") : ""}<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px;"><input class="input" id="ogev-name-${esc(og.id)}" style="flex:1;min-width:160px;" placeholder="اسم التقرير" /><input class="input" id="ogev-url-${esc(og.id)}" style="flex:2;min-width:200px;direction:ltr;" placeholder="رابط التقرير أو رابط درايف (https://…)" />${add("follow-url")}</div>`;
+  } else if (type === "سجل رسمي") body = `<div style="display:flex;gap:8px;flex-wrap:wrap;"><input class="input" id="ogev-name-${esc(og.id)}" style="flex:1;min-width:160px;" placeholder="اسم السجل" /><input class="input" id="ogev-url-${esc(og.id)}" style="flex:2;min-width:200px;direction:ltr;" placeholder="رابط السجل الرسمي (https://…)" />${add("official")}</div>`;
+  else if (type === "أخرى") body = `<div style="display:flex;gap:8px;flex-wrap:wrap;"><input class="input" id="ogev-name-${esc(og.id)}" style="flex:1;min-width:200px;" placeholder="وصف الدليل" /><input class="input" id="ogev-url-${esc(og.id)}" style="flex:2;min-width:200px;direction:ltr;" placeholder="رابط الدليل أو ملفه على درايف (https://…)" />${add("custom")}</div>`;
+  const legacy = (og.evidenceAnswer && String(og.evidenceAnswer).trim() && !(og.evidenceLinks || []).some((l) => l.kind === "repo")) ? `<div style="padding:8px 10px;border:1px dashed ${BORDER};border-radius:10px;margin-top:6px;display:flex;align-items:center;gap:8px;"><span style="font-size:10.5px;background:${GRAY_BG};border-radius:999px;padding:2px 9px;">${esc(og.evidenceType || "دليل سابق")}</span><span style="flex:1;font-size:12.5px;">${esc(og.evidenceAnswer || "")}</span><button type="button" class="icon-btn" style="width:28px;height:28px;" data-action="og-evd-legacy-clear" ${att}>${iconX(13, DANGER)}</button></div>` : "";
+  return `<div style="margin-bottom:10px;">${type ? fieldWrap("إجابة الدليل — " + type, body) : ""}${ogLinksHtml(g.id, og)}${legacy}${type ? "" : ((og.evidenceLinks || []).length || legacy ? "" : `<div class="hint">اختاري نوع الدليل لإضافة دليل. ويمكن إضافة أكثر من دليل.</div>`)}</div>`;
+}
 function ogLevelPctHtml(g, og) {
   const rep = getCurrentReportEntry(), au = ogApplyAuto(rep, og, S.currentUnitId) || {}, gm = goalLevelMeta(og.level);
   const bar = og.level ? `<div style="display:flex;align-items:center;gap:10px;"><div style="flex:1;">${progressBarHtml(og.percentage || 0, gm.color)}</div><span style="font-size:13px;font-weight:800;color:${gm.color};min-width:34px;text-align:left;">${og.percentage}٪</span></div>` : "";
@@ -12764,13 +12818,13 @@ async function evdFormSave() {
   f.busy = false;
   if (!r.ok) { f.msg = "تعذّر الحفظ: " + r.error + " — هل شُغّل ملف «الشواهد-إضافات.sql»؟"; render(); return; }
   const ret = f.ret; S.ui.evdForm = null;
-  if (ret) evdLinkToGoal(ret.gid, ret.ogid, it);
+  if (ret) { loadSectionIntoDraft("goals"); (S.ui.expandedRepeatItem || (S.ui.expandedRepeatItem = {})).goals = ret.gid; evdLinkToGoal(ret.gid, ret.ogid, it); autoSaveFlush(); try { trySaveSectionWithStatus("draft"); } catch (e) { /* تجاهل */ } window.scrollTo(0, 0); }
   render();
 }
 // ربط الشاهد بالهدف (مرة واحدة) وإظهار اسمه في «إجابة الدليل»
 function evdLinkToGoal(gid, ogid, it) {
   const g = findById(getItemList("goals"), gid), og = g && (g.operationalGoals || []).find((x) => x.id === ogid); if (!og || !it) return;
-  og.evidenceRepoId = it.id; og.evidenceAnswer = it.name;
+  og.evidenceRepoId = it.id;
   if (!(og.evidenceLinks || []).some((l) => l.kind === "repo" && l.refId === it.id)) og.evidenceLinks = [...(og.evidenceLinks || []), { id: uid("ev"), kind: "repo", refId: it.id, refName: it.name }];
   autoSaveSchedule();
 }
@@ -12794,7 +12848,8 @@ function evdLinkedCount(id) {
 function evdRepoPageHtml() {
   evdLoad();
   const f = S.ui.evdForm, items = evdRepo().filter(evdCanSee);
-  const form = f && !f.ret ? evdFormHtml() : "";
+  const retGoal = f && f.ret ? (() => { const gg = findById(((getCurrentReportEntry() || {}).sections || {}).goals ? (getCurrentReportEntry().sections.goals.data.goals || []) : [], f.ret.gid), oo = gg && (gg.operationalGoals || []).find((x) => x.id === f.ret.ogid); return oo ? `<div class="hint" style="background:${GRAY_BG};border-radius:10px;padding:8px 12px;margin-bottom:8px;">سيُربط الشاهد بالهدف: <b>${esc(oo.name)}</b> ويُحفظ في المستودع، ثم تعودين لصفحة الأهداف.</div>` : ""; })() : "";
+  const form = f ? retGoal + evdFormHtml() : "";
   const rows = items.map((it) => {
     const kind = (EVD_KINDS.find((k) => k[0] === it.kind) || [, "شاهد"])[1], n = evdLinkedCount(it.id), sub = [it.department, it.program].filter(Boolean).join(" · ");
     return `<div class="repeat-item" style="padding:10px 12px;"><div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
@@ -12874,15 +12929,13 @@ function goalsSectionHtml(d) {
     const ogHtml = (g.operationalGoals || []).map((og) => `
       <div class="og-block">
         <div style="font-size:12.5px;font-weight:800;margin-bottom:10px;">${esc(og.name)}${(() => { const dd = (S.goalsDefinitions.operational || []).find((x) => x.name === og.name); const t = dd ? ogTargetForReport(dd.id, S.currentUnitId, getCurrentReportEntry()) : ""; return t !== "" ? ` <span style="font-weight:600;color:${SUBTLE};">— المستهدف ${esc(t)}%</span>` : ""; })()}</div>
-        ${ogLevelPctHtml(g, og)}
-        ${renderSchemaFieldHtml(evidenceTypeField, "goals", g.id, og.evidenceType || "", d.customEvidenceTypes || [], og, "operationalGoals", og.id)}
-        ${og.evidenceType === "رابط شاهد" ? evdGoalAnswerHtml(g.id, og) : (og.evidenceType ? renderSchemaFieldHtml({ ...evidenceAnswerField, placeholder: evidenceAnswerPlaceholder(og.evidenceType) }, "goals", g.id, og.evidenceAnswer, undefined, og, "operationalGoals", og.id) : "")}
+        ${ogTopRowHtml(g, og)}
+        ${ogEvidenceAreaHtml(g, og)}
         ${renderSchemaFieldHtml(explanationField, "goals", g.id, og.explanation, undefined, og, "operationalGoals", og.id) + `<div class="char-count">${(og.explanation || "").length} / 300</div>`}
-        ${ogLinksHtml(g.id, og)}
       </div>`).join("");
     return `<div class="repeat-item">
       ${head}
-      ${fieldWrap("الهدف التشغيلي للوحدة", true, multiSelectDropdownHtml(`goal-og-${g.id}`, operationalAll || operationalGoalsFor(), (g.operationalGoals || []).map((og) => og.name), "اختاري هدفًا أو أكثر") + goalAddInlineHtml(g.id, "operational"))}
+      ${fieldWrap("الهدف التشغيلي للوحدة", true, multiSelectDropdownHtml(`goal-og-${g.id}`, operationalAll || operationalGoalsFor(), (g.operationalGoals || []).map((og) => og.name), "اختاري هدفًا أو أكثر", goalAddRowHtml(g.id, "operational")) + goalAddInlineHtml(g.id, "operational", true))}
       ${ogHtml}
     </div>`;
   }).join("");
@@ -12902,10 +12955,15 @@ function operationalGoalsFor() {
 // «＋ هدف غير موجود في القائمة»: يضيف الهدف للقائمة العامة (إدارة الأهداف) ويختاره مباشرة.
 // مديرة النظام تقدر توقفه من «إدارة الأهداف والمستهدفات».
 function goalAddFromReportOn() { const th = ((S.siteSettings || {}).theme) || {}; return th.goalAddFromReport !== false; }
-function goalAddInlineHtml(goalId, kind) {
+function goalAddRowHtml(goalId, kind) {
+  if (!goalAddFromReportOn()) return "";
+  return `<div class="multi-dropdown-item" data-action="goal-add-open" data-key="${esc(goalId + ":" + kind)}" style="color:${ROSE};font-weight:800;border-top:1px solid ${BORDER};position:sticky;bottom:0;background:#fff;">＋ ${kind === "strategic" ? "هدف استراتيجي" : "هدف تشغيلي"} غير موجود في القائمة</div>`;
+}
+function goalAddInlineHtml(goalId, kind, onlyOpen) {
   if (!goalAddFromReportOn()) return "";
   const key = goalId + ":" + kind;
   const label = kind === "strategic" ? "هدف استراتيجي" : "هدف تشغيلي";
+  if (S.ui.goalAddOpen !== key && onlyOpen) return "";
   if (S.ui.goalAddOpen !== key) return `<button type="button" data-action="goal-add-open" data-key="${esc(key)}" style="background:none;border:none;cursor:pointer;color:${ROSE};font-size:12px;font-weight:700;padding:6px 0 0;font-family:inherit;">＋ ${label} غير موجود في القائمة</button>`;
   return `<div style="display:flex;gap:6px;margin-top:8px;flex-wrap:wrap;">
     <input class="input" id="goal-add-input" style="flex:1;min-width:200px;" placeholder="اكتبي نص ${label} الجديد" value="${esc(S.ui.goalAddText || "")}" />
@@ -14631,6 +14689,7 @@ function shapePickerHtml(target) {
 function shapeAutoFor(sectionId) { const id = shapeDefaultFor(sectionId); return id && (SHAPES_LIB[id].live || SHAPES_LIB[id].cat !== "photo") && sectionId !== "programs" ? id : ""; }
 function shapeDefaultFor(sectionId) { return ""; } // الشكل المقترح القديم مُعطّل: الاختيار صار من «شكل كل قسم»
 function shapeBlocksEditorHtml(d, sectionId) {
+  if (sectionId === "goals" || S.activeSectionId === "goals") return "";
   const defId = (!(d.shapeBlocks || []).length && sectionId) ? shapeDefaultFor(sectionId) : "";
   if (defId && shapeAutoFor(sectionId)) return shapeBlocksEditorInner(d, sectionId) + `<div class="hint no-print" style="margin-top:8px;">يظهر تلقائيًا في التقرير: <b>${esc(SHAPES_LIB[defId].name)}</b></div><div class="rpt-v5 no-print">${shapeRender(defId, { auto: true }, { editor: true, report: getCurrentReportEntry(), unitId: S.currentUnitId, sectionId, data: d })}</div>`;
   const sug = defId ? `<div class="hint" style="margin-top:8px;">الشكل المقترح لهذا القسم: <b>${esc(SHAPES_LIB[defId].name)}</b> ${pillBtn("إضافته", { variant: "ghost", action: "shp-add", data: { shape: defId } })}</div>` : "";
@@ -16122,6 +16181,15 @@ function attachFormListeners() {
   appEl.addEventListener("change", (e) => {
     const t0 = e.target;
     if (t0 && t0.dataset && t0.dataset.evf) { evdFormInput(t0, false); return; }
+    if (t0 && t0.dataset && t0.dataset.action === "og-evt") { (S.ui.ogEvT || (S.ui.ogEvT = {}))[t0.dataset.ogid] = t0.value; render(); return; }
+    if (t0 && t0.dataset && t0.dataset.action === "og-evd-pick") {
+      const g = findById(getItemList("goals"), t0.dataset.gid), og = g && (g.operationalGoals || []).find((x) => x.id === t0.dataset.ogid);
+      if (og && t0.value) { const [k, id] = t0.value.split(":");
+        if (k === "repo") evdLinkToGoal(t0.dataset.gid, t0.dataset.ogid, evdFind(id));
+        else { const r = ogResolveLink(getCurrentReportEntry(), { kind: k, refId: id }); og.evidenceLinks = [...(og.evidenceLinks || []), { id: uid("ev"), kind: k, refId: id, refName: r.title || "" }]; autoSaveSchedule(); }
+        (S.ui.ogEvT || {})[og.id] = ""; }
+      render(); return;
+    }
     if (t0 && t0.dataset && t0.dataset.action === "evr-goal-pick") { if (t0.value) { evdLinkToGoal(t0.dataset.gid, t0.dataset.ogid, evdFind(t0.value)); } render(); return; }
     if (t0 && t0.dataset && t0.dataset.indSel) { if (t0.dataset.indSel === "impview") S.ui.impView = t0.value; else if (t0.dataset.indSel === "impstat") S.ui.impStat = t0.value; else if (t0.dataset.indSel === "view") S.ui.indView = t0.value; else if (t0.dataset.indSel === "ind") S.ui.indSel = t0.value; else S.ui.indStat = t0.value; render(); return; }
     if (t0 && t0.dataset && t0.dataset.ccKind && t0.dataset.ccId) { dashCCSave(t0.dataset.ccKind, (c) => { const k = c.cards.find((x) => x.id === t0.dataset.ccId); if (k) k[t0.dataset.ccF] = t0.value; }); render(); return; }
@@ -17709,7 +17777,7 @@ function attachClickListener() {
         break;
       }
       case "goal-add-toggle": saveSiteTheme({ goalAddFromReport: !goalAddFromReportOn() }); render(); break;
-      case "goal-add-open": S.ui.goalAddOpen = ds.key; S.ui.goalAddErr = ""; S.ui.goalAddText = ""; S.ui.goalAddConfirm = ""; render(); setTimeout(() => { const el = document.getElementById("goal-add-input"); if (el) el.focus(); }, 30); break;
+      case "goal-add-open": S.ui.openMultiDropdown = null; S.ui.goalAddOpen = ds.key; S.ui.goalAddErr = ""; S.ui.goalAddText = ""; S.ui.goalAddConfirm = ""; render(); setTimeout(() => { const el = document.getElementById("goal-add-input"); if (el) el.focus(); }, 30); break;
       case "goal-add-cancel": S.ui.goalAddOpen = null; S.ui.goalAddErr = ""; render(); break;
       case "goal-add-save": {
         const el = document.getElementById("goal-add-input");
@@ -18110,7 +18178,7 @@ function handleReportEditorAction(action, ds) {
     }
     case "evr-new": S.ui.evdForm = evdNewForm(null); render(); return true;
     case "evr-edit": { const it = evdFind(ds.id); if (it) { S.ui.evdForm = { ...evdNewForm(null), ...it, file_data: "", ret: null, msg: "" }; render(); } return true; }
-    case "evr-cancel": S.ui.evdForm = null; render(); return true;
+    case "evr-cancel": { const rt = S.ui.evdForm && S.ui.evdForm.ret; S.ui.evdForm = null; if (rt) { loadSectionIntoDraft("goals"); (S.ui.expandedRepeatItem || (S.ui.expandedRepeatItem = {})).goals = rt.gid; } render(); return true; }
     case "evr-kind": if (S.ui.evdForm) { S.ui.evdForm.kind = ds.v; S.ui.evdForm.file_data = ""; S.ui.evdForm.file_name = ""; } render(); return true;
     case "evd-auth": { const k = ds.k; saveSiteTheme((th) => ({ evdAuth: { ...(th.evdAuth || {}), [k]: !evdAuthCfg()[k] } })); return true; }
     case "evr-conf": if (S.ui.evdForm) S.ui.evdForm.confidentiality = ds.v; render(); return true;
@@ -18118,7 +18186,25 @@ function handleReportEditorAction(action, ds) {
     case "evr-save": evdFormSave(); return true;
     case "evr-del": evdDelete(ds.id); return true;
     case "evr-open": evdOpen(ds.id); return true;
-    case "evr-goal-new": S.ui.evdForm = evdNewForm({ gid: ds.gid, ogid: ds.ogid }); render(); return true;
+    case "evr-goal-new": {
+      autoSaveFlush(); try { trySaveSectionWithStatus("draft"); } catch (e) { /* تجاهل */ }
+      S.ui.evdForm = evdNewForm({ gid: ds.gid, ogid: ds.ogid });
+      loadSectionIntoDraft("evidence"); render(); window.scrollTo(0, 0); return true;
+    }
+    case "og-evd-new": {
+      const g = findById(getItemList("goals"), ds.gid), og = g && (g.operationalGoals || []).find((x) => x.id === ds.ogid); if (!og) return true;
+      const val = (id) => String((document.getElementById(id + og.id) || {}).value || "").trim(), nm = val("ogev-name-"), url = val("ogev-url-");
+      if (!nm && !url) { S.sectionSaveError = ""; alert("اكتبي الاسم أو الوصف، أو ضعي الرابط."); return true; }
+      if (url && !/^https?:\/\//i.test(url)) { alert("الرابط يجب أن يبدأ بـ http أو https."); return true; }
+      const kind = ds.k === "follow-url" ? "follow" : ds.k;
+      og.evidenceLinks = [...(og.evidenceLinks || []), { id: uid("ev"), kind, text: nm, url }];
+      (S.ui.ogEvT || {})[og.id] = ""; autoSaveSchedule(); render(); return true;
+    }
+    case "og-evd-legacy-clear": {
+      const g = findById(getItemList("goals"), ds.gid), og = g && (g.operationalGoals || []).find((x) => x.id === ds.ogid);
+      if (og) { og.evidenceType = ""; og.evidenceAnswer = ""; og.evidenceRepoId = ""; autoSaveSchedule(); }
+      render(); return true;
+    }
     case "evr-goal-clear": {
       const g = findById(getItemList("goals"), ds.gid), og = g && (g.operationalGoals || []).find((x) => x.id === ds.ogid);
       if (og) { og.evidenceLinks = (og.evidenceLinks || []).filter((l) => !(l.kind === "repo" && l.refId === og.evidenceRepoId)); og.evidenceRepoId = ""; og.evidenceAnswer = ""; autoSaveSchedule(); }

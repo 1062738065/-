@@ -1404,3 +1404,6 @@ body.sp-body{background:#f7f3f1}
 .rpt-jump:hover{text-decoration:underline}
 .rpt-flash{animation:rptflash 1.8s ease}
 @keyframes rptflash{0%,60%{background:#fff3c4}100%{background:transparent}}
+.og-trio { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; align-items: start; }
+@media (max-width: 640px) { .og-trio { grid-template-columns: 1fr; } }
+.multi-dropdown-panel.mdp-float { position: absolute; inset-inline: 0; z-index: 30; box-shadow: 0 8px 24px rgba(60,20,30,.18); max-height: 260px; }
