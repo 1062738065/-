@@ -1524,3 +1524,22 @@ body.sp-body{background:#f7f3f1}
 .rg-ph img{width:100%;height:100%;object-fit:cover;display:block}
 .rg-ph .cap{position:absolute;inset-inline:0;bottom:0;padding:14px 6px 5px;background:linear-gradient(transparent,rgba(43,14,24,.82));color:#fff;font-size:10px;font-weight:700;text-align:right}
 .rg-hint{font-size:11.5px;color:#8a7279}
+
+/* ضبط مطابق للنموذج */
+.rg-rh{font-weight:400;font-size:15px;margin:10px 0 4px}
+.rg-rtb{table-layout:fixed;font-size:11px;min-width:860px}
+.rg-rtb td{word-wrap:break-word}
+.rg-rtb th{font-size:11px}
+.rg-rtb td:nth-child(2){text-align:center}
+.rg-eg{margin-bottom:12px}
+.rg-eg-h{padding:10px 14px}
+.rg-eg-g{grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:8px;padding:12px}
+.rg-wc{gap:9px;border-radius:12px;padding:7px 10px}
+.rg-wi{width:36px;height:36px;border-radius:10px;font-size:16px}.rg-wi.pdf{font-size:12px}
+.rg-wc b{font-size:12.5px}.rg-go{width:26px;height:26px;font-size:12px}
+.rg-also{font-size:11px;margin-top:4px}
+.rg-gh{padding:2px 14px 4px;font-size:12px}
+.rg-gal{grid-template-columns:repeat(auto-fill,minmax(180px,230px));gap:10px;padding:0 12px 12px}
+.rg-ph{aspect-ratio:4/3;border-radius:14px}
+.rg-ph .cap{padding:22px 10px 8px;font-size:12px}
+.rg-leg{font-size:12px;margin-bottom:6px}.rg-leg s{width:12px;height:12px;margin-inline-end:4px}

@@ -13014,7 +13014,7 @@ function rgEvCardsHtml(reg, gnum, flat) {
     const card = (k) => { const e = reg.ent[k], ic = rgIcon(e.type), oth = e.gks.filter((x) => x !== og.id), c = reg.code[k];
       const open = e.url ? `<a class="rg-go" href="${esc(e.url)}" target="_blank" rel="noopener noreferrer" title="فتح">↗</a>` : e.repoId ? `<button type="button" class="rg-go" data-action="evr-open" data-id="${esc(e.repoId)}" title="فتح">↗</button>` : "";
       return `<div class="rg-wc" id="rpt-evx-${c}-${esc(og.id)}"><span class="rg-wi ${ic[0]}">${ic[1]}</span><span style="flex:1;min-width:0"><b>${esc(e.title)}</b><small>${esc(e.type)}${e.src ? ` · <span class="rg-dom">${esc(e.src)}</span>` : ""}</small>${oth.length ? `<span class="rg-also">مشترك مع الهدف: ${oth.map((x) => rptEvJump(gnum[x] ? gnum[x].anchor : "", String(gnum[x] ? gnum[x].n : "•"), "rpt-jump")).join("، ")}</span>` : ""}</span>${open}</div>`; };
-    const gal = im.length ? `<div class="rg-gh">📷 صور الهدف (${im.length})</div><div class="rg-gal">${im.map((k) => { const e = reg.ent[k]; return `<a class="rg-ph" href="${esc(e.url || e.thumb)}" target="_blank" rel="noopener noreferrer"><img alt="${esc(e.title)}" src="${esc(e.thumb)}" loading="lazy" /><span class="cap">${esc(e.title)}</span></a>`; }).join("")}</div>` : "";
+    const gal = im.length ? `<div class="rg-gh">📷 صور الهدف (${im.length}) — اضغطي/اضغط على الصورة لتكبيرها</div><div class="rg-gal">${im.map((k) => { const e = reg.ent[k]; return `<a class="rg-ph" href="${esc(e.url || e.thumb)}" target="_blank" rel="noopener noreferrer"><img alt="${esc(e.title)}" src="${esc(e.thumb)}" loading="lazy" /><span class="cap">${esc(e.title)}</span></a>`; }).join("")}</div>` : "";
     return `<div class="rg-eg" id="rpt-evg-${esc(og.id)}"><div class="rg-eg-h"><span class="rg-eg-n">${g.n}</span><div class="rg-eg-t">شواهد الهدف<small>${esc(og.name)}</small></div><span class="rg-wt">${ks.length} ${ks.length > 2 ? "شواهد" : "شاهد"}${im.length ? " · " + im.length + " صور" : ""}</span>${rptEvJump("rpt-og-" + og.id, "العودة إلى الهدف ↑", "rg-eg-b")}</div>${ev.length ? `<div class="rg-eg-g">${ev.map(card).join("")}</div>` : ""}${gal}</div>`;
   }).join("");
   return blocks ? blocks + `<div class="rg-hint">الشاهد المرتبط بأكثر من هدف يظهر في كل هدف مع إشارة «مشترك مع…»، وهو نسخة واحدة في المستودع.</div>` : "";
@@ -13067,7 +13067,7 @@ function rptGoalsAnalysisHtml(report, flat) {
   const tbl = `<div class="rg-tw"><table class="rg-rtb">${head}${body}</table></div>`;
   const title = multi ? "تحليل الأهداف التشغيلية — مقارنة: " + pu.map((p) => esc(p.label)).join(" ← ") : "تحليل الأهداف التشغيلية — " + esc(pu[0].label);
   const kt = (n, l, c) => `<div class="${c}"><span>${l}</span><b>${n}</b></div>`;
-  const evid = reg.order.length ? `<div class="rg-rh">الشواهد والمرفقات</div>${es === "B" ? rptEvRegisterHtml(reg, gnum) : rgEvCardsHtml(reg, gnum, flat)}` : "";
+  const evid = reg.order.length ? `${es === "B" ? "" : '<div class="rg-rh">الشواهد والمرفقات</div>'}${es === "B" ? rptEvRegisterHtml(reg, gnum) : rgEvCardsHtml(reg, gnum, flat)}` : "";
   return `<div class="rg-scope">${ctl}<div class="rg-rh">${title}</div><div class="rg-rk">${kt(rows.length, "إجمالي الأهداف", "")}${kt(cnt.ok, "متحقق", "ok")}${kt(cnt.wr, "متحقق جزئيًا", "wr")}${kt(cnt.bad + cnt.na, "غير متحقق", "bad")}${kt(avg == null ? "—" : avg + "٪", "نسبة التحقق", "")}</div>${legend}${svg}<div class="rg-rh">تفاصيل الأهداف التشغيلية (${rows.length})</div>${tbl}${evid}</div>`;
 }
 
@@ -15302,7 +15302,7 @@ function rptMeasureHtml(report) {
     ${(anTxt && String(anTxt).replace(/<[^>]*>/g, "").trim()) ? `<div class="rpt-pc-s">تحليل النتائج</div>${anTxt}` : ""}
     ${cmp.length ? `<div class="rpt-pc-s">المقارنة بالفترة السابقة</div>${rptSchemaItemsHtml("analysis", cmp)}` : ""}
     ${ge.length ? `<div class="rpt-pc-s">الشواهد والمرفقات</div>${rptEvidenceGalleryHtml(ge)}` : ""}</div>` : "";
-  return (cards ? `<div class="rpt-subheading">القياس والتحليل والشواهد لكل برنامج</div><div class="rpt-pcs">${cards}</div>` : "") + gen + evdReportHtml(report);
+  return (cards ? `<div class="rpt-subheading">القياس والتحليل والشواهد لكل برنامج</div><div class="rpt-pcs">${cards}</div>` : "") + gen;
 }
 function svEvdProgramHtml(item) {
   const names = rptProgramNames();
