@@ -1602,7 +1602,7 @@ body.sp-body{background:#f7f3f1}
 .rg-scope .rg-rtb a{white-space:normal}
 .rg-scope .rg-rtb tr:first-child th:nth-last-child(1){width:13%}
 
-.rg-scope .rg-rtb th{background:var(--rpt-gh-bg,var(--rpt-burgundy,#7a1f3d))!important;color:var(--rpt-gh-color,#fff)!important}
+.rg-scope .rg-rtb th{background:var(--rpt-gh-bg,var(--rpt-burgundy,#7a1f3d))!important;color:var(--rpt-gh-color,#6b2337)!important}
 .rg-scope .rg-rtb td,.rg-scope .rg-rtb th{font-family:var(--rpt-font-body,'IBM Plex Sans Arabic'),'IBM Plex Sans Arabic','Cairo',sans-serif}
 .rg-scope .rg-rtb td{font-size:var(--rpt-table-fs,11px)}
 .rg-scope .rg-rtb td:not(:nth-child(2)){text-align:var(--rpt-td-align,center)!important}
@@ -1611,7 +1611,7 @@ body.sp-body{background:#f7f3f1}
 .rg-scope .rg-wi.pdf{color:#fff}
 
 /* ===== جداول الأهداف كلها بنفس التنسيق: رأس برغندي فاتح + توسيط + خط موحّد ===== */
-.rg-scope .rg-rtb th,.gb-board table.prs-table th,.rg-flat table.prs-table th,.rpt-evx th{background:var(--rpt-gh-bg,#a8395c)!important;color:var(--rpt-gh-color,#fff)!important;text-align:center!important;vertical-align:middle;font-weight:700;font-family:var(--rpt-font-body,'IBM Plex Sans Arabic'),'IBM Plex Sans Arabic','Cairo',sans-serif;border:1px solid rgba(255,255,255,.7)}
+.rg-scope .rg-rtb th,.gb-board table.prs-table th,.rg-flat table.prs-table th,.rpt-evx th{background:var(--rpt-gh-bg,#f4ece4)!important;color:var(--rpt-gh-color,#6b2337)!important;text-align:center!important;vertical-align:middle;font-weight:700;font-family:var(--rpt-font-body,'IBM Plex Sans Arabic'),'IBM Plex Sans Arabic','Cairo',sans-serif;border:1px solid rgba(255,255,255,.7)}
 .gb-board table.prs-table td,.rg-flat table.prs-table td,.rpt-evx td,.rg-scope .rg-rtb td{text-align:center!important;vertical-align:middle;font-weight:600;font-family:var(--rpt-font-body,'IBM Plex Sans Arabic'),'IBM Plex Sans Arabic','Cairo',sans-serif}
 .gb-board table.prs-table td:first-child,.rg-flat table.prs-table td:first-child{font-weight:700}
 .rpt-evx td:nth-child(2){text-align:center}
@@ -1625,3 +1625,16 @@ body.sp-body{background:#f7f3f1}
 .gb-board table.prs-table th{background:#a8395c;color:#fff}
 .gbk span,.gbk b{font-family:'IBM Plex Sans Arabic','Cairo',sans-serif}
 .gbk span{font-weight:700}
+
+/* اللوحة: رأس الجداول بنفس ألوان جداول التقرير */
+.gb-board table.prs-table th{background:#f4ece4;color:#6b2337}
+.gb-pop{--ghd:#6b2337}
+.gb-pop-h{background:#f4ece4;color:#6b2337;border-bottom:1px solid #ead6dc}
+.gb-pop-h button{background:rgba(107,35,55,.12);color:#6b2337}
+.gb-pop.aR::after{border-left-color:#f4ece4}.gb-pop.aL::after{border-right-color:#f4ece4}
+.rg-scope .rg-rtb th,.rg-flat table.prs-table th,.rpt-evx th{border:1px solid rgba(107,35,55,.18)}
+/* خط جداول الأهداف = خط التقرير نفسه، وأصغر، والمحتوى في الوسط */
+.rg-scope .rg-rtb,.rg-scope .rg-rtb th,.rg-scope .rg-rtb td,.rg-flat table.prs-table th,.rg-flat table.prs-table td,.gb-board table.prs-table th,.gb-board table.prs-table td,.rpt-evx th,.rpt-evx td,.gb-pop,.gb-pop-h,.gb-pop td{font-family:inherit!important}
+.rg-scope .rg-rtb th,.rg-scope .rg-rtb td,.rg-flat table.prs-table th,.rg-flat table.prs-table td,.gb-board table.prs-table th,.gb-board table.prs-table td,.rpt-evx th,.rpt-evx td{font-size:10.5px!important;text-align:center!important;vertical-align:middle}
+.rg-scope .rg-rtb td:nth-child(2),.rg-scope .rg-rtb th:nth-child(2){text-align:center!important}
+.rpt-pdf .rg-rtb th,.rpt-pdf .rg-rtb td{font-size:9px!important}
