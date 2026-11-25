@@ -4798,7 +4798,7 @@ function gbGroupedHtml(groups, legend, tog) {
   const legendCols = legend.map((l, i) => gbSerCol(i, legend.length));
   const n = Math.max(1, groups.length), gw = Math.max(70, Math.min(150, 900 / n));
   const bar = (b, i) => { const a = b.pct == null ? 0 : Math.min(100, b.pct); return `<div style="flex:1;max-width:44px;height:100%;display:flex;flex-direction:column;justify-content:flex-end;align-items:center;"><div style="font-size:10px;font-weight:800;margin-bottom:2px;">${b.pct == null ? "—" : b.pct + "٪"}</div><div title="${esc(b.label)}" style="position:relative;width:100%;height:${a * 1.6}px;min-height:2px;background:${b.c};border-radius:5px 5px 0 0;">${b.target != null ? `<div style="position:absolute;inset-inline:-3px;bottom:${Math.min(100, b.target) * 1.6}px;height:2px;background:${INK};"></div>` : ""}</div></div>`; };
-  return `<div style="overflow-x:auto;margin-top:6px;"><div style="display:flex;gap:14px;align-items:flex-end;height:210px;border-bottom:2px solid ${BORDER};padding:16px 6px 0;min-width:${n * (gw + 14)}px;">${groups.map((g) => `<div style="flex:1;min-width:${gw}px;height:100%;display:flex;gap:4px;align-items:flex-end;justify-content:center;cursor:pointer;" ${tog(g)}>${g.bars.map(bar).join("")}</div>`).join("")}</div><div style="display:flex;gap:14px;padding:6px 6px 0;min-width:${n * (gw + 14)}px;">${groups.map((g) => `<div style="flex:1;min-width:${gw}px;font-size:11px;text-align:center;line-height:1.5;">${esc(g.name)}</div>`).join("")}</div></div><div style="display:flex;gap:12px;flex-wrap:wrap;margin-top:8px;font-size:11.5px;">${legend.map((l, i) => `<span style="display:inline-flex;align-items:center;gap:5px;"><i style="width:12px;height:12px;border-radius:3px;background:${legendCols[i]};display:inline-block;"></i>${esc(l)}</span>`).join("")}<span class="hint" style="margin:0;">الخط الأسود = المستهدف</span></div>`;
+  return `<div style="overflow-x:auto;margin-top:6px;"><div style="display:flex;gap:14px;align-items:flex-end;height:210px;border-bottom:2px solid ${BORDER};padding:16px 6px 0;min-width:${n * (gw + 14)}px;">${groups.map((g) => `<div style="flex:1;min-width:${gw}px;height:100%;display:flex;gap:4px;align-items:flex-end;justify-content:center;cursor:pointer;" class="gb-col" data-gbn="${esc(g.name)}" ${tog(g)}>${g.bars.map(bar).join("")}</div>`).join("")}</div><div style="display:flex;gap:14px;padding:6px 6px 0;min-width:${n * (gw + 14)}px;">${groups.map((g) => `<div style="flex:1;min-width:${gw}px;font-size:11px;text-align:center;line-height:1.5;">${esc(g.name)}</div>`).join("")}</div></div><div style="display:flex;gap:12px;flex-wrap:wrap;margin-top:8px;font-size:11.5px;">${legend.map((l, i) => `<span style="display:inline-flex;align-items:center;gap:5px;"><i style="width:12px;height:12px;border-radius:3px;background:${legendCols[i]};display:inline-block;"></i>${esc(l)}</span>`).join("")}<span class="hint" style="margin:0;">الخط الأسود = المستهدف</span></div>`;
 }
 // يُرجع {controls, html, grouped}؛ لا يعرض مقارنة بلا بيانات
 function gbCmpBuild(series, rows, tog) {
@@ -4845,7 +4845,7 @@ function gbCmpBuild(series, rows, tog) {
   const body = rs.map((x) => { const d = dir(x), rr = rat(x), df = d ? last(x.vs) - first(x.vs) : null;
     return `<tr><td style="font-weight:700">${esc(x.r.name)}${nv(x.vs) < 2 ? `<div class="hint" style="margin:0;">${nv(x.vs) ? "نتيجة في فترة واحدة فقط" : "لا توجد نتائج في الفترات المختارة"}</div>` : ""}</td>${x.vs.map((v, i) => `<td style="text-align:center"><span style="color:${SUBTLE};font-size:11.5px;">${x.tg[i] != null ? x.tg[i] + "٪" : "بلا مستهدف"}</span> · ${dashPctCell(v)}<div style="font-size:11px;margin-top:2px;color:${rr[i] == null ? SUBTLE : rr[i] >= 100 ? GREEN : DANGER};">${rr[i] == null ? "نسبة التحقق: —" : "نسبة التحقق: <b>" + rr[i] + "٪</b>"}${v != null && x.tg[i] ? `<span style="color:${SUBTLE};"> (${v}÷${x.tg[i]})</span>` : ""}</div></td>`).join("")}<td style="text-align:center">${df == null ? "—" : `<b style="color:${DL[d][1]}">${df > 0 ? "+" : ""}${df}</b>`}</td><td style="text-align:center"><b style="color:${DL[d || "none"][1]};font-size:11.5px;">${DL[d || "none"][0]}</b></td></tr>`; }).join("");
   const groups = rs.map((x) => ({ name: x.r.name, bars: x.vs.map((v, i) => ({ label: live[i].label, pct: v, target: x.tg[i], c: gbSerCol(i, live.length) })) }));
-  const html = `<div style="display:flex;gap:8px;flex-wrap:wrap;margin:12px 0 10px;">${stat(rs.length, "إجمالي الأهداف")}${stat(cnt.up, "تحسّنت", GREEN)}${stat(cnt.down, "تراجعت", DANGER)}${stat(cnt.same, "ثبتت", SUBTLE)}${cnt.none ? stat(cnt.none, "بلا بيانات كافية", SUBTLE) : ""}</div><div class="table-wrap" style="overflow-x:auto;"><table class="prs-table" style="min-width:640px;"><thead><tr><th>الهدف</th>${live.map((c) => `<th style="text-align:center">${esc(c.label)}<div class="hint" style="margin:0;color:inherit;opacity:.85;">المستهدف · المتحقق · نسبة التحقق</div></th>`).join("")}<th style="text-align:center">الفرق في المتحقق</th><th style="text-align:center">الاتجاه</th></tr></thead><tbody>${body}</tbody></table></div><div class="hint" style="margin-top:6px;">نسبة التحقق (لكل فترة) = المتحقق ÷ مستهدف تلك الفترة · الاتجاه يقارن نسبة التحقق في آخر فترة بأولها عند توفر مستهدفي الفترتين، وإلا يقارن المتحقق · الفرق = آخر متحقق − أول متحقق · الفراغ لا يُحسب صفرًا.</div>`;
+  const html = `<div style="display:flex;gap:8px;flex-wrap:wrap;margin:12px 0 10px;">${stat(rs.length, "إجمالي الأهداف")}${stat(cnt.up, "تحسّنت", GREEN)}${stat(cnt.down, "تراجعت", DANGER)}${stat(cnt.same, "ثبتت", SUBTLE)}${cnt.none ? stat(cnt.none, "بلا بيانات كافية", SUBTLE) : ""}</div><details style="margin-top:6px;"><summary style="cursor:pointer;font-size:12px;color:${SUBTLE};font-weight:700;">عرض جدول التفاصيل (المستهدف · المتحقق · نسبة التحقق)</summary><div class="table-wrap" style="overflow-x:auto;margin-top:8px;"><table class="prs-table" style="min-width:640px;"><thead><tr><th>الهدف</th>${live.map((c) => `<th style="text-align:center">${esc(c.label)}<div class="hint" style="margin:0;color:inherit;opacity:.85;">المستهدف · المتحقق · نسبة التحقق</div></th>`).join("")}<th style="text-align:center">الفرق في المتحقق</th><th style="text-align:center">الاتجاه</th></tr></thead><tbody>${body}</tbody></table></div></details><div class="hint" style="margin-top:6px;">نسبة التحقق (لكل فترة) = المتحقق ÷ مستهدف تلك الفترة · الاتجاه يقارن نسبة التحقق في آخر فترة بأولها عند توفر مستهدفي الفترتين، وإلا يقارن المتحقق · الفرق = آخر متحقق − أول متحقق · الفراغ لا يُحسب صفرًا.</div>`;
   return { controls, html, grouped: { groups, legend: live.map((c) => c.label) } };
 }
 function gbColTarget(sa, gs, row, keys) {
@@ -4917,6 +4917,31 @@ function dashIndDetailHtml(kind, series) {
 }
 function gbCmpAll(series) { return dashSeries(series.units || [], "all"); }
 function gbCmpHtml(series, rows) { const b = gbCmpBuild(series, rows, () => ""); return b.controls + b.html; }
+// مربع بيانات الهدف: جدول صغير يطلع من العمود بسهم (يُوضع بعد الرسم في gbPlacePop)
+function gbPopHtml(name, rows, grouped) {
+  const r = rows.find((x) => x.name === name); if (!r) return "";
+  const g = grouped ? grouped.groups.find((x) => x.name === name) : null, grp = (v) => (v == null ? "empty" : v >= 75 ? "achieved" : v >= 40 ? "partial" : "not");
+  const td = (a, b) => `<tr><td>${a}</td><td>${b}</td></tr>`; let t = "";
+  if (g) {
+    g.bars.forEach((b) => { t += td(esc(b.label), b.pct != null ? b.pct + "٪" : "—"); });
+    const vs = g.bars.map((b) => b.pct).filter((v) => v != null), d = vs.length > 1 ? vs[vs.length - 1] - vs[0] : null;
+    if (d != null) t += td("الاتجاه", d > 0 ? "▲ تحسّن" : d < 0 ? "▼ تراجع" : "= ثبات");
+    const lv = vs.length ? vs[vs.length - 1] : null; t += td("الحالة", badgeHtml(GOAL_GROUP_LABEL[grp(lv)], GB_COLOR[grp(lv)], "#f6f2f3"));
+  } else {
+    t += td("المستهدف", r.target != null ? r.target + "٪" : "—") + td("المتحقق", r.avg != null ? r.avg + "٪" : "—") + td("الحالة", badgeHtml(GOAL_GROUP_LABEL[r.group], GB_COLOR[r.group], "#f6f2f3"));
+    if (r.units.length > 1) r.units.forEach((x) => { t += td(esc(x.unit.name), x.pct != null ? x.pct + "٪" : "—"); });
+  }
+  return `<div class="gb-pop" data-gbp="${esc(name)}"><div class="gb-pop-h"><span>${esc(name)}</span><button type="button" data-action="gb-open" data-v="${esc(name)}" aria-label="إغلاق">✕</button></div><table>${t}</table></div>`;
+}
+function gbPlacePop() {
+  const pop = document.querySelector(".gb-pop"); if (!pop) return;
+  const board = pop.parentElement, nm = pop.getAttribute("data-gbp"), col = [...document.querySelectorAll(".gb-col")].find((c) => c.getAttribute("data-gbn") === nm); if (!col) { pop.style.display = "none"; return; }
+  const b = board.getBoundingClientRect(), kr = [...col.children].map((k) => k.getBoundingClientRect()).filter((k) => k.width > 0), cr0 = col.getBoundingClientRect(),
+    c = kr.length ? { left: Math.min(...kr.map((k) => k.left)), right: Math.max(...kr.map((k) => k.right)), top: cr0.top, height: cr0.height } : cr0, pw = pop.offsetWidth, ph = pop.offsetHeight, onLeft = c.left - b.left >= pw + 24;
+  pop.classList.add(onLeft ? "aR" : "aL");
+  pop.style.left = Math.max(0, onLeft ? c.left - b.left - pw - 16 : Math.min(b.width - pw, c.right - b.left + 16)) + "px";
+  pop.style.top = Math.max(0, c.top - b.top + Math.min(40, c.height * 0.2) - ph + 70) + "px";
+}
 function dashGoalsBoardHtml(kind, series) {
   const gs = gbState(); let rows = gbBuild(series);
   if (!rows.length) return dashCard("الأهداف التشغيلية", "", emptyHint("لا توجد أهداف في الفترة المختارة."));
@@ -4936,18 +4961,18 @@ function dashGoalsBoardHtml(kind, series) {
   const cb = gbCmpBuild(series, rows, tog);
   let body = "";
   if (cb.grouped && gs.view === "chart" && gs.dir !== "bar") {
-    body = gbGroupedHtml(cb.grouped.groups, cb.grouped.legend, tog) + rows.filter((r) => open[r.name]).map((r) => `<div class="card" style="padding:12px;margin-top:10px;"><b style="font-size:12.5px;">${esc(r.name)}</b>${gbUnitsDetailHtml(r)}</div>`).join("");
+    body = gbGroupedHtml(cb.grouped.groups, cb.grouped.legend, tog) + (rows.find((r) => open[r.name]) ? gbPopHtml(rows.find((r) => open[r.name]).name, rows, cb.grouped) : "");
   } else if (gs.view === "table") {
     body = `<div class="table-wrap" style="overflow-x:auto;"><table class="prs-table" style="min-width:640px;"><thead><tr><th>الهدف</th><th style="text-align:center">الوحدات</th><th style="text-align:center">المستهدف</th><th style="text-align:center">المتحقق</th><th style="text-align:center">الحالة</th></tr></thead><tbody>${rows.map((r) => `<tr style="cursor:pointer" ${tog(r)}><td style="font-weight:700">${esc(r.name)}${r.shared ? ` <span class="hint" style="margin:0;">(مشترك)</span>` : ""}</td><td style="text-align:center">${r.units.length}</td><td style="text-align:center">${r.target != null ? r.target + "٪" : "—"}</td><td style="text-align:center">${dashPctCell(r.avg)}</td><td style="text-align:center">${badgeHtml(GOAL_GROUP_LABEL[r.group], GB_COLOR[r.group], "#f6f2f3")}</td></tr>${open[r.name] ? `<tr><td colspan="5">${gbUnitsDetailHtml(r)}</td></tr>` : ""}`).join("")}</tbody></table></div>`;
   } else if (gs.view === "cards") {
     body = `<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:10px;">${rows.map((r) => `<div class="card" style="padding:12px;border-inline-start:4px solid ${GB_COLOR[r.group]};cursor:pointer;" ${tog(r)}><div style="font-weight:800;font-size:13px;margin-bottom:6px;">${esc(r.name)}</div>${badgeHtml(GOAL_GROUP_LABEL[r.group], GB_COLOR[r.group], "#f6f2f3")} ${r.shared ? `<span class="hint" style="margin:0;">مشترك · ${r.units.length} وحدات</span>` : `<span class="hint" style="margin:0;">${esc(r.units[0].unit.name)}</span>`}<div style="margin:10px 0 4px;">${gbBarHtml(r)}</div><div class="hint" style="margin:0;">المستهدف ${r.target != null ? r.target + "٪" : "—"} · المتحقق ${r.avg != null ? r.avg + "٪" : "—"}</div>${open[r.name] ? gbUnitsDetailHtml(r) : ""}</div>`).join("")}</div>`;
   } else if (gs.dir !== "bar") {
     const cw = Math.max(64, Math.min(120, Math.floor(100 / Math.max(rows.length, 1)) * 8));
-    body = `<div style="overflow-x:auto;"><div style="display:flex;align-items:flex-end;gap:12px;height:230px;border-bottom:2px solid ${BORDER};padding:18px 6px 0;min-width:${rows.length * (cw + 12)}px;">${rows.map((r) => { const a = r.avg == null ? 0 : Math.min(100, r.avg); return `<div style="flex:1;min-width:${cw}px;height:100%;display:flex;flex-direction:column;justify-content:flex-end;align-items:center;cursor:pointer;" ${tog(r)}><div style="font-weight:800;font-size:12px;margin-bottom:3px;color:${GB_COLOR[r.group]}">${r.avg != null ? r.avg + "٪" : "—"}</div><div style="position:relative;width:100%;max-width:90px;height:${a * 1.8}px;min-height:3px;background:${GB_GRAD[r.group]};border-radius:6px 6px 0 0;">${r.target != null ? `<div title="المستهدف ${r.target}٪" style="position:absolute;inset-inline:-4px;bottom:${Math.min(100, r.target) * 1.8}px;height:2px;background:${INK};"></div>` : ""}</div></div>`; }).join("")}</div><div style="display:flex;gap:12px;padding:6px 6px 0;min-width:${rows.length * (cw + 12)}px;">${rows.map((r) => `<div style="flex:1;min-width:${cw}px;font-size:11px;text-align:center;line-height:1.5;cursor:pointer;" ${tog(r)}>${esc(r.name)}${r.shared ? `<div class="hint" style="margin:0;">مشترك · ${r.units.length}</div>` : ""}</div>`).join("")}</div></div><div class="hint" style="margin-top:8px;">الخط الأسود = المستهدف · اضغطي على العمود لتفاصيل الوحدات وأدلتها.</div>${rows.filter((r) => open[r.name]).map((r) => `<div class="card" style="padding:12px;margin-top:10px;"><b style="font-size:12.5px;">${esc(r.name)}</b>${gbUnitsDetailHtml(r)}</div>`).join("")}`;
+    body = `<div style="overflow-x:auto;"><div style="display:flex;align-items:flex-end;gap:12px;height:230px;border-bottom:2px solid ${BORDER};padding:18px 6px 0;min-width:${rows.length * (cw + 12)}px;">${rows.map((r) => { const a = r.avg == null ? 0 : Math.min(100, r.avg); return `<div style="flex:1;min-width:${cw}px;height:100%;display:flex;flex-direction:column;justify-content:flex-end;align-items:center;cursor:pointer;" class="gb-col" data-gbn="${esc(r.name)}" ${tog(r)}><div style="font-weight:800;font-size:12px;margin-bottom:3px;color:${GB_COLOR[r.group]}">${r.avg != null ? r.avg + "٪" : "—"}</div><div style="position:relative;width:100%;max-width:90px;height:${a * 1.8}px;min-height:3px;background:${GB_GRAD[r.group]};border-radius:6px 6px 0 0;">${r.target != null ? `<div title="المستهدف ${r.target}٪" style="position:absolute;inset-inline:-4px;bottom:${Math.min(100, r.target) * 1.8}px;height:2px;background:${INK};"></div>` : ""}</div></div>`; }).join("")}</div><div style="display:flex;gap:12px;padding:6px 6px 0;min-width:${rows.length * (cw + 12)}px;">${rows.map((r) => `<div style="flex:1;min-width:${cw}px;font-size:11px;text-align:center;line-height:1.5;cursor:pointer;" ${tog(r)}>${esc(r.name)}${r.shared ? `<div class="hint" style="margin:0;">مشترك · ${r.units.length}</div>` : ""}</div>`).join("")}</div></div><div class="hint" style="margin-top:8px;">الخط الأسود = المستهدف · اضغطي على العمود لتظهر بياناته.</div>${rows.find((r) => open[r.name]) ? gbPopHtml(rows.find((r) => open[r.name]).name, rows, null) : ""}`;
   } else {
     body = `<div style="display:flex;flex-direction:column;gap:12px;">${rows.map((r) => `<div><div style="display:flex;justify-content:space-between;gap:8px;align-items:center;cursor:pointer;margin-bottom:4px;" ${tog(r)}><span style="font-size:12.5px;font-weight:700;">${esc(r.name)}${r.shared ? ` <span class="hint" style="margin:0;">(مشترك · ${r.units.length})</span>` : ""}</span><span style="white-space:nowrap;">${badgeHtml(GOAL_GROUP_LABEL[r.group], GB_COLOR[r.group], "#f6f2f3")} <span style="font-size:11.5px;color:${SUBTLE};">${r.avg != null ? r.avg + "٪" : "—"} / ${r.target != null ? r.target + "٪" : "—"}</span></span></div>${gbBarHtml(r)}${open[r.name] ? gbUnitsDetailHtml(r) : ""}</div>`).join("")}</div><div class="hint" style="margin-top:8px;">الخط الأسود = المستهدف · اضغطي على الهدف لتفاصيل الوحدات وأدلتها.</div>`;
   }
-  return dashCard("لوحة الأهداف التشغيلية", "كل الأهداف: المتحقق وغير المتحقق، مع نتيجة كل وحدة بصورة مستقلة · اختاري «الفصل» لمقارنة نفس الفصل عبر السنوات", `<div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-bottom:8px;">${viewChips}<span style="flex:1"></span>${statusChips}${unitSel}${gs.cmp === "none" ? termSel + colSel : ""}${cmpChips}</div><div style="margin-bottom:12px;"></div>${cb.controls}<div class="gb-board">${body}${cb.html}</div>`);
+  return dashCard("لوحة الأهداف التشغيلية", "كل الأهداف: المتحقق وغير المتحقق، مع نتيجة كل وحدة بصورة مستقلة · اختاري «الفصل» لمقارنة نفس الفصل عبر السنوات", `<div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-bottom:8px;">${viewChips}<span style="flex:1"></span>${statusChips}${unitSel}${gs.cmp === "none" ? termSel + colSel : ""}${cmpChips}</div><div style="margin-bottom:12px;"></div>${cb.controls}<div class="gb-board" style="position:relative;">${body}${cb.html}</div>`);
 }
 // الأجزاء المشتركة الجديدة بالترتيب (لوحة الوحدة/القسم/المكتب)
 function dashPeriodBlocksHtml(kind, series) {
@@ -7890,7 +7915,8 @@ function aggGoalsChapterBody(flat) {
   const sum = `<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px;">${["achieved", "partial", "not", "empty"].map((k) => cnt[k] ? badgeHtml(GOAL_GROUP_LABEL[k] + ": " + cnt[k], GB_COLOR[k], "#f6f2f3") : "").join("")}</div>`;
   const det = (r) => `<details style="margin-top:4px;"><summary style="cursor:pointer;font-size:11px;color:${SUBTLE};">تفاصيل ${r.units.length} وحدات</summary>${r.units.map((x) => `<div style="padding:6px 0;border-bottom:1px solid #f1e9eb;font-size:11.5px;"><b>${esc(x.unit.name)}</b> · ${esc(GOAL_STATUS_LABEL[x.key])} · المستهدف ${x.target != null ? x.target + "٪" : "—"} · المتحقق ${x.pct != null ? x.pct + "٪" : "—"}<div style="padding-inline-start:10px;">${gbEvidenceHtml(x)}</div></div>`).join("")}</details>`;
   const bar = (r) => r.avg == null ? "—" : `<div style="display:flex;align-items:center;gap:6px;"><div style="width:70px;">${progressBarHtml(r.avg, GB_COLOR[r.group])}</div><b style="color:${GB_COLOR[r.group]}">${r.avg}٪</b></div>`;
-  return sum + reportTable(["الهدف التشغيلي", "المستهدف", "المتحقق", "الحالة", "الأدلة"], rows.map((r) => [
+  const chart = gbGroupedHtml(rows.map((r) => ({ name: r.name, bars: [{ label: "المتحقق", pct: r.avg, target: r.target, c: GB_COLOR[r.group] }] })), ["المتحقق (الخط الأسود = المستهدف)"], () => "");
+  return sum + chart + reportTable(["الهدف التشغيلي", "المستهدف", "المتحقق", "الحالة", "الأدلة"], rows.map((r) => [
     esc(r.name) + (r.shared ? ` <span style="font-size:10.5px;color:${SUBTLE};">(مشترك)</span>` : "") + (r.shared ? det(r) : ""),
     r.target != null ? r.target + "٪" : "—", bar(r), badgeHtml(GOAL_GROUP_LABEL[r.group], GB_COLOR[r.group], "#f6f2f3"),
     r.shared ? r.units.reduce((t, x) => t + ((x.og.evidenceLinks || []).length + (x.og.evidenceType ? 1 : 0)), 0) + " دليل" : gbEvidenceHtml(r.units[0])]));
@@ -12916,27 +12942,71 @@ function evdJump(target) {
   t.scrollIntoView({ behavior: "smooth", block: "start" }); t.classList.add("rpt-flash"); setTimeout(() => t.classList.remove("rpt-flash"), 1800);
 }
 // قسم الشواهد في التقرير: شواهد كل هدف، ثم سجل الشواهد (كل شاهد مرة واحدة مع الأهداف المرتبطة به)
-function evdReportHtml(report) {
+// سجل شواهد التقرير: كل شاهد مرة واحدة برقم، وأرقام الأهداف المرتبطة به + معرض صور
+function rptEvRegister(report) {
   evdLoad();
   const goals = (((report && report.sections && report.sections.goals && report.sections.goals.data) || {}).goals || []);
-  const groups = [], byEv = {}, order = [];
+  const ent = {}, order = [], byOg = {};
+  const add = (key, og, mk) => { if (!ent[key]) { ent[key] = { ...mk(), goals: [] }; order.push(key); } if (ent[key].goals.indexOf(og) === -1) ent[key].goals.push(og); (byOg[og.id] = byOg[og.id] || []); if (byOg[og.id].indexOf(key) === -1) byOg[og.id].push(key); };
   goals.forEach((g) => (g.operationalGoals || []).forEach((og) => {
-    const ids = [...new Set((og.evidenceLinks || []).filter((l) => l.kind === "repo").map((l) => l.refId).concat(og.evidenceRepoId ? [og.evidenceRepoId] : []))];
-    if (!ids.length) return;
-    groups.push({ og, ids });
-    ids.forEach((id) => { if (!byEv[id]) { byEv[id] = []; order.push(id); } byEv[id].push(og); });
+    const links = (og.evidenceLinks || []).slice(); if (og.evidenceRepoId && !links.some((l) => l.kind === "repo" && l.refId === og.evidenceRepoId)) links.push({ kind: "repo", refId: og.evidenceRepoId });
+    links.forEach((ln) => {
+      if (ln.kind === "repo") {
+        add("r:" + ln.refId, og, () => { const it = evdFind(ln.refId), ok = it && evdCanSee(it); return { title: !it ? "شاهد محذوف" : ok ? it.name : "شاهد غير متاح للعرض", type: ok ? (it.type || "شاهد") : "شاهد", sub: ok ? (it.description || "") : "", src: ok && it.kind === "link" ? (String(it.url || "").replace(/^https?:\/\//i, "").split("/")[0]) : (ok && it.kind === "text" ? "نص" : "مستودع الشواهد"), url: ok && it.kind === "link" && /^https?:\/\//i.test(it.url || "") ? it.url : "", repoId: ln.refId, thumb: ok ? rptEvidenceThumbUrl({ fileLink: it.url, evidenceType: it.type, imageData: /^data:image/.test(it.file_data || "") ? it.file_data : "" }) : "" }; });
+      } else {
+        const r = ogResolveLink(report, ln);
+        add(ln.kind + ":" + (ln.refId || ln.url || ln.text || r.title), og, () => ({ title: r.title || "دليل", type: r.kindLabel || "دليل", sub: r.sub || "", src: r.url ? String(r.url).replace(/^https?:\/\//i, "").split("/")[0] : "من الموقع", url: /^https?:\/\//i.test(r.url || "") ? r.url : "", reportId: r.reportId || "", thumb: "" }));
+      }
+    });
+    if (!links.length && (og.evidenceType || og.evidenceAnswer)) add("l:" + og.id, og, () => ({ title: og.evidenceAnswer || og.evidenceType, type: og.evidenceType || "دليل", sub: "", src: "", url: /^https?:\/\//i.test(og.evidenceAnswer || "") ? og.evidenceAnswer : "", thumb: "" }));
   }));
-  if (!groups.length) return "";
-  const nm = (id) => { const it = evdFind(id); return !it ? "شاهد محذوف" : evdCanSee(it) ? it.name : "شاهد غير متاح للعرض"; };
-  const jump = (t, label) => `<a class="rpt-jump" href="#${esc(t)}" data-action="rpt-jump" data-target="${esc(t)}">${esc(label)}</a>`;
-  const per = groups.map((x) => `<div class="rpt-pc" id="rpt-evg-${esc(x.og.id)}"><div class="rpt-pc-h"><b>${esc(x.og.name)}</b>${jump("rpt-og-" + x.og.id, "← العودة إلى الهدف")}</div>
-    <div style="display:flex;gap:6px 14px;flex-wrap:wrap;">${x.ids.map((id) => `<span>${jump("rpt-evd-" + id, nm(id))}</span>`).join("")}</div></div>`).join("");
-  const uniq = order.map((id) => {
-    const it = evdFind(id), ok = it && evdCanSee(it);
-    const goalsHtml = byEv[id].map((og) => jump("rpt-og-" + og.id, og.name)).join("، ");
-    return `<div class="rpt-ev-row" id="rpt-evd-${esc(id)}" style="margin-top:6px;flex-wrap:wrap;"><span class="rpt-ev-type">${esc(ok ? (it.type || "شاهد") : "شاهد")}</span><div class="rpt-ev-main"><b>${esc(nm(id))}</b>${ok && it.description ? `<span>${esc(it.description)}</span>` : ""}${ok && it.kind === "text" ? `<span style="white-space:pre-wrap;">${esc(it.body || "")}</span>` : ""}<span>الأهداف المرتبطة: ${goalsHtml}</span></div>${ok && it.kind === "link" && /^https?:\/\//i.test(it.url || "") ? `<a class="rpt-ev-open" href="${esc(it.url)}" target="_blank" rel="noopener noreferrer">فتح ↗</a>` : (ok && it.kind !== "text" ? `<button type="button" class="rpt-ev-open" data-action="evr-open" data-id="${esc(id)}">فتح ↗</button>` : "")}</div>`;
-  }).join("");
-  return `<div style="margin-top:14px;"><div class="rpt-pc-s">شواهد الأهداف</div>${per}<div class="rpt-pc-s" style="margin-top:12px;">سجل الشواهد (كل شاهد مرة واحدة)</div>${uniq}</div>`;
+  const code = {}; order.forEach((k, i) => { code[k] = String(i + 1).padStart(2, "0"); });
+  return { ent, order, byOg, code };
+}
+function rptEvJump(t, label, cls) { return `<a class="${cls || "rpt-jump"}" href="#${esc(t)}" data-action="rpt-jump" data-target="${esc(t)}">${esc(label)}</a>`; }
+function rptEvChips(reg, og) { const ks = reg.byOg[og.id] || []; return ks.length ? ks.map((k) => rptEvJump("rpt-evx-" + reg.code[k], reg.code[k], "rpt-ecode")).join("") : "—"; }
+function evdReportHtml(report) {
+  const reg = rptEvRegister(report); if (!reg.order.length) return "";
+  const goals = (((report.sections.goals || {}).data || {}).goals || []).flatMap((g) => g.operationalGoals || []), gnum = {}; goals.forEach((og, i) => { gnum[og.id] = i + 1; });
+  const chips = (e) => e.goals.map((og) => rptEvJump("rpt-og-" + og.id, String(gnum[og.id] || "•"), "rpt-gchip")).join("");
+  const rows = reg.order.map((k) => { const e = reg.ent[k], c = reg.code[k];
+    const open = e.url ? `<a class="rpt-ev-open" href="${esc(e.url)}" target="_blank" rel="noopener noreferrer">فتح ↗</a>` : e.repoId ? `<button type="button" class="rpt-ev-open" data-action="evr-open" data-id="${esc(e.repoId)}" style="border:0;cursor:pointer;">فتح</button>` : "";
+    return `<tr id="rpt-evx-${c}"><td><span class="rpt-ecode">${c}</span></td><td style="text-align:start"><b>${esc(e.title)}</b>${e.sub ? `<div class="rpt-evx-s">${esc(e.sub)}</div>` : ""}</td><td><span class="rpt-ev-type">${esc(e.type)}</span>${e.src ? `<div class="rpt-evx-s">${esc(e.src)}</div>` : ""}</td><td>${chips(e)}</td><td>${open}</td></tr>`; }).join("");
+  const imgs = reg.order.filter((k) => reg.ent[k].thumb);
+  const gal = imgs.length ? `<div class="rpt-pc-s" style="margin-top:12px;">معرض الصور (${imgs.length})</div><div class="rpt-gal2">${imgs.map((k) => { const e = reg.ent[k]; return `<figure class="rpt-ph2"><a href="${esc(e.url || e.thumb)}" target="_blank" rel="noopener noreferrer"><img alt="${esc(e.title)}" src="${esc(e.thumb)}" loading="lazy" /></a><figcaption><b>${esc(e.title)}</b><span class="rpt-ecode">${reg.code[k]}</span>${chips(e)}</figcaption></figure>`; }).join("")}</div>` : "";
+  return `<div style="margin-top:14px;"><div class="rpt-pc-s">الشواهد والمرفقات</div><div class="rpt-evx-w"><table class="rpt-evx"><thead><tr><th style="width:46px">رقم</th><th>الشاهد</th><th>النوع / المصدر</th><th>الأهداف المرتبطة</th><th style="width:70px">فتح</th></tr></thead><tbody>${rows}</tbody></table></div><div class="rpt-evx-s" style="margin-top:6px;">كل شاهد يُذكر مرة واحدة مهما تكرر في الأهداف · اضغطي رقم الهدف للانتقال إليه.</div>${gal}</div>`;
+}
+// تحليل الأهداف في التقرير: رسم + جدول، والمقارنة تختارها صاحبة التقرير
+function rgState() { return S.ui.rg || (S.ui.rg = { mode: "none", keys: [], year: "" }); }
+function rptGoalsAnalysisHtml(report, flat) {
+  const uid = (RPT_CTX && RPT_CTX.unitId) || S.currentUnitId, unit = (S.units || []).find((u) => u.id === uid); if (!unit || !flat.length) return "";
+  const sa = dashSeries([unit], "all"), cols = sa.cols || [], gs = rgState(), cur = reportTermInfo(report);
+  const yrs = [...new Set(cols.map((c) => c.year).filter((y) => y > 0))].sort((a, b) => a - b);
+  const keyOpts = cols.map((c) => [c.key, c.label]), yrsMulti = yrs.filter((y) => cols.filter((c) => c.year === y).length > 1), yPick = yrsMulti.indexOf(Number(gs.year)) !== -1 ? Number(gs.year) : (yrsMulti[yrsMulti.length - 1] || 0);
+  let pu = [];
+  if (gs.mode === "pick" && cols.length > 1) { let ks = (gs.keys && gs.keys.length ? gs.keys : cols.slice(-2).map((c) => c.key)).filter((k) => cols.some((c) => c.key === k)).slice(0, 4); if (ks.length < 2) ks = cols.slice(-2).map((c) => c.key); pu = ks.map((k) => ({ label: (cols.find((c) => c.key === k) || {}).label || k, keys: [k] })); }
+  else if (gs.mode === "year" && yrsMulti.length) { const y = yPick; pu = cols.filter((c) => c.year === y).map((c) => ({ label: gbTermOf(c) || c.label, keys: [c.key] })); if (pu.length < 2) pu = []; }
+  const single = !pu.length;
+  if (single) pu = [{ label: (cols.find((c) => c.key === cur.key) || {}).label || cur.label, keys: [cur.key], own: true }];
+  const val = (og, p) => (p.own ? (og.level && og.percentage !== "" ? numOrNull(og.percentage) : null) : gbColVal(sa, { unit: uid }, String(og.name).trim(), p.keys));
+  const rows = flat.map((og) => ({ og, vs: pu.map((p) => val(og, p)) }));
+  const lastV = (r) => { for (let i = r.vs.length - 1; i >= 0; i--) if (r.vs[i] != null) return r.vs[i]; return null; };
+  const grp = (v) => (v == null ? "empty" : v >= 75 ? "achieved" : v >= 40 ? "partial" : "not");
+  const cnt = { achieved: 0, partial: 0, not: 0, empty: 0 }; rows.forEach((r) => { cnt[grp(lastV(r))]++; });
+  const seen = rows.map(lastV).filter((v) => v != null), avg = seen.length ? Math.round(seen.reduce((t, v) => t + v, 0) / seen.length) : null;
+  const kpi = (n, l, c) => `<div class="rpt-gk"><b style="color:${c}">${n}</b><span>${l}</span></div>`;
+  const chk = (m, l) => `<button type="button" class="rpt-gp ${gs.mode === m ? "on" : ""}" data-action="rg-mode" data-v="${m}">${l}</button>`;
+  const sel = (k, opts, v, i) => `<select class="input" style="width:auto;padding:4px 10px;font-size:12px;" data-action="rg-sel" data-k="${k}"${i != null ? ` data-i="${i}"` : ""}>${opts.map(([a, l]) => `<option value="${esc(a)}" ${String(v) === String(a) ? "selected" : ""}>${esc(l)}</option>`).join("")}</select>`;
+  let ctl = `<div class="no-print rpt-gctl"><span class="hint" style="margin:0;font-weight:700;">المقارنة في التقرير:</span>${chk("none", "بدون مقارنة")}${cols.length > 1 ? chk("pick", "فترات محددة") : ""}${yrsMulti.length ? chk("year", "عام كامل (كل فتراته)") : ""}`;
+  if (gs.mode === "pick" && cols.length > 1) { const ks = pu.map((p) => p.keys[0]); ctl += ks.map((k, i) => sel("pk", keyOpts, k, i) + (ks.length > 2 ? `<button type="button" class="rpt-gx" data-action="rg-rm" data-i="${i}" title="حذف">✕</button>` : "")).join("") + (ks.length < 4 ? `<button type="button" class="rpt-gp on" data-action="rg-add">＋ فترة</button>` : ""); }
+  if (gs.mode === "year" && yrsMulti.length) ctl += sel("yr", yrsMulti.map((y) => [y, y + "هـ"]), yPick);
+  ctl += "</div>";
+  const groups = rows.map((r) => ({ name: r.og.name, bars: r.vs.map((v, i) => ({ label: pu[i].label, pct: v, target: null, c: gbSerCol(i, pu.length) })) }));
+  const chart = gbGroupedHtml(groups, pu.map((p) => p.label), () => "");
+  const multi = pu.length > 1, hdr = ["م", "الهدف التشغيلي"].concat(pu.map((p) => p.label)).concat(multi ? ["الفرق", "الاتجاه"] : []).concat(["الحالة"]);
+  const tbl = reportTable(hdr, rows.map((r, i) => { const v = lastV(r), vs = r.vs.filter((x) => x != null), d = vs.length > 1 ? vs[vs.length - 1] - vs[0] : null;
+    return [String(i + 1), `<b>${esc(r.og.name)}</b>`].concat(r.vs.map((x) => (x == null ? "—" : x + "٪"))).concat(multi ? [d == null ? "—" : `<span dir="ltr">${d > 0 ? "+" : ""}${d}</span>`, d == null ? "—" : d > 0 ? `<span style="color:${GREEN};font-weight:700;">▲ تحسّن</span>` : d < 0 ? `<span style="color:${DANGER};font-weight:700;">▼ تراجع</span>` : "= ثبات"] : []).concat([badgeHtml(GOAL_GROUP_LABEL[grp(v)], GB_COLOR[grp(v)], "#f6f2f3")]); }));
+  return `${ctl}<div class="rpt-gks">${kpi(rows.length, "إجمالي الأهداف", "var(--rpt-burgundy,#6b2337)")}${kpi(cnt.achieved, "متحقق", GREEN)}${kpi(cnt.partial, "متحقق جزئيًا", "#c9965a")}${kpi(cnt.not + cnt.empty, "غير متحقق", DANGER)}${kpi(avg == null ? "—" : avg + "٪", "نسبة التحقق", "var(--rpt-burgundy,#6b2337)")}</div>${chart}${tbl}`;
 }
 
 function goalsSectionHtml(d) {
@@ -15235,11 +15305,12 @@ function sectionBodyOnly(section, saved, report) {
     (d.goals || []).forEach((g) => (g.operationalGoals || []).forEach((og) => flat.push({ ...og })));
     if (!flat.length) { body = emptyHint("لا توجد أهداف مُدخلة."); }
     else {
-      body = reportTable(["الهدف التشغيلي", "المستهدف", "المستوى", "النسبة", "الأدلة"], flat.map((og) => {
+      const reg = rptEvRegister(report);
+      body = rptGoalsAnalysisHtml(report, flat) + `<div class="rpt-subheading">تفاصيل الأهداف التشغيلية</div>` + reportTable(["الهدف التشغيلي", "المستهدف", "المستوى", "النسبة", "الشواهد"], flat.map((og) => {
         const gm = goalLevelMeta(og.level), dd = gbDefByName(og.name), tg = dd ? ogTargetForReport(dd.id, S.currentUnitId, report) : "";
         const bar = og.percentage !== "" ? `<div style="display:flex;align-items:center;gap:6px;"><div style="width:70px;">${progressBarHtml(og.percentage || 0, gm.color)}</div><b style="color:${gm.color}">${og.percentage}٪</b></div>` : "—";
-        return [`<span id="rpt-og-${esc(og.id)}">${esc(og.name)}</span>`, tg !== "" ? tg + "٪" : "—", og.level ? badgeHtml(og.level, gm.color, gm.bg) : "—", bar, ((og.evidenceLinks || []).length || og.evidenceType || og.evidenceAnswer) ? gbEvidenceHtml({ og, report }) + ((og.evidenceLinks || []).some((l) => l.kind === "repo") || og.evidenceRepoId ? `<div style="margin-top:4px;"><a class="rpt-jump" href="#rpt-evg-${esc(og.id)}" data-action="rpt-jump" data-target="rpt-evg-${esc(og.id)}">عرض الشواهد ↓</a></div>` : "") : "—"];
-      }));
+        return [`<span id="rpt-og-${esc(og.id)}">${esc(og.name)}</span>`, tg !== "" ? tg + "٪" : "—", og.level ? badgeHtml(og.level, gm.color, gm.bg) : "—", bar, rptEvChips(reg, og)];
+      })) + evdReportHtml(report);
     }
 
   } else if (section.id === "programs") {
@@ -15324,7 +15395,7 @@ function sectionBodyOnly(section, saved, report) {
     } else { body = emptyHint("لم تُضف أعمال رئيسة بعد."); }
 
   } else if (section.id === "evidence") {
-    body = ((d.evidenceItems || []).length ? rptEvidenceGalleryHtml(d.evidenceItems) : "") + evdReportHtml(report);
+    body = ((d.evidenceItems || []).length ? rptEvidenceGalleryHtml(d.evidenceItems) : "");
     if (!body) body = emptyHint("لا توجد شواهد مُدخلة بعد.");
 
   } else if (section.id === "review") {
@@ -16290,6 +16361,7 @@ function attachFormListeners() {
     }
     if (el.dataset && el.dataset.ogPnew) { const [gid_, uid2, f] = el.dataset.ogPnew.split("|"), kk = gid_ + "|" + uid2; (S.ui.ogTgNew || (S.ui.ogTgNew = {}))[kk] = { ...((S.ui.ogTgNew || {})[kk] || {}), [f]: el.value }; return;
     }
+    if (el.dataset && el.dataset.action === "rg-sel") { const g_ = rgState(), k_ = el.dataset.k; if (k_ === "yr") g_.year = el.value; else if (k_ === "pk") { const ks = (g_.keys && g_.keys.length ? g_.keys.slice() : []); ks[Number(el.dataset.i)] = el.value; g_.keys = ks; } render(); return; }
     if (el.dataset && el.dataset.action === "ib-sel") { const g_ = ibState(); g_[el.dataset.k] = el.value; render(); return; }
     if (el.dataset && el.dataset.action === "gb-sel") { const g_ = gbState(); if (el.dataset.k === "vd") { const [v_, d_] = el.value.split(":"); g_.view = v_; g_.dir = d_ || "col"; } else g_[el.dataset.k] = el.value; if (el.dataset.k === "term") g_.col = ""; render(); return; }
     if (el.dataset && el.dataset.action === "og-evd-add") {
@@ -17095,7 +17167,10 @@ function attachClickListener() {
       case "og-pt-add": { if (!S.isAdmin) break; const [g_, u_] = ds.v.split("|"), n_ = (S.ui.ogTgNew || {})[ds.v] || {}; if (!n_.y || n_.v === "" || n_.v == null) break; ogPtSet(g_, u_, String(n_.y), n_.t || "", Math.max(0, Math.min(100, Number(n_.v) || 0))); S.ui.ogTgNew[ds.v] = { y: n_.y, t: "", v: "" }; break; }
       case "ib-yr": { const g_ = ibState(), all_ = [...new Set(dashSeries(S.ui._gbUnits || [], "all").cols.map((c) => String(c.year)).filter((y) => y !== "0"))]; let cur_ = g_.yrs && g_.yrs.length ? g_.yrs.slice() : all_.slice(); const i_ = cur_.indexOf(ds.v); if (i_ >= 0) cur_.splice(i_, 1); else cur_.push(ds.v); g_.yrs = cur_.length === all_.length ? [] : cur_; render(); break; }
       case "gb-yr": { const g_ = gbState(), all_ = [...new Set(gbCmpAll({ units: S.ui._gbUnits || [] }).cols.map((c) => String(c.year)).filter((y) => y !== "0"))]; let cur_ = g_.yrs && g_.yrs.length ? g_.yrs.slice() : all_.slice(); const i_ = cur_.indexOf(ds.v); if (i_ >= 0) cur_.splice(i_, 1); else cur_.push(ds.v); g_.yrs = cur_.length === all_.length ? [] : cur_; render(); break; }
-      case "gb-open": { const o = S.ui.gbOpen || (S.ui.gbOpen = {}); o[ds.v] = !o[ds.v]; render(); break; }
+      case "rg-mode": { const g_ = rgState(); g_.mode = ds.v; if (ds.v === "pick" && !(g_.keys && g_.keys.length)) { const sa_ = dashSeries([(S.units || []).find((u) => u.id === S.currentUnitId)].filter(Boolean), "all"); g_.keys = sa_.cols.slice(-2).map((c) => c.key); } render(); break; }
+      case "rg-add": { const g_ = rgState(), sa_ = dashSeries([(S.units || []).find((u) => u.id === S.currentUnitId)].filter(Boolean), "all"), ks = (g_.keys && g_.keys.length ? g_.keys : sa_.cols.slice(-2).map((c) => c.key)).slice(); const nx = sa_.cols.find((c) => ks.indexOf(c.key) === -1); ks.push(nx ? nx.key : ks[ks.length - 1]); g_.keys = ks.slice(0, 4); render(); break; }
+      case "rg-rm": { const g_ = rgState(); if (g_.keys && g_.keys.length > 2) g_.keys.splice(Number(ds.i), 1); render(); break; }
+      case "gb-open": { const g_ = gbState(); let o = S.ui.gbOpen || (S.ui.gbOpen = {}); const was = !!o[ds.v]; if (g_.view === "chart" && g_.dir !== "bar") o = S.ui.gbOpen = {}; o[ds.v] = !was; render(); break; }
       case "heat-open": { const ho = S.ui.heatOpen; S.ui.heatOpen = ho && ho.hk === ds.hk && ho.u === ds.u ? null : { hk: ds.hk, u: ds.u }; render(); break; }
       case "ex-drill": S.ui.exDrill = { path: ds.path ? ds.path.split(",") : [] }; render(); break;
       case "us-period": S.ui.usPeriod = ds.pt; S.ui.usMsg = ""; render(); break;
@@ -18484,6 +18559,7 @@ window.addEventListener("resize", () => { clearTimeout(window.__dfg); window.__d
 function afterRender() {
   applyButtonPermissions();
   dashFillGaps();
+  try { gbPlacePop(); } catch (e) { /* تجاهل */ }
   try { if (S.view === "full-report" || S.view === "report-preview" || S.view === "executive-final-report") linkifyReportView(); decorateLinkInputs(); } catch (e) { /* تجاهل */ }
   const loginUserEl = document.getElementById("login-username");
   if (loginUserEl) loginUserEl.focus();
