@@ -1587,3 +1587,17 @@ body.sp-body{background:#f7f3f1}
 .rg-scope .rg-wc b{font-weight:700;color:#2b1a20}.rg-scope .rg-wc small{font-weight:500;color:#8a7279}
 .rg-scope svg text{font-family:inherit}
 .rpt-pdf .rg-rtb td,.rpt-pdf .rg-rtb th{font-size:9.5px!important}
+/* جدول الأهداف: توزيع أعمدة ثابت + توسيط + خط أنظف */
+.rg-scope .rg-tw{overflow:visible}
+.rg-scope .rg-rtb{table-layout:fixed!important;width:100%;min-width:0!important;font-family:'IBM Plex Sans Arabic','Cairo',sans-serif}
+.rg-scope .rg-rtb th,.rg-scope .rg-rtb td{font-family:'IBM Plex Sans Arabic','Cairo',sans-serif;text-align:center!important;vertical-align:middle;font-size:11px;font-weight:600;padding:6px 3px;word-break:break-word}
+.rg-scope .rg-rtb th{font-weight:700;font-size:11px}
+.rg-scope .rg-rtb td:nth-child(2){min-width:0;font-weight:700}
+.rg-scope .rg-rtb tr:first-child th:first-child{width:28px}
+.rg-scope .rg-rtb tr:first-child th:nth-child(2){width:19%}
+.rg-scope .rg-rtb tr:first-child th:nth-last-child(1){width:11%}
+.rg-scope .rg-rtb tr:first-child th:nth-last-child(2){width:11%}
+.rg-scope .rg-rtb a{white-space:nowrap;font-size:10.5px}
+.rg-scope .rg-dtag{font-size:10px;padding:2px 7px}
+.rg-scope .rg-rtb a{white-space:normal}
+.rg-scope .rg-rtb tr:first-child th:nth-last-child(1){width:13%}
