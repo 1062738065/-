@@ -1641,3 +1641,16 @@ body.sp-body{background:#f7f3f1}
 
 /* رأس جدول «تفاصيل الأهداف التشغيلية»: برغندي فاتح بنص أبيض */
 .rg-scope .rg-rtb th{background:var(--rpt-gl-bg,#a8395c)!important;color:#fff!important;border:1px solid rgba(255,255,255,.55)}
+/* رأس «تفاصيل الأهداف التشغيلية»: بلون عمود المستهدف + توسيط كامل */
+.rg-scope .rg-rtb th{background:var(--rpt-c1,#e3b6c5)!important;color:var(--rpt-burgundy,#6b2337)!important;text-align:center!important;vertical-align:middle!important;border:1px solid #fff}
+.rg-scope .rg-rtb thead th,.rg-scope .rg-rtb tr:first-child th{text-align:center!important}
+/* خلايا أوسع ومحتوى في الوسط */
+.rg-scope .rg-tw{overflow-x:auto}
+.rg-scope .rg-rtb{table-layout:auto!important;min-width:560px!important}
+.rg-scope .rg-rtb th,.rg-scope .rg-rtb td{padding:8px 7px!important;text-align:center!important;vertical-align:middle!important;line-height:1.55}
+.rg-scope .rg-rtb tr:nth-child(2) th,.rg-scope .rg-rtb th[colspan="1"]{min-width:72px}
+.rg-scope .rg-rtb td:nth-child(2),.rg-scope .rg-rtb th:nth-child(2){min-width:150px}
+.rpt-pdf .rg-rtb{min-width:0!important}
+.rpt-pdf .rg-rtb th,.rpt-pdf .rg-rtb td{padding:6px 4px!important}
+.rpt-pdf .rg-rtb tr:nth-child(2) th,.rpt-pdf .rg-rtb th[colspan="1"]{min-width:44px}
+@media print{.rg-scope .rg-rtb{min-width:0!important}}
