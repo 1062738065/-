@@ -1609,3 +1609,19 @@ body.sp-body{background:#f7f3f1}
 .rg-scope .rg-rtb td:nth-child(2){text-align:var(--rpt-td-align,center)!important}
 .rg-scope.rg-zebra .rg-rtb tr:nth-child(even) td{filter:brightness(.98)}
 .rg-scope .rg-wi.pdf{color:#fff}
+
+/* ===== جداول الأهداف كلها بنفس التنسيق: رأس برغندي فاتح + توسيط + خط موحّد ===== */
+.rg-scope .rg-rtb th,.gb-board table.prs-table th,.rg-flat table.prs-table th,.rpt-evx th{background:var(--rpt-gh-bg,#a8395c)!important;color:var(--rpt-gh-color,#fff)!important;text-align:center!important;vertical-align:middle;font-weight:700;font-family:var(--rpt-font-body,'IBM Plex Sans Arabic'),'IBM Plex Sans Arabic','Cairo',sans-serif;border:1px solid rgba(255,255,255,.7)}
+.gb-board table.prs-table td,.rg-flat table.prs-table td,.rpt-evx td,.rg-scope .rg-rtb td{text-align:center!important;vertical-align:middle;font-weight:600;font-family:var(--rpt-font-body,'IBM Plex Sans Arabic'),'IBM Plex Sans Arabic','Cairo',sans-serif}
+.gb-board table.prs-table td:first-child,.rg-flat table.prs-table td:first-child{font-weight:700}
+.rpt-evx td:nth-child(2){text-align:center}
+.rg-scope .rg-rtb td:nth-child(2){text-align:center!important}
+/* اللوحة: نفس تنسيق جداول الأهداف في التقرير (رأس برغندي فاتح، توسيط، خط موحّد) */
+.gb-pop{--ghd:#a8395c;font-family:'IBM Plex Sans Arabic','Cairo',sans-serif}
+.gb-pop-h{background:var(--ghd);font-family:'IBM Plex Sans Arabic','Cairo',sans-serif;text-align:center;font-weight:700}
+.gb-pop.aR::after{border-left-color:var(--ghd)}.gb-pop.aL::after{border-right-color:var(--ghd)}
+.gb-pop td{text-align:center;vertical-align:middle;font-weight:600;font-family:'IBM Plex Sans Arabic','Cairo',sans-serif;color:#2b1a20}
+.gb-pop td:first-child{background:#f7ecef;color:var(--ghd);font-weight:700;text-align:center}
+.gb-board table.prs-table th{background:#a8395c;color:#fff}
+.gbk span,.gbk b{font-family:'IBM Plex Sans Arabic','Cairo',sans-serif}
+.gbk span{font-weight:700}

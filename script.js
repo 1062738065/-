@@ -4852,7 +4852,7 @@ function gbCmpBuild(series, rows, tog) {
   const body = rs.map((x) => { const d = dir(x), rr = rat(x), df = d ? last(x.vs) - first(x.vs) : null;
     return `<tr><td style="font-weight:700">${esc(x.r.name)}${nv(x.vs) < 2 ? `<div class="hint" style="margin:0;">${nv(x.vs) ? "نتيجة في فترة واحدة فقط" : "لا توجد نتائج في الفترات المختارة"}</div>` : ""}</td>${x.vs.map((v, i) => `<td style="text-align:center"><span style="color:${SUBTLE};font-size:11.5px;">${x.tg[i] != null ? x.tg[i] + "٪" : "بلا مستهدف"}</span> · ${dashPctCell(v)}<div style="font-size:11px;margin-top:2px;color:${rr[i] == null ? SUBTLE : rr[i] >= 100 ? GREEN : DANGER};">${rr[i] == null ? "نسبة التحقق: —" : "نسبة التحقق: <b>" + rr[i] + "٪</b>"}${v != null && x.tg[i] ? `<span style="color:${SUBTLE};"> (${v}÷${x.tg[i]})</span>` : ""}</div></td>`).join("")}<td style="text-align:center">${df == null ? "—" : `<b style="color:${DL[d][1]}">${df > 0 ? "+" : ""}${df}</b>`}</td><td style="text-align:center"><b style="color:${DL[d || "none"][1]};font-size:11.5px;">${DL[d || "none"][0]}</b></td></tr>`; }).join("");
   const groups = rs.map((x) => ({ name: x.r.name, dir: dir(x), bars: x.vs.map((v, i) => ({ label: live[i].label, pct: v, target: x.tg[i], c: gbSerCol(i, live.length) })) }));
-  const html = `<details style="margin-top:6px;"><summary style="cursor:pointer;font-size:12px;color:${SUBTLE};font-weight:700;">عرض جدول التفاصيل (المستهدف · المتحقق · نسبة التحقق)</summary><div class="table-wrap" style="overflow-x:auto;margin-top:8px;"><table class="prs-table" style="min-width:640px;"><thead><tr><th>الهدف</th>${live.map((c) => `<th style="text-align:center">${esc(c.label)}<div class="hint" style="margin:0;color:inherit;opacity:.85;">المستهدف · المتحقق · نسبة التحقق</div></th>`).join("")}<th style="text-align:center">الفرق في المتحقق</th><th style="text-align:center">الاتجاه</th></tr></thead><tbody>${body}</tbody></table></div></details><div class="hint" style="margin-top:6px;">نسبة التحقق (لكل فترة) = المتحقق ÷ مستهدف تلك الفترة · الاتجاه يقارن نسبة التحقق في آخر فترة بأولها عند توفر مستهدفي الفترتين، وإلا يقارن المتحقق · الفرق = آخر متحقق − أول متحقق · الفراغ لا يُحسب صفرًا.</div>`;
+  const html = "";
   return { controls, html, grouped: { groups, legend: live.map((c) => c.label) } };
 }
 function gbColTarget(sa, gs, row, keys) {
@@ -4985,7 +4985,7 @@ function dashGoalsBoardHtml(kind, series) {
   } else {
     body = `<div style="display:flex;flex-direction:column;gap:12px;">${rows.map((r) => `<div><div style="display:flex;justify-content:space-between;gap:8px;align-items:center;cursor:pointer;margin-bottom:4px;" ${tog(r)}><span style="font-size:12.5px;font-weight:700;">${esc(r.name)}${r.shared ? ` <span class="hint" style="margin:0;">(مشترك · ${r.units.length})</span>` : ""}</span><span style="white-space:nowrap;">${badgeHtml(GOAL_GROUP_LABEL[r.group], GB_COLOR[r.group], "#f6f2f3")} <span style="font-size:11.5px;color:${SUBTLE};">${r.avg != null ? r.avg + "٪" : "—"} / ${r.target != null ? r.target + "٪" : "—"}</span></span></div>${gbBarHtml(r)}${open[r.name] ? gbUnitsDetailHtml(r) : ""}</div>`).join("")}</div><div class="hint" style="margin-top:8px;">الخط الأسود = المستهدف · اضغطي على الهدف لتفاصيل الوحدات وأدلتها.</div>`;
   }
-  return dashCard("لوحة الأهداف التشغيلية", "كل الأهداف: المتحقق وغير المتحقق، مع نتيجة كل وحدة بصورة مستقلة · اختاري «الفصل» لمقارنة نفس الفصل عبر السنوات", `<div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-bottom:8px;">${viewChips}<span style="flex:1"></span>${statusChips}${unitSel}${gs.cmp === "none" ? termSel + colSel : ""}</div>${cmpPills}${cb.controls}${kpisHtml}<div class="gb-board" style="position:relative;">${body}${cb.html}</div>`);
+  return dashCard("لوحة الأهداف التشغيلية", "كل الأهداف: المتحقق وغير المتحقق، مع نتيجة كل وحدة بصورة مستقلة · اختاري «الفصل» لمقارنة نفس الفصل عبر السنوات", `<div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-bottom:8px;">${viewChips}<span style="flex:1"></span>${statusChips}${kind === "admin" ? unitSel : ""}${gs.cmp === "none" ? termSel + colSel : ""}</div>${cmpPills}${cb.controls}${kpisHtml}<div class="gb-board" style="position:relative;">${body}${cb.html}</div>`);
 }
 // الأجزاء المشتركة الجديدة بالترتيب (لوحة الوحدة/القسم/المكتب)
 function dashPeriodBlocksHtml(kind, series) {
@@ -7690,7 +7690,7 @@ function rptWrap(s, inner, isPreview) {
   const [w, h] = rptPageDims(s);
   const [t, b, r, l] = rptMargins(s);
   const main = /^#[0-9a-fA-F]{6}$/.test(s.mainColor) ? s.mainColor : "#6b2337";
-  let vars = `--rpt-burgundy:${main};--rpt-t0:${mixHex(main, "#ffffff", 0.96)};--rpt-t1:${mixHex(main, "#ffffff", 0.9)};--rpt-line:${mixHex(main, "#ffffff", 0.82)};--rpt-c1:${mixHex(main, "#ffffff", 0.7)};--rpt-c2:${mixHex(main, "#ffffff", 0.45)};--rpt-c3:${mixHex(main, "#ffffff", 0.2)};--rpt-gh-bg:${s.thBg && s.thBg !== "#f4ece4" ? rptCssSafe(s.thBg) : main};--rpt-gh-color:${s.thBg && s.thBg !== "#f4ece4" ? rptCssSafe(s.thColor || main) : "#ffffff"};--rpt-burgundy-dark:${mixHex(main, "#000000", 0.25)};--rpt-paper:${rptCssSafe(s.paper)};--rpt-chapter-bg:${rptCssSafe(s.chapterBg)};` +
+  let vars = `--rpt-burgundy:${main};--rpt-t0:${mixHex(main, "#ffffff", 0.96)};--rpt-t1:${mixHex(main, "#ffffff", 0.9)};--rpt-line:${mixHex(main, "#ffffff", 0.82)};--rpt-c1:${mixHex(main, "#ffffff", 0.7)};--rpt-c2:${mixHex(main, "#ffffff", 0.45)};--rpt-c3:${mixHex(main, "#ffffff", 0.2)};--rpt-gh-bg:${s.thBg && s.thBg !== "#f4ece4" ? rptCssSafe(s.thBg) : rptLighten(main, 0.14)};--rpt-gh-color:${s.thBg && s.thBg !== "#f4ece4" ? rptCssSafe(s.thColor || main) : "#ffffff"};--rpt-burgundy-dark:${mixHex(main, "#000000", 0.25)};--rpt-paper:${rptCssSafe(s.paper)};--rpt-chapter-bg:${rptCssSafe(s.chapterBg)};` +
     `--rpt-font-body:'${rptCssSafe(s.fontBody)}';--rpt-font-title:'${rptCssSafe(s.fontTitle)}';--rpt-font-heading:'${rptCssSafe(s.fontHeading)}';` +
     `--rpt-page-w:${w}mm;--rpt-page-h:${h}mm;--rpt-mt:${t}mm;--rpt-mb:${b}mm;--rpt-mr:${r}mm;--rpt-ml:${l}mm;` +
     `--rpt-th-align:${["right", "center", "left"].includes(s.thAlign) ? s.thAlign : "center"};--rpt-td-align:${["right", "center", "left"].includes(s.tdAlign) ? s.tdAlign : "center"};` +
@@ -7711,6 +7711,17 @@ function rptPageNumText(s, n, total) {
   return "";
 }
 // صفحة واحدة من التقرير مع الكليشة (رأس) والتذييل ورقم الصفحة والعلامة المائية
+function rptLighten(hex, dl) {
+  try {
+    const m = /^#?([0-9a-f]{6})$/i.exec(String(hex || "").trim()); if (!m) return hex;
+    const n = parseInt(m[1], 16); let r = (n >> 16) / 255, g = ((n >> 8) & 255) / 255, b = (n & 255) / 255;
+    const mx = Math.max(r, g, b), mn = Math.min(r, g, b); let h = 0, sat = 0, l = (mx + mn) / 2;
+    if (mx !== mn) { const d = mx - mn; sat = l > 0.5 ? d / (2 - mx - mn) : d / (mx + mn); h = mx === r ? (g - b) / d + (g < b ? 6 : 0) : mx === g ? (b - r) / d + 2 : (r - g) / d + 4; h /= 6; }
+    l = Math.min(0.5, l + dl); sat = Math.min(1, sat + 0.05);
+    const q = l < 0.5 ? l * (1 + sat) : l + sat - l * sat, p = 2 * l - q, f = (t) => { t = (t + 1) % 1; return t < 1 / 6 ? p + (q - p) * 6 * t : t < 0.5 ? q : t < 2 / 3 ? p + (q - p) * (2 / 3 - t) * 6 : p; };
+    return "#" + [f(h + 1 / 3), f(h), f(h - 1 / 3)].map((x) => Math.round(x * 255).toString(16).padStart(2, "0")).join("");
+  } catch (e) { return hex; }
+}
 function rptUnitSettings(unit) {
   const s = rptSettings("unit");
   const ul = ((((S.siteSettings || {}).theme || {}).unitLetterheads) || {})[unit && unit.id] || {};
@@ -7932,10 +7943,10 @@ function aggGoalsChapterBody(flat) {
   const pairs = []; rows.forEach((r) => r.units.forEach((x) => pairs.push({ report: x.report, og: x.og, unit: x.unit, gk: r.name })));
   const reg = rptEvRegCore(pairs), gnum = {}; rows.forEach((r, i) => { gnum[r.name] = { n: i + 1, anchor: "rpt-ogx-" + r.name }; });
   const chart = gbGroupedHtml(rows.map((r) => ({ name: r.name, bars: [{ label: "المتحقق", pct: r.avg, target: r.target, c: GB_COLOR[r.group] }] })), ["المتحقق (الخط الأسود = المستهدف)"], () => "");
-  return sum + chart + reportTable(["الهدف التشغيلي", "المستهدف", "المتحقق", "الحالة", "الشواهد"], rows.map((r) => [
+  return sum + chart + `<div class="rg-flat rg-scope">` + reportTable(["الهدف التشغيلي", "المستهدف", "المتحقق", "الحالة", "الشواهد"], rows.map((r) => [
     `<span id="rpt-ogx-${esc(r.name)}">${esc(r.name)}</span>` + (r.shared ? ` <span style="font-size:10.5px;color:${SUBTLE};">(مشترك)</span>` : "") + (r.shared ? det(r) : ""),
     r.target != null ? r.target + "٪" : "—", bar(r), badgeHtml(GOAL_GROUP_LABEL[r.group], GB_COLOR[r.group], "#f6f2f3"),
-    rptEvChips(reg, { id: r.name }, r.name)])) + rptEvRegisterHtml(reg, gnum);
+    rptEvChips(reg, { id: r.name }, r.name)])) + `</div>` + rptEvRegisterHtml(reg, gnum);
 }
 function aggChapterHasData(key, data) {
   const m = { goalsChapter: data.hasGoals ? data.hasGoals() : false, perf: data.deptPerf.length || data.unitRows.length, indicators: data.indicators.length, yearCompare: data.hasYearCompare(), programs: data.hasPrograms(),
