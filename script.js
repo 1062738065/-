@@ -4402,7 +4402,7 @@ function chartsSummaryPages(pagesHtml, title) {
     const box = document.createElement("div"); box.innerHTML = pagesHtml;
     const cards = [], seen = {}, indAll = [], indSeen = {};
     box.querySelectorAll("table").forEach((tb) => {
-      if (tb.querySelector("table") || tb.closest(".rpt-v5")) return;
+      if (tb.querySelector("table") || tb.closest(".rpt-v5") || tb.closest(".rg-scope")) return;
       const items = tvShapeItems(tb); if (items.some((q) => q.x || q.meta)) items.forEach((q) => { if (!indSeen[q.title]) { indSeen[q.title] = 1; indAll.push(q); } });
       if (!items.length || !items.some((i) => i.num != null)) return;
       let ttl = ""; try { let el = (tb.closest(".table-wrap") || tb); const w = tb.closest(".tv-wrap"); if (w) el = w; let q = el.previousElementSibling; while (q && !ttl) { if (/rpt-subheading|^H[1-6]$|rpt-ch-title/.test((q.className || "") + " " + q.tagName)) ttl = q.textContent.trim(); q = q.previousElementSibling; } if (!ttl) { const ch = el.closest(".rpt-chapter,.rpt-ch,section"); const h = ch && ch.querySelector("h1,h2,h3,.rpt-ch-title"); ttl = h ? h.textContent.trim() : ""; } } catch (e) {}
@@ -4424,7 +4424,7 @@ function tvApply(html, id, mode) {
     try {
       const box = document.createElement("div"); box.innerHTML = html; let n = 0;
       box.querySelectorAll("table").forEach((tb) => {
-        if (tb.closest(".tv-wrap") || tb.closest(".gb-board") || tb.querySelector("table")) return;
+        if (tb.closest(".tv-wrap") || tb.closest(".gb-board") || tb.closest(".rg-scope") || tb.querySelector("table")) return;
         const items = tvShapeItems(tb); if (items.length < 1) return;
         let ttl = ""; try { let p = (tb.closest(".table-wrap") || tb).previousElementSibling; while (p && !ttl) { if (/rpt-subheading|^H[1-6]$|rpt-ch-title/.test((p.className || "") + " " + p.tagName)) ttl = p.textContent.trim(); p = p.previousElementSibling; } } catch (e) {}
         const sh = shapeRender(sid, { auto: true }, { sectionId: "tbl", items, label: ttl, dash: true }); if (!sh) { const hn = document.createElement("div"); hn.className = "hint no-print"; hn.style.marginBottom = "6px"; hn.textContent = "هذا الشكل لا يناسب بيانات هذا الجدول، فعُرض الجدول كما هو."; (tb.closest(".table-wrap") || tb).before(hn); return; }
@@ -4441,7 +4441,7 @@ function tvApply(html, id, mode) {
     const box = document.createElement("div"); box.innerHTML = html;
     let n = 0;
     box.querySelectorAll("table").forEach((tb) => {
-      if (tb.closest(".tv-wrap") || tb.closest(".gb-board") || tb.querySelector("table")) return;
+      if (tb.closest(".tv-wrap") || tb.closest(".gb-board") || tb.closest(".rg-scope") || tb.querySelector("table")) return;
       const ch = tvChartFromTable(tb); if (!ch) return;
       const host = tb.closest(".table-wrap") || tb; const tid = id + "#" + (n++);
       const showTbl = (S.ui.tv || {})[tid] || mode === "both";

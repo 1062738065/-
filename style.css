@@ -1572,3 +1572,18 @@ body.sp-body{background:#f7f3f1}
   .rg-eg-b,.rg-go{display:none}
   .rg-rtb th,.rg-rtb td,.rg-rk div,.rg-eg-h,.rg-wi,.rg-ph .cap{-webkit-print-color-adjust:exact;print-color-adjust:exact}
 }
+.rg-rtb{table-layout:auto}
+.rg-rtb th:nth-child(2),.rg-rtb td:nth-child(2){min-width:150px;text-align:right}
+.rg-rtb th:first-child,.rg-rtb td:first-child{width:30px}
+/* خط وألوان القسم مطابقة للنموذج */
+.rg-scope{font-family:var(--rpt-font-body,'Cairo'),'Cairo','Tajawal',sans-serif;color:#2b1a20;font-weight:500}
+.rg-scope .rg-rh,.rg-scope .rg-rk b,.rg-scope .rg-rtb th,.rg-scope .rg-eg-t,.rg-scope .rg-eg-n{font-family:var(--rpt-font-heading,'Cairo'),'Cairo','Tajawal',sans-serif}
+.rg-scope .rg-rh{font-weight:700;color:#7a1f3d;font-size:15.5px}
+.rg-scope .rg-rtb td{font-weight:600;color:#2b1a20;font-size:11.5px}
+.rg-scope .rg-rtb td:nth-child(2){font-weight:700}
+.rg-scope .rg-rtb th{font-weight:700;font-size:11.5px;color:#fff;background:#7a1f3d}
+.rg-scope .rg-rtb .rg-p-ok{color:#1f8a5b;background:#e2f4ea}.rg-scope .rg-rtb .rg-p-wr{color:#c9831a;background:#fcefd8}.rg-scope .rg-rtb .rg-p-bad{color:#c0392b;background:#fbe3e0}
+.rg-scope .rg-rk span{font-weight:700;color:#6b5a60}
+.rg-scope .rg-wc b{font-weight:700;color:#2b1a20}.rg-scope .rg-wc small{font-weight:500;color:#8a7279}
+.rg-scope svg text{font-family:inherit}
+.rpt-pdf .rg-rtb td,.rpt-pdf .rg-rtb th{font-size:9.5px!important}
