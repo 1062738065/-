@@ -1442,3 +1442,12 @@ body.sp-body{background:#f7f3f1}
 .rpt-ph2 img{width:100%;aspect-ratio:4/3;object-fit:cover;display:block}
 .rpt-ph2 figcaption{padding:6px 8px;font-size:10.5px}.rpt-ph2 figcaption b{display:block;margin-bottom:3px}
 @media print{.rpt-ev-open{background:none;color:var(--rpt-burgundy,#6b2337)}}
+
+/* ألوان نموذج الأهداف: عنابي #7a1f3d + ورديّات */
+.rpt-gscope{--rpt-burgundy:#7a1f3d}
+.rpt-gscope .rpt-gk{border-radius:14px}
+.rpt-gscope .rpt-gk b{font-size:24px}
+.rpt-pv{display:inline-block;min-width:44px;padding:2px 8px;border-radius:8px;font-weight:700}
+.rpt-dt{display:inline-block;padding:2px 9px;border-radius:8px;font-weight:700;font-size:11px}
+.rpt-gscope .rpt-evx th,.rpt-gscope .rpt-gchip{background:#7a1f3d}
+.rpt-gscope .rpt-ecode{background:#f3e1e7;color:#7a1f3d}

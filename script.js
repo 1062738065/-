@@ -4760,7 +4760,7 @@ function gbBarHtml(r) {
   const a = r.avg == null ? 0 : Math.min(100, r.avg), c = GB_COLOR[r.group];
   return `<div style="position:relative;height:14px;background:#f1e9eb;border-radius:8px;overflow:visible;"><div style="width:${a}%;height:100%;background:${GB_GRAD[r.group]};border-radius:8px;"></div>${r.target != null ? `<div title="المستهدف ${r.target}٪" style="position:absolute;top:-3px;bottom:-3px;inset-inline-start:${Math.min(100, r.target)}%;width:2px;background:#2c2c2a;"></div>` : ""}</div>`;
 }
-const GB_SER = ["#d9c9ce", "#d1a56b", "#c4577a", "#6b2337", "#3b1020"];
+const GB_SER = ["#f3dde4", "#e3b6c5", "#c9708f", "#a73a5c", "#7a1f3d"];
 const GB_CMP = [["none", "بدون مقارنة"], ["terms", "الفصول داخل العام"], ["sameterm", "الفصل نفسه عبر الأعوام"], ["years", "الأعوام (عام كامل بعام أو أكثر)"], ["pair", "فترتان محددتان"], ["units", "الوحدات (الهدف المشترك)"]];
 const gbCmpMode = (gs) => (gs.cmp === "cols" ? gs.pm || "years" : gs.cmp);
 // أعمدة المقارنة الزمنية: كل عمود {label, keys[]}؛ العام الكامل = متوسط فصوله المتوفرة
@@ -4793,7 +4793,7 @@ function gbColVal(sa, gs, name, keys) {
   });
   return dashAvg(vals);
 }
-const gbSerCol = (i, n) => GB_SER[n <= GB_SER.length ? GB_SER.length - n + i : i % GB_SER.length];
+const gbSerCol = (i, n) => (n <= 2 ? (i ? GB_SER[4] : GB_SER[1]) : GB_SER[n <= GB_SER.length ? GB_SER.length - n + i : i % GB_SER.length]);
 function gbGroupedHtml(groups, legend, tog) {
   const legendCols = legend.map((l, i) => gbSerCol(i, legend.length));
   const n = Math.max(1, groups.length), gw = Math.max(70, Math.min(150, 900 / n));
@@ -7915,11 +7915,13 @@ function aggGoalsChapterBody(flat) {
   const sum = `<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px;">${["achieved", "partial", "not", "empty"].map((k) => cnt[k] ? badgeHtml(GOAL_GROUP_LABEL[k] + ": " + cnt[k], GB_COLOR[k], "#f6f2f3") : "").join("")}</div>`;
   const det = (r) => `<details style="margin-top:4px;"><summary style="cursor:pointer;font-size:11px;color:${SUBTLE};">تفاصيل ${r.units.length} وحدات</summary>${r.units.map((x) => `<div style="padding:6px 0;border-bottom:1px solid #f1e9eb;font-size:11.5px;"><b>${esc(x.unit.name)}</b> · ${esc(GOAL_STATUS_LABEL[x.key])} · المستهدف ${x.target != null ? x.target + "٪" : "—"} · المتحقق ${x.pct != null ? x.pct + "٪" : "—"}<div style="padding-inline-start:10px;">${gbEvidenceHtml(x)}</div></div>`).join("")}</details>`;
   const bar = (r) => r.avg == null ? "—" : `<div style="display:flex;align-items:center;gap:6px;"><div style="width:70px;">${progressBarHtml(r.avg, GB_COLOR[r.group])}</div><b style="color:${GB_COLOR[r.group]}">${r.avg}٪</b></div>`;
+  const pairs = []; rows.forEach((r) => r.units.forEach((x) => pairs.push({ report: x.report, og: x.og, unit: x.unit, gk: r.name })));
+  const reg = rptEvRegCore(pairs), gnum = {}; rows.forEach((r, i) => { gnum[r.name] = { n: i + 1, anchor: "rpt-ogx-" + r.name }; });
   const chart = gbGroupedHtml(rows.map((r) => ({ name: r.name, bars: [{ label: "المتحقق", pct: r.avg, target: r.target, c: GB_COLOR[r.group] }] })), ["المتحقق (الخط الأسود = المستهدف)"], () => "");
-  return sum + chart + reportTable(["الهدف التشغيلي", "المستهدف", "المتحقق", "الحالة", "الأدلة"], rows.map((r) => [
-    esc(r.name) + (r.shared ? ` <span style="font-size:10.5px;color:${SUBTLE};">(مشترك)</span>` : "") + (r.shared ? det(r) : ""),
+  return sum + chart + reportTable(["الهدف التشغيلي", "المستهدف", "المتحقق", "الحالة", "الشواهد"], rows.map((r) => [
+    `<span id="rpt-ogx-${esc(r.name)}">${esc(r.name)}</span>` + (r.shared ? ` <span style="font-size:10.5px;color:${SUBTLE};">(مشترك)</span>` : "") + (r.shared ? det(r) : ""),
     r.target != null ? r.target + "٪" : "—", bar(r), badgeHtml(GOAL_GROUP_LABEL[r.group], GB_COLOR[r.group], "#f6f2f3"),
-    r.shared ? r.units.reduce((t, x) => t + ((x.og.evidenceLinks || []).length + (x.og.evidenceType ? 1 : 0)), 0) + " دليل" : gbEvidenceHtml(r.units[0])]));
+    rptEvChips(reg, { id: r.name }, r.name)])) + rptEvRegisterHtml(reg, gnum);
 }
 function aggChapterHasData(key, data) {
   const m = { goalsChapter: data.hasGoals ? data.hasGoals() : false, perf: data.deptPerf.length || data.unitRows.length, indicators: data.indicators.length, yearCompare: data.hasYearCompare(), programs: data.hasPrograms(),
@@ -12944,37 +12946,47 @@ function evdJump(target) {
 // قسم الشواهد في التقرير: شواهد كل هدف، ثم سجل الشواهد (كل شاهد مرة واحدة مع الأهداف المرتبطة به)
 // سجل شواهد التقرير: كل شاهد مرة واحدة برقم، وأرقام الأهداف المرتبطة به + معرض صور
 function rptEvRegister(report) {
+  const goals = (((report && report.sections && report.sections.goals && report.sections.goals.data) || {}).goals || []), pairs = [];
+  goals.forEach((g) => (g.operationalGoals || []).forEach((og) => pairs.push({ report, og, unit: null, gk: og.id })));
+  return rptEvRegCore(pairs);
+}
+// pairs: [{report, og, unit, gk}] — gk مفتاح الهدف في الربط (id الهدف، أو اسمه في التجميع)
+function rptEvRegCore(pairs) {
   evdLoad();
-  const goals = (((report && report.sections && report.sections.goals && report.sections.goals.data) || {}).goals || []);
   const ent = {}, order = [], byOg = {};
-  const add = (key, og, mk) => { if (!ent[key]) { ent[key] = { ...mk(), goals: [] }; order.push(key); } if (ent[key].goals.indexOf(og) === -1) ent[key].goals.push(og); (byOg[og.id] = byOg[og.id] || []); if (byOg[og.id].indexOf(key) === -1) byOg[og.id].push(key); };
-  goals.forEach((g) => (g.operationalGoals || []).forEach((og) => {
-    const links = (og.evidenceLinks || []).slice(); if (og.evidenceRepoId && !links.some((l) => l.kind === "repo" && l.refId === og.evidenceRepoId)) links.push({ kind: "repo", refId: og.evidenceRepoId });
+  const add = (key, gk, og, mk) => { if (!ent[key]) { ent[key] = { ...mk(), goals: [], gks: [] }; order.push(key); } if (ent[key].gks.indexOf(gk) === -1) { ent[key].gks.push(gk); ent[key].goals.push(og); } (byOg[gk] = byOg[gk] || []); if (byOg[gk].indexOf(key) === -1) byOg[gk].push(key); };
+  pairs.forEach(({ report, og, unit, gk }) => {
+    const pre = unit ? unit.id + ":" : "", links = (og.evidenceLinks || []).slice(); if (og.evidenceRepoId && !links.some((l) => l.kind === "repo" && l.refId === og.evidenceRepoId)) links.push({ kind: "repo", refId: og.evidenceRepoId });
     links.forEach((ln) => {
       if (ln.kind === "repo") {
-        add("r:" + ln.refId, og, () => { const it = evdFind(ln.refId), ok = it && evdCanSee(it); return { title: !it ? "شاهد محذوف" : ok ? it.name : "شاهد غير متاح للعرض", type: ok ? (it.type || "شاهد") : "شاهد", sub: ok ? (it.description || "") : "", src: ok && it.kind === "link" ? (String(it.url || "").replace(/^https?:\/\//i, "").split("/")[0]) : (ok && it.kind === "text" ? "نص" : "مستودع الشواهد"), url: ok && it.kind === "link" && /^https?:\/\//i.test(it.url || "") ? it.url : "", repoId: ln.refId, thumb: ok ? rptEvidenceThumbUrl({ fileLink: it.url, evidenceType: it.type, imageData: /^data:image/.test(it.file_data || "") ? it.file_data : "" }) : "" }; });
+        add("r:" + ln.refId, gk, og, () => { const it = evdFind(ln.refId), ok = it && evdCanSee(it); return { title: !it ? "شاهد محذوف" : ok ? it.name : "شاهد غير متاح للعرض", type: ok ? (it.type || "شاهد") : "شاهد", sub: ok ? (it.description || "") : "", src: ok && it.kind === "link" ? (String(it.url || "").replace(/^https?:\/\//i, "").split("/")[0]) : (ok && it.kind === "text" ? "نص" : "مستودع الشواهد"), url: ok && it.kind === "link" && /^https?:\/\//i.test(it.url || "") ? it.url : "", repoId: ln.refId, thumb: ok ? rptEvidenceThumbUrl({ fileLink: it.url, evidenceType: it.type, imageData: /^data:image/.test(it.file_data || "") ? it.file_data : "" }) : "" }; });
       } else {
         const r = ogResolveLink(report, ln);
-        add(ln.kind + ":" + (ln.refId || ln.url || ln.text || r.title), og, () => ({ title: r.title || "دليل", type: r.kindLabel || "دليل", sub: r.sub || "", src: r.url ? String(r.url).replace(/^https?:\/\//i, "").split("/")[0] : "من الموقع", url: /^https?:\/\//i.test(r.url || "") ? r.url : "", reportId: r.reportId || "", thumb: "" }));
+        add(pre + ln.kind + ":" + (ln.refId || ln.url || ln.text || r.title), gk, og, () => ({ title: r.title || "دليل", type: r.kindLabel || "دليل", sub: r.sub || "", src: r.url ? String(r.url).replace(/^https?:\/\//i, "").split("/")[0] : (unit ? unit.name : "من الموقع"), url: /^https?:\/\//i.test(r.url || "") ? r.url : "", reportId: r.reportId || "", thumb: "" }));
       }
     });
-    if (!links.length && (og.evidenceType || og.evidenceAnswer)) add("l:" + og.id, og, () => ({ title: og.evidenceAnswer || og.evidenceType, type: og.evidenceType || "دليل", sub: "", src: "", url: /^https?:\/\//i.test(og.evidenceAnswer || "") ? og.evidenceAnswer : "", thumb: "" }));
-  }));
+    if (!links.length && (og.evidenceType || og.evidenceAnswer)) add(pre + "l:" + og.id, gk, og, () => ({ title: og.evidenceAnswer || og.evidenceType, type: og.evidenceType || "دليل", sub: "", src: unit ? unit.name : "", url: /^https?:\/\//i.test(og.evidenceAnswer || "") ? og.evidenceAnswer : "", thumb: "" }));
+  });
   const code = {}; order.forEach((k, i) => { code[k] = String(i + 1).padStart(2, "0"); });
   return { ent, order, byOg, code };
 }
 function rptEvJump(t, label, cls) { return `<a class="${cls || "rpt-jump"}" href="#${esc(t)}" data-action="rpt-jump" data-target="${esc(t)}">${esc(label)}</a>`; }
-function rptEvChips(reg, og) { const ks = reg.byOg[og.id] || []; return ks.length ? ks.map((k) => rptEvJump("rpt-evx-" + reg.code[k], reg.code[k], "rpt-ecode")).join("") : "—"; }
+function rptEvChips(reg, og, gk) { const ks = reg.byOg[gk != null ? gk : og.id] || []; return ks.length ? ks.map((k) => rptEvJump("rpt-evx-" + reg.code[k], reg.code[k], "rpt-ecode")).join("") : "—"; }
 function evdReportHtml(report) {
-  const reg = rptEvRegister(report); if (!reg.order.length) return "";
-  const goals = (((report.sections.goals || {}).data || {}).goals || []).flatMap((g) => g.operationalGoals || []), gnum = {}; goals.forEach((og, i) => { gnum[og.id] = i + 1; });
-  const chips = (e) => e.goals.map((og) => rptEvJump("rpt-og-" + og.id, String(gnum[og.id] || "•"), "rpt-gchip")).join("");
+  const reg = rptEvRegister(report), goals = (((report.sections.goals || {}).data || {}).goals || []).flatMap((g) => g.operationalGoals || []), gnum = {};
+  goals.forEach((og, i) => { gnum[og.id] = { n: i + 1, anchor: "rpt-og-" + og.id }; });
+  return rptEvRegisterHtml(reg, gnum);
+}
+// gnum: مفتاح الهدف ← {n رقمه، anchor معرّف سطره}
+function rptEvRegisterHtml(reg, gnum) {
+  if (!reg.order.length) return "";
+  const chips = (e) => e.gks.map((gk) => { const g = gnum[gk]; return g ? rptEvJump(g.anchor, String(g.n), "rpt-gchip") : ""; }).join("");
   const rows = reg.order.map((k) => { const e = reg.ent[k], c = reg.code[k];
     const open = e.url ? `<a class="rpt-ev-open" href="${esc(e.url)}" target="_blank" rel="noopener noreferrer">فتح ↗</a>` : e.repoId ? `<button type="button" class="rpt-ev-open" data-action="evr-open" data-id="${esc(e.repoId)}" style="border:0;cursor:pointer;">فتح</button>` : "";
     return `<tr id="rpt-evx-${c}"><td><span class="rpt-ecode">${c}</span></td><td style="text-align:start"><b>${esc(e.title)}</b>${e.sub ? `<div class="rpt-evx-s">${esc(e.sub)}</div>` : ""}</td><td><span class="rpt-ev-type">${esc(e.type)}</span>${e.src ? `<div class="rpt-evx-s">${esc(e.src)}</div>` : ""}</td><td>${chips(e)}</td><td>${open}</td></tr>`; }).join("");
   const imgs = reg.order.filter((k) => reg.ent[k].thumb);
   const gal = imgs.length ? `<div class="rpt-pc-s" style="margin-top:12px;">معرض الصور (${imgs.length})</div><div class="rpt-gal2">${imgs.map((k) => { const e = reg.ent[k]; return `<figure class="rpt-ph2"><a href="${esc(e.url || e.thumb)}" target="_blank" rel="noopener noreferrer"><img alt="${esc(e.title)}" src="${esc(e.thumb)}" loading="lazy" /></a><figcaption><b>${esc(e.title)}</b><span class="rpt-ecode">${reg.code[k]}</span>${chips(e)}</figcaption></figure>`; }).join("")}</div>` : "";
-  return `<div style="margin-top:14px;"><div class="rpt-pc-s">الشواهد والمرفقات</div><div class="rpt-evx-w"><table class="rpt-evx"><thead><tr><th style="width:46px">رقم</th><th>الشاهد</th><th>النوع / المصدر</th><th>الأهداف المرتبطة</th><th style="width:70px">فتح</th></tr></thead><tbody>${rows}</tbody></table></div><div class="rpt-evx-s" style="margin-top:6px;">كل شاهد يُذكر مرة واحدة مهما تكرر في الأهداف · اضغطي رقم الهدف للانتقال إليه.</div>${gal}</div>`;
+  return `<div class="rpt-gscope" style="margin-top:14px;"><div class="rpt-pc-s">الشواهد والمرفقات</div><div class="rpt-evx-w"><table class="rpt-evx"><thead><tr><th style="width:46px">رقم</th><th>الشاهد</th><th>النوع / المصدر</th><th>الأهداف المرتبطة</th><th style="width:70px">فتح</th></tr></thead><tbody>${rows}</tbody></table></div><div class="rpt-evx-s" style="margin-top:6px;">كل شاهد يُذكر مرة واحدة مهما تكرر في الأهداف · اضغطي رقم الهدف للانتقال إليه.</div>${gal}</div>`;
 }
 // تحليل الأهداف في التقرير: رسم + جدول، والمقارنة تختارها صاحبة التقرير
 function rgState() { return S.ui.rg || (S.ui.rg = { mode: "none", keys: [], year: "" }); }
@@ -12994,7 +13006,9 @@ function rptGoalsAnalysisHtml(report, flat) {
   const grp = (v) => (v == null ? "empty" : v >= 75 ? "achieved" : v >= 40 ? "partial" : "not");
   const cnt = { achieved: 0, partial: 0, not: 0, empty: 0 }; rows.forEach((r) => { cnt[grp(lastV(r))]++; });
   const seen = rows.map(lastV).filter((v) => v != null), avg = seen.length ? Math.round(seen.reduce((t, v) => t + v, 0) / seen.length) : null;
-  const kpi = (n, l, c) => `<div class="rpt-gk"><b style="color:${c}">${n}</b><span>${l}</span></div>`;
+  const RGC = { achieved: ["#1f8a5b", "#e2f4ea"], partial: ["#c9831a", "#fcefd8"], not: ["#c0392b", "#fbe3e0"], empty: ["#8a7279", "#f1eceb"] };
+  const kpi = (n, l, c, bg) => `<div class="rpt-gk" style="${bg ? `background:${bg};border-color:transparent;` : ""}"><b style="color:${c}">${n}</b><span>${l}</span></div>`;
+  const pv = (v) => (v == null ? "—" : `<span class="rpt-pv" style="background:${RGC[grp(v)][1]};color:${RGC[grp(v)][0]}">${v}٪</span>`);
   const chk = (m, l) => `<button type="button" class="rpt-gp ${gs.mode === m ? "on" : ""}" data-action="rg-mode" data-v="${m}">${l}</button>`;
   const sel = (k, opts, v, i) => `<select class="input" style="width:auto;padding:4px 10px;font-size:12px;" data-action="rg-sel" data-k="${k}"${i != null ? ` data-i="${i}"` : ""}>${opts.map(([a, l]) => `<option value="${esc(a)}" ${String(v) === String(a) ? "selected" : ""}>${esc(l)}</option>`).join("")}</select>`;
   let ctl = `<div class="no-print rpt-gctl"><span class="hint" style="margin:0;font-weight:700;">المقارنة في التقرير:</span>${chk("none", "بدون مقارنة")}${cols.length > 1 ? chk("pick", "فترات محددة") : ""}${yrsMulti.length ? chk("year", "عام كامل (كل فتراته)") : ""}`;
@@ -13005,8 +13019,8 @@ function rptGoalsAnalysisHtml(report, flat) {
   const chart = gbGroupedHtml(groups, pu.map((p) => p.label), () => "");
   const multi = pu.length > 1, hdr = ["م", "الهدف التشغيلي"].concat(pu.map((p) => p.label)).concat(multi ? ["الفرق", "الاتجاه"] : []).concat(["الحالة"]);
   const tbl = reportTable(hdr, rows.map((r, i) => { const v = lastV(r), vs = r.vs.filter((x) => x != null), d = vs.length > 1 ? vs[vs.length - 1] - vs[0] : null;
-    return [String(i + 1), `<b>${esc(r.og.name)}</b>`].concat(r.vs.map((x) => (x == null ? "—" : x + "٪"))).concat(multi ? [d == null ? "—" : `<span dir="ltr">${d > 0 ? "+" : ""}${d}</span>`, d == null ? "—" : d > 0 ? `<span style="color:${GREEN};font-weight:700;">▲ تحسّن</span>` : d < 0 ? `<span style="color:${DANGER};font-weight:700;">▼ تراجع</span>` : "= ثبات"] : []).concat([badgeHtml(GOAL_GROUP_LABEL[grp(v)], GB_COLOR[grp(v)], "#f6f2f3")]); }));
-  return `${ctl}<div class="rpt-gks">${kpi(rows.length, "إجمالي الأهداف", "var(--rpt-burgundy,#6b2337)")}${kpi(cnt.achieved, "متحقق", GREEN)}${kpi(cnt.partial, "متحقق جزئيًا", "#c9965a")}${kpi(cnt.not + cnt.empty, "غير متحقق", DANGER)}${kpi(avg == null ? "—" : avg + "٪", "نسبة التحقق", "var(--rpt-burgundy,#6b2337)")}</div>${chart}${tbl}`;
+    return [String(i + 1), `<b>${esc(r.og.name)}</b>`].concat(r.vs.map(pv)).concat(multi ? [d == null ? "—" : `<span dir="ltr">${d > 0 ? "+" : ""}${d}</span>`, d == null ? "—" : d > 0 ? `<span class="rpt-dt" style="background:#e2f4ea;color:#1f8a5b">▲ تحسّن</span>` : d < 0 ? `<span class="rpt-dt" style="background:#fbe3e0;color:#c0392b">▼ تراجع</span>` : `<span class="rpt-dt" style="background:#f1eceb;color:#8a7279">= ثبات</span>`] : []).concat([badgeHtml(GOAL_GROUP_LABEL[grp(v)], RGC[grp(v)][0], RGC[grp(v)][1])]); }));
+  return `<div class="rpt-gscope">${ctl}<div class="rpt-gks">${kpi(rows.length, "إجمالي الأهداف", "var(--rpt-burgundy,#6b2337)")}${kpi(cnt.achieved, "متحقق", RGC.achieved[0], RGC.achieved[1])}${kpi(cnt.partial, "متحقق جزئيًا", RGC.partial[0], RGC.partial[1])}${kpi(cnt.not + cnt.empty, "غير متحقق", RGC.not[0], RGC.not[1])}${kpi(avg == null ? "—" : avg + "٪", "نسبة التحقق", "var(--rpt-burgundy,#6b2337)")}</div>${chart}${tbl}</div>`;
 }
 
 function goalsSectionHtml(d) {
