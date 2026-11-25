@@ -13021,6 +13021,18 @@ function rgEvCardsHtml(reg, gnum, flat) {
   }).join("");
   return blocks ? blocks + `<div class="rg-hint">الشاهد المرتبط بأكثر من هدف يظهر في كل هدف مع إشارة «مشترك مع…»، وهو نسخة واحدة في المستودع.</div>` : "";
 }
+// فصل «الشواهد والمرفقات»: كل شواهد الأهداف في مكان واحد (بطاقات لكل هدف أو فهرس موحّد + معرض صور)
+function rgEvHas(report) { try { return rptEvRegister(report).order.length > 0; } catch (e) { return false; } }
+function rgEvidenceChapterHtml(report) {
+  try {
+    const flat = (((report.sections.goals || {}).data || {}).goals || []).flatMap((g) => g.operationalGoals || []);
+    const reg = rptEvRegister(report); if (!reg.order.length) return "";
+    const gs = rgState(), es = gs.es === "B" ? "B" : "A", gnum = {}; flat.forEach((og, i) => { gnum[og.id] = { n: i + 1, anchor: "rpt-og-" + og.id }; });
+    const pill = (m, l) => `<button type="button" class="rpt-gp ${es === m ? "on" : ""}" data-action="rg-es" data-v="${m}">${l}</button>`;
+    const ctl = `<div class="no-print rpt-gctl"><div class="rpt-gl">شكل الشواهد والمرفقات</div><div class="rpt-gpills">${pill("A", "١ — بطاقات لكل هدف")}${pill("B", "٢ — فهرس موحّد + معرض صور")}</div></div>`;
+    return `<div class="rg-scope">${ctl}${es === "B" ? rptEvRegisterHtml(reg, gnum) : rgEvCardsHtml(reg, gnum, flat)}</div>`;
+  } catch (e) { return ""; }
+}
 function rptGoalsAnalysisHtml(report, flat) {
   const uid = (RPT_CTX && RPT_CTX.unitId) || S.currentUnitId, unit = (S.units || []).find((u) => u.id === uid); if (!unit || !flat.length) return "";
   const sa = dashSeries([unit], "all"), cols = sa.cols || [], gs = rgState(), cur = reportTermInfo(report);
@@ -13047,7 +13059,7 @@ function rptGoalsAnalysisHtml(report, flat) {
   let ctl = `<div class="no-print rpt-gctl"><div class="rpt-gl">اختاري ما تريدينه في التقرير من المقارنة</div><div class="rpt-gpills">${chk("none", "بدون مقارنة (فترة واحدة)")}${cols.length > 1 ? chk("pick", "مقارنة فترات محددة") : ""}${yrsMulti.length ? chk("year", "عام كامل (كل فتراته)") : ""}</div>`;
   if (gs.mode === "pick" && cols.length > 1) { const ks = pu.map((p) => p.keys[0]); ctl += `<div class="rpt-gsel">${ks.map((k, i) => `<div><span class="rpt-gl2">الفترة ${ord[i]}${ks.length > 2 ? `<button type="button" class="gb-lk" data-action="rg-rm" data-i="${i}">حذف</button>` : ""}</span>${sel("pk", keyOpts, k, i)}</div>`).join("")}${ks.length < 4 ? `<div style="display:flex;align-items:flex-end;"><button type="button" class="rpt-gp on" data-action="rg-add">＋ إضافة فترة</button></div>` : ""}</div>`; }
   if (gs.mode === "year" && yrsMulti.length) ctl += `<div class="rpt-gsel"><div><span class="rpt-gl2">العام</span>${sel("yr", yrsMulti.map((y) => [y, y + "هـ"]), yPick)}</div></div><div class="hint" style="margin:6px 0 0;">يظهر كل فصول هذا العام في التقرير.</div>`;
-  ctl += `<div class="rpt-gl" style="margin-top:10px;">شكل الشواهد والمرفقات</div><div class="rpt-gpills"><button type="button" class="rpt-gp ${es === "A" ? "on" : ""}" data-action="rg-es" data-v="A">١ — بطاقات لكل هدف</button><button type="button" class="rpt-gp ${es === "B" ? "on" : ""}" data-action="rg-es" data-v="B">٢ — فهرس موحّد + معرض صور</button></div></div>`;
+  ctl += `</div>`;
   // ---- الرسم ----
   const W = 700, H = 250, pl = 38, pr = 10, pt = 30, pb = 44, gw = (W - pl - pr) / rows.length, yy = (v) => pt + (H - pt - pb) * (1 - v / 100), cx = (i) => pl + gw * (i + 0.5);
   let svg = `<svg viewBox="0 0 ${W} ${H}" width="100%" style="direction:ltr;font-family:inherit;max-width:760px;display:block;margin:0 auto">`;
@@ -13069,7 +13081,7 @@ function rptGoalsAnalysisHtml(report, flat) {
   const tbl = `<div class="rg-tw"><table class="rg-rtb">${head}${body}</table></div>`;
   const title = multi ? "تحليل الأهداف التشغيلية — مقارنة: " + pu.map((p) => esc(p.label)).join(" ← ") : "تحليل الأهداف التشغيلية — " + esc(pu[0].label);
   const kt = (n, l, c) => `<div class="${c}"><span>${l}</span><b>${n}</b></div>`;
-  const evid = reg.order.length ? `${es === "B" ? "" : '<div class="rg-rh">الشواهد والمرفقات</div>'}${es === "B" ? rptEvRegisterHtml(reg, gnum) : rgEvCardsHtml(reg, gnum, flat)}` : "";
+  const evid = "";
   return `<div class="rg-scope">${ctl}<div class="rg-rh">${title}</div><div class="rg-rk">${kt(rows.length, "إجمالي الأهداف", "")}${kt(cnt.ok, "متحقق", "ok")}${kt(cnt.wr, "متحقق جزئيًا", "wr")}${kt(cnt.bad + cnt.na, "غير متحقق", "bad")}${kt(avg == null ? "—" : avg + "٪", "نسبة التحقق", "")}</div>${legend}${svg}<div class="rg-rh">تفاصيل الأهداف التشغيلية (${rows.length})</div>${tbl}${evid}</div>`;
 }
 
@@ -15460,7 +15472,7 @@ function sectionBodyOnly(section, saved, report) {
     } else { body = emptyHint("لم تُضف أعمال رئيسة بعد."); }
 
   } else if (section.id === "evidence") {
-    body = ((d.evidenceItems || []).length ? rptEvidenceGalleryHtml(d.evidenceItems) : "");
+    body = rgEvidenceChapterHtml(report) + ((d.evidenceItems || []).length ? rptEvidenceGalleryHtml(d.evidenceItems) : "");
     if (!body) body = emptyHint("لا توجد شواهد مُدخلة بعد.");
 
   } else if (section.id === "review") {
@@ -15752,7 +15764,13 @@ function fullReportOrPreviewBody(unit, report, afterPage, opts) {
   const review = !!afterPage;
   const dept = S.departments.find((x) => x.id === unit.departmentId);
   const chapters = rptOrdered(unitChapterDefs(opts.capture ? null : report, unit.id), s).filter((c) => review || (!s.hidden[c.key] && !rptLevelHides(s, c.key) &&
-    (s.showEmpty || opts.capture || c.special || c.sections.some((sid) => sectionHasData(report, sid)))));
+    (s.showEmpty || opts.capture || c.special || c.sections.some((sid) => sectionHasData(report, sid) || (sid === "evidence" && rgEvHas(report))))));
+  if (!(s.order || []).includes("evidence")) { const ei = chapters.findIndex((c) => c.key === "evidence"), ii = chapters.findIndex((c) => c.key === "impact"); if (ei >= 0 && ii >= 0 && ei !== ii + 1) { const ev = chapters.splice(ei, 1)[0]; chapters.splice(chapters.findIndex((c) => c.key === "impact") + 1, 0, ev); } }
+  if (!opts.capture && !chapters.some((c) => (c.sections || []).includes("evidence")) && !s.hidden.evidenceReg && !rptLevelHides(s, "evidenceReg") && rgEvHas(report)) {
+    // الأقسام مدموجة: «الشواهد والمرفقات» فصل مستقل يأتي بعد «الأثر وقصص النجاح»
+    let at = chapters.findIndex((c) => c.key === "impact"); if (at < 0) at = chapters.findIndex((c) => c.key === "initiatives"); if (at < 0) at = chapters.findIndex((c) => c.special === "approval") - 1;
+    chapters.splice(Math.max(at, -1) + 1, 0, { key: "evidenceReg", title: "الشواهد والمرفقات", icon: "document", sections: ["evidence"] });
+  }
   const mergeBasic = !review && !opts.capture && s.mergeBasic !== false && chapters.some((c) => c.special === "summary") && chapters.some((c) => c.key === "basic");
   const grouped = opts.capture ? chapters : rptGroupChapters(chapters.filter((c) => !(mergeBasic && c.key === "basic")), report);
   return rptWithCtx({ ...rptChartCtx(s), hiddenCols: review ? null : rptHiddenColsForViewer(s), colsShow: s.colsShow, capture: opts.capture || null, unitId: unit.id }, () => {
