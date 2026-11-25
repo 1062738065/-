@@ -1470,3 +1470,21 @@ body.sp-body{background:#f7f3f1}
 .rpt-gpills{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px}
 .rpt-gsel{display:flex;gap:10px;flex-wrap:wrap}
 .rpt-gl2{display:block;font-size:11.5px;font-weight:700;color:#8a7279;margin-bottom:3px}
+
+/* صفحة الأهداف: بطاقات قابلة للطيّ + حلقة النسبة + أزرار أنواع الدليل */
+.og-block.og-card{border-right:0;border:1px solid var(--line,#ecdfe3);border-radius:18px;padding:0;background:#fff;overflow:hidden;margin-top:14px}
+.og-head{display:flex;align-items:center;gap:12px;padding:12px 14px;cursor:pointer;background:linear-gradient(90deg,#fbf3f6,#fff)}
+.og-ring{width:46px;height:46px;border-radius:50%;display:grid;place-items:center;flex:none;font-weight:800;font-size:12px;background:conic-gradient(var(--c) calc(var(--v)*1%),#efe6e9 0)}
+.og-ring span{width:36px;height:36px;border-radius:50%;background:#fff;display:grid;place-items:center}
+.og-ht{flex:1;min-width:0}.og-ht b{display:block;font-size:14.5px}.og-ht small{color:#8a7279;font-size:11.5px}
+.og-chev{color:#8a7279}
+.og-body{padding:0 14px 14px;border-top:1px solid var(--line,#ecdfe3)}
+.og-trio{margin:14px 0 8px}
+.og-trio>*{border:1px solid #ecdfe3;border-radius:14px;padding:10px 12px;background:#fbf3f6;min-width:0}
+.og-adv{margin:6px 0 10px;font-size:12.5px}.og-adv summary{cursor:pointer;color:#8a7279;font-weight:700}
+.og-sec{font-size:13px;font-weight:800;margin:14px 0 8px;display:flex;align-items:center;gap:8px}
+.og-sec em{font-style:normal;background:var(--rose,#6b2337);color:#fff;border-radius:99px;font-size:11px;padding:0 8px}
+.og-types{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px}
+.og-ty{border:1px solid #ecdfe3;background:#fff;color:inherit;border-radius:999px;padding:5px 12px;font:inherit;font-size:12px;cursor:pointer}
+.og-ty.on{background:var(--rose,#6b2337);color:#fff;border-color:var(--rose,#6b2337)}
+.og-ic{width:34px;height:34px;border-radius:10px;display:grid;place-items:center;font-size:15px;flex:none;background:#fbf3f6}
